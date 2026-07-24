@@ -1,7 +1,7 @@
 services:
   notes:
     # Build the current release from this source tree and tag it locally.
-    image: gouou7/mint-notes:0.1.0
+    image: gouou7/mint-notes:latest
     build: .
     restart: unless-stopped
     # Match these numeric IDs to the owner of the host-side data directory.

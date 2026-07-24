@@ -4,7 +4,8 @@ English | [简体中文](README_zh.md)
 
 Mint Notes is a toy-grade project developed with AI. It aims to provide a note-taking experience that is lightweight to deploy, secure to store, and simple to use. It supports responsive PWA layouts and end-to-end encryption, so you can self-host your notes on a remote server and edit them with familiar Markdown syntax.
 
-If you find a bug or have a feature suggestion, don't tell me—tell your AI!
+If you find a bug or have a feature suggestion, please submit an issue—or ask your AI agent to make the changes!
+
 
 ## Features
 
