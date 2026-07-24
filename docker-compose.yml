@@ -1,0 +1,45 @@
+services:
+  notes:
+    # Build the current release from this source tree and tag it locally.
+    image: gouou7/mint-notes:0.1.0
+    build: .
+    restart: unless-stopped
+    # Match these numeric IDs to the owner of the host-side data directory.
+    # This keeps the application non-root while permitting SQLite writes on Linux.
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      # Listen on every container interface; host exposure is restricted by
+      # the loopback-only port mapping below.
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-8787}
+      # Public registration after the bootstrap administrator is opt-in.
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      # Server attachment limit and per-user encrypted attachment quota (MiB).
+      MAX_ATTACHMENT_SIZE_MB: ${MAX_ATTACHMENT_SIZE_MB:-25}
+      USER_STORAGE_QUOTA_MB: ${USER_STORAGE_QUOTA_MB:-2048}
+      # Independent quota for encrypted note history (MiB).
+      USER_HISTORY_QUOTA_MB: ${USER_HISTORY_QUOTA_MB:-256}
+      # Ordinary session lifetime in hours.
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+      # Enable only behind a controlled reverse proxy that sets forwarded
+      # scheme and host headers correctly.
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      # Must exactly match the browser origin, including scheme and any
+      # non-default port; for direct local access use http://localhost:8787.
+      APP_ORIGIN: ${APP_ORIGIN:-}
+    ports:
+      # Bind only to host loopback. Put an HTTPS reverse proxy in front for
+      # access from other devices or a public network.
+      - "127.0.0.1:8787:8787"
+    volumes:
+      # The container path is fixed at /data. Change only the host path on the
+      # left when selecting another storage location. Do not commit its data.
+      - ./notes-data:/data
+    healthcheck:
+      # Probe the HTTP server from inside the container without depending on
+      # the host port or an external reverse proxy.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

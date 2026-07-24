@@ -1,0 +1,47 @@
+diff --git a/dist/lib/typora-web.js b/dist/lib/typora-web.js
+index 612197ca1cc1155524d3f86121988a9a468ca369..1ce779b08486807e4f5190436aaf9e9c5a4ad5e9 100644
+--- a/dist/lib/typora-web.js
++++ b/dist/lib/typora-web.js
+@@ -3183,6 +3183,29 @@ function yn(t, n = {}) {
+ 			return 0;
+ 		}
+ 	}
++	function w(e, t) {
++		if (l) return o.selectionStart ?? o.value.length;
++		let n = c.posAtCoords({ left: e, top: t })?.pos ?? c.state.selection.from;
++		try {
++			return $(c.state.doc.cut(0, n)).length;
++		} catch {
++			return h();
++		}
++	}
++	function b(e, t) {
++		let r = l ? o.value : $(c.state.doc), a = Math.max(0, Math.min(t ?? h(), r.length)), s = r.slice(0, a) + e + r.slice(a), u = a + e.length;
++		if (l) o.value = s, o.setSelectionRange(u, u), f();
++		else {
++			d(s);
++			let e = Math.min(g(s, u), c.state.doc.content.size);
++			try {
++				let t = i.near(c.state.doc.resolve(e));
++				c.dispatch(c.state.tr.setSelection(t).scrollIntoView());
++			} catch {}
++			c.focus();
++		}
++		n.onChange?.(s);
++	}
+ 	function _() {
+ 		let e = $(c.state.doc), t = h();
+ 		o.value = e, a.hidden = !0, o.hidden = !1, f(), o.focus();
+@@ -3211,6 +3234,12 @@ function yn(t, n = {}) {
+ 		setMarkdown(e) {
+ 			l ? o.value = e : d(e);
+ 		},
++		getMarkdownOffsetAtPoint(e, t) {
++			return w(e, t);
++		},
++		insertMarkdown(e, t) {
++			b(e, t);
++		},
+ 		toggleSource() {
+ 			l ? v() : _();
+ 		},

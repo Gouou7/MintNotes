@@ -1,0 +1,82 @@
+# Mint Notes
+
+English | [简体中文](README_zh.md)
+
+Mint Notes is a toy-grade project developed with AI. It aims to provide a note-taking experience that is lightweight to deploy, secure to store, and simple to use. It supports responsive PWA layouts and end-to-end encryption, so you can self-host your notes on a remote server and edit them with familiar Markdown syntax.
+
+If you find a bug or have a feature suggestion, don't tell me—tell your AI!
+
+## Features
+
+- **Local-first and end-to-end encrypted:** Input and local saves never wait for the network; titles, content, folders, and attachments are encrypted in the browser before synchronization.
+- **Markdown editing:** Typora-style live editing, source mode, reading mode, a live outline, and text statistics.
+- **Organization and history:** Folders, search, sorting, drag-and-drop, trash, and encrypted cross-device version history with preview and restore.
+- **Multi-user and device security:** Multi-user accounts, recovery keys, activation codes, remembered devices, local PINs, automatic locking, and remote sign-out.
+- **Attachments and data migration:** Encrypted image attachments plus Markdown/ZIP import and export that preserve folder structure and attachment paths.
+- **PWA and multi-device synchronization:** Installable desktop, tablet, and mobile layouts with offline editing, themes, and multilingual interfaces.
+- **Lightweight self-hosting:** One Docker service backed by SQLite, with a consistent online-backup workflow.
+
+## Technology
+
+The browser application uses React, TypeScript, Vite, `typora-web`, Web Crypto, and Dexie/IndexedDB.
+
+The server uses Fastify and SQLite.
+
+## Development
+
+Requirements:
+
+- Node.js 22 or newer
+- pnpm 11 or newer
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Open `http://localhost:5173`. Vite proxies `/api` to the API server at `http://127.0.0.1:8787`. The first account becomes the administrator and receives a recovery key during registration.
+
+See the [development guide](docs/DEVELOPMENT.md) for the project layout, verification commands, and test dependencies.
+
+## Docker quick start
+
+```bash
+cp .env.example .env
+mkdir -p notes-data
+docker compose config
+docker compose up --build -d
+docker compose ps
+```
+
+Before starting, set `APP_ORIGIN` in `.env` to the exact HTTPS origin users will open, such as `https://notes.example.com`.
+
+On Linux, set `PUID` and `PGID` to the non-zero numeric user and group IDs that own `./notes-data`—normally the output of `id -u` and `id -g`—so the non-root container can write its SQLite files.
+
+## First use
+
+1. Open the application and create the first account. It is always assigned the administrator role.
+2. Store the displayed recovery key in a password manager or a protected offline location. It is shown only during account creation.
+3. Keep public registration disabled unless it is intentionally required. Administrators can create activation codes under **Settings > Administrator settings**.
+4. Create and test both a plaintext Markdown ZIP export and an encrypted server backup before relying on the service.
+
+The [user guide](docs/USER_GUIDE.md) covers editor modes, file-tree operations, attachments, synchronization states, account recovery, import/export, and safe deletion.
+
+## Documentation
+
+- [User guide](docs/USER_GUIDE.md)
+- [Production deployment](docs/DEPLOYMENT.md)
+- [Backup and restore](docs/BACKUP_AND_RESTORE.md)
+- [Security model](docs/SECURITY.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development guide](docs/DEVELOPMENT.md)
+
+## Acknowledgements
+
+Thanks to the following open-source projects:
+
+- Markdown editor: [typora-web](https://github.com/Yuyz0112/typora-web)
+- Icon library: [Lucide React](https://lucide.dev/)
+
+## License
+
+Mint Notes is available under the [MIT License](LICENSE).

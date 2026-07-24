@@ -1,0 +1,33 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+
+# Build and test output
+dist/
+server-dist/
+dev-dist/
+.vite/
+coverage/
+playwright-report/
+test-results/
+
+# Runtime data and database backups
+data/
+notes-data/
+backups/
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# IDE state
+.vs/
+.idea/
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db

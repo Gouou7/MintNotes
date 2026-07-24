@@ -1,0 +1,101 @@
+# Security model
+
+## Protected assets
+
+The application is designed to keep note titles, Markdown, tags, folder names, folder structure, derived outlines, active/open note identifiers, active editor mode, sidebar visibility state, attachment names, MIME types, attachment keys, and attachment bytes confidential from the server at rest.
+
+The server necessarily observes usernames, display names, roles, account status, trash/history-retention preferences, history capture frequency and enablement, whether encrypted avatar/workspace/history records exist, random note/history IDs, history capture times and capture kinds, avatar/workspace/history ciphertext sizes and update times, random user/content/session/endpoint IDs, an ephemeral random synchronization-client ID, the reserved workspace object ID, ciphertext sizes, object counts, revisions, synchronization times, browser/device summaries, IP addresses, login counts and activity times, remembered status, and access patterns. SSE notifications expose only a user-scoped change cursor to the authenticated browser and do not carry object IDs or ciphertext. The server does not receive historical titles, Markdown, tags, attachment names or bytes, the avatar image, avatar MIME type, active/open note identifiers, editor mode, or sidebar state in plaintext. Users can view their own trusted-endpoint and encrypted note-history metadata; administrators can view account identity, status, object count, and aggregate ciphertext storage usage.
+
+## Threats covered by the design
+
+- Theft of the SQLite database or an application backup.
+- Direct inspection of stored data by an operator.
+- Ciphertext corruption or rebinding to another user/object/revision.
+- Cross-account API access using a guessed object ID.
+- Accidental overwrite, deletion, interrupted uploads, and ordinary network failure.
+
+## Threats outside the browser-only E2EE boundary
+
+- An actively compromised server can replace the JavaScript application and capture a password or unlocked key.
+- Malware, a hostile browser extension, or physical access to an unlocked device can read plaintext.
+- Malware or hostile same-origin JavaScript can use a stored device key while its browser profile remains trusted, even though the key is non-exportable.
+- A user-created plaintext export is outside the encrypted storage boundary.
+- Traffic metadata and ciphertext sizes are not hidden.
+
+The UI and documentation must not claim protection against these cases.
+
+## Key hierarchy
+
+The intended key hierarchy is:
+
+```text
+master password + per-user salt
+  -> Argon2id root key
+      -> domain-separated authentication secret
+      -> domain-separated vault wrapping key
+
+random vault key
+  -> encrypted by vault wrapping key for normal unlock
+  -> encrypted by an independent recovery key for recovery
+  -> optionally encrypted by a non-exportable browser device key for online refresh recovery
+  -> encrypts user objects with Web Crypto AES-256-GCM and random nonces
+  -> encrypts attachment manifests containing independent random attachment keys
+
+random attachment key
+  -> encrypts immutable 1 MiB attachment chunks with per-chunk nonces
+```
+
+The server receives an authentication secret but never receives the password, root key, wrapping key, recovery key, device key, device-wrapped vault credential, or plaintext vault key. The server stores a slow hash of the authentication secret.
+
+The device-unlock key is a non-exportable AES-256-GCM `CryptoKey` stored by the browser in IndexedDB. Its ciphertext is authenticated with the user ID and credential version. This protects the vault key from a simple copy of the wrapped credential, but it is a convenience boundary rather than hardware-backed authentication: malicious same-origin code can ask the stored key to decrypt. A local PIN stores only a domain-separated Argon2id verifier and does not protect against code already executing in the origin. Locking clears decrypted memory but preserves this credential. Session invalidation or five failed PIN attempts delete local trust; confirmed logout additionally deletes all current-user encrypted objects, attachment chunks, outboxes, cursors, and preferences from the browser.
+
+The browser derives a 32-byte Argon2id root through the bundled `hash-wasm` implementation. The current KDF profile uses three iterations, 64 MiB of memory, and one lane; its parameters and random salt are stored per account so a future profile can be versioned. Purpose-specific keys are then derived with Web Crypto HMAC-SHA-256. A cross-worker integration test verifies that registration, normal unlock, recovery unlock, and encrypted document round-trips remain stable across fresh Worker instances.
+
+Every encrypted object uses a fresh 96-bit nonce and authenticates the user ID, object ID, object type, encryption version, and intended revision as AES-GCM additional data.
+
+Every note-history snapshot also uses a fresh 96-bit nonce in a separate AAD domain. It authenticates the user ID, note ID, history ID, capture time, capture kind, history schema, and encryption version. The encrypted payload contains the title, Markdown, tags, attachment IDs, and source update time. Rebinding any server-visible history field causes decryption to fail.
+
+Every attachment chunk uses a fresh 96-bit nonce and authenticates the user ID, attachment UUID, chunk index, total chunk count, and encryption version. A plaintext SHA-256 digest is kept only inside encrypted metadata and is checked after reassembly. SVG is not rendered; supported raster formats are detected from file signatures rather than filename extensions.
+
+## Web security
+
+- Production requires HTTPS.
+- Production sessions and endpoint identifiers use separate opaque random values in `Secure`, `HttpOnly`, `SameSite=Strict` cookies. Only their hashes are stored in SQLite. An endpoint identifier cannot authenticate a request by itself.
+- Logging out revokes all sessions for the current endpoint and, after an explicit confirmation, discards every current-account browser record including unsynchronized changes. It does not delete server-synchronized content or another local user's rows. Password recovery and account disabling revoke every endpoint; password changes revoke other endpoints. Remote logout is scoped to the authenticated user, cannot target the current endpoint, and is allowed only after its server-recorded first-trusted time is 24 hours old. Repeated login does not reset that time.
+- Remembered sessions have a rolling long-lived cookie; ordinary sessions use a session cookie and the configured server TTL. Browser cookie/storage cleanup can terminate either mode.
+- Immediate permanent deletion requires an authenticated session, an explicit client-side confirmation, a synchronized tombstone, and the server-side user scope derived from that session.
+- Browser CSRF resistance relies on `SameSite=Strict` cookies plus exact `Origin` validation when an `Origin` header is present. `APP_ORIGIN` must therefore match the public browser origin exactly.
+- Markdown does not execute raw HTML or scriptable embeds.
+- The application uses a restrictive Content Security Policy and no runtime CDN scripts.
+- The CSP allows `'wasm-unsafe-eval'` only so the bundled Argon2id module can compile; JavaScript `'unsafe-eval'` remains disabled.
+- Login, registration, invitation, and recovery endpoints are rate limited.
+- Sensitive material is excluded from logs and error reports.
+- Synchronization event streams are bound to the authenticated user and session, are closed on revocation or account disabling, and are periodically revalidated while open.
+
+## Account isolation
+
+Authorization derives user identity exclusively from the server session. Request bodies and URLs never choose the authorization scope. Unknown and cross-user object IDs return indistinguishable not-found responses.
+
+The first account bootstraps the administrator role. The empty-database check and account insert run in one SQLite `BEGIN IMMEDIATE` transaction, so concurrent registration requests can assign this bootstrap role only once. Administrators may create one-time account activations, disable accounts, permanently delete another account after master-password and username confirmation, or inspect ciphertext storage usage, but cannot decrypt user data. Deletion is scoped to the exact target user and cascades through that user's server records; self-deletion and deletion of the last administrator are rejected. Each invited user creates their password, recovery key, and vault key in their own browser. Account disabling is reversible and does not erase ciphertext.
+
+## Data-loss controls
+
+- Local encrypted copy before network upload.
+- Durable retry outbox.
+- Per-object decryption failure isolation: one invalid ciphertext cannot hide other readable notes. Failed local ciphertext and pending edits remain untouched, and remote ciphertext must authenticate before replacing a known-good local copy. Suppressing a repeated warning stores only a local fingerprint for that exact failed revision and does not delete the ciphertext.
+- Append-only server revisions.
+- Independent encrypted note history with retention, quota, clear markers, and local-first retry storage. User-visible history deletion never removes synchronization revisions.
+- Tombstone deletion and trash restoration.
+- Attachment tombstones follow their owning note. Physical removal occurs after the configured retention period or after an explicit confirmation for a manual purge.
+- Exportable plaintext Markdown and consistent server backups.
+- Consistent SQLite online backups and documented restore drills.
+
+Recovery-key rotation creates a fresh random recovery key in the Crypto Worker, updates only its server-side verifier and vault-key envelope after master-password verification, and invalidates the previous recovery key. The plaintext recovery key is displayed once and is not persisted.
+
+## Operational requirements
+
+- Serve a reviewed, pinned build over HTTPS and protect the host and reverse proxy from unauthorized code changes.
+- Keep `.env`, SQLite backups, reverse-proxy logs, and host snapshots access-controlled even though note payloads are encrypted.
+- Test account recovery and backup restoration on a separate deployment; the existence of a backup file is not proof that users can decrypt it.
+- Treat Markdown ZIP exports as plaintext. They must not be uploaded to an untrusted backup target without independent encryption.
+- Do not add analytics, remote fonts, CDN scripts, new network origins, raw HTML, or scriptable embeds without revisiting this threat model and the Content Security Policy.
