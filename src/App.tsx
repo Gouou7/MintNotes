@@ -52,6 +52,7 @@ import { buildOutline } from "./editor/outline";
 import { ReadOnlyMarkdown } from "./editor/ReadOnlyMarkdown";
 import { TyporaEditor } from "./editor/TyporaEditor";
 import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "./features/attachments";
+import { documentPatchChanges } from "./features/documentPatch";
 import { exportMarkdownZip, exportSingleMarkdown, importFiles } from "./features/importExport";
 import { SettingsPanel } from "./features/SettingsPanel";
 import {
@@ -885,11 +886,10 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
 
   const patchDocument = (objectId: string, patch: Partial<OpenDocument>, delay = 500) => {
     const current = documentIndexRef.current.get(objectId);
-    if (current) {
-      const next = { ...current, ...patch, updatedAt: new Date().toISOString(), dirty: true };
-      scheduleHistoryEdit(current, next);
-      queueDocument(next, delay);
-    }
+    if (!current || !documentPatchChanges(current, patch)) return;
+    const next = { ...current, ...patch, updatedAt: new Date().toISOString(), dirty: true };
+    scheduleHistoryEdit(current, next);
+    queueDocument(next, delay);
   };
 
   const beginTreeRename = (objectId: string) => {
@@ -2464,8 +2464,9 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
             : mode === "readonly"
             ? <ReadOnlyMarkdown markdown={activeDocument.markdown} attachmentUrls={attachmentUrls} />
             : <TyporaEditor key={`${editorSessionId}:${mode}`} markdown={activeDocument.markdown} mode={mode} attachmentUrls={attachmentUrls} onChange={(markdown) => {
-              if (markdown === activeDocument.markdown) return;
-              patchDocument(activeDocument.objectId, { markdown, attachmentIds: [...new Set([...activeDocument.attachmentIds, ...attachmentIdsIn(markdown)])] });
+              const latest = documentIndexRef.current.get(activeDocument.objectId);
+              if (!latest || markdown === latest.markdown) return;
+              patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });
             }} onImageDrop={async (file) => { const attachment = await addAttachment(activeDocument.objectId, file); return attachmentMarkdown(attachment.objectId, attachment.originalName); }} />
             : <div className="empty-editor"><div className="empty-icon"><AppIcon icon={Sparkles} size={34} /></div><h2>{t("app.emptyTitle")}</h2><p>{t("app.emptyDescription")}</p></div>}
         </div>

@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditor, type TyporaWebEditor } from "typora-web";
+import { I18nProvider } from "../i18n";
 import { TyporaEditor } from "./TyporaEditor";
 
 vi.mock("typora-web", () => ({ createEditor: vi.fn() }));
@@ -84,8 +85,13 @@ describe("TyporaEditor live mode", () => {
     ));
 
     expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe(`![image](${blobUrl})`);
+    act(() => editorChange?.(`![image](${blobUrl})`));
+    expect(onChange).not.toHaveBeenCalled();
+
     act(() => editorChange?.(`text\n\n![image](${blobUrl})`));
     expect(onChange).toHaveBeenCalledWith(`text\n\n![image](webmd-attachment:${attachmentId})`);
+    act(() => editorChange?.(`text\n\n![image](${blobUrl})`));
+    expect(onChange).toHaveBeenCalledOnce();
 
     await act(async () => root.unmount());
   });
@@ -115,6 +121,39 @@ describe("TyporaEditor live mode", () => {
 
     expect(editor.setMarkdown).toHaveBeenCalledOnce();
     expect(editor.setMarkdown).toHaveBeenCalledWith(`before\n\n![image](${blobUrl})`);
+
+    await act(async () => root.unmount());
+  });
+
+  it("keeps frontmatter outside the live editor and canonicalizes callout changes", async () => {
+    const editor = {
+      destroy: vi.fn(),
+      focus: vi.fn(),
+      setMarkdown: vi.fn()
+    } as unknown as TyporaWebEditor;
+    let editorChange: ((markdown: string) => void) | undefined;
+    vi.mocked(createEditor).mockImplementation((_host, options) => {
+      editorChange = options?.onChange;
+      return editor;
+    });
+    const onChange = vi.fn();
+    const markdown = "---\nversion:\n---\n> [!TIP]\n> Body";
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(
+      <I18nProvider><TyporaEditor
+        markdown={markdown}
+        mode="live"
+        onChange={onChange}
+      /></I18nProvider>
+    ));
+
+    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe("> ==`[!TIP]`==\n> Body");
+    act(() => editorChange?.("> ==`[!TIP]`==\n> Changed"));
+    expect(onChange).toHaveBeenCalledWith("---\nversion:\n---\n> [!TIP]\n> Changed");
+    expect(container.textContent).toContain("Note properties");
 
     await act(async () => root.unmount());
   });

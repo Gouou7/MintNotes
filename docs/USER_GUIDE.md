@@ -1,5 +1,7 @@
 # User guide
 
+[Documentation index](README.md)
+
 This guide describes the behavior implemented by the current Mint Notes release. Deployment and server administration are covered separately in the [deployment guide](DEPLOYMENT.md).
 
 ## Create or activate an account
@@ -61,7 +63,39 @@ The center toolbar provides three modes:
 
 Markdown remains the canonical note format in every mode. Switching modes does not convert it to a proprietary document format. The right outline is generated from H1-H6 headings and never uploads as separate plaintext metadata.
 
-The left side of the status bar shows the active note's creation time, latest modification time, and local save or synchronization state. The right side counts words with language-aware segmentation. Punctuation is excluded from the word count. The character count excludes whitespace but includes symbols.
+### Callouts
+
+Place an Obsidian-style callout marker on the first line of a blockquote:
+
+```markdown
+> [!TIP]
+> Keep the recovery key somewhere safe.
+
+> [!WARNING]- Optional details
+> This callout starts collapsed in Reading mode.
+```
+
+Mint Notes recognizes Note, Abstract/Summary/TLDR, Info, Todo, Tip/Hint, Important, Success/Check/Done, Question/Help/FAQ, Warning/Attention, Caution, Failure/Fail/Missing, Danger/Error, Bug, Example, and Quote/Cite. Type names are case-insensitive. Unknown names use a neutral style so custom callouts remain readable. Add text after the marker for a custom title. A `+` suffix makes the callout collapsible and initially expanded; `-` makes it initially collapsed. Live mode keeps every callout expanded so its Markdown remains editable. Reading mode and historical previews honor the requested fold state.
+
+### YAML properties
+
+Valid YAML frontmatter at the very top of a note appears as a properties panel in Live and Reading modes:
+
+```yaml
+---
+version:
+description:
+created:
+modified: "{{date}}"
+tags:
+---
+```
+
+In Live mode, edit, rename, add, or remove top-level scalar properties and simple scalar lists directly in the panel. Boolean values use checkboxes, ISO dates use date inputs, and lists such as `tags` use value chips. Reading mode and historical previews show the same properties read-only. Source mode always exposes the complete original YAML.
+
+Nested objects, nested lists, multiline values, anchors, and aliases are shown read-only in the panel and must be edited in Source mode. Invalid YAML is preserved unchanged and shown with a source-editing notice. Notes without frontmatter do not show a properties panel. Mint Notes never evaluates template text such as `{{date}}` and does not automatically create or update `created` or `modified`.
+
+The left side of the status bar shows the active note's creation time, latest modification time, and local save or synchronization state. Moving the caret or changing the selection without changing the title or Markdown does not update the modification time. The right side counts words with language-aware segmentation. Punctuation is excluded from the word count. The character count excludes whitespace but includes symbols.
 
 ## Use note history
 

@@ -1,5 +1,7 @@
 # Architecture
 
+[Documentation index](README.md)
+
 ## Goals
 
 Mint Notes optimizes for a small deployment footprint, responsive editing under high latency, ciphertext-only server storage, multi-user isolation, and recoverable user mistakes.

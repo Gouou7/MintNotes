@@ -20,7 +20,7 @@ Preserve these invariants in every change:
 
 ## Documentation routing
 
-Read only the documents relevant to the current change, but use this file as the routing entrypoint.
+Use `docs/README.md` as the human-facing documentation index. For implementation work, read only the documents relevant to the current change and use this table as the routing entrypoint.
 
 | Need or change | Read first | Update when behavior changes |
 | --- | --- | --- |
@@ -56,7 +56,7 @@ When documents disagree, use this evidence order: implementation code, automated
 - `scripts/`: built crypto Worker integration and API smoke tests.
 - `patches/`: the minimal public-controller extension maintained for `typora-web`.
 - `deploy/`: production reverse-proxy example.
-- `docs/`: user, development, architecture, security, deployment, backup, and staged-delivery documentation.
+- `docs/`: task-oriented user, development, architecture, security, deployment, and backup documentation, with navigation in `docs/README.md`.
 
 ## Security constraints
 

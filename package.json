@@ -36,6 +36,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "typora-web": "0.3.1",
+    "yaml": "^2.9.0",
     "zod": "^3.25.67"
   },
   "devDependencies": {

@@ -1,5 +1,7 @@
 # Backup and restore
 
+[Documentation index](README.md)
+
 Server backups protect account records, key envelopes, trash/history-retention settings, encrypted profile avatars, trusted-endpoint and session history, encrypted objects, synchronization revisions, encrypted note history, clear markers, synchronization changes, activation records, and encrypted attachment chunks. They do not contain note, historical-note, avatar, or attachment plaintext, but they remain sensitive because they expose account, endpoint, IP, activity, history timing/type, and ciphertext-size metadata plus material for offline password guessing.
 
 A backup strategy needs both layers:

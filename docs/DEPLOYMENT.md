@@ -1,5 +1,7 @@
 # Production deployment
 
+[Documentation index](README.md)
+
 Mint Notes runs as one non-root application container plus one persistent SQLite volume. Production access must use HTTPS because the browser handles passwords, recovery keys, vault keys, and plaintext notes while unlocked.
 
 ## Prerequisites

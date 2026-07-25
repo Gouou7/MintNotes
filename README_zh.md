@@ -9,7 +9,7 @@ Mint Notes 是一款使用 AI 开发的玩具级项目。目标是提供轻量�
 ## 功能特性
 
 - **本地优先与端到端加密：**输入和本地保存无需等待网络，标题、正文、目录和附件在浏览器中加密后再同步。
-- **Markdown 编辑体验：**支持类 Typora 的实时编辑、源码模式、阅读模式，以及实时大纲和字数统计。
+- **Markdown 编辑体验：**支持类 Typora 的实时编辑、源码模式、阅读模式、Obsidian 兼容的 Callout 与 YAML 属性，以及实时大纲和字数统计。
 - **笔记组织与历史：**支持文件夹、搜索、排序、拖放、回收站，以及可预览和恢复的跨设备加密版本历史。
 - **多用户与设备安全：**支持多用户账户、恢复密钥、激活码、记住设备、本地 PIN、自动锁定和远程登出。
 - **附件与数据迁移：**支持加密图片附件，以及保留目录结构和附件路径的 Markdown／ZIP 导入导出。
@@ -63,12 +63,11 @@ docker compose ps
 
 ## 文档
 
-- [用户指南](docs/USER_GUIDE.md)
-- [生产部署](docs/DEPLOYMENT.md)
-- [备份与恢复](docs/BACKUP_AND_RESTORE.md)
-- [安全模型](docs/SECURITY.md)
-- [架构](docs/ARCHITECTURE.md)
-- [开发指南](docs/DEVELOPMENT.md)
+请从[文档索引](docs/README.md)按任务选择对应指南。
+
+- **使用 Mint Notes：**[用户指南](docs/USER_GUIDE.md)
+- **运维 Mint Notes：**[生产部署](docs/DEPLOYMENT.md)与[备份和恢复](docs/BACKUP_AND_RESTORE.md)
+- **参与开发：**[开发指南](docs/DEVELOPMENT.md)；架构与安全资料可从文档索引进入
 
 ## 致谢
 

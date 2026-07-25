@@ -29,4 +29,33 @@ describe("ReadOnlyMarkdown", () => {
     expect(html).toContain("附件尚未加载：example");
     expect(html).not.toContain("webmd-attachment:");
   });
+
+  it("renders frontmatter properties and callouts without exposing their source markers", () => {
+    localStorage.setItem("webmd-notes-language", "en");
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={[
+        "---",
+        "version:",
+        'modified: "{{date}}"',
+        "tags:",
+        "---",
+        "",
+        "> [!IMPORTANT]- Read this",
+        "> Body",
+        "",
+        "> [!custom-kind]",
+        "> Custom body"
+      ].join("\n")} /></I18nProvider>
+    );
+
+    expect(html).toContain("Note properties");
+    expect(html).toContain("version");
+    expect(html).toContain("{{date}}");
+    expect(html).toContain("callout-important");
+    expect(html).toContain("<summary>");
+    expect(html).not.toContain("<details open");
+    expect(html).toContain("Read this");
+    expect(html).toContain("callout-custom");
+    expect(html).not.toContain("[!IMPORTANT]");
+  });
 });

@@ -1,5 +1,7 @@
 # Security model
 
+[Documentation index](README.md)
+
 ## Protected assets
 
 The application is designed to keep note titles, Markdown, tags, folder names, folder structure, derived outlines, active/open note identifiers, active editor mode, sidebar visibility state, attachment names, MIME types, attachment keys, and attachment bytes confidential from the server at rest.

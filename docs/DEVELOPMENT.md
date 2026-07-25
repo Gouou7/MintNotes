@@ -1,5 +1,7 @@
 # Development guide
 
+[Documentation index](README.md)
+
 This guide is for contributors who need to run, verify, or extend Mint Notes. Product operation belongs in the [user guide](USER_GUIDE.md); production configuration belongs in the [deployment guide](DEPLOYMENT.md).
 
 ## Requirements
@@ -53,9 +55,9 @@ pnpm dev:server
 | `scripts/` | Crypto Worker integration test and API smoke test. |
 | `patches/` | Maintained public-controller extension for `typora-web`. |
 | `deploy/` | Reverse-proxy example. |
-| `docs/` | User, deployment, architecture, security, backup, and maintenance documentation. |
+| `docs/` | Task-oriented documentation and its [navigation index](README.md). |
 
-Read `AGENTS.md`, `docs/ARCHITECTURE.md`, and `docs/SECURITY.md` before changing authentication, encryption, persistence, synchronization, service-worker behavior, or database schemas.
+Read [`AGENTS.md`](../AGENTS.md), [Architecture](ARCHITECTURE.md), and the [Security model](SECURITY.md) before changing authentication, encryption, persistence, synchronization, service-worker behavior, or database schemas.
 
 ## UI icons and branding
 
@@ -97,47 +99,25 @@ The order matters:
 
 The smoke test covers account bootstrap, cross-user object, attachment, avatar, note-history and SSE isolation, source-client notification suppression, batch object writes and conflicts, compact delta pulls, history settings/clear barriers/purge, password and recovery-key changes, administrator activation and deletion, authenticated purge propagation, and trash-retention settings. The Worker test covers registration/login/recovery compatibility, recovery-key rotation, object, avatar, history and attachment round trips, nonce uniqueness, AAD binding, and tamper rejection.
 
-## Local-first invariant
+## Implementation boundaries
 
-The keystroke path must remain independent of network latency:
+Read [`AGENTS.md`](../AGENTS.md) before changing system behavior. It contains the executable repository constraints and routes each change area to its canonical documentation:
 
-```text
-editor state -> browser encryption -> IndexedDB object + outbox transaction -> background network sync
-```
+| Change area | Canonical references |
+| --- | --- |
+| Local-first persistence, synchronization, browser/server storage, or attachments | [Architecture](ARCHITECTURE.md) |
+| Authentication, encryption, AAD, account isolation, CSP, or metadata exposure | [Security model](SECURITY.md) |
+| Schema compatibility, production configuration, or upgrades | [Production deployment](DEPLOYMENT.md) |
+| Online backup, retention, or restoration | [Backup and restore](BACKUP_AND_RESTORE.md) |
+| User-visible editor, history, import/export, trash, settings, or PWA behavior | [User guide](USER_GUIDE.md) |
 
-Do not move `fetch` calls into the editor `onChange` path. A network failure must leave the latest encrypted local object and its outbox entry intact. Confirmed logout is the only intentional destructive exception: cancel pending local saves, prevent in-flight work from repopulating IndexedDB, and delete every current-user row from all object, attachment, metadata, credential, and revocation stores without affecting another user.
+The most common contributor pitfalls are:
 
-Synchronization uses `baseRevision` and an idempotency key. A `409` response must preserve a conflict copy or otherwise retain the only local revision; never resolve conflicts solely from wall-clock timestamps.
-
-Keep push and pull triggers separate. Editor persistence may request an outbox push, but must not append an unconditional delta pull. SSE carries only a wake-up hint; durable cursors, outboxes, startup/reconnect/visibility pulls, and the foreground safety check remain responsible for correctness. Apply remote pages to IndexedDB in bulk and publish one indexed UI merge after the pull instead of setting React state per object.
-
-## Encryption and attachment rules
-
-- Use the existing crypto Worker wrappers; do not introduce custom cryptographic primitives.
-- Generate a fresh 96-bit AES-GCM nonce for every encryption under a key.
-- Bind ciphertext to its user, object/attachment ID, type or chunk position, schema/encryption version, and revision through AAD.
-- Never persist plaintext notes or the unlocked vault key in Local Storage, Cache Storage, URLs, logs, or server data.
-- Device unlock may persist only the non-exportable IndexedDB `CryptoKey`, its user- and endpoint-bound wrapped vault credential, local PIN verifier/failure count, auto-lock preference, and pending endpoint revocation. Never export these records or restore the vault before `/api/auth/me` confirms the matching endpoint session.
-- Keep attachment chunks encrypted in IndexedDB before inserting the Markdown reference and before scheduling upload.
-- Upload attachment chunks before the encrypted attachment manifest and owning note.
-- Preserve the one-note-per-attachment ownership rule; duplication must create a new UUID and key.
-
-The application may use only documented `typora-web` controller methods. The maintained patch exposes Markdown insertion and coordinate-to-Markdown-offset mapping; application code must not access `editor.view` or other package internals.
-
-## Database and compatibility
-
-The server requires SQLite schema v2. `openDatabase` rejects unknown versions and a legacy database with tables but no supported `user_version`. Within schema v2 it additively creates trusted endpoints, session endpoint linkage, and the user-scoped `profile_assets` ciphertext table without modifying encrypted note objects. Because old session rows cannot be reliably merged into browser endpoints, that one-time extension revokes all existing sessions. The browser keeps the `webmd-notes-v2` database name; Dexie v4 adds endpoint-bound credentials and durable pending revocation without changing ciphertext formats.
-
-The browser intentionally uses the separate IndexedDB name `webmd-notes-v2`. Dexie v5 adds encrypted history snapshots and their durable outbox without changing the database name or encrypted object formats. Changes to either schema require updates to architecture, security, deployment, backup, and migration documentation.
-
-All SQL access to owned objects, revisions, changes, attachment chunks, history snapshots, settings, clear markers, and usage must derive `user_id` from the authenticated session. Never accept an authorization scope from a request body or query parameter. Keep `note_history` separate from `object_revisions`; arbitrary deletion from the latter breaks incremental synchronization.
-
-Trusted-endpoint listing and revocation follow the same rule. The 24-hour gate uses the current endpoint's server-side `first_seen_at`, never client input, session creation, or a device timestamp. Login preserves this value while replacing the endpoint's old sessions. Activity tracking is throttled to one SQLite update per session and endpoint per minute.
-
-Use the online backup implementation in `server/backup.ts`; copying a live WAL-mode SQLite file is not a consistent backup.
-
-## PWA and content security
-
-The service worker precaches only local build assets and activates new builds through a user confirmation prompt. Synchronization correctness must not depend solely on Service Worker background sync or SSE delivery; startup, online, low-frequency safety, and visibility triggers remain required.
-
-The production Content Security Policy allows same-origin assets, local workers, data/blob images, and WebAssembly compilation for Argon2id. Adding a remote script, font, analytics endpoint, frame, or executable Markdown embed requires a security review and CSP change.
+- Keep the keystroke path independent of network latency: editor state, browser encryption, atomic IndexedDB object/outbox storage, then background synchronization.
+- Preserve the only remaining revision when synchronization conflicts or deletion flows fail.
+- Use the existing cryptographic wrappers and session-derived server authorization; do not add custom primitives or request-controlled user scopes.
+- Make attachment ciphertext durable before inserting its Markdown reference, and upload chunks before the manifest and owning note.
+- Use only documented `typora-web` controller methods. The maintained patch exposes Markdown insertion and coordinate-to-Markdown-offset mapping; application code must not access `editor.view` or package internals.
+- Treat Markdown as the canonical portable format. Editor mode changes, frontmatter presentation, and read-only rendering must not silently rewrite it.
+- Do not make synchronization correctness depend on Service Worker background execution or SSE delivery.
+- Review the security model and Content Security Policy before adding remote assets, analytics, raw HTML, or executable embeds.

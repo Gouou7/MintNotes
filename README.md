@@ -10,7 +10,7 @@ If you find a bug or have a feature suggestion, please submit an issue—or ask 
 ## Features
 
 - **Local-first and end-to-end encrypted:** Input and local saves never wait for the network; titles, content, folders, and attachments are encrypted in the browser before synchronization.
-- **Markdown editing:** Typora-style live editing, source mode, reading mode, a live outline, and text statistics.
+- **Markdown editing:** Typora-style live editing, source mode, reading mode, Obsidian-compatible callouts and YAML properties, a live outline, and text statistics.
 - **Organization and history:** Folders, search, sorting, drag-and-drop, trash, and encrypted cross-device version history with preview and restore.
 - **Multi-user and device security:** Multi-user accounts, recovery keys, activation codes, remembered devices, local PINs, automatic locking, and remote sign-out.
 - **Attachments and data migration:** Encrypted image attachments plus Markdown/ZIP import and export that preserve folder structure and attachment paths.
@@ -64,12 +64,11 @@ The [user guide](docs/USER_GUIDE.md) covers editor modes, file-tree operations, 
 
 ## Documentation
 
-- [User guide](docs/USER_GUIDE.md)
-- [Production deployment](docs/DEPLOYMENT.md)
-- [Backup and restore](docs/BACKUP_AND_RESTORE.md)
-- [Security model](docs/SECURITY.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Development guide](docs/DEVELOPMENT.md)
+See the [documentation index](docs/README.md) to choose a guide by task.
+
+- **Using Mint Notes:** [User guide](docs/USER_GUIDE.md)
+- **Operating Mint Notes:** [Production deployment](docs/DEPLOYMENT.md) and [backup and restore](docs/BACKUP_AND_RESTORE.md)
+- **Contributing:** [Development guide](docs/DEVELOPMENT.md), with architecture and security references linked from the documentation index
 
 ## Acknowledgements
 

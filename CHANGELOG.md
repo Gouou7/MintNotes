@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added Obsidian-compatible Callouts across live editing, reading, and historical previews, including common aliases, custom titles, nesting, and fold markers.
+- Added editable YAML frontmatter properties in Live mode and read-only properties in Reading mode and historical previews while preserving canonical Markdown.
+
 ## [0.1.0] - 2026-07-24
 
 ### Added

@@ -401,6 +401,33 @@ const messages = {
   "app.permanentDeleteEllipsis": { en: "Permanently delete…", "zh-CN": "永久删除…", "zh-TW": "永久刪除…" },
   "app.moveToTrash": { en: "Move to trash", "zh-CN": "移到回收站", "zh-TW": "移到垃圾桶" },
   "app.markdownSource": { en: "Markdown source", "zh-CN": "Markdown 源码", "zh-TW": "Markdown 原始碼" },
+  "properties.title": { en: "Note properties", "zh-CN": "笔记属性", "zh-TW": "筆記屬性" },
+  "properties.key": { en: "Property name", "zh-CN": "属性名称", "zh-TW": "屬性名稱" },
+  "properties.value": { en: "Value for {key}", "zh-CN": "{key} 的值", "zh-TW": "{key} 的值" },
+  "properties.noValue": { en: "No value", "zh-CN": "没有值", "zh-TW": "沒有值" },
+  "properties.add": { en: "Add note property", "zh-CN": "添加笔记属性", "zh-TW": "新增筆記屬性" },
+  "properties.remove": { en: "Remove property", "zh-CN": "删除属性", "zh-TW": "刪除屬性" },
+  "properties.removeNamed": { en: "Remove property {key}", "zh-CN": "删除属性 {key}", "zh-TW": "刪除屬性 {key}" },
+  "properties.addListValue": { en: "Add value", "zh-CN": "添加值", "zh-TW": "新增值" },
+  "properties.removeListValue": { en: "Remove value {value}", "zh-CN": "删除值 {value}", "zh-TW": "刪除值 {value}" },
+  "properties.keyRequired": { en: "A property name is required.", "zh-CN": "属性名称不能为空。", "zh-TW": "屬性名稱不能為空。" },
+  "properties.keyDuplicate": { en: "That property name already exists.", "zh-CN": "该属性名称已存在。", "zh-TW": "該屬性名稱已存在。" },
+  "properties.invalid": {
+    en: "This YAML frontmatter is invalid and has been left unchanged.",
+    "zh-CN": "这段 YAML 元数据无效，内容已原样保留。",
+    "zh-TW": "這段 YAML 中繼資料無效，內容已原樣保留。"
+  },
+  "properties.sourceHint": {
+    en: "Switch to Source mode to edit the original YAML.",
+    "zh-CN": "请切换到源码模式编辑原始 YAML。",
+    "zh-TW": "請切換到原始碼模式編輯原始 YAML。"
+  },
+  "properties.complexValue": { en: "Complex YAML value", "zh-CN": "复杂 YAML 值", "zh-TW": "複雜 YAML 值" },
+  "properties.complexHint": {
+    en: "Complex YAML values are read-only here. Edit them in Source mode.",
+    "zh-CN": "复杂 YAML 值在此处为只读，请在源码模式中编辑。",
+    "zh-TW": "複雜 YAML 值在此處為唯讀，請在原始碼模式中編輯。"
+  },
   "app.attachmentNotLoaded": { en: "Attachment not loaded: {name}", "zh-CN": "附件尚未加载：{name}", "zh-TW": "附件尚未載入：{name}" },
 
   "notice.attachmentConflict": { en: "Attachment metadata conflict detected. The server version was retained and local attachment chunks were not deleted.", "zh-CN": "检测到附件元数据冲突；已保留服务器版本，本地附件分块仍未删除。", "zh-TW": "偵測到附件中繼資料衝突；已保留伺服器版本，本機附件分塊仍未刪除。" },
