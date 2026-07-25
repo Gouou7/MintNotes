@@ -38,6 +38,8 @@ export interface CryptoClient {
   decryptProfileAvatar(userId: string, avatar: EncryptedProfileAvatar): Promise<{ mime: string; data: ArrayBuffer }>;
   wrapVaultForDevice(userId: string, deviceKey: CryptoKey): Promise<{ ciphertext: string; nonce: string; version: 1 }>;
   unlockVaultFromDevice(userId: string, deviceKey: CryptoKey, ciphertext: string, nonce: string): Promise<unknown>;
+  wrapVaultForDeviceWithPin(userId: string, endpointId: string, deviceKey: CryptoKey, pin: string, salt: string): Promise<{ ciphertext: string; nonce: string; version: 1 }>;
+  unlockVaultFromDeviceWithPin(userId: string, endpointId: string, deviceKey: CryptoKey, pin: string, salt: string, ciphertext: string, nonce: string, kdfVersion: 1): Promise<unknown>;
   derivePinVerifier(pin: string, salt: string): Promise<{ verifier: string }>;
   encryptObject(userId: string, objectId: string, objectType: ObjectType, revision: number, object: VaultObject): Promise<{ ciphertext: string; nonce: string; encryptionVersion: number }>;
   decryptObject(userId: string, objectId: string, objectType: ObjectType, revision: number, ciphertext: string, nonce: string): Promise<VaultObject>;
@@ -82,6 +84,8 @@ export function createCryptoClient(): CryptoClient {
     decryptProfileAvatar: (userId, avatar) => call("decryptProfileAvatar", { userId, ...avatar }),
     wrapVaultForDevice: (userId, deviceKey) => call("wrapVaultForDevice", { userId, deviceKey }),
     unlockVaultFromDevice: (userId, deviceKey, ciphertext, nonce) => call("unlockVaultFromDevice", { userId, deviceKey, ciphertext, nonce }),
+    wrapVaultForDeviceWithPin: (userId, endpointId, deviceKey, pin, salt) => call("wrapVaultForDeviceWithPin", { userId, endpointId, deviceKey, pin, salt }),
+    unlockVaultFromDeviceWithPin: (userId, endpointId, deviceKey, pin, salt, ciphertext, nonce, kdfVersion) => call("unlockVaultFromDeviceWithPin", { userId, endpointId, deviceKey, pin, salt, ciphertext, nonce, kdfVersion }),
     derivePinVerifier: (pin, salt) => call("derivePinVerifier", { pin, salt }),
     encryptObject: (userId, objectId, objectType, revision, object) => call("encryptObject", { userId, objectId, objectType, revision, document: object }),
     decryptObject: (userId, objectId, objectType, revision, ciphertext, nonce) => call("decryptObject", { userId, objectId, objectType, revision, ciphertext, nonce }),

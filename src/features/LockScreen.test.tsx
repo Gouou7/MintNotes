@@ -9,9 +9,14 @@ import { LockScreen } from "./LockScreen";
 vi.mock("../api", () => ({ api: vi.fn() }));
 vi.mock("../crypto/client", () => ({ cryptoClient: { prepareLogin: vi.fn(), unlockVault: vi.fn() } }));
 vi.mock("../crypto/deviceUnlock", () => ({
+  hasDevicePin: (credential: DeviceUnlockCredential | null) => Boolean(
+    credential && (
+      (credential.version === 3 && credential.protection === "pin")
+      || (credential.version === 2 && credential.pinVerifier)
+    )
+  ),
   markEndpointRevocationPending: vi.fn(),
-  restoreDeviceUnlock: vi.fn(),
-  verifyDevicePin: vi.fn()
+  unlockDeviceWithPin: vi.fn()
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

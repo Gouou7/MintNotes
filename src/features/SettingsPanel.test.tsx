@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import packageMetadata from "../../package.json";
 import { api } from "../api";
 import { setAutoLockMinutes } from "../crypto/deviceUnlock";
 import { I18nProvider } from "../i18n";
@@ -9,7 +10,15 @@ import { SettingsPanel } from "./SettingsPanel";
 
 vi.mock("../api", () => ({ api: vi.fn() }));
 vi.mock("../crypto/client", () => ({ cryptoClient: { prepareLogin: vi.fn(), discardPendingLogin: vi.fn(), rotateRecoveryKey: vi.fn(), encryptProfileAvatar: vi.fn(), decryptProfileAvatar: vi.fn(), rewrapPassword: vi.fn() } }));
-vi.mock("../crypto/deviceUnlock", () => ({ getDeviceUnlock: vi.fn(), removeDevicePin: vi.fn(), setAutoLockMinutes: vi.fn(), setDevicePin: vi.fn() }));
+vi.mock("../crypto/deviceUnlock", () => ({
+  getDeviceUnlock: vi.fn(),
+  hasDevicePin: (credential: { version?: number; protection?: string; pinVerifier?: string } | null) => Boolean(
+    credential && ((credential.version === 3 && credential.protection === "pin") || credential.pinVerifier)
+  ),
+  removeDevicePin: vi.fn(),
+  setAutoLockMinutes: vi.fn(),
+  setDevicePin: vi.fn()
+}));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const roots: Root[] = [];
@@ -156,7 +165,7 @@ describe("SettingsPanel", () => {
   it("shows project attribution and the package version in About", async () => {
     const container = await renderSettings();
     await act(async () => button(container, "关于").click());
-    expect(container.querySelector(".about-product")?.textContent).toContain("Mint Notes版本 0.1.0");
+    expect(container.querySelector(".about-product")?.textContent).toContain(`Mint Notes版本 ${packageMetadata.displayVersion}`);
     expect(container.querySelector(".about-introduction")?.textContent).toContain("Mint Notes 是一款使用 AI 开发的玩具级项目");
     expect(container.querySelector(".about-feedback")?.textContent).toBe("如果你发现 Bug 或者有功能建议，请不要向我提，向你的 AI 提！");
     expect(container.textContent).toContain("致谢");

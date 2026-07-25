@@ -1,5 +1,11 @@
 import { cryptoClient } from "./client";
-import { localDb, type DeviceUnlockCredential } from "../storage/database";
+import {
+  localDb,
+  type DeviceUnlockCredential,
+  type DirectDeviceUnlockCredential,
+  type LegacyDeviceUnlockCredential,
+  type PinProtectedDeviceUnlockCredential
+} from "../storage/database";
 
 const SESSION_GRANT_KEY = "webmd-device-session-grant";
 const SESSION_CHANNEL = "webmd-device-session";
@@ -79,24 +85,34 @@ export async function rememberDeviceUnlock(
   mode: "remembered" | "session"
 ): Promise<DeviceUnlockCredential> {
   const previous = await localDb.deviceCredentials.get(userId);
+  if (previous?.endpointId === endpointId && hasDevicePin(previous)) {
+    const credential: DeviceUnlockCredential = {
+      ...previous,
+      mode,
+      failedPinAttempts: 0,
+      updatedAt: new Date().toISOString()
+    };
+    await localDb.deviceCredentials.put(credential);
+    grantCurrentBrowserSession(endpointId);
+    return credential;
+  }
   const deviceKey = await crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
     false,
     ["encrypt", "decrypt"]
   );
   const wrapped = await cryptoClient.wrapVaultForDevice(userId, deviceKey);
-  const credential: DeviceUnlockCredential = {
+  const credential: DirectDeviceUnlockCredential = {
     userId,
     endpointId,
     mode,
     deviceKey,
     ciphertext: wrapped.ciphertext,
     nonce: wrapped.nonce,
-    version: 2,
-    pinSalt: previous?.endpointId === endpointId ? previous.pinSalt : undefined,
-    pinVerifier: previous?.endpointId === endpointId ? previous.pinVerifier : undefined,
+    version: 3,
+    protection: "device",
     failedPinAttempts: 0,
-    autoLockMinutes: previous?.endpointId === endpointId ? previous.autoLockMinutes : 0,
+    autoLockMinutes: previous?.endpointId === endpointId && !hasDevicePin(previous) ? previous.autoLockMinutes : 0,
     updatedAt: new Date().toISOString()
   };
   await localDb.deviceCredentials.put(credential);
@@ -106,15 +122,50 @@ export async function rememberDeviceUnlock(
 
 export async function getDeviceUnlock(userId: string, endpointId?: string): Promise<DeviceUnlockCredential | undefined> {
   const credential = await localDb.deviceCredentials.get(userId);
-  if (!credential || credential.version !== 2 || (endpointId && credential.endpointId !== endpointId)) return undefined;
+  if (!credential || (credential.version !== 2 && credential.version !== 3) || (endpointId && credential.endpointId !== endpointId)) return undefined;
+  if (credential.version === 3 && credential.protection !== "device" && credential.protection !== "pin") return undefined;
   return credential;
+}
+
+export function hasDevicePin(credential: DeviceUnlockCredential | null | undefined): boolean {
+  return Boolean(credential && (
+    isPinProtectedCredential(credential)
+    || (credential.version === 2 && credential.pinSalt && credential.pinVerifier)
+  ));
+}
+
+function isPinProtectedCredential(credential: DeviceUnlockCredential): credential is PinProtectedDeviceUnlockCredential {
+  return credential.version === 3 && credential.protection === "pin";
+}
+
+function isLegacyPinCredential(credential: DeviceUnlockCredential): credential is LegacyDeviceUnlockCredential & {
+  pinSalt: string;
+  pinVerifier: string;
+} {
+  return credential.version === 2 && Boolean(credential.pinSalt && credential.pinVerifier);
 }
 
 export async function restoreDeviceUnlock(userId: string, endpointId: string): Promise<boolean> {
   const credential = await getDeviceUnlock(userId, endpointId);
-  if (!credential) return false;
+  if (!credential || isPinProtectedCredential(credential) || isLegacyPinCredential(credential)) return false;
   try {
     await cryptoClient.unlockVaultFromDevice(userId, credential.deviceKey, credential.ciphertext, credential.nonce);
+    if (credential.version === 2) {
+      const migrated: DirectDeviceUnlockCredential = {
+        userId: credential.userId,
+        endpointId: credential.endpointId,
+        mode: credential.mode,
+        deviceKey: credential.deviceKey,
+        ciphertext: credential.ciphertext,
+        nonce: credential.nonce,
+        version: 3,
+        protection: "device",
+        failedPinAttempts: 0,
+        autoLockMinutes: credential.autoLockMinutes,
+        updatedAt: new Date().toISOString()
+      };
+      await localDb.deviceCredentials.put(migrated);
+    }
     grantCurrentBrowserSession(endpointId);
     return true;
   } catch {
@@ -135,31 +186,111 @@ export async function setDevicePin(userId: string, endpointId: string, pin: stri
   const credential = await getDeviceUnlock(userId, endpointId);
   if (!credential) throw new Error("当前设备没有可用的本机解锁凭据");
   const salt = toBase64(crypto.getRandomValues(new Uint8Array(16)));
-  const { verifier } = await cryptoClient.derivePinVerifier(pin, salt);
-  await localDb.deviceCredentials.put({ ...credential, pinSalt: salt, pinVerifier: verifier, failedPinAttempts: 0, updatedAt: new Date().toISOString() });
+  const wrapped = await cryptoClient.wrapVaultForDeviceWithPin(userId, endpointId, credential.deviceKey, pin, salt);
+  const protectedCredential: PinProtectedDeviceUnlockCredential = {
+    userId,
+    endpointId,
+    mode: credential.mode,
+    deviceKey: credential.deviceKey,
+    version: 3,
+    protection: "pin",
+    pinKdfVersion: 1,
+    pinSalt: salt,
+    pinCiphertext: wrapped.ciphertext,
+    pinNonce: wrapped.nonce,
+    failedPinAttempts: 0,
+    autoLockMinutes: credential.autoLockMinutes,
+    updatedAt: new Date().toISOString()
+  };
+  await localDb.deviceCredentials.put(protectedCredential);
 }
 
 export async function removeDevicePin(userId: string, endpointId: string): Promise<void> {
   const credential = await getDeviceUnlock(userId, endpointId);
   if (!credential) return;
-  await localDb.deviceCredentials.put({ ...credential, pinSalt: undefined, pinVerifier: undefined, failedPinAttempts: 0, updatedAt: new Date().toISOString() });
+  const wrapped = await cryptoClient.wrapVaultForDevice(userId, credential.deviceKey);
+  const directCredential: DirectDeviceUnlockCredential = {
+    userId,
+    endpointId,
+    mode: credential.mode,
+    deviceKey: credential.deviceKey,
+    version: 3,
+    protection: "device",
+    ciphertext: wrapped.ciphertext,
+    nonce: wrapped.nonce,
+    failedPinAttempts: 0,
+    autoLockMinutes: 0,
+    updatedAt: new Date().toISOString()
+  };
+  await localDb.deviceCredentials.put(directCredential);
 }
 
-export async function verifyDevicePin(userId: string, endpointId: string, pin: string): Promise<"ok" | "invalid" | "exhausted"> {
-  const credential = await getDeviceUnlock(userId, endpointId);
-  if (!credential?.pinSalt || !credential.pinVerifier) return "invalid";
-  const { verifier } = await cryptoClient.derivePinVerifier(pin, credential.pinSalt);
-  if (equalVerifier(verifier, credential.pinVerifier)) {
-    await localDb.deviceCredentials.put({ ...credential, failedPinAttempts: 0, updatedAt: new Date().toISOString() });
-    return "ok";
-  }
+async function recordFailedPin(
+  credential: DeviceUnlockCredential
+): Promise<"invalid" | "exhausted"> {
   const failedPinAttempts = credential.failedPinAttempts + 1;
   if (failedPinAttempts >= 5) {
-    await forgetDeviceUnlock(userId);
+    await forgetDeviceUnlock(credential.userId);
     return "exhausted";
   }
   await localDb.deviceCredentials.put({ ...credential, failedPinAttempts, updatedAt: new Date().toISOString() });
   return "invalid";
+}
+
+export async function unlockDeviceWithPin(userId: string, endpointId: string, pin: string): Promise<"ok" | "invalid" | "exhausted"> {
+  const credential = await getDeviceUnlock(userId, endpointId);
+  if (!credential || !hasDevicePin(credential)) return "invalid";
+
+  if (isPinProtectedCredential(credential)) {
+    try {
+      await cryptoClient.unlockVaultFromDeviceWithPin(
+        userId,
+        endpointId,
+        credential.deviceKey,
+        pin,
+        credential.pinSalt,
+        credential.pinCiphertext,
+        credential.pinNonce,
+        credential.pinKdfVersion
+      );
+    } catch {
+      await cryptoClient.lock().catch(() => undefined);
+      return recordFailedPin(credential);
+    }
+    await localDb.deviceCredentials.put({ ...credential, failedPinAttempts: 0, updatedAt: new Date().toISOString() });
+    grantCurrentBrowserSession(endpointId);
+    return "ok";
+  }
+
+  if (!isLegacyPinCredential(credential)) return "invalid";
+  const { verifier } = await cryptoClient.derivePinVerifier(pin, credential.pinSalt);
+  if (!equalVerifier(verifier, credential.pinVerifier)) return recordFailedPin(credential);
+
+  try {
+    await cryptoClient.unlockVaultFromDevice(userId, credential.deviceKey, credential.ciphertext, credential.nonce);
+    const wrapped = await cryptoClient.wrapVaultForDeviceWithPin(userId, endpointId, credential.deviceKey, pin, credential.pinSalt);
+    const migrated: PinProtectedDeviceUnlockCredential = {
+      userId,
+      endpointId,
+      mode: credential.mode,
+      deviceKey: credential.deviceKey,
+      version: 3,
+      protection: "pin",
+      pinKdfVersion: 1,
+      pinSalt: credential.pinSalt,
+      pinCiphertext: wrapped.ciphertext,
+      pinNonce: wrapped.nonce,
+      failedPinAttempts: 0,
+      autoLockMinutes: credential.autoLockMinutes,
+      updatedAt: new Date().toISOString()
+    };
+    await localDb.deviceCredentials.put(migrated);
+    grantCurrentBrowserSession(endpointId);
+    return "ok";
+  } catch (error) {
+    await cryptoClient.lock().catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function setAutoLockMinutes(userId: string, endpointId: string, autoLockMinutes: number): Promise<void> {

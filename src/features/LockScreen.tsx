@@ -3,7 +3,7 @@ import { LockKeyhole, LogOut, X } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { cryptoClient } from "../crypto/client";
-import { markEndpointRevocationPending, restoreDeviceUnlock, verifyDevicePin } from "../crypto/deviceUnlock";
+import { hasDevicePin, markEndpointRevocationPending, unlockDeviceWithPin } from "../crypto/deviceUnlock";
 import { translateError, useI18n } from "../i18n";
 import { submitFormOnEnter } from "./formKeyboard";
 import type { DeviceUnlockCredential } from "../storage/database";
@@ -22,7 +22,7 @@ export function LockScreen({ user, endpoint, credential, onUnlocked, onTrustExha
   const { t } = useI18n();
   const [pin, setPin] = useState("");
   const [password, setPassword] = useState("");
-  const [usePassword, setUsePassword] = useState(!credential.pinVerifier);
+  const [usePassword, setUsePassword] = useState(!hasDevicePin(credential));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [logoutConfirming, setLogoutConfirming] = useState(false);
@@ -32,13 +32,13 @@ export function LockScreen({ user, endpoint, credential, onUnlocked, onTrustExha
     setBusy(true);
     setError("");
     try {
-      const result = await verifyDevicePin(user.id, endpoint.id, pin);
+      const result = await unlockDeviceWithPin(user.id, endpoint.id, pin);
       if (result === "exhausted") {
         await markEndpointRevocationPending(user.id, endpoint.id);
         await onTrustExhausted();
         return;
       }
-      if (result !== "ok" || !await restoreDeviceUnlock(user.id, endpoint.id)) throw new Error(t("lock.invalidPin"));
+      if (result !== "ok") throw new Error(t("lock.invalidPin"));
       await onUnlocked(false);
     } catch (value) {
       setError(translateError(value, t, "lock.cannotUnlock"));
@@ -72,7 +72,7 @@ export function LockScreen({ user, endpoint, credential, onUnlocked, onTrustExha
       <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
       <h1><AppIcon icon={LockKeyhole} />{t("lock.title")}</h1>
       <p className="auth-subtitle">{t("lock.subtitle")}</p>
-      {!usePassword && credential.pinVerifier ? <form onSubmit={unlockWithPin}>
+      {!usePassword && hasDevicePin(credential) ? <form onSubmit={unlockWithPin}>
         <label>{t("lock.devicePin")}<input type="password" value={pin} onChange={(event) => setPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" autoFocus required /></label>
         {error && <p className="error">{error}</p>}
         <button type="submit" className="primary" disabled={busy}>{busy ? t("lock.unlocking") : t("lock.unlockWithPin")}</button>
@@ -81,7 +81,7 @@ export function LockScreen({ user, endpoint, credential, onUnlocked, onTrustExha
         <label>{t("auth.masterPassword")}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete="current-password" enterKeyHint="done" autoFocus required /></label>
         {error && <p className="error">{error}</p>}
         <button type="submit" className="primary" disabled={busy}>{busy ? t("lock.verifying") : t("lock.unlockWithPassword")}</button>
-        {credential.pinVerifier && <button type="button" onClick={() => { setUsePassword(false); setError(""); }}>{t("lock.backToPin")}</button>}
+        {hasDevicePin(credential) && <button type="button" onClick={() => { setUsePassword(false); setError(""); }}>{t("lock.backToPin")}</button>}
       </form>}
       <button className="danger-text" onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} size={16} />{t("lock.logout")}</button>
     </section>

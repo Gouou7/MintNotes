@@ -93,10 +93,17 @@ const encrypted = await loginWorker.call("encryptObject", {
 });
 const deviceKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 const deviceWrapped = await loginWorker.call("wrapVaultForDevice", { userId, deviceKey });
+const pinSalt = "MTIzNDU2Nzg5MGFiY2RlZg";
+const pinProtected = await loginWorker.call("wrapVaultForDeviceWithPin", {
+  userId,
+  endpointId: "endpoint-id",
+  deviceKey,
+  pin: "246810",
+  salt: pinSalt
+});
 await loginWorker.worker.terminate();
 
 const deviceWorker = createCryptoWorker();
-const pinSalt = "MTIzNDU2Nzg5MGFiY2RlZg";
 const pinVerifier = await deviceWorker.call("derivePinVerifier", { pin: "246810", salt: pinSalt });
 const repeatedPinVerifier = await deviceWorker.call("derivePinVerifier", { pin: "246810", salt: pinSalt });
 const otherPinVerifier = await deviceWorker.call("derivePinVerifier", { pin: "135790", salt: pinSalt });
@@ -119,22 +126,69 @@ const deviceDecrypted = await deviceWorker.call("decryptObject", {
 });
 await deviceWorker.worker.terminate();
 
+const wrongPinWorker = createCryptoWorker();
+let wrongPinRejected = false;
+try {
+  await wrongPinWorker.call("unlockVaultFromDeviceWithPin", {
+    userId,
+    endpointId: "endpoint-id",
+    deviceKey,
+    pin: "135790",
+    salt: pinSalt,
+    ciphertext: pinProtected.ciphertext,
+    nonce: pinProtected.nonce,
+    kdfVersion: 1
+  });
+} catch {
+  wrongPinRejected = true;
+}
+await wrongPinWorker.worker.terminate();
+if (!wrongPinRejected) throw new Error("Incorrect PIN released the device credential");
+
+const pinWorker = createCryptoWorker();
+await pinWorker.call("unlockVaultFromDeviceWithPin", {
+  userId,
+  endpointId: "endpoint-id",
+  deviceKey,
+  pin: "246810",
+  salt: pinSalt,
+  ciphertext: pinProtected.ciphertext,
+  nonce: pinProtected.nonce,
+  kdfVersion: 1
+});
+const pinDeviceDecrypted = await pinWorker.call("decryptObject", {
+  userId,
+  objectId,
+  objectType: "note",
+  revision: 1,
+  ciphertext: encrypted.ciphertext,
+  nonce: encrypted.nonce
+});
+await pinWorker.worker.terminate();
+
 const tamperedDeviceWorker = createCryptoWorker();
-const lastDeviceCharacter = deviceWrapped.ciphertext.at(-1);
-const tamperedDeviceCiphertext = `${deviceWrapped.ciphertext.slice(0, -1)}${lastDeviceCharacter === "A" ? "B" : "A"}`;
+const lastDeviceCharacter = pinProtected.ciphertext.at(-1);
+const tamperedDeviceCiphertext = `${pinProtected.ciphertext.slice(0, -1)}${lastDeviceCharacter === "A" ? "B" : "A"}`;
 let tamperedDeviceCredentialRejected = false;
 try {
-  await tamperedDeviceWorker.call("unlockVaultFromDevice", {
+  await tamperedDeviceWorker.call("unlockVaultFromDeviceWithPin", {
     userId,
+    endpointId: "endpoint-id",
     deviceKey,
+    pin: "246810",
+    salt: pinSalt,
     ciphertext: tamperedDeviceCiphertext,
-    nonce: deviceWrapped.nonce
+    nonce: pinProtected.nonce,
+    kdfVersion: 1
   });
 } catch {
   tamperedDeviceCredentialRejected = true;
 }
 await tamperedDeviceWorker.worker.terminate();
 if (!tamperedDeviceCredentialRejected) throw new Error("Tampered device credential was accepted");
+if (JSON.stringify(pinDeviceDecrypted) !== JSON.stringify(document)) {
+  throw new Error("PIN-protected device unlock changed the encrypted document");
+}
 
 const recoveryWorker = createCryptoWorker();
 const recovery = await recoveryWorker.call("unlockRecovery", {
@@ -298,6 +352,8 @@ console.log(JSON.stringify({
   recoveryAcrossWorkers: true,
   deviceUnlockAcrossWorkers: true,
   localPinVerifier: true,
+  pinEncryptedDeviceCredential: true,
+  wrongPinRejected: true,
   tamperedDeviceCredentialRejected: true,
   encryptedDocumentRoundTrip: true,
   encryptedAttachmentRoundTrip: true,

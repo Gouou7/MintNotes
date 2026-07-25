@@ -68,6 +68,7 @@ When documents disagree, use this evidence order: implementation code, automated
 - Authentication tokens belong in production `Secure`, `HttpOnly`, `SameSite=Strict` cookies. Only token hashes are stored server-side.
 - Persistent endpoint cookies identify a user/browser profile but never authenticate by themselves; endpoint and session hashes remain separate and all endpoint queries use the authenticated session's user ID.
 - Local PIN data, device keys, auto-lock preferences, and pending endpoint revocations stay browser-only and must be excluded from diagnostics. Locking clears decrypted memory; logout and invalid sessions also delete local trust.
+- Once a local PIN is configured, IndexedDB may retain only a PIN-encrypted device credential. Refresh, session grants, and cross-tab grants must never restore a PIN-protected vault without deriving the PIN wrapping key again.
 - Raw HTML and remote executable embeds remain disabled in Markdown.
 - Do not weaken exact-origin checks or CSP to work around a deployment error; fix `APP_ORIGIN` and reverse-proxy forwarding instead.
 

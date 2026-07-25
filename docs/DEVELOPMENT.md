@@ -97,7 +97,7 @@ The order matters:
 - `pnpm test:crypto-worker` loads the built Worker bundle from `dist/assets`.
 - `pnpm test:smoke` starts `server-dist/index.js` against a temporary database and removes it afterward.
 
-The smoke test covers account bootstrap, cross-user object, attachment, avatar, note-history and SSE isolation, source-client notification suppression, batch object writes and conflicts, compact delta pulls, history settings/clear barriers/purge, password and recovery-key changes, administrator activation and deletion, authenticated purge propagation, and trash-retention settings. The Worker test covers registration/login/recovery compatibility, recovery-key rotation, object, avatar, history and attachment round trips, nonce uniqueness, AAD binding, and tamper rejection.
+The smoke test covers account bootstrap, cross-user object, attachment, avatar, note-history and SSE isolation, source-client notification suppression, batch object writes and conflicts, compact delta pulls, history settings/clear barriers/purge, password and recovery-key changes, administrator activation and deletion, authenticated purge propagation, and trash-retention settings. The Worker test covers registration/login/recovery compatibility, recovery-key rotation, PIN-encrypted device credentials, wrong-PIN rejection, object, avatar, history and attachment round trips, nonce uniqueness, AAD binding, and tamper rejection.
 
 ## Implementation boundaries
 

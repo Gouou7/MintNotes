@@ -11,6 +11,12 @@ const DEFAULT_KDF: KdfParams = {
   memLimit: 64 * 1024 * 1024,
   version: 1
 };
+const PIN_KDF: KdfParams = {
+  algorithm: "argon2id",
+  opsLimit: 3,
+  memLimit: 64 * 1024 * 1024,
+  version: 1
+};
 
 let vaultKey: Uint8Array | null = null;
 let pendingWrapKey: Uint8Array | null = null;
@@ -122,6 +128,10 @@ function deviceUnlockAad(userId: string): string {
   return `webmd:${userId}:device-unlock:v1`;
 }
 
+function devicePinUnlockAad(userId: string, endpointId: string): string {
+  return `webmd:${userId}:${endpointId}:device-pin-unlock:v1`;
+}
+
 function profileAvatarAad(userId: string): string {
   return `webmd:${userId}:profile-avatar:v1`;
 }
@@ -134,6 +144,31 @@ function validateDeviceKey(key: CryptoKey, usage: "encrypt" | "decrypt") {
   if (key.type !== "secret" || key.extractable || key.algorithm.name !== "AES-GCM" || !key.usages.includes(usage)) {
     throw new Error("Invalid device unlock key");
   }
+}
+
+async function wrapVaultBytesForDevice(userId: string, deviceKey: CryptoKey, bytes: Uint8Array) {
+  validateDeviceKey(deviceKey, "encrypt");
+  const nonce = randomBytes(12);
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: ownedBuffer(nonce), additionalData: new TextEncoder().encode(deviceUnlockAad(userId)), tagLength: 128 },
+    deviceKey,
+    ownedBuffer(bytes)
+  ));
+  return { ciphertext: b64(ciphertext), nonce: b64(nonce), version: 1 as const };
+}
+
+async function unwrapVaultBytesFromDevice(userId: string, deviceKey: CryptoKey, ciphertext: string, nonce: string): Promise<Uint8Array> {
+  validateDeviceKey(deviceKey, "decrypt");
+  const restored = new Uint8Array(await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: ownedBuffer(fromB64(nonce)), additionalData: new TextEncoder().encode(deviceUnlockAad(userId)), tagLength: 128 },
+    deviceKey,
+    ownedBuffer(fromB64(ciphertext))
+  ));
+  if (restored.byteLength !== 32) {
+    restored.fill(0);
+    throw new Error("Invalid device unlock credential");
+  }
+  return restored;
 }
 
 async function handle(operation: string, payload: any): Promise<any> {
@@ -268,31 +303,52 @@ async function handle(operation: string, payload: any): Promise<any> {
     }
     case "wrapVaultForDevice": {
       if (!vaultKey) throw new Error("Vault is locked");
-      const deviceKey = payload.deviceKey as CryptoKey;
-      validateDeviceKey(deviceKey, "encrypt");
-      const nonce = randomBytes(12);
-      const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv: ownedBuffer(nonce), additionalData: new TextEncoder().encode(deviceUnlockAad(payload.userId)), tagLength: 128 },
-        deviceKey,
-        ownedBuffer(vaultKey)
-      ));
-      return { ciphertext: b64(ciphertext), nonce: b64(nonce), version: 1 };
+      return wrapVaultBytesForDevice(payload.userId, payload.deviceKey as CryptoKey, vaultKey);
     }
     case "unlockVaultFromDevice": {
-      const deviceKey = payload.deviceKey as CryptoKey;
-      validateDeviceKey(deviceKey, "decrypt");
-      const restored = new Uint8Array(await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: ownedBuffer(fromB64(payload.nonce)), additionalData: new TextEncoder().encode(deviceUnlockAad(payload.userId)), tagLength: 128 },
-        deviceKey,
-        ownedBuffer(fromB64(payload.ciphertext))
-      ));
-      if (restored.byteLength !== 32) {
-        restored.fill(0);
-        throw new Error("Invalid device unlock credential");
-      }
+      const restored = await unwrapVaultBytesFromDevice(payload.userId, payload.deviceKey as CryptoKey, payload.ciphertext, payload.nonce);
       if (vaultKey) vaultKey.fill(0);
       vaultKey = restored;
       return { unlocked: true };
+    }
+    case "wrapVaultForDeviceWithPin": {
+      if (!vaultKey) throw new Error("Vault is locked");
+      if (payload.kdfVersion !== undefined && payload.kdfVersion !== PIN_KDF.version) throw new Error("Unsupported PIN KDF version");
+      const inner = await wrapVaultBytesForDevice(payload.userId, payload.deviceKey as CryptoKey, vaultKey);
+      const encoded = new TextEncoder().encode(JSON.stringify({ ciphertext: inner.ciphertext, nonce: inner.nonce }));
+      const root = await deriveRoot(payload.pin, fromB64(payload.salt), PIN_KDF);
+      const pinKey = await deriveSubkey(root, "webmd-local-pin-wrapping-v1");
+      try {
+        return { ...await seal(encoded, pinKey, devicePinUnlockAad(payload.userId, payload.endpointId)), version: 1 };
+      } finally {
+        encoded.fill(0);
+        root.fill(0);
+        pinKey.fill(0);
+      }
+    }
+    case "unlockVaultFromDeviceWithPin": {
+      if (payload.kdfVersion !== PIN_KDF.version) throw new Error("Unsupported PIN KDF version");
+      const root = await deriveRoot(payload.pin, fromB64(payload.salt), PIN_KDF);
+      const pinKey = await deriveSubkey(root, "webmd-local-pin-wrapping-v1");
+      let encoded: Uint8Array | null = null;
+      try {
+        encoded = await open(
+          payload.ciphertext,
+          payload.nonce,
+          pinKey,
+          devicePinUnlockAad(payload.userId, payload.endpointId)
+        );
+        const inner = JSON.parse(new TextDecoder().decode(encoded)) as { ciphertext?: unknown; nonce?: unknown };
+        if (typeof inner.ciphertext !== "string" || typeof inner.nonce !== "string") throw new Error("Invalid PIN-protected device credential");
+        const restored = await unwrapVaultBytesFromDevice(payload.userId, payload.deviceKey as CryptoKey, inner.ciphertext, inner.nonce);
+        if (vaultKey) vaultKey.fill(0);
+        vaultKey = restored;
+        return { unlocked: true };
+      } finally {
+        encoded?.fill(0);
+        root.fill(0);
+        pinKey.fill(0);
+      }
     }
     case "derivePinVerifier": {
       const params: KdfParams = { ...DEFAULT_KDF, memLimit: 32 * 1024 * 1024 };

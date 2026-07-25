@@ -20,7 +20,7 @@ The server necessarily observes usernames, display names, roles, account status,
 
 - An actively compromised server can replace the JavaScript application and capture a password or unlocked key.
 - Malware, a hostile browser extension, or physical access to an unlocked device can read plaintext.
-- Malware or hostile same-origin JavaScript can use a stored device key while its browser profile remains trusted, even though the key is non-exportable.
+- Malware or hostile same-origin JavaScript can use a directly wrapped device credential while its browser profile remains trusted. With a local PIN configured, it can instead attempt PIN guesses against the stored authenticated ciphertext; a short PIN is not a defense against an attacker who controls the origin or browser profile.
 - A user-created plaintext export is outside the encrypted storage boundary.
 - Traffic metadata and ciphertext sizes are not hidden.
 
@@ -40,6 +40,7 @@ random vault key
   -> encrypted by vault wrapping key for normal unlock
   -> encrypted by an independent recovery key for recovery
   -> optionally encrypted by a non-exportable browser device key for online refresh recovery
+      -> when a PIN exists, the device envelope is encrypted again by an Argon2id-derived PIN wrapping key
   -> encrypts user objects with Web Crypto AES-256-GCM and random nonces
   -> encrypts attachment manifests containing independent random attachment keys
 
@@ -49,7 +50,11 @@ random attachment key
 
 The server receives an authentication secret but never receives the password, root key, wrapping key, recovery key, device key, device-wrapped vault credential, or plaintext vault key. The server stores a slow hash of the authentication secret.
 
-The device-unlock key is a non-exportable AES-256-GCM `CryptoKey` stored by the browser in IndexedDB. Its ciphertext is authenticated with the user ID and credential version. This protects the vault key from a simple copy of the wrapped credential, but it is a convenience boundary rather than hardware-backed authentication: malicious same-origin code can ask the stored key to decrypt. A local PIN stores only a domain-separated Argon2id verifier and does not protect against code already executing in the origin. Locking clears decrypted memory but preserves this credential. Session invalidation or five failed PIN attempts delete local trust; confirmed logout additionally deletes all current-user encrypted objects, attachment chunks, outboxes, cursors, and preferences from the browser.
+The device-unlock key is a non-exportable AES-256-GCM `CryptoKey` stored by the browser in IndexedDB. The inner device ciphertext is authenticated with the user ID. Without a PIN this is a convenience boundary rather than hardware-backed authentication: malicious same-origin code can ask the stored key to decrypt.
+
+When a PIN is configured, the browser derives a separate wrapping key with Argon2id and HMAC domain separation, then AES-GCM encrypts the complete inner device envelope with AAD binding it to the user, endpoint, and PIN-envelope version. IndexedDB does not retain the directly device-decryptable inner ciphertext. Lock and Worker termination erase the vault key, PIN-derived material, and decrypted envelope; refresh therefore requires the PIN again even when the authenticated browser-session grant remains valid. AES-GCM authentication replaces the former standalone verifier for new credentials. Legacy verifier records are blocked from automatic restoration and upgrade only after the entered PIN is verified.
+
+The PIN envelope improves the application lock boundary but does not turn a short PIN into a high-entropy secret. Anyone able to copy or repeatedly operate on browser storage can attempt guesses offline, and client-side failure counters can be rolled back. Five failed attempts delete local trust and request endpoint revocation as an online damage-control measure, not as a cryptographic brute-force guarantee. Session invalidation also deletes local trust; confirmed logout additionally deletes all current-user encrypted objects, attachment chunks, outboxes, cursors, and preferences from the browser.
 
 The browser derives a 32-byte Argon2id root through the bundled `hash-wasm` implementation. The current KDF profile uses three iterations, 64 MiB of memory, and one lane; its parameters and random salt are stored per account so a future profile can be versioned. Purpose-specific keys are then derived with Web Crypto HMAC-SHA-256. A cross-worker integration test verifies that registration, normal unlock, recovery unlock, and encrypted document round-trips remain stable across fresh Worker instances.
 

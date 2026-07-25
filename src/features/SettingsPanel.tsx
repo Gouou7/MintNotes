@@ -6,7 +6,7 @@ import { AppIcon } from "../components/AppIcon";
 import { LanguageSelect } from "../components/LanguageSelect";
 import type { ToastTone } from "../components/Toast";
 import { cryptoClient, type EncryptedProfileAvatar } from "../crypto/client";
-import { getDeviceUnlock, removeDevicePin, setAutoLockMinutes, setDevicePin } from "../crypto/deviceUnlock";
+import { getDeviceUnlock, hasDevicePin, removeDevicePin, setAutoLockMinutes, setDevicePin } from "../crypto/deviceUnlock";
 import { translateError, useI18n } from "../i18n";
 import type { DeviceUnlockCredential } from "../storage/database";
 import type { AuthEndpoint, HistorySettings, KdfParams, OpenDocument, TrustedEndpointsResponse, UiPreferences, User } from "../types";
@@ -241,7 +241,7 @@ export function SettingsPanel({ user, endpoint, credential, onCredentialChange, 
   };
 
   const updateAutoLock = async (minutes: number) => {
-    if (minutes > 0 && !credential?.pinVerifier) {
+    if (minutes > 0 && !hasDevicePin(credential)) {
       onNotify(t("notice.setPinFirst"), "warning");
       return;
     }
@@ -371,7 +371,7 @@ export function SettingsPanel({ user, endpoint, credential, onCredentialChange, 
 
           {tab === "security" && <div className="settings-section">
             <h3>{t("settings.setPin")}</h3><p className="settings-help">{t("settings.pinHelp")}</p>
-            <form className="compact-form" onSubmit={savePin}><label>{t("auth.masterPassword")}<input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" required /></label><label>{credential?.pinVerifier ? t("settings.newPin") : t("settings.setPin")}<input type="password" minLength={4} value={newPin} onChange={(event) => setNewPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" placeholder={t("settings.pinMin")} required /></label><div className="settings-actions"><button type="submit" className="primary compact" disabled={busy}>{credential?.pinVerifier ? t("settings.changePin") : t("settings.setPin")}</button>{credential?.pinVerifier && <button type="button" disabled={busy} onClick={() => void removePin()}>{t("settings.removePin")}</button>}</div></form>
+            <form className="compact-form" onSubmit={savePin}><label>{t("auth.masterPassword")}<input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" required /></label><label>{hasDevicePin(credential) ? t("settings.newPin") : t("settings.setPin")}<input type="password" minLength={4} value={newPin} onChange={(event) => setNewPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" placeholder={t("settings.pinMin")} required /></label><div className="settings-actions"><button type="submit" className="primary compact" disabled={busy}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</button>{hasDevicePin(credential) && <button type="button" disabled={busy} onClick={() => void removePin()}>{t("settings.removePin")}</button>}</div></form>
             <h3>{t("settings.autoLock")}</h3><p className="settings-help">{t("settings.autoLockHelp")}</p>
             <label className="settings-control-row"><span>{t("settings.autoLockAfter")}</span><select disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select></label>
             <h3>{t("settings.loginDevices")}</h3><p className="settings-help">{t("settings.loginDevicesHelp")}</p>

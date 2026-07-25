@@ -43,20 +43,44 @@ export interface LocalMeta {
   value: string;
 }
 
-export interface DeviceUnlockCredential {
+interface DeviceUnlockCredentialBase {
   userId: string;
   endpointId: string;
   mode: "remembered" | "session";
   deviceKey: CryptoKey;
-  ciphertext: string;
-  nonce: string;
-  version: 2;
-  pinSalt?: string;
-  pinVerifier?: string;
   failedPinAttempts: number;
   autoLockMinutes: number;
   updatedAt: string;
 }
+
+export interface LegacyDeviceUnlockCredential extends DeviceUnlockCredentialBase {
+  version: 2;
+  ciphertext: string;
+  nonce: string;
+  pinSalt?: string;
+  pinVerifier?: string;
+}
+
+export interface DirectDeviceUnlockCredential extends DeviceUnlockCredentialBase {
+  version: 3;
+  protection: "device";
+  ciphertext: string;
+  nonce: string;
+}
+
+export interface PinProtectedDeviceUnlockCredential extends DeviceUnlockCredentialBase {
+  version: 3;
+  protection: "pin";
+  pinKdfVersion: 1;
+  pinSalt: string;
+  pinCiphertext: string;
+  pinNonce: string;
+}
+
+export type DeviceUnlockCredential =
+  | LegacyDeviceUnlockCredential
+  | DirectDeviceUnlockCredential
+  | PinProtectedDeviceUnlockCredential;
 
 export interface PendingEndpointRevocation {
   endpointId: string;

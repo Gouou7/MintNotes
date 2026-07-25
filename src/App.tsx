@@ -43,6 +43,7 @@ import {
   getDeviceUnlock,
   grantCurrentBrowserSession,
   hasCurrentBrowserSessionGrant,
+  hasDevicePin,
   listenForBrowserSessionGrantRequests,
   rememberDeviceUnlock,
   requestBrowserSessionGrant,
@@ -226,7 +227,7 @@ export default function App() {
         if (!active) return;
         setSession({ user: sessionUser, endpoint });
         setCredential(stored);
-        const needsPin = Boolean(stored.pinVerifier) && !browserSessionGranted;
+        const needsPin = hasDevicePin(stored);
         if (!needsPin && await restoreDeviceUnlock(sessionUser.id, endpoint.id) && active) setUser(sessionUser);
       })
       .catch(async (value) => {
@@ -2314,7 +2315,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
   };
 
   const manualLock = () => {
-    if (!credential?.pinVerifier) {
+    if (!hasDevicePin(credential)) {
       showMessage(t("notice.configurePin"));
       return;
     }
