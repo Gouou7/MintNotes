@@ -1,4 +1,11 @@
-import { type CSSProperties, type DragEvent, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useRef,
+  useState
+} from "react";
 import { createEditor, type TyporaWebEditor } from "typora-web";
 import "typora-web/widgets.css";
 import "typora-web/theme-typora.css";
@@ -9,6 +16,7 @@ import {
   canonicalizeCalloutsFromLive,
   materializeCalloutsForLive,
   parseCalloutMarker,
+  removeCalloutAtIndex,
   type CalloutKind
 } from "./callouts";
 import { FrontmatterProperties } from "./FrontmatterProperties";
@@ -73,13 +81,16 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
     const editor = createEditor(hostRef.current, {
       initialContent: renderedMarkdownRef.current,
       onChange: (next) => {
-        let canonicalBody = canonicalizeCalloutsFromLive(next);
+        const canonicalizedLiveBody = canonicalizeCalloutsFromLive(next);
+        let canonicalBody = canonicalizedLiveBody;
         for (const [url, attachmentId] of attachmentUrlHistoryRef.current) {
           canonicalBody = canonicalBody.split(url).join(`webmd-attachment:${attachmentId}`);
         }
         const canonical = replaceFrontmatterBody(frontmatterRef.current, canonicalBody);
         const previousMarkdown = editorMarkdownRef.current;
-        renderedMarkdownRef.current = next;
+        // Track the reversible live representation rather than typora-web's
+        // serializer output, which omits a trailing empty callout paragraph.
+        renderedMarkdownRef.current = materializeCalloutsForLive(canonicalizedLiveBody);
         if (canonical === previousMarkdown) return;
         editorMarkdownRef.current = canonical;
         changeRef.current(canonical);
@@ -135,21 +146,23 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
       frame = requestAnimationFrame(() => {
         const shellRect = shell.getBoundingClientRect();
         const overlays: LiveCalloutOverlay[] = [];
+        const selectionAnchor = document.getSelection()?.anchorNode ?? null;
         let index = 0;
         for (const blockquote of host.querySelectorAll<HTMLElement>("blockquote")) {
           const firstParagraph = blockquote.firstElementChild instanceof HTMLParagraphElement
             ? blockquote.firstElementChild
             : null;
-          const markerNode = firstParagraph?.querySelector<HTMLElement>("code > mark");
           const firstLine = firstParagraph?.textContent?.split(/\r?\n/, 1)[0] ?? "";
-          const marker = parseCalloutMarker(markerNode?.textContent ?? firstLine);
+          const marker = parseCalloutMarker(firstLine);
           if (!marker || !firstParagraph) continue;
 
           const rect = blockquote.getBoundingClientRect();
+          const editingMarker = Boolean(selectionAnchor && firstParagraph.contains(selectionAnchor));
           overlays.push({
             key: `${index++}:${marker.rawType}:${marker.title}`,
             kind: marker.kind,
             title: marker.title,
+            editingMarker,
             style: {
               top: rect.top - shellRect.top,
               left: rect.left - shellRect.left,
@@ -167,11 +180,13 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
     observer.observe(host, { childList: true, subtree: true, characterData: true });
     const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
     resizeObserver?.observe(host);
+    document.addEventListener("selectionchange", sync);
     window.addEventListener("resize", sync);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
       resizeObserver?.disconnect();
+      document.removeEventListener("selectionchange", sync);
       window.removeEventListener("resize", sync);
     };
   }, []);
@@ -184,6 +199,54 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
     const offset = editorRef.current.getMarkdownOffsetAtPoint(event.clientX, event.clientY);
     const insertion = await onImageDrop(file, offset);
     editorRef.current?.insertMarkdown(insertion, offset);
+  };
+
+  const deleteEmptyCallout = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (
+      (event.key !== "Backspace" && event.key !== "Delete")
+      || event.nativeEvent.isComposing
+      || !editorRef.current
+    ) return;
+
+    const host = hostRef.current;
+    const selection = window.getSelection();
+    const anchor = selection?.anchorNode;
+    const anchorElement = anchor instanceof Element ? anchor : anchor?.parentElement;
+    const blockquote = anchorElement?.closest("blockquote");
+    if (!host || !selection?.isCollapsed || !anchorElement || !blockquote || !host.contains(blockquote)) return;
+
+    const markerParagraph = blockquote.firstElementChild instanceof HTMLParagraphElement
+      ? blockquote.firstElementChild
+      : null;
+    const markerLine = markerParagraph?.textContent?.split(/\r?\n/, 1)[0] ?? "";
+    if (!parseCalloutMarker(markerLine)) return;
+
+    const bodyElements = Array.from(blockquote.children).slice(1) as HTMLElement[];
+    if (!bodyElements.some((element) => element === anchorElement || element.contains(anchorElement))) return;
+    const hasStructuredBody = bodyElements.some((element) => (
+      element.matches("blockquote, hr, ol, pre, table, ul")
+      || Boolean(element.querySelector("blockquote, hr, img, ol, pre, table, ul"))
+    ));
+    const bodyText = bodyElements.map((element) => element.textContent ?? "").join("");
+    if (hasStructuredBody || bodyText.replace(/[\s\u00a0\u2060]/g, "")) return;
+
+    const liveCallouts = Array.from(host.querySelectorAll<HTMLElement>("blockquote")).filter((candidate) => {
+      const paragraph = candidate.firstElementChild instanceof HTMLParagraphElement
+        ? candidate.firstElementChild
+        : null;
+      const firstLine = paragraph?.textContent?.split(/\r?\n/, 1)[0] ?? "";
+      return Boolean(parseCalloutMarker(firstLine));
+    });
+    const calloutIndex = liveCallouts.indexOf(blockquote as HTMLElement);
+    const removed = removeCalloutAtIndex(frontmatterRef.current.body, calloutIndex);
+    if (!removed) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const nextRendered = materializeLiveMarkdown(removed.markdown, attachmentUrls);
+    const renderedOffset = materializeLiveMarkdown(removed.markdown.slice(0, removed.offset), attachmentUrls).length;
+
+    editorRef.current.replaceMarkdown(nextRendered, renderedOffset);
   };
 
   const changeProperties = (next: string) => {
@@ -199,13 +262,19 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
       <div
         ref={hostRef}
         className="typora-host"
+        onKeyDownCapture={deleteEmptyCallout}
         onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
         onDrop={(event) => void drop(event)}
       />
       <div className="live-callout-overlays">
         {calloutOverlays.map((overlay) => <div className="live-callout-overlay-group" key={overlay.key}>
           <div className={`live-callout-surface callout-${overlay.kind}`} style={overlay.style} aria-hidden="true" />
-          <div className={`live-callout-overlay callout-${overlay.kind}`} style={overlay.style} role="note" aria-label={overlay.title}>
+          <div
+            className={`live-callout-overlay callout-${overlay.kind}${overlay.editingMarker ? " is-marker-editing" : ""}`}
+            style={overlay.style}
+            role="note"
+            aria-label={overlay.title}
+          >
             <CalloutHeader kind={overlay.kind} title={overlay.title} />
           </div>
         </div>)}
@@ -218,6 +287,7 @@ interface LiveCalloutOverlay {
   key: string;
   kind: CalloutKind;
   title: string;
+  editingMarker: boolean;
   style: CSSProperties;
 }
 
@@ -231,8 +301,10 @@ function overlaysEqual(left: LiveCalloutOverlay[], right: LiveCalloutOverlay[]):
     return entry.key === other?.key
       && entry.kind === other.kind
       && entry.title === other.title
+      && entry.editingMarker === other.editingMarker
       && entry.style.top === other.style.top
       && entry.style.left === other.style.left
-      && entry.style.width === other.style.width;
+      && entry.style.width === other.style.width
+      && entry.style.height === other.style.height;
   });
 }

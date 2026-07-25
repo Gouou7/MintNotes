@@ -16,7 +16,7 @@ Install dependencies:
 pnpm install
 ```
 
-The repository maintains a small `pnpm` patch for `typora-web`. A normal install applies `patches/typora-web@0.3.1.patch` through the workspace configuration; do not edit installed package files directly.
+The repository treats `typora-web` 0.3.1 as an effectively frozen dependency and maintains the required live Markdown behavior in a `pnpm` patch. A normal install applies `patches/typora-web@0.3.1.patch` through the workspace configuration; do not edit installed package files directly. Update the patch through `pnpm patch` / `pnpm patch-commit` and cover parser, serializer, input-transaction, and controller changes with direct round-trip tests.
 
 ## Development servers
 
@@ -53,7 +53,7 @@ pnpm dev:server
 | `src/features/` | Authentication, settings, administration, file-tree and versioned workspace-state utilities, synchronization coordination and batching, attachments, import/export, and text statistics. |
 | `server/` | Fastify routes, session authentication, user-scoped ciphertext storage and synchronization hints, SQLite schema, and online backup. |
 | `scripts/` | Crypto Worker integration test and API smoke test. |
-| `patches/` | Maintained public-controller extension for `typora-web`. |
+| `patches/` | Maintained `typora-web` compatibility layer for canonical Markdown live editing and public controller extensions. |
 | `deploy/` | Reverse-proxy example. |
 | `docs/` | Task-oriented documentation and its [navigation index](README.md). |
 
@@ -117,7 +117,10 @@ The most common contributor pitfalls are:
 - Preserve the only remaining revision when synchronization conflicts or deletion flows fail.
 - Use the existing cryptographic wrappers and session-derived server authorization; do not add custom primitives or request-controlled user scopes.
 - Make attachment ciphertext durable before inserting its Markdown reference, and upload chunks before the manifest and owning note.
-- Use only documented `typora-web` controller methods. The maintained patch exposes Markdown insertion and coordinate-to-Markdown-offset mapping; application code must not access `editor.view` or package internals.
+- Use only declared `typora-web` controller methods. The maintained patch owns the Callout-aware Markdown serializer/input transaction and the insertion, replacement, and coordinate-to-offset controller extensions; application code must not access `editor.view` or package internals.
+- Keep every live-only representation out of canonical Markdown. In particular, Callout editing must round-trip `> [!TYPE]` directly and must not emit highlight/backtick sentinels.
+- The Live serializer must not synthesize backslash escapes for punctuation in plain text, block starts, table cells, link titles, or image titles. Any backslash in canonical Markdown must be user-authored in Live or Source mode, not created by Live serialization. The parser preserves such explicit escapes across reloads, while Live presentation hides the backslash and renders the escaped symbol literally.
+- A line-leading `>` remains plain text until Enter confirms that line; only that completed paragraph is then converted to a blockquote. An explicitly escaped `\>` never triggers the conversion.
 - Treat Markdown as the canonical portable format. Editor mode changes, frontmatter presentation, and read-only rendering must not silently rewrite it.
 - Do not make synchronization correctness depend on Service Worker background execution or SSE delivery.
 - Review the security model and Content Security Policy before adding remote assets, analytics, raw HTML, or executable embeds.

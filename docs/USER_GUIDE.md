@@ -63,6 +63,8 @@ The center toolbar provides three modes:
 
 Markdown remains the canonical note format in every mode. Switching modes does not convert it to a proprietary document format. The right outline is generated from H1-H6 headings and never uploads as separate plaintext metadata.
 
+In Live mode, a line-leading `>` remains visible while you type. Press Enter to confirm the completed line and render it as a blockquote, matching the delayed conversion used for headings. The Live editor does not automatically insert backslashes before any punctuation. To request a literal Markdown-significant symbol, type the backslash yourself in Live or Source mode—for example, `\>` displays as an ordinary `>` instead of starting a blockquote. Live mode hides that user-authored escape while the canonical Markdown retains it across reloads.
+
 ### Callouts
 
 Place an Obsidian-style callout marker on the first line of a blockquote:
@@ -76,6 +78,8 @@ Place an Obsidian-style callout marker on the first line of a blockquote:
 ```
 
 Mint Notes recognizes Note, Abstract/Summary/TLDR, Info, Todo, Tip/Hint, Important, Success/Check/Done, Question/Help/FAQ, Warning/Attention, Caution, Failure/Fail/Missing, Danger/Error, Bug, Example, and Quote/Cite. Type names are case-insensitive. Unknown names use a neutral style so custom callouts remain readable. Add text after the marker for a custom title. A `+` suffix makes the callout collapsible and initially expanded; `-` makes it initially collapsed. Live mode keeps every callout expanded so its Markdown remains editable. Reading mode and historical previews honor the requested fold state.
+
+In Live mode, deleting the last body text leaves one empty quoted line so the caret remains editable. Press Backspace or Delete again while that body is empty to remove the entire callout block; the standard undo command restores it. The callout frame follows added or removed body lines immediately. Live editing preserves the canonical `> [!TYPE]` marker directly and does not add highlight/backtick sentinels or synthesize backslash escapes.
 
 ### YAML properties
 

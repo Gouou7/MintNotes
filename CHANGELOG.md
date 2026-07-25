@@ -6,10 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-25
+
 ### Added
 
-- Added Obsidian-compatible Callouts across live editing, reading, and historical previews, including common aliases, custom titles, nesting, and fold markers.
-- Added editable YAML frontmatter properties in Live mode and read-only properties in Reading mode and historical previews while preserving canonical Markdown.
+- Added Obsidian-compatible Callouts across Live, Reading, and historical previews, including common aliases, custom titles, nested Callouts, neutral styling for unknown types, and collapsible `+`/`-` markers.
+- Added an editable YAML frontmatter properties panel in Live mode and a read-only panel in Reading mode and historical previews, with safe fallbacks for invalid or complex YAML.
+
+### Changed
+
+- Changed line-leading `>` input to remain visible until Enter confirms the line, then continue editing on an empty quoted line.
+- Changed Live mode to preserve user-authored Markdown escapes across reloads while never inserting backslash escapes automatically.
+
+### Fixed
+
+- Fixed Callout frames not resizing immediately when body lines were added or removed.
+- Fixed empty Callout body deletion losing the caret, corrupting the marker, or preventing undo after the whole block was removed.
+- Fixed private highlight/backtick markers and generated backslash escapes leaking into canonical Markdown.
 
 ## [0.1.0] - 2026-07-24
 

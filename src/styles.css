@@ -235,17 +235,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-callout > .callout-content:empty { margin-top: 0; }
 
 .typora-host { position: relative; z-index: 1; }
-.typora-host blockquote:has(> p:first-child > code > mark) { position: relative; margin: 0 0 1em; padding: 50px 17px 15px; border: 1px solid transparent; border-radius: 10px; color: var(--text); }
-.typora-host blockquote:has(> p:first-child > code > mark) > :first-child { margin-top: 0; }
-.typora-host blockquote:has(> p:first-child > code > mark) > :last-child { margin-bottom: 0; }
-.typora-host blockquote:has(> p:first-child > code > mark) > p:first-child > span:first-child,
-.typora-host blockquote:has(> p:first-child > code > mark) > p:first-child > mark:nth-child(2),
-.typora-host blockquote:has(> p:first-child > code > mark) > p:first-child > code:nth-child(3),
-.typora-host blockquote:has(> p:first-child > code > mark) > p:first-child > mark:nth-child(4),
-.typora-host blockquote:has(> p:first-child > code > mark) > p:first-child > span:nth-child(5) { display: none; }
+.typora-host blockquote.live-callout { position: relative; margin: 0 0 1em; padding: 50px 17px 15px; border: 1px solid transparent; border-radius: 10px; color: var(--text); }
+.typora-host blockquote.live-callout > :first-child { margin-top: 0; }
+.typora-host blockquote.live-callout > :last-child { margin-bottom: 0; }
+.typora-host blockquote.live-callout > p.live-callout-marker { position: absolute; z-index: 3; top: 13px; right: 17px; left: 17px; min-height: 24px; margin: 0; color: var(--callout-color); }
+.typora-host .live-callout-marker-hidden { visibility: hidden; }
+.typora-host .live-markdown-escape-hidden { font-size: 0; line-height: 0; color: transparent; }
 .live-callout-overlays { position: absolute; inset: 0; pointer-events: none; }
 .live-callout-surface { position: absolute; z-index: 0; border: 1px solid var(--callout-color); border-radius: 10px; background: var(--callout-soft); }
 .live-callout-overlay { position: absolute; z-index: 2; min-height: 50px; display: flex; align-items: flex-start; padding: 13px 17px; overflow: hidden; }
+.live-callout-overlay.is-marker-editing .callout-header { visibility: hidden; }
 .live-callout-overlay .callout-header { min-width: 0; }
 .live-callout-overlay .callout-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-placeholder { display: inline-block; padding: 10px; border: 1px dashed var(--border); border-radius: 7px; color: var(--muted); }

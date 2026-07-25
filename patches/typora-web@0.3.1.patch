@@ -1,8 +1,151 @@
 diff --git a/dist/lib/typora-web.js b/dist/lib/typora-web.js
-index 612197ca1cc1155524d3f86121988a9a468ca369..1ce779b08486807e4f5190436aaf9e9c5a4ad5e9 100644
+index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82c9ace294 100644
 --- a/dist/lib/typora-web.js
 +++ b/dist/lib/typora-web.js
-@@ -3183,6 +3183,29 @@ function yn(t, n = {}) {
+@@ -1214,7 +1214,7 @@ function Je() {
+ }
+ function Ye(e) {
+ 	let t = String(e.attrs.src ?? ""), n = e.attrs.title;
+-	return n ? `](${t} "${n.replace(/"/g, "\\\"")}")` : `](${t})`;
++	return n ? `](${t} "${n}")` : `](${t})`;
+ }
+ var Xe = {
+ 	name: "image",
+@@ -1342,7 +1342,7 @@ var Xe = {
+ };
+ function $e(e) {
+ 	let t = String(e.attrs.href ?? ""), n = e.attrs.title;
+-	return n ? `](${t} "${n.replace(/"/g, "\\\"")}")` : `](${t})`;
++	return n ? `](${t} "${n}")` : `](${t})`;
+ }
+ var et = {
+ 	name: "link",
+@@ -1880,7 +1880,7 @@ function _t(e) {
+ 	let t = "";
+ 	return e.content.forEach((e) => {
+ 		e.isText && (t += e.text ?? "");
+-	}), t.replace(/\|/g, "\\|");
++	}), t;
+ }
+ var vt = {
+ 	name: "table",
+@@ -2747,6 +2747,65 @@ function rn() {
+ 		return e.dispatch(o), !0;
+ 	} } });
+ }
++function blockquoteInputPlugin() {
++	let e = null;
++	return new t({
++		props: { handleKeyDown(t, n) {
++			if (n.key !== "Enter" || n.shiftKey || n.altKey || n.ctrlKey || n.metaKey) return !1;
++			let { selection: r } = t.state, i = r.$from;
++			if (!r.empty || i.depth !== 1 || i.parent.type !== t.state.schema.nodes.paragraph || !/^>[ \t]?/.test(i.parent.textContent)) return !1;
++			return e = i.before(), !1;
++		} },
++		appendTransaction(t, n, r) {
++			if (e === null || !t.some((e) => e.docChanged)) return null;
++			let i = e;
++			e = null;
++			let a = r.doc.nodeAt(i), o = /^>[ \t]?/.exec(a?.textContent ?? "");
++			if (!a || a.type !== r.schema.nodes.paragraph || !o) return null;
++			let s = r.tr.delete(i + 1, i + 1 + o[0].length), c = s.doc.nodeAt(i);
++			if (!c) return null;
++			let l = i + c.nodeSize, u = s.doc.nodeAt(l), d = u?.type === r.schema.nodes.paragraph ? l + u.nodeSize - 1 : i + c.nodeSize - 1, h = s.doc.resolve(i + 1).blockRange(s.doc.resolve(d));
++			return h && s.wrap(h, [{ type: r.schema.nodes.blockquote }]), s.docChanged ? s : null;
++		}
++	});
++}
++function manualEscapeDecorationPlugin() {
++	let e = "\\!\"#$%&'()*+,./:;<=>?@[]^_`{|}~-";
++	return new t({ props: { decorations(t) {
++		let n = [];
++		t.doc.descendants((t, r, i) => {
++			if (!t.isText || t.marks.some((e) => e.type === Y.marks.code) || i?.type === Y.nodes.code_block) return;
++			let s = t.text ?? "";
++			for (let t = 0; t < s.length - 1; t++) if (s[t] === "\\" && e.includes(s[t + 1])) {
++				n.push(a.inline(r + t, r + t + 1, {
++					class: "live-markdown-escape-hidden",
++					"aria-hidden": "true"
++				})), t++;
++			}
++		});
++		return n.length > 0 ? o.create(t.doc, n) : o.empty;
++	} } });
++}
++function calloutDecorationPlugin() {
++	return new t({ props: { decorations(e) {
++		let t = [], n = e.selection;
++		e.doc.descendants((e, r) => {
++			if (e.type !== Y.nodes.blockquote) return;
++			let i = e.firstChild;
++			if (!i || i.type !== Y.nodes.paragraph) return;
++			let s = /^\[!([a-z0-9_-]+)\][+-]?(?:[ \t]+[^\n]*)?/i.exec(i.textContent);
++			if (!s) return;
++			let c = r + 1, l = c + 1, u = l + s[0].length, d = n.from >= l && n.from <= u && n.to >= l && n.to <= u;
++			t.push(a.node(r, r + e.nodeSize, {
++				class: "live-callout",
++				"data-callout-type": s[1].toLowerCase()
++			}));
++			t.push(a.node(c, c + i.nodeSize, { class: "live-callout-marker" }));
++			d || t.push(a.inline(l, u, { class: "live-callout-marker-hidden" }));
++		});
++		return t.length > 0 ? o.create(e.doc, t) : o.empty;
++	} } });
++}
+ //#endregion
+ //#region src/editor.ts
+ function an() {
+@@ -2768,6 +2827,9 @@ function on(e = {}) {
+ 		}),
+ 		nn(),
+ 		rn(),
++		blockquoteInputPlugin(),
++		manualEscapeDecorationPlugin(),
++		calloutDecorationPlugin(),
+ 		Jt(),
+ 		...Wt(Y),
+ 		tn(),
+@@ -2779,6 +2841,12 @@ function on(e = {}) {
+ //#region src/parser.ts
+ var Q = new ne("commonmark", { html: !1 });
+ for (let e of It()) Q.use(e);
++Q.core.ruler.after("inline", "preserve_manual_escapes", function(e) {
++	for (let t of e.tokens) {
++		if (t.type !== "inline") continue;
++		for (let e of t.children ?? []) e.type === "text_special" && e.info === "escape" && (e.content = e.markup);
++	}
++});
+ Q.block.ruler.at("paragraph", function(e, t, n) {
+ 	let r = e.md.block.ruler.getRules("paragraph"), i = e.parentType, a = t + 1;
+ 	for (e.parentType = "paragraph"; a < n && !e.isEmpty(a); a++) {
+@@ -2938,7 +3006,7 @@ function dn(e) {
+ }
+ //#endregion
+ //#region src/serializer.ts
+-var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.test(e) ? `\\${e}` : fn(e), mn = {
++var fn = (e) => e, pn = (e) => e, mn = {
+ 	marks: { ...Rt() },
+ 	escapeInline: fn,
+ 	escapeBlockStart: pn,
+@@ -3016,7 +3084,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
+ 				let e = n[i.type.name];
+ 				e && (this.out += typeof e.open == "function" ? e.open(r) : e.open), t = [...t, i];
+ 			}
+-		};
++		}, u = /^(?:> )+$/.test(this.delim) ? (e.textContent.match(/^\[![a-z0-9_-]*(?:\][+-]?)?/i)?.[0].length ?? 0) : this.delim === "" && e.textContent.startsWith(">") ? 1 : 0;
+ 		e.forEach((e) => {
+ 			if (e.marks.find((e) => e.type === Y.marks.code) && this.config.codeMarkAsBacktickFence) {
+ 				o([]), this.write();
+@@ -3038,7 +3106,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
+ 			if (!e.isText) return;
+ 			o(e.marks), this.write(), s(e.marks, e);
+ 			let r = e.text ?? "", c = this.atBlankLine() && t.length === 0, l = !1;
+-			for (let e of r) this.tick("inner"), e === "\n" ? (this.out += "\n", this.delim && (this.out += this.delim)) : a(i) ? (this.out += e, l = !0) : (this.out += c && !l ? this.config.escapeBlockStart(e) : this.config.escapeInline(e), l = !0), i++, this.advance(1);
++			for (let e of r) this.tick("inner"), e === "\n" ? (this.out += "\n", this.delim && (this.out += this.delim)) : i < u || a(i) ? (this.out += e, l = !0) : (this.out += c && !l ? this.config.escapeBlockStart(e) : this.config.escapeInline(e), l = !0), i++, this.advance(1);
+ 		}), o([]), this.tick("inner");
+ 	}
+ }, gn = {
+@@ -3183,6 +3251,41 @@ function yn(t, n = {}) {
  			return 0;
  		}
  	}
@@ -29,10 +172,22 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..1ce779b08486807e4f5190436aaf9e9c
 +		}
 +		n.onChange?.(s);
 +	}
++	function E(e, t) {
++		let r = Math.max(0, Math.min(t ?? e.length, e.length));
++		if (l) {
++			o.value = e, o.setSelectionRange(r, r), f(), n.onChange?.(e);
++			return;
++		}
++		let a = dn(e), s = c.state.tr.replaceWith(0, c.state.doc.content.size, a.content), u = Math.min(g(e, r), s.doc.content.size);
++		try {
++			s.setSelection(i.near(s.doc.resolve(u))).scrollIntoView();
++		} catch {}
++		c.dispatch(s), c.focus();
++	}
  	function _() {
  		let e = $(c.state.doc), t = h();
  		o.value = e, a.hidden = !0, o.hidden = !1, f(), o.focus();
-@@ -3211,6 +3234,12 @@ function yn(t, n = {}) {
+@@ -3211,6 +3314,15 @@ function yn(t, n = {}) {
  		setMarkdown(e) {
  			l ? o.value = e : d(e);
  		},
@@ -41,6 +196,9 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..1ce779b08486807e4f5190436aaf9e9c
 +		},
 +		insertMarkdown(e, t) {
 +			b(e, t);
++		},
++		replaceMarkdown(e, t) {
++			E(e, t);
 +		},
  		toggleSource() {
  			l ? v() : _();

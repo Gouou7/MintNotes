@@ -54,7 +54,7 @@ When documents disagree, use this evidence order: implementation code, automated
 - `src/features/`: authentication, settings, administration, attachments, import/export, tree utilities, and language-aware text statistics.
 - `server/`: Fastify authentication, session-derived authorization, opaque encrypted-object storage, SQLite revisions/changes, attachment chunks, account activation, and static PWA delivery.
 - `scripts/`: built crypto Worker integration and API smoke tests.
-- `patches/`: the minimal public-controller extension maintained for `typora-web`.
+- `patches/`: the project-maintained `typora-web` compatibility layer for public controller methods and canonical Markdown live-editing behavior.
 - `deploy/`: production reverse-proxy example.
 - `docs/`: task-oriented user, development, architecture, security, deployment, and backup documentation, with navigation in `docs/README.md`.
 
@@ -93,8 +93,8 @@ When documents disagree, use this evidence order: implementation code, automated
 
 ## Editor and PWA constraints
 
-- Use only the documented `typora-web` controller API. Its underlying `editor.view` is not a stable integration surface.
-- Keep `patches/typora-web@0.3.1.patch` limited to public controller methods for Markdown insertion and coordinate-to-Markdown-offset mapping. Application code must not import package internals.
+- Treat `typora-web` 0.3.1 as an effectively frozen dependency. Maintain required live Markdown parsing, serialization, input transactions, and public controller extensions in `patches/typora-web@0.3.1.patch`, with direct round-trip regression tests.
+- Application code must use only the declared `typora-web` controller API and must not import package internals or access the unstable `editor.view`. Changes inside the maintained patch must preserve canonical Markdown and must never expose private display syntax in saved notes.
 - Markdown remains canonical across live, source, and read-only modes; switching modes must not silently rewrite content.
 - Decrypted attachment Blob URLs exist only in memory and must be revoked when the note changes or the vault locks.
 - PWA updates require the existing user confirmation path so a new bundle is not activated in the middle of an unsaved editing transition.

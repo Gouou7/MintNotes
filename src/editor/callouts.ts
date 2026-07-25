@@ -54,10 +54,14 @@ const ALIASES = new Map(DEFINITIONS.flatMap((definition) => (
 )));
 
 const MARKER = /^\[!([a-z0-9_-]+)\]([+-]?)(?:[ \t]+([^\r\n]*))?$/i;
-const MATERIALIZED_MARKER = /^==`(\[![a-z0-9_-]+\][+-]?(?:[ \t]+[^\r\n]*)?)`==$/i;
+// Accepted only to repair notes produced by the removed live-highlight workaround.
+const LEGACY_MATERIALIZED_MARKER = /^==`(\[![a-z0-9_-]+\][+-]?(?:[ \t]+[^\r\n]*)?)`=?=?$/i;
 const ESCAPED_MARKER = /^\\\[!([a-z0-9_-]+)\\\]([+-]?)(?:[ \t]+([^\r\n]*))?$/i;
+const ESCAPED_CALLOUT_LINE = /^([ \t]*)\\>[ \t]+\\\[!([a-z0-9_-]+)\\\]([+-]?)(?:[ \t]+([^\r\n]*))?$/i;
 const QUOTE_PREFIX = /^((?:[ \t]*>[ \t]?)+)(.*)$/;
 const FENCE = /^(`{3,}|~{3,})/;
+// Live-only text that keeps an otherwise empty body paragraph editable.
+const LIVE_EMPTY_BODY = "\u2060";
 
 export function calloutDefinition(rawType: string): { kind: CalloutKind; title: string } {
   const normalized = rawType.toLowerCase();
@@ -73,7 +77,7 @@ export function calloutDefinition(rawType: string): { kind: CalloutKind; title: 
   };
 }
 
-function decodeMaterializedTitle(value: string): string {
+function decodeLegacyTitle(value: string): string {
   try {
     return decodeURIComponent(value);
   } catch {
@@ -82,14 +86,14 @@ function decodeMaterializedTitle(value: string): string {
 }
 
 export function parseCalloutMarker(value: string): CalloutMarker | null {
-  const materialized = MATERIALIZED_MARKER.exec(value.trim());
-  const candidate = materialized?.[1] ?? value.trim();
+  const legacyMaterialized = LEGACY_MATERIALIZED_MARKER.exec(value.trim());
+  const candidate = legacyMaterialized?.[1] ?? value.trim();
   const match = MARKER.exec(candidate) ?? ESCAPED_MARKER.exec(candidate);
   if (!match) return null;
   const rawType = match[1].toLowerCase();
   const definition = calloutDefinition(rawType);
   const customTitle = match[3]?.trim();
-  const title = materialized && customTitle ? decodeMaterializedTitle(customTitle) : customTitle;
+  const title = legacyMaterialized && customTitle ? decodeLegacyTitle(customTitle) : customTitle;
   return {
     rawType,
     kind: definition.kind,
@@ -98,55 +102,223 @@ export function parseCalloutMarker(value: string): CalloutMarker | null {
   };
 }
 
-function transformCalloutLines(markdown: string, mode: "materialize" | "canonicalize"): string {
+interface QuoteLine {
+  prefix: string;
+  content: string;
+  depth: number;
+}
+
+function parseQuoteLine(line: string): QuoteLine | null {
+  const quote = QUOTE_PREFIX.exec(line);
+  if (!quote) return null;
+  return {
+    prefix: quote[1],
+    content: quote[2],
+    depth: [...quote[1]].filter((character) => character === ">").length
+  };
+}
+
+function blankQuoteLine(prefix: string): string {
+  return prefix.trimEnd();
+}
+
+function emptyQuoteBody(prefix: string): string {
+  return /[ \t]$/.test(prefix) ? prefix : `${prefix} `;
+}
+
+function canonicalMarker(match: RegExpExecArray, decodeTitle = false): string {
+  const rawTitle = decodeTitle && match[3] ? decodeLegacyTitle(match[3]) : match[3];
+  const title = rawTitle ? ` ${rawTitle}` : "";
+  return `[!${match[1]}]${match[2] ?? ""}${title}`;
+}
+
+function updateFence(content: string, fences: string[]): boolean {
+  const fence = FENCE.exec(content.trimStart());
+  if (!fence) return false;
+  const marker = fence[1][0];
+  const top = fences.at(-1);
+  if (top === marker) fences.pop();
+  else if (!top) fences.push(marker);
+  return true;
+}
+
+function stripLiveEmptyBody(content: string): string {
+  if (content.startsWith(LIVE_EMPTY_BODY)) return content.slice(LIVE_EMPTY_BODY.length);
+  if (content.startsWith("\u00a0")) return content.slice(1);
+  return content;
+}
+
+function materializeCalloutLines(markdown: string): string {
   const eol = markdown.includes("\r\n") ? "\r\n" : "\n";
   const lines = markdown.split(/\r?\n/);
   const fences: string[] = [];
+  const output: string[] = [];
+  let pendingBody: { depth: number; prefix: string } | null = null;
 
-  return lines.map((line) => {
-    const quote = QUOTE_PREFIX.exec(line);
-    if (!quote) return line;
-    const prefix = quote[1];
-    const content = quote[2];
-    const fence = FENCE.exec(content.trimStart());
-    if (fence) {
-      const marker = fence[1][0];
-      const top = fences.at(-1);
-      if (top === marker) fences.pop();
-      else if (!top) fences.push(marker);
-      return line;
-    }
-    if (fences.length) return line;
-
-    if (mode === "materialize") {
-      const marker = MARKER.exec(content.trim());
-      if (!marker) return line;
-      const title = marker[3] ? ` ${encodeURIComponent(marker[3])}` : "";
-      return `${prefix}==\`[!${marker[1]}]${marker[2] ?? ""}${title}\`==`;
+  for (const line of lines) {
+    const quote = parseQuoteLine(line);
+    if (pendingBody) {
+      if (!quote || quote.depth < pendingBody.depth) {
+        output.push(`${pendingBody.prefix}${LIVE_EMPTY_BODY}`);
+        pendingBody = null;
+      } else {
+        pendingBody = null;
+        if (!quote.content.trim()) {
+          output.push(`${quote.prefix}${LIVE_EMPTY_BODY}`);
+          continue;
+        }
+      }
     }
 
-    const materialized = MATERIALIZED_MARKER.exec(content.trim());
-    if (materialized) {
-      const marker = MARKER.exec(materialized[1]);
-      if (!marker) return line;
-      const title = marker[3] ? ` ${decodeMaterializedTitle(marker[3])}` : "";
-      return `${prefix}[!${marker[1]}]${marker[2] ?? ""}${title}`;
+    if (!quote) {
+      output.push(line);
+      continue;
     }
-    const escaped = ESCAPED_MARKER.exec(content.trim());
+    if (updateFence(quote.content, fences) || fences.length) {
+      output.push(line);
+      continue;
+    }
+
+    const legacyMaterialized = LEGACY_MATERIALIZED_MARKER.exec(quote.content.trim());
+    const marker = MARKER.exec(legacyMaterialized?.[1] ?? quote.content.trim());
+    if (!marker) {
+      output.push(line);
+      continue;
+    }
+
+    output.push(`${quote.prefix}${canonicalMarker(marker, Boolean(legacyMaterialized))}`);
+    // A quoted blank line makes typora-web parse the marker and body as separate
+    // paragraphs, so deleting the body cannot move the selection into the marker.
+    output.push(blankQuoteLine(quote.prefix));
+    pendingBody = { depth: quote.depth, prefix: quote.prefix };
+  }
+
+  if (pendingBody) output.push(`${pendingBody.prefix}${LIVE_EMPTY_BODY}`);
+  return output.join(eol);
+}
+
+function canonicalizeCalloutLines(markdown: string): string {
+  const eol = markdown.includes("\r\n") ? "\r\n" : "\n";
+  const lines = markdown.split(/\r?\n/);
+  const fences: string[] = [];
+  const output: string[] = [];
+  let pendingBody: { depth: number; prefix: string; separatorRemoved: boolean } | null = null;
+
+  for (const line of lines) {
+    let currentLine = line;
+    let quote = parseQuoteLine(currentLine);
+
+    if (!quote) {
+      const escapedCallout = ESCAPED_CALLOUT_LINE.exec(currentLine);
+      if (escapedCallout) {
+        const title = escapedCallout[4] ? ` ${escapedCallout[4]}` : "";
+        currentLine = `${escapedCallout[1]}> [!${escapedCallout[2]}]${escapedCallout[3] ?? ""}${title}`;
+        quote = parseQuoteLine(currentLine);
+      }
+    }
+
+    if (pendingBody) {
+      if (!pendingBody.separatorRemoved) {
+        if (quote && quote.depth === pendingBody.depth && !quote.content.trim()) {
+          pendingBody.separatorRemoved = true;
+          continue;
+        }
+        if (!quote || quote.depth < pendingBody.depth) {
+          output.push(emptyQuoteBody(pendingBody.prefix));
+        }
+        pendingBody = null;
+      } else {
+        if (!quote || quote.depth < pendingBody.depth) {
+          output.push(emptyQuoteBody(pendingBody.prefix));
+        } else {
+          currentLine = `${quote.prefix}${stripLiveEmptyBody(quote.content)}`;
+          quote = parseQuoteLine(currentLine);
+        }
+        pendingBody = null;
+      }
+    }
+
+    if (!quote) {
+      output.push(currentLine);
+      continue;
+    }
+    if (updateFence(quote.content, fences) || fences.length) {
+      output.push(currentLine);
+      continue;
+    }
+
+    const legacyMaterialized = LEGACY_MATERIALIZED_MARKER.exec(quote.content.trim());
+    const marker = MARKER.exec(legacyMaterialized?.[1] ?? quote.content.trim());
+    if (marker) {
+      output.push(`${quote.prefix}${canonicalMarker(marker, Boolean(legacyMaterialized))}`);
+      pendingBody = { depth: quote.depth, prefix: quote.prefix, separatorRemoved: false };
+      continue;
+    }
+
+    const escaped = ESCAPED_MARKER.exec(quote.content.trim());
     if (escaped) {
       const title = escaped[3] ? ` ${escaped[3]}` : "";
-      return `${prefix}[!${escaped[1]}]${escaped[2] ?? ""}${title}`;
+      output.push(`${quote.prefix}[!${escaped[1]}]${escaped[2] ?? ""}${title}`);
+      continue;
     }
-    return line;
-  }).join(eol);
+    output.push(currentLine);
+  }
+
+  if (pendingBody) output.push(emptyQuoteBody(pendingBody.prefix));
+  return output.join(eol);
 }
 
 export function materializeCalloutsForLive(markdown: string): string {
-  return transformCalloutLines(markdown, "materialize");
+  return materializeCalloutLines(markdown);
 }
 
 export function canonicalizeCalloutsFromLive(markdown: string): string {
-  return transformCalloutLines(markdown, "canonicalize");
+  return canonicalizeCalloutLines(markdown);
+}
+
+export interface RemovedCallout {
+  markdown: string;
+  offset: number;
+}
+
+export function removeCalloutAtIndex(markdown: string, calloutIndex: number): RemovedCallout | null {
+  if (calloutIndex < 0) return null;
+  const eol = markdown.includes("\r\n") ? "\r\n" : "\n";
+  const lines = markdown.split(/\r?\n/);
+  const fences: string[] = [];
+  let currentCallout = 0;
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const quote = parseQuoteLine(lines[lineIndex]);
+    if (!quote) continue;
+    if (updateFence(quote.content, fences) || fences.length) continue;
+    if (!MARKER.test(quote.content.trim())) continue;
+    if (currentCallout !== calloutIndex) {
+      currentCallout += 1;
+      continue;
+    }
+
+    let start = lineIndex;
+    let end = lineIndex + 1;
+    while (end < lines.length) {
+      const followingQuote = parseQuoteLine(lines[end]);
+      if (!followingQuote || followingQuote.depth < quote.depth) break;
+      end += 1;
+    }
+
+    if (end < lines.length && !lines[end].trim()) end += 1;
+    else if (start > 0 && !lines[start - 1].trim()) start -= 1;
+
+    const before = lines.slice(0, start);
+    const after = lines.slice(end);
+    const nextLines = [...before, ...after];
+    const nextMarkdown = nextLines.join(eol);
+    const beforeText = before.join(eol);
+    const offset = before.length && after.length ? beforeText.length + eol.length : beforeText.length;
+    return { markdown: nextMarkdown, offset };
+  }
+
+  return null;
 }
 
 interface MdNode {

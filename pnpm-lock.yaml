@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  typora-web@0.3.1: 9b93c590af2ce592c6a52a0fc26c9a6183c9074bbba36c79a2a7ab172dbd1a3e
+  typora-web@0.3.1: 0a4e5c54b5bd8bd60f49b9af94f1f5157c1e02d82ee33500c93daa00dbd875cb
 
 importers:
 
@@ -55,7 +55,7 @@ importers:
         version: 4.0.1
       typora-web:
         specifier: 0.3.1
-        version: 0.3.1(patch_hash=9b93c590af2ce592c6a52a0fc26c9a6183c9074bbba36c79a2a7ab172dbd1a3e)
+        version: 0.3.1(patch_hash=0a4e5c54b5bd8bd60f49b9af94f1f5157c1e02d82ee33500c93daa00dbd875cb)
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
@@ -6137,7 +6137,7 @@ snapshots:
 
   typescript@5.9.3: {}
 
-  typora-web@0.3.1(patch_hash=9b93c590af2ce592c6a52a0fc26c9a6183c9074bbba36c79a2a7ab172dbd1a3e):
+  typora-web@0.3.1(patch_hash=0a4e5c54b5bd8bd60f49b9af94f1f5157c1e02d82ee33500c93daa00dbd875cb):
     dependencies:
       markdown-it: 14.3.0
       markdown-it-emoji: 3.0.0

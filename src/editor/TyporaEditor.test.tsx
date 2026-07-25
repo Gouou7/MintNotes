@@ -150,10 +150,156 @@ describe("TyporaEditor live mode", () => {
       /></I18nProvider>
     ));
 
-    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe("> ==`[!TIP]`==\n> Body");
-    act(() => editorChange?.("> ==`[!TIP]`==\n> Changed"));
+    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe("> [!TIP]\n>\n> Body");
+    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).not.toContain("==`");
+    act(() => editorChange?.("> [!TIP]\n>\n> Changed"));
     expect(onChange).toHaveBeenCalledWith("---\nversion:\n---\n> [!TIP]\n> Changed");
     expect(container.textContent).toContain("Note properties");
+
+    await act(async () => root.unmount());
+  });
+
+  it("keeps an empty callout body stable without rebuilding the live editor", async () => {
+    const editor = {
+      destroy: vi.fn(),
+      focus: vi.fn(),
+      setMarkdown: vi.fn()
+    } as unknown as TyporaWebEditor;
+    let editorChange: ((markdown: string) => void) | undefined;
+    vi.mocked(createEditor).mockImplementation((_host, options) => {
+      editorChange = options?.onChange;
+      return editor;
+    });
+    const onChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const render = (markdown: string) => (
+      <TyporaEditor markdown={markdown} mode="live" onChange={onChange} />
+    );
+
+    await act(async () => root.render(render("> [!NOTE]\n> Body")));
+    act(() => editorChange?.("> [!NOTE]"));
+
+    expect(onChange).toHaveBeenLastCalledWith("> [!NOTE]\n> ");
+
+    await act(async () => root.render(render("> [!NOTE]\n> ")));
+    expect(editor.setMarkdown).not.toHaveBeenCalled();
+
+    act(() => editorChange?.("> [!NOTE]\n>\n> Restored"));
+    expect(onChange).toHaveBeenLastCalledWith("> [!NOTE]\n> Restored");
+
+    await act(async () => root.unmount());
+  });
+
+  it("updates the callout overlay height when live body lines change", async () => {
+    const editor = {
+      destroy: vi.fn(),
+      focus: vi.fn(),
+      setMarkdown: vi.fn()
+    } as unknown as TyporaWebEditor;
+    let height = 80;
+    let bodyParagraph: HTMLParagraphElement | null = null;
+    vi.mocked(createEditor).mockImplementation((host) => {
+      const blockquote = document.createElement("blockquote");
+      Object.defineProperty(blockquote, "getBoundingClientRect", {
+        value: () => ({
+          bottom: height,
+          height,
+          left: 0,
+          right: 320,
+          top: 0,
+          width: 320,
+          x: 0,
+          y: 0,
+          toJSON: () => ({})
+        })
+      });
+      const markerParagraph = document.createElement("p");
+      markerParagraph.textContent = "[!NOTE]";
+      bodyParagraph = document.createElement("p");
+      bodyParagraph.textContent = "Body";
+      blockquote.append(markerParagraph, bodyParagraph);
+      host.append(blockquote);
+      return editor;
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(
+      <TyporaEditor markdown={"> [!NOTE]\n> Body"} mode="live" onChange={vi.fn()} />
+    ));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("80px");
+
+    height = 140;
+    act(() => {
+      bodyParagraph?.append(document.createTextNode("\nMore"));
+      window.dispatchEvent(new Event("resize"));
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("140px");
+
+    height = 80;
+    act(() => {
+      bodyParagraph?.lastChild?.remove();
+      window.dispatchEvent(new Event("resize"));
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("80px");
+
+    await act(async () => root.unmount());
+  });
+
+  it("deletes the whole callout when backspace is pressed in an already empty body", async () => {
+    let editorChange: ((markdown: string) => void) | undefined;
+    const editor = {
+      destroy: vi.fn(),
+      focus: vi.fn(),
+      insertMarkdown: vi.fn(),
+      replaceMarkdown: vi.fn((markdown: string) => editorChange?.(markdown)),
+      setMarkdown: vi.fn()
+    } as unknown as TyporaWebEditor;
+    let bodyParagraph: HTMLParagraphElement | null = null;
+    vi.mocked(createEditor).mockImplementation((host, options) => {
+      editorChange = options?.onChange;
+      const blockquote = document.createElement("blockquote");
+      const markerParagraph = document.createElement("p");
+      markerParagraph.textContent = "[!NOTE]";
+      bodyParagraph = document.createElement("p");
+      bodyParagraph.append(document.createElement("br"));
+      blockquote.append(markerParagraph, bodyParagraph);
+      host.append(blockquote);
+      return editor;
+    });
+    const onChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(
+      <TyporaEditor
+        markdown={"Before\n\n> [!NOTE]\n> \n\nAfter"}
+        mode="live"
+        onChange={onChange}
+      />
+    ));
+
+    const range = document.createRange();
+    range.selectNodeContents(bodyParagraph!);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    const event = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
+    act(() => bodyParagraph?.dispatchEvent(event));
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onChange).toHaveBeenCalledWith("Before\n\nAfter");
+    expect(editor.replaceMarkdown).toHaveBeenCalledWith("Before\n\nAfter", "Before\n\n".length);
+    expect(editor.setMarkdown).not.toHaveBeenCalled();
+    expect(editor.insertMarkdown).not.toHaveBeenCalled();
 
     await act(async () => root.unmount());
   });
