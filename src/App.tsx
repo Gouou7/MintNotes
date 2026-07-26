@@ -79,6 +79,13 @@ import {
 } from "./features/history";
 import { focusAndSelectName } from "./features/focusName";
 import { countText } from "./features/wordCount";
+import {
+  beginMobileDrawerGesture,
+  gestureBecameVertical,
+  gestureHasInwardHorizontalIntent,
+  openedDrawerFromGesture,
+  type MobileDrawerGesture
+} from "./features/mobileDrawerGesture";
 import { AuthScreen } from "./features/AuthScreen";
 import { LockScreen } from "./features/LockScreen";
 import { isLanguagePreference, translateError, useI18n, type Translate } from "./i18n";
@@ -2359,6 +2366,57 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     window.addEventListener("blur", close);
     return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); };
   }, []);
+
+  useEffect(() => {
+    let gesture: (MobileDrawerGesture & { touchId: number }) | null = null;
+    const reset = () => {
+      gesture = null;
+      window.removeEventListener("touchmove", move);
+    };
+    const start = (event: TouchEvent) => {
+      if (
+        event.touches.length !== 1
+        || treeOpen
+        || outlineOpen
+        || settingsOpen
+        || !window.matchMedia("(max-width: 720px)").matches
+      ) {
+        reset();
+        return;
+      }
+      const touch = event.touches[0];
+      const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+      const beginning = beginMobileDrawerGesture(touch.clientX, touch.clientY, viewportWidth);
+      gesture = beginning ? { ...beginning, touchId: touch.identifier } : null;
+      if (gesture) window.addEventListener("touchmove", move, { passive: false });
+    };
+    const move = (event: TouchEvent) => {
+      if (!gesture) return;
+      const touch = [...event.touches].find((candidate) => candidate.identifier === gesture?.touchId);
+      if (!touch) {
+        reset();
+        return;
+      }
+      if (gestureHasInwardHorizontalIntent(gesture, touch.clientX, touch.clientY)) event.preventDefault();
+      const drawer = openedDrawerFromGesture(gesture, touch.clientX, touch.clientY);
+      if (drawer) {
+        setTreeOpen(drawer === "left");
+        setOutlineOpen(drawer === "right");
+        reset();
+        return;
+      }
+      if (gestureBecameVertical(gesture, touch.clientX, touch.clientY)) reset();
+    };
+    window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchend", reset, { passive: true });
+    window.addEventListener("touchcancel", reset, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", reset);
+      window.removeEventListener("touchcancel", reset);
+    };
+  }, [outlineOpen, settingsOpen, treeOpen]);
 
   const jumpToHeading = (index: number) => {
     editorArea.current?.querySelectorAll("h1,h2,h3,h4,h5,h6").item(index)?.scrollIntoView({ behavior: "smooth", block: "start" });
