@@ -1,6 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, Download, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, RotateCcw, Settings2, Shield, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
-import packageMetadata from "../../package.json";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { LanguageSelect } from "../components/LanguageSelect";
@@ -15,6 +14,7 @@ import { submitFormOnEnter } from "./formKeyboard";
 import { AdminPanel } from "./AdminPanel";
 import { prepareProfileAvatar } from "./profileAvatar";
 import { formatHistoryBytes } from "./history";
+import { APP_VERSION } from "../version";
 
 type Tab = "general" | "history" | "trash" | "security" | "data" | "about" | "users";
 
@@ -387,7 +387,7 @@ export function SettingsPanel({ user, endpoint, credential, onCredentialChange, 
           {tab === "about" && <div className="settings-section about-settings">
             <div className="about-product">
               <h3>Mint Notes</h3>
-              <p>{t("settings.version")} {packageMetadata.displayVersion}</p>
+              <p>{t("settings.version")} {APP_VERSION}</p>
             </div>
             <div className="about-introduction">
               <p>{t("settings.aboutDescription")}</p>

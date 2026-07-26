@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-26
+
+### Added
+
+- Added inline `$...$` and display `$$...$$` KaTeX math rendering in Live and Reading modes, with editable source presentation in Live mode and canonical delimiters preserved in Markdown.
+- Added local Mermaid rendering for `mermaid` fenced blocks in Live and Reading modes, with strict sanitization and editable source fallback.
+- Added WikiLink navigation for note titles, vault-root paths, custom labels, and headings, including current-folder preference when duplicate note titles exist.
+- Added optional Mint Notes Callout appearance attributes for predefined colors and icons.
+
+### Changed
+
+- Expanded Callouts to cover every built-in Obsidian type and alias, preserve alias-specific default titles, and render unknown custom types with a neutral style.
+- Changed empty Callout editing so Backspace moves into the marker line; an incomplete marker degrades to an ordinary blockquote without deleting its content, while retyping `]` restores Callout rendering.
+
+### Fixed
+
+- Fixed Live Callout title editing so entering a space and custom title after the closing `]` remains visible and renders immediately.
+- Fixed an acknowledged encrypted revision uploaded by the current browser being reported as an update from another device when synchronization encountered it again.
+- Fixed repeated PWA update prompts by fingerprinting the deployed Service Worker, suppressing duplicate prompts for the same version for 24 hours, and still prompting immediately for a genuinely different version.
+
 ## [0.3.0] - 2026-07-26
 
 ### Added

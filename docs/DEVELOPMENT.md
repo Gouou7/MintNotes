@@ -99,6 +99,10 @@ The order matters:
 
 The smoke test covers account bootstrap, cross-user object, attachment, avatar, note-history and SSE isolation, source-client notification suppression, batch object writes and conflicts, compact delta pulls, history settings/clear barriers/purge, password and recovery-key changes, administrator activation and deletion, authenticated purge propagation, and trash-retention settings. The Worker test covers registration/login/recovery compatibility, recovery-key rotation, PIN-encrypted device credentials, wrong-PIN rejection, object, avatar, history and attachment round trips, nonce uniqueness, AAD binding, and tamper rejection.
 
+Maintainers building and publishing the official tag-derived multi-platform
+container locally should follow the
+[Docker image release guide](DOCKER_IMAGE_RELEASE.md).
+
 ## Implementation boundaries
 
 Read [`AGENTS.md`](../AGENTS.md) before changing system behavior. It contains the executable repository constraints and routes each change area to its canonical documentation:
@@ -108,6 +112,7 @@ Read [`AGENTS.md`](../AGENTS.md) before changing system behavior. It contains th
 | Local-first persistence, synchronization, browser/server storage, or attachments | [Architecture](ARCHITECTURE.md) |
 | Authentication, encryption, AAD, account isolation, CSP, or metadata exposure | [Security model](SECURITY.md) |
 | Schema compatibility, production configuration, or upgrades | [Production deployment](DEPLOYMENT.md) |
+| Application releases or Docker image publishing | [Docker image release](DOCKER_IMAGE_RELEASE.md) |
 | Online backup, retention, or restoration | [Backup and restore](BACKUP_AND_RESTORE.md) |
 | User-visible editor, history, import/export, trash, settings, or PWA behavior | [User guide](USER_GUIDE.md) |
 

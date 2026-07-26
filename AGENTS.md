@@ -32,6 +32,7 @@ Use `docs/README.md` as the human-facing documentation index. For implementation
 | Docker, environment variables, reverse proxy, account bootstrap, production checks, or schema upgrade | `docs/DEPLOYMENT.md` | `docs/DEPLOYMENT.md`, `.env.example`, and `docker-compose.yml`; review README quick start when required. |
 | Online backup, retention, restore drills, WAL behavior, or disaster recovery | `docs/BACKUP_AND_RESTORE.md` | `docs/BACKUP_AND_RESTORE.md`; schema/storage changes also require deployment and architecture review. |
 | Nginx headers, TLS termination, or request-size limits | `deploy/nginx.conf.example` and `docs/DEPLOYMENT.md` | Keep both files aligned. |
+| Application releases or multi-platform Docker image publishing | `docs/DOCKER_IMAGE_RELEASE.md` | Keep the CHANGELOG, Git tag, injected build version, image tags, and release verification steps aligned; `package.json` is not the release-version source. |
 | Repository-specific Agent constraints and recurring implementation pitfalls | `AGENTS.md` | Update this file only with durable project knowledge, not one-time task history or general Agent behavior. |
 
 When documents disagree, use this evidence order: implementation code, automated tests, build/deployment configuration, `AGENTS.md`, then user-facing documentation. Do not preserve a stale claim merely because it already appears in README.

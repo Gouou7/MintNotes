@@ -80,6 +80,10 @@ docker compose logs --tail=100 notes
 
 The supplied Compose file builds the current source checkout and tags the image with the name configured in `docker-compose.yml`.
 
+Maintainers building and publishing the official tag-derived multi-platform
+image locally should follow the separate
+[Docker image release guide](DOCKER_IMAGE_RELEASE.md).
+
 The health endpoint is available to the host at `http://127.0.0.1:8787/api/health`. A healthy response is:
 
 ```json

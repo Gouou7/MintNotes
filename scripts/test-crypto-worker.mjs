@@ -167,8 +167,8 @@ const pinDeviceDecrypted = await pinWorker.call("decryptObject", {
 await pinWorker.worker.terminate();
 
 const tamperedDeviceWorker = createCryptoWorker();
-const lastDeviceCharacter = pinProtected.ciphertext.at(-1);
-const tamperedDeviceCiphertext = `${pinProtected.ciphertext.slice(0, -1)}${lastDeviceCharacter === "A" ? "B" : "A"}`;
+const firstDeviceCharacter = pinProtected.ciphertext[0];
+const tamperedDeviceCiphertext = `${firstDeviceCharacter === "A" ? "B" : "A"}${pinProtected.ciphertext.slice(1)}`;
 let tamperedDeviceCredentialRejected = false;
 try {
   await tamperedDeviceWorker.call("unlockVaultFromDeviceWithPin", {

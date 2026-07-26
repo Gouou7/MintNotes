@@ -1,11 +1,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import packageMetadata from "../../package.json";
 import { api } from "../api";
 import { setAutoLockMinutes } from "../crypto/deviceUnlock";
 import { I18nProvider } from "../i18n";
 import type { HistorySettings, OpenDocument, UiPreferences, User } from "../types";
+import { APP_VERSION } from "../version";
 import { SettingsPanel } from "./SettingsPanel";
 
 vi.mock("../api", () => ({ api: vi.fn() }));
@@ -168,10 +168,10 @@ describe("SettingsPanel", () => {
     expect(userContainer.textContent).not.toContain("管理员设置");
   });
 
-  it("shows project attribution and the package version in About", async () => {
+  it("shows project attribution and the build version in About", async () => {
     const container = await renderSettings();
     await act(async () => button(container, "关于").click());
-    expect(container.querySelector(".about-product")?.textContent).toContain(`Mint Notes版本 ${packageMetadata.displayVersion}`);
+    expect(container.querySelector(".about-product")?.textContent).toContain(`Mint Notes版本 ${APP_VERSION}`);
     expect(container.querySelector(".about-introduction")?.textContent).toContain("Mint Notes 是一款使用 AI 开发的玩具级项目");
     expect(container.querySelector(".about-feedback")).toBeNull();
     expect(container.textContent).not.toContain("如果你发现 Bug 或者有功能建议");
