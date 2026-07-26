@@ -10,6 +10,7 @@ const document: OpenDocument = {
   parentId: null,
   tags: ["one", "two"],
   favorite: false,
+  locked: false,
   deleted: false,
   createdAt: "2026-07-25T01:00:00.000Z",
   updatedAt: "2026-07-25T01:00:00.000Z",

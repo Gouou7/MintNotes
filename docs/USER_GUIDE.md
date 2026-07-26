@@ -26,7 +26,7 @@ Use **Forgot password** to reset a master password with the account's recovery k
 Desktop uses three panes:
 
 - **Left:** application branding, pinned shortcuts above search, local search, compact new-note/new-folder controls plus a right-aligned collapse-all/current-note-location/sort group, and the active note/folder tree. The tree scrolls independently while the account identity, settings, and lock icon buttons remain in one anchored bottom row.
-- **Center:** note title, live/source/reading modes, image attachment action, sidebar controls, and save/sync status.
+- **Center:** note title, live/source/reading modes, note lock and image attachment actions, sidebar controls, and save/sync status.
 - **Right:** a tool panel with tabs for the outline generated from Markdown headings and the active note's encrypted version history.
 
 All three panes scroll vertically on their own. On desktop, drag either divider to resize its sidebar; widths and the selected Outline/History tab are remembered per user in that browser. The active note, its Live/Source/Reading mode, and collapsed state of both sidebars are saved locally first, encrypted, and synchronized so they restore after refresh and on another device. On phone-sized screens, the sidebars become drawers opened from the editor toolbar. You can also swipe inward from the left screen edge to open the directory drawer or from the right screen edge to open the Outline/History drawer. Selecting a history version closes the right drawer and shows the read-only preview in the center.
@@ -53,6 +53,8 @@ A folder cannot be moved into itself or one of its descendants.
 
 Open the contextual menu with right-click or the `…` button. It provides open, rename, move, pin or unpin, create child, duplicate, export, and move-to-trash actions as applicable. Renaming a note or folder opens an inline name field on that item in the file tree instead of a browser dialog; press Enter or leave the field to save, or press Escape to cancel. Duplicating a folder recursively copies its descendants. Attached images receive new IDs and keys in a copied note.
 
+Locked notes can still be moved normally, pinned, copied, exported, and opened from WikiLinks. A copied note is unlocked so it can be edited independently. A folder may still be renamed or moved when it contains locked notes, but neither the folder nor a larger batch containing it can be moved to trash until every locked descendant has been unlocked.
+
 ## Edit Markdown
 
 The center toolbar provides three modes:
@@ -62,6 +64,10 @@ The center toolbar provides three modes:
 - **Reading:** render the current Markdown without editing controls.
 
 Markdown remains the canonical note format in every mode. Switching modes does not convert it to a proprietary document format. The right outline is generated from H1-H6 headings and never uploads as separate plaintext metadata.
+
+Use the lock button immediately to the left of the image action to protect the current note from accidental editing or deletion. Locking saves pending title and editor changes locally first, then shows the note in Reading mode without changing the workspace's remembered Live/Source/Reading choice. Live and Source are disabled while the note is locked; the title, YAML properties, image action, and **Restore as current** history action are also unavailable. Unlocking is a direct toggle and restores the underlying workspace mode. The file tree and pinned shortcuts show a small lock badge on protected notes.
+
+The note lock is an encrypted, cross-device client-side safety control, not password protection or a server authorization rule. It does not require a PIN or master password. Updated clients synchronize it with the note; if a remote lock arrives while that note is actively open, the existing active-note deferral rule applies and the lock becomes visible after leaving and reopening the note.
 
 In Live mode, a line-leading `>` remains visible while you type. Press Enter to confirm the completed line and render it as a blockquote, matching the delayed conversion used for headings. The Live editor does not automatically insert backslashes before any punctuation. To request a literal Markdown-significant symbol, type the backslash yourself in Live or Source mode—for example, `\>` displays as an ordinary `>` instead of starting a blockquote. Live mode hides that user-authored escape while the canonical Markdown retains it across reloads.
 
@@ -211,7 +217,7 @@ The selected mode is remembered per user in the current browser.
 
 ## Trash and permanent deletion
 
-Moving an item to trash happens immediately without an extra confirmation. Moving a folder includes its descendants; owned attachments follow their notes. Open **Settings > Trash** to browse the original deleted folder hierarchy and deletion times. Restore and permanent-delete controls appear on each deleted root and apply to its descendants.
+Moving an item to trash happens immediately without an extra confirmation. A locked note cannot be moved to trash. A folder or multi-item selection containing a locked note at any descendant depth is blocked as a whole until that note is unlocked. Moving an allowed folder includes its descendants; owned attachments follow their notes. Open **Settings > Trash** to browse the original deleted folder hierarchy and deletion times. Restore and permanent-delete controls appear on each deleted root and apply to its descendants.
 
 Trash is retained for 30 days by default. Under **Settings > Trash**, choose 7, 30, 90, 180, or 365 days, or retain trash permanently. The choice saves immediately. The server applies the selected policy hourly to synchronized tombstones; other devices remove their cached copies when they receive the purge event.
 
@@ -235,6 +241,8 @@ Every Markdown or ZIP export asks for confirmation because its contents are plai
 - `_export.json` records the format version and original attachment-name mapping for lossless re-import.
 
 Exports are decrypted in the browser. Markdown and ZIP output is plaintext and must be stored in a trusted or independently encrypted location. Export stops instead of silently creating an incomplete ZIP when an attachment cannot be recovered.
+
+The lock state is application metadata rather than Markdown content, so Markdown and ZIP exports do not retain it. Imported notes and notes created from an explicit copy start unlocked.
 
 ### Import
 

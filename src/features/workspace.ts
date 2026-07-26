@@ -64,6 +64,7 @@ export function makeWorkspaceDocument(state: WorkspaceState, current: OpenDocume
     parentId: null,
     tags: [],
     favorite: false,
+    locked: false,
     deleted: false,
     createdAt: current?.createdAt ?? now,
     updatedAt: now,

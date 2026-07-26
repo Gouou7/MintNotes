@@ -16,6 +16,7 @@ const note: OpenDocument = {
   parentId: null,
   tags: ["one"],
   favorite: false,
+  locked: false,
   deleted: false,
   createdAt: "2026-07-24T00:00:00.000Z",
   updatedAt: "2026-07-24T01:00:00.000Z",
@@ -29,6 +30,7 @@ const note: OpenDocument = {
 describe("note history policy", () => {
   it("captures only content fields and deduplicates attachment order", () => {
     expect(historyContentChanged(note, { ...note, favorite: true })).toBe(false);
+    expect(historyContentChanged(note, { ...note, locked: true })).toBe(false);
     expect(historyContentChanged(note, { ...note, markdown: "# Changed" })).toBe(true);
     const first = makeHistoryPayload(note, "2026-07-24T02:00:00.000Z");
     const second = makeHistoryPayload({ ...note, attachmentIds: ["a", "b"] }, "2026-07-24T03:00:00.000Z");

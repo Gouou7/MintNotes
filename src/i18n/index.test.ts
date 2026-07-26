@@ -31,4 +31,10 @@ describe("i18n language resolution", () => {
     expect(translateMessage("zh-CN", "app.selectedCount", { count: 3 })).toBe("已选择 3 个项目");
     expect(translateMessage("zh-TW", "app.selectedCount", { count: 3 })).toBe("已選擇 3 個項目");
   });
+
+  it("translates note-lock controls and protected-trash feedback", () => {
+    expect(translateMessage("en", "app.unlockNote")).toBe("Unlock note");
+    expect(translateMessage("zh-CN", "app.noteLockedBadge")).toBe("已锁定笔记");
+    expect(translateMessage("zh-TW", "notice.lockedTrashBlocked", { title: "計畫" })).toContain("計畫");
+  });
 });

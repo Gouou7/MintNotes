@@ -5,6 +5,11 @@ export function decryptFailureFingerprint(object: LocalEncryptedObject): string 
   return `${object.objectId}:${object.revision}:${object.nonce}`;
 }
 
+export function normalizeVaultObject(object: VaultObject): VaultObject {
+  if (object.kind === "attachment") return object;
+  return { ...object, locked: object.locked === true };
+}
+
 export async function decryptAvailableLocalObjects(
   stored: LocalEncryptedObject[],
   pendingByKey: Map<string, OutboxEntry>,
@@ -15,7 +20,7 @@ export async function decryptAvailableLocalObjects(
   const failed: LocalEncryptedObject[] = [];
   for (const object of stored) {
     try {
-      const decrypted = await decrypt(object);
+      const decrypted = normalizeVaultObject(await decrypt(object));
       const pending = pendingByKey.get(object.key);
       const open = { ...decrypted, objectId: object.objectId, serverRevision: pending?.baseRevision ?? object.revision, dirty: Boolean(pending) };
       if (decrypted.kind === "attachment") attachments.push(open as OpenAttachment);

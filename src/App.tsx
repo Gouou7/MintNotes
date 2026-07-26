@@ -15,6 +15,7 @@ import {
   ListTree,
   LocateFixed,
   LockKeyhole,
+  LockKeyholeOpen,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -67,8 +68,9 @@ import {
   type SyncIntent
 } from "./features/syncCoordinator";
 import { isAcknowledgedLocalEcho } from "./features/syncChanges";
-import { decryptAvailableLocalObjects, decryptFailureFingerprint } from "./features/vaultLoad";
-import { canMoveDocument, compareDocuments, descendantsOf, isFolderDropZone, nextManualOrder, pinnedDocuments, reorderedSiblings, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "./features/tree";
+import { decryptAvailableLocalObjects, decryptFailureFingerprint, normalizeVaultObject } from "./features/vaultLoad";
+import { canMoveDocument, compareDocuments, descendantsOf, isFolderDropZone, lockedNoteInSelection, nextManualOrder, pinnedDocuments, reorderedSiblings, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "./features/tree";
+import { derivedNoteLockState, effectiveEditorMode, isLockedNote } from "./features/noteLock";
 import { formatNoteTime } from "./features/noteTime";
 import {
   DEFAULT_HISTORY_SETTINGS,
@@ -96,6 +98,7 @@ import {
   parseWorkspaceState,
   WORKSPACE_OBJECT_ID,
   workspaceStateEquals,
+  type WorkspaceEditorMode,
   type WorkspaceState
 } from "./features/workspace";
 import {
@@ -129,7 +132,7 @@ import type {
   VaultObject
 } from "./types";
 
-type EditorMode = "live" | "source" | "readonly";
+type EditorMode = WorkspaceEditorMode;
 type SaveState = "ready" | "saving" | "local" | "syncing" | "synced" | "offline" | "error";
 type CachedAttachmentUrl = { signature: string; url: string };
 type CreateDocumentOptions = { focusName?: boolean };
@@ -187,6 +190,7 @@ function makeDocument(
     parentId,
     tags: [],
     favorite: false,
+    locked: false,
     deleted: false,
     createdAt: now,
     updatedAt: now,
@@ -429,6 +433,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
   const editorArea = useRef<HTMLDivElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const pendingTitleFocus = useRef<string | null>(null);
+  const pendingTitleSave = useRef<Promise<boolean>>(Promise.resolve(true));
   const attachmentInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -903,7 +908,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
 
   const patchDocument = (objectId: string, patch: Partial<OpenDocument>, delay = 500) => {
     const current = documentIndexRef.current.get(objectId);
-    if (!current || !documentPatchChanges(current, patch)) return;
+    if (!current || isLockedNote(current) || !documentPatchChanges(current, patch)) return;
     const next = { ...current, ...patch, updatedAt: new Date().toISOString(), dirty: true };
     scheduleHistoryEdit(current, next);
     queueDocument(next, delay);
@@ -912,6 +917,10 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
   const beginTreeRename = (objectId: string) => {
     const target = documentIndexRef.current.get(objectId);
     if (!target || target.deleted) return;
+    if (isLockedNote(target)) {
+      showMessage(t("notice.noteLockedEdit", { title: target.title }));
+      return;
+    }
     const ancestors = new Set<string>();
     let ancestorId = target.parentId;
     while (ancestorId) {
@@ -987,6 +996,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     const conflict = makeDocument(documentsRef.current, local.kind, `${local.title} (${t("app.conflictSuffix")})`, local.parentId, local.markdown);
     conflict.tags = local.tags;
     conflict.favorite = local.favorite;
+    conflict.locked = derivedNoteLockState(local, "conflict-copy");
     conflict.attachmentIds = local.attachmentIds;
     const persisted = await persistObject(conflict, { commitState });
     requestPush("structural");
@@ -1114,7 +1124,14 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
         if (isAcknowledgedLocalEcho(localVersionByKey.get(key), change)) continue;
         let decrypted: VaultObject;
         try {
-          decrypted = await cryptoClient.decryptObject(user.id, change.objectId, change.objectType, change.revision, change.ciphertext, change.nonce);
+          decrypted = normalizeVaultObject(await cryptoClient.decryptObject(
+            user.id,
+            change.objectId,
+            change.objectType,
+            change.revision,
+            change.ciphertext,
+            change.nonce
+          ));
         } catch {
           // Keep the last known-good local ciphertext and decrypted document.
           // A later revision in the same pull may still repair this object.
@@ -1706,6 +1723,8 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
 
   const indexedActiveDocument = activeId ? documentIndexRef.current.get(activeId) : null;
   const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
+  const activeDocumentLocked = isLockedNote(activeDocument);
+  const displayedMode = effectiveEditorMode(mode, activeDocument);
   useEffect(() => {
     setHistoryPreview(null);
     setHistoryItems([]);
@@ -1905,6 +1924,13 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
 
   const setDeletedMany = async (objectIds: string[], deleted: boolean) => {
     const roots = selectionRoots(documentsRef.current, objectIds);
+    if (deleted) {
+      const locked = lockedNoteInSelection(documentsRef.current, roots);
+      if (locked) {
+        showMessage(t("notice.lockedTrashBlocked", { title: locked.title }));
+        return;
+      }
+    }
     const ids = new Set(roots.flatMap((objectId) => [...descendantsOf(documentsRef.current, objectId)]));
     if (!ids.size) return;
     if (!deleted) {
@@ -2027,6 +2053,8 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
   };
 
   const addAttachment = async (noteId: string, file: File) => {
+    const editableNote = documentIndexRef.current.get(noteId);
+    if (editableNote && isLockedNote(editableNote)) throw new Error(t("notice.noteLockedEdit", { title: editableNote.title }));
     showMessage(t("notice.encryptingAttachment", { name: file.name }), "info");
     const attachment = await createLocalAttachment(user.id, noteId, file, () => !logoutStarted.current);
     await persistObject(attachment);
@@ -2058,7 +2086,13 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       newIds.push(created.objectId);
     }
     const copy = documentsRef.current.find((entry) => entry.objectId === noteId);
-    if (copy) await persistObject({ ...copy, markdown, attachmentIds: newIds, dirty: true });
+    if (copy) await persistObject({
+      ...copy,
+      locked: derivedNoteLockState(source, "explicit-copy"),
+      markdown,
+      attachmentIds: newIds,
+      dirty: true
+    });
     return noteId;
   };
 
@@ -2150,6 +2184,10 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
 
   const restoreHistoryAsCurrent = async () => {
     if (!activeDocument || !historyPreview) return;
+    if (isLockedNote(activeDocument)) {
+      showMessage(t("notice.noteLockedEdit", { title: activeDocument.title }));
+      return;
+    }
     const missing = attachmentIdsIn(historyPreview.payload.markdown)
       .filter((id) => !attachmentIndexRef.current.get(id) || attachmentIndexRef.current.get(id)?.deleted);
     if (missing.length && !window.confirm(t("history.restoreMissingAttachments", { count: missing.length }))) return;
@@ -2203,6 +2241,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       );
       const copy = makeDocument(documentsRef.current, "note", title, activeDocument.parentId, historyPreview.payload.markdown);
       copy.tags = [...historyPreview.payload.tags];
+      copy.locked = derivedNoteLockState(activeDocument, "explicit-copy");
       let markdown = copy.markdown;
       const attachmentIds: string[] = [];
       const createdAttachments: OpenAttachment[] = [];
@@ -2248,6 +2287,10 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
   const updateDocumentTitle = async (objectId: string, value: string): Promise<boolean> => {
     const target = documentsRef.current.find((entry) => entry.objectId === objectId);
     if (!target) return false;
+    if (isLockedNote(target)) {
+      showMessage(t("notice.noteLockedEdit", { title: target.title }));
+      return false;
+    }
     const title = value.trim();
     if (!title) {
       showMessage(t("notice.nameRequired"));
@@ -2265,9 +2308,45 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     return true;
   };
 
+  const commitDocumentTitle = (objectId: string, value: string): Promise<boolean> => {
+    const next = pendingTitleSave.current
+      .catch(() => false)
+      .then(() => updateDocumentTitle(objectId, value));
+    pendingTitleSave.current = next;
+    return next;
+  };
+
+  const toggleActiveNoteLock = async () => {
+    const noteId = activeIdRef.current;
+    if (!noteId || historyPreview) return;
+    const initial = documentIndexRef.current.get(noteId);
+    if (!initial || initial.kind !== "note") return;
+    try {
+      if (!isLockedNote(initial)) {
+        const titleSaved = await commitDocumentTitle(noteId, titleDraft);
+        if (!titleSaved) return;
+        await flushDocument(noteId);
+      }
+      const current = documentIndexRef.current.get(noteId);
+      if (!current || current.kind !== "note") return;
+      const locked = !isLockedNote(current);
+      await persistObject({ ...current, locked, dirty: true });
+      setEditorSessionId((value) => value + 1);
+      requestPush("structural");
+      showMessage(
+        locked
+          ? t("notice.noteLocked", { title: current.title })
+          : t("notice.noteUnlocked", { title: current.title }),
+        "info"
+      );
+    } catch (error) {
+      showMessage(translateError(error, t, "notice.noteLockFailed"), "critical");
+    }
+  };
+
   const commitTreeRename = (objectId: string, value: string) => {
     setRenamingDocumentId((current) => current === objectId ? null : current);
-    void updateDocumentTitle(objectId, value);
+    void commitDocumentTitle(objectId, value);
   };
 
   const renameDocument = (objectId: string) => beginTreeRename(objectId);
@@ -2493,7 +2572,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
         {pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>
           <div className="tree-section-label"><AppIcon icon={Pin} size={13} />{t("app.pinned")}</div>
           {pinned.map((entry) => <div className={`tree-row pinned-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""}`} key={`pinned-${entry.objectId}`} role="treeitem" aria-selected={selectedIds.has(entry.objectId)} onContextMenu={(event) => { event.preventDefault(); openTreeContext(entry, event.clientX, event.clientY); }}>
-            <button className="tree-main" onClick={(event) => selectTreeEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><span><AppIcon icon={entry.kind === "folder" ? Folder : FileText} size={17} /></span><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>
+            <button className="tree-main" onClick={(event) => selectTreeEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><TreeDocumentIcon document={entry} /><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>
             <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); openTreeContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={17} /></button>
           </div>)}
         </div>}
@@ -2529,14 +2608,14 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       <main className="note-pane">
         <header className="note-toolbar">
           <button className="pane-toggle" onClick={() => preferences.treeCollapsed ? setPreferences({ ...preferences, treeCollapsed: false }) : setTreeOpen(true)} aria-label={t("app.openLeft")}><AppIcon icon={PanelLeftOpen} /></button>
-          {activeDocument ? <input ref={titleInput} className="title-input" value={historyPreview?.payload.title ?? titleDraft} readOnly={Boolean(historyPreview)} onChange={(event) => setTitleDraft(event.target.value)} onBlur={(event) => {
-            if (historyPreview) return;
+          {activeDocument ? <input ref={titleInput} className="title-input" value={historyPreview?.payload.title ?? titleDraft} readOnly={Boolean(historyPreview) || activeDocumentLocked} onChange={(event) => setTitleDraft(event.target.value)} onBlur={(event) => {
+            if (historyPreview || activeDocumentLocked) return;
             const noteId = activeDocument.objectId;
-            void updateDocumentTitle(noteId, event.currentTarget.value).then((updated) => {
+            void commitDocumentTitle(noteId, event.currentTarget.value).then((updated) => {
               if (!updated) setTitleDraft(documentIndexRef.current.get(noteId)?.title ?? "");
             });
           }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} aria-label={t("app.noteTitle")} /> : <strong>{t("app.selectNote")}</strong>}
-          <div className="mode-switch" aria-label={t("app.displayMode")}><button disabled={Boolean(historyPreview)} className={mode === "live" ? "active" : ""} onClick={() => setMode("live")}>{t("app.modeLive")}</button><button disabled={Boolean(historyPreview)} className={mode === "source" ? "active" : ""} onClick={() => setMode("source")}>{t("app.modeSource")}</button><button disabled={Boolean(historyPreview)} className={mode === "readonly" ? "active" : ""} onClick={() => setMode("readonly")}>{t("app.modeReading")}</button></div>
+          <div className="mode-switch" aria-label={t("app.displayMode")}><button disabled={Boolean(historyPreview) || activeDocumentLocked} className={displayedMode === "live" ? "active" : ""} onClick={() => setMode("live")}>{t("app.modeLive")}</button><button disabled={Boolean(historyPreview) || activeDocumentLocked} className={displayedMode === "source" ? "active" : ""} onClick={() => setMode("source")}>{t("app.modeSource")}</button><button disabled={Boolean(historyPreview) || activeDocumentLocked} className={displayedMode === "readonly" ? "active" : ""} onClick={() => setMode("readonly")}>{t("app.modeReading")}</button></div>
           <input ref={attachmentInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => {
             const file = event.target.files?.[0];
             const noteId = activeDocument?.objectId;
@@ -2544,9 +2623,10 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
             if (file && noteId) void addAttachment(noteId, file).then((attachment) => {
               const latest = documentIndexRef.current.get(noteId);
               if (latest) patchDocument(noteId, { markdown: latest.markdown + attachmentMarkdown(attachment.objectId, attachment.originalName) }, 0);
-            });
+            }).catch((error) => showMessage(translateError(error, t, "notice.attachmentSaveFailed"), "critical"));
           }} />
-          {activeDocument && !historyPreview && <button className="toolbar-icon" onClick={() => attachmentInput.current?.click()} title={t("app.addImage")} aria-label={t("app.addImage")}><AppIcon icon={ImagePlus} /></button>}
+          {activeDocument && !historyPreview && <button className={`toolbar-icon note-lock-toggle ${activeDocumentLocked ? "active" : ""}`} onClick={() => void toggleActiveNoteLock()} title={activeDocumentLocked ? t("app.unlockNote") : t("app.lockNote")} aria-label={activeDocumentLocked ? t("app.unlockNote") : t("app.lockNote")} aria-pressed={activeDocumentLocked}><AppIcon icon={activeDocumentLocked ? LockKeyholeOpen : LockKeyhole} /></button>}
+          {activeDocument && !historyPreview && !activeDocumentLocked && <button className="toolbar-icon" onClick={() => attachmentInput.current?.click()} title={t("app.addImage")} aria-label={t("app.addImage")}><AppIcon icon={ImagePlus} /></button>}
           <button className="toolbar-icon right-pane-toggle" onClick={() => preferences.outlineCollapsed ? setPreferences({ ...preferences, outlineCollapsed: false }) : setOutlineOpen(true)} aria-label={t("app.openRight")}><AppIcon icon={PanelRightOpen} /></button>
         </header>
         {historyPreview && <div className="history-preview-banner">
@@ -2554,16 +2634,16 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
           <div>
             <button onClick={() => setHistoryPreview(null)}>{t("history.exitPreview")}</button>
             <button onClick={() => void restoreHistoryAsCopy()}><AppIcon icon={Copy} size={14} />{t("history.restoreCopy")}</button>
-            <button className="primary" onClick={() => void restoreHistoryAsCurrent()}><AppIcon icon={RotateCcw} size={14} />{t("history.restoreCurrent")}</button>
+            <button className="primary" disabled={activeDocumentLocked} onClick={() => void restoreHistoryAsCurrent()} title={activeDocumentLocked ? t("app.unlockToEdit") : undefined}><AppIcon icon={RotateCcw} size={14} />{t("history.restoreCurrent")}</button>
             <button className="danger" onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} size={14} /></button>
           </div>
         </div>}
         <div className="editor-area" ref={editorArea}>
           {activeDocument ? historyPreview
             ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : mode === "readonly"
+            : displayedMode === "readonly"
             ? <ReadOnlyMarkdown markdown={activeDocument.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : <TyporaEditor key={`${editorSessionId}:${mode}`} markdown={activeDocument.markdown} mode={mode} attachmentUrls={attachmentUrls} onChange={(markdown) => {
+            : <TyporaEditor key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} attachmentUrls={attachmentUrls} onChange={(markdown) => {
               const latest = documentIndexRef.current.get(activeDocument.objectId);
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });
@@ -2614,6 +2694,15 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       {message && <Toast notice={message} onDismiss={() => setMessage(null)} />}
     </div>
   );
+}
+
+function TreeDocumentIcon({ document }: { document: OpenDocument }) {
+  const { t } = useI18n();
+  const locked = isLockedNote(document);
+  return <span className={`tree-document-icon ${locked ? "locked" : ""}`}>
+    <AppIcon icon={document.kind === "folder" ? Folder : FileText} size={17} />
+    {locked && <span className="tree-lock-badge" title={t("app.noteLockedBadge")}><AppIcon icon={LockKeyhole} size={8} /><span className="sr-only">{t("app.noteLockedBadge")}</span></span>}
+  </span>;
 }
 
 function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, expanded, dropTargetId, renamingDocumentId, onDropTarget, onSelect, onContext, onDragSelection, onMove, onRenameCommit, onRenameCancel }: {
@@ -2671,10 +2760,10 @@ function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, expanded
         onContextMenu={(event) => { event.preventDefault(); onContext(entry, event.clientX, event.clientY); }}
       >
         {renamingDocumentId === entry.objectId
-          ? <div className="tree-main tree-main-renaming"><span className={entry.kind === "note" ? "tree-spacer" : undefined}>{entry.kind === "folder" && <AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={14} />}</span><span><AppIcon icon={entry.kind === "folder" ? Folder : FileText} size={17} /></span><TreeRenameInput initialValue={entry.title} label={t("app.rename")} onCommit={(value) => onRenameCommit(entry.objectId, value)} onCancel={onRenameCancel} /></div>
+          ? <div className="tree-main tree-main-renaming"><span className={entry.kind === "note" ? "tree-spacer" : undefined}>{entry.kind === "folder" && <AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={14} />}</span><TreeDocumentIcon document={entry} /><TreeRenameInput initialValue={entry.title} label={t("app.rename")} onCommit={(value) => onRenameCommit(entry.objectId, value)} onCancel={onRenameCancel} /></div>
           : entry.kind === "folder"
-            ? <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span><AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={14} /></span><span><AppIcon icon={Folder} size={17} /></span><span>{entry.title}</span></button>
-            : <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span className="tree-spacer" /><span><AppIcon icon={FileText} size={17} /></span><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>}
+            ? <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span><AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={14} /></span><TreeDocumentIcon document={entry} /><span>{entry.title}</span></button>
+            : <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span className="tree-spacer" /><TreeDocumentIcon document={entry} /><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>}
         <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); onContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={17} /></button>
       </div>
       {entry.kind === "folder" && expanded.has(entry.objectId) && <div className="tree-children" role="group"><TreeLevel childrenByParent={childrenByParent} parentId={entry.objectId} activeId={activeId} selectedIds={selectedIds} expanded={expanded} dropTargetId={dropTargetId} renamingDocumentId={renamingDocumentId} onDropTarget={onDropTarget} onSelect={onSelect} onContext={onContext} onDragSelection={onDragSelection} onMove={onMove} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} /></div>}
@@ -2705,6 +2794,7 @@ function ContextMenu({ document, selection, documents, position, onClose, onSele
   const roots = selectionRoots(documents, selectedIds);
   const single = selected.length === 1;
   const deleted = selected.every((entry) => entry.deleted);
+  const lockedTrashNote = deleted ? undefined : lockedNoteInSelection(documents, roots);
   const allPinned = selected.every((entry) => entry.favorite);
   const folders = documents.filter((entry) => entry.kind === "folder" && !entry.deleted && !selectedIds.includes(entry.objectId) && roots.every((id) => canMoveDocument(documents, id, entry.objectId)));
   const act = (callback: () => unknown | Promise<unknown>) => { onClose(); void callback(); };
@@ -2712,13 +2802,13 @@ function ContextMenu({ document, selection, documents, position, onClose, onSele
     <div className="context-menu" style={{ left: Math.min(position.x, window.innerWidth - 230), top: Math.min(position.y, window.innerHeight - 430) }} onPointerDown={(event) => event.stopPropagation()}>
       {!single && <p className="context-selection-count">{t("app.selectedCount", { count: selected.length })}</p>}
       {single && document.kind === "note" && <button onClick={() => act(() => onSelect(document.objectId))}>{t("app.open")}</button>}
-      {!deleted && <>{single && <button onClick={() => act(() => onRename(document.objectId))}>{t("app.rename")}</button>}<button onClick={() => act(() => onPin(selectedIds, !allPinned))}>{allPinned ? t("app.unpin") : t("app.pinned")}</button></>}
+      {!deleted && <>{single && <button disabled={isLockedNote(document)} title={isLockedNote(document) ? t("app.unlockToEdit") : undefined} onClick={() => act(() => onRename(document.objectId))}>{t("app.rename")}</button>}<button onClick={() => act(() => onPin(selectedIds, !allPinned))}>{allPinned ? t("app.unpin") : t("app.pinned")}</button></>}
       {!deleted && single && document.kind === "folder" && <><button onClick={() => act(() => onCreate("note", document.objectId))}>{t("app.createNoteInFolder")}</button><button onClick={() => act(() => onCreate("folder", document.objectId))}>{t("app.createSubfolder")}</button></>}
       {!deleted && <button onClick={() => act(() => onDuplicate(selectedIds))}>{t("app.duplicate")}</button>}
       <button onClick={() => act(() => onExport(selectedIds))}>{t("app.export")}</button>
       {!deleted && <details><summary>{t("app.moveTo")}</summary><button onClick={() => act(() => onMove(selectedIds, null))}>{t("app.rootDirectory")}</button>{folders.map((folder) => <button key={folder.objectId} onClick={() => act(() => onMove(selectedIds, folder.objectId))}>{folder.title}</button>)}</details>}
       <hr />
-      {deleted ? <><button onClick={() => act(() => onRestore(selectedIds))}>{t("app.restore")}</button><button className="danger" onClick={() => act(() => onPurge(selectedIds))}>{t("app.permanentDeleteEllipsis")}</button></> : <button className="danger" onClick={() => act(() => onDelete(selectedIds))}>{t("app.moveToTrash")}</button>}
+      {deleted ? <><button onClick={() => act(() => onRestore(selectedIds))}>{t("app.restore")}</button><button className="danger" onClick={() => act(() => onPurge(selectedIds))}>{t("app.permanentDeleteEllipsis")}</button></> : <button className="danger" disabled={Boolean(lockedTrashNote)} title={lockedTrashNote ? t("notice.lockedTrashBlocked", { title: lockedTrashNote.title }) : undefined} onClick={() => act(() => onDelete(selectedIds))}>{t("app.moveToTrash")}</button>}
     </div>
   );
 }

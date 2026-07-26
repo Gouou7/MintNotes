@@ -15,6 +15,22 @@ export function descendantsOf(documents: OpenDocument[], objectId: string): Set<
   return result;
 }
 
+export function lockedNoteInSelection(
+  documents: OpenDocument[],
+  objectIds: Iterable<string>
+): OpenDocument | undefined {
+  const recursiveIds = new Set<string>();
+  for (const objectId of objectIds) {
+    for (const descendantId of descendantsOf(documents, objectId)) recursiveIds.add(descendantId);
+  }
+  return documents.find((entry) => (
+    recursiveIds.has(entry.objectId)
+    && !entry.deleted
+    && entry.kind === "note"
+    && entry.locked === true
+  ));
+}
+
 export function canMoveDocument(documents: OpenDocument[], objectId: string, parentId: string | null): boolean {
   if (objectId === parentId) return false;
   return !parentId || !descendantsOf(documents, objectId).has(parentId);

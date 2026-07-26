@@ -27,8 +27,8 @@ const historySettings: HistorySettings = { enabled: true, intervalMinutes: 10, r
 const admin: User = { id: "admin-id", username: "admin", displayName: "Administrator", role: "admin" };
 const deletedAt = "2026-07-20T12:00:00.000Z";
 const trashItems: OpenDocument[] = [
-  { objectId: "folder", kind: "folder", title: "Deleted folder", markdown: "", parentId: null, tags: [], favorite: false, deleted: true, createdAt: deletedAt, updatedAt: deletedAt, manualOrder: 0, attachmentIds: [], schemaVersion: 2, serverRevision: 1, dirty: false },
-  { objectId: "note", kind: "note", title: "Nested note", markdown: "", parentId: "folder", tags: [], favorite: false, deleted: true, createdAt: deletedAt, updatedAt: deletedAt, manualOrder: 0, attachmentIds: [], schemaVersion: 2, serverRevision: 1, dirty: false }
+  { objectId: "folder", kind: "folder", title: "Deleted folder", markdown: "", parentId: null, tags: [], favorite: false, locked: false, deleted: true, createdAt: deletedAt, updatedAt: deletedAt, manualOrder: 0, attachmentIds: [], schemaVersion: 2, serverRevision: 1, dirty: false },
+  { objectId: "note", kind: "note", title: "Nested note", markdown: "", parentId: "folder", tags: [], favorite: false, locked: false, deleted: true, createdAt: deletedAt, updatedAt: deletedAt, manualOrder: 0, attachmentIds: [], schemaVersion: 2, serverRevision: 1, dirty: false }
 ];
 
 function mockApi() {

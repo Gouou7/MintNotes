@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { OpenDocument } from "../types";
-import { canMoveDocument, compareDocuments, isFolderDropZone, pinnedDocuments, reorderedSiblings, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle, visibleTreeOrder } from "./tree";
+import { canMoveDocument, compareDocuments, isFolderDropZone, lockedNoteInSelection, pinnedDocuments, reorderedSiblings, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle, visibleTreeOrder } from "./tree";
 
 function doc(objectId: string, parentId: string | null, manualOrder: number, kind: "note" | "folder" = "note"): OpenDocument {
-  return { objectId, parentId, manualOrder, kind, title: objectId, markdown: "", tags: [], favorite: false, deleted: false, createdAt: "2026-01-01", updatedAt: "2026-01-01", attachmentIds: [], schemaVersion: 2, serverRevision: 0, dirty: false };
+  return { objectId, parentId, manualOrder, kind, title: objectId, markdown: "", tags: [], favorite: false, locked: false, deleted: false, createdAt: "2026-01-01", updatedAt: "2026-01-01", attachmentIds: [], schemaVersion: 2, serverRevision: 0, dirty: false };
 }
 
 describe("tree operations", () => {
@@ -54,6 +54,27 @@ describe("tree operations", () => {
     const child = doc("child", "folder", 1024);
     const sibling = doc("sibling", null, 2048);
     expect(selectionRoots([folder, child, sibling], ["folder", "child", "sibling"])).toEqual(["folder", "sibling"]);
+  });
+
+  it("finds locked notes directly and at any folder depth", () => {
+    const root = doc("root", null, 1024, "folder");
+    const nested = doc("nested", "root", 1024, "folder");
+    const locked = { ...doc("locked", "nested", 1024), locked: true };
+    const unlocked = doc("unlocked", null, 2048);
+    const documents = [root, nested, locked, unlocked];
+
+    expect(lockedNoteInSelection(documents, ["locked"])?.objectId).toBe("locked");
+    expect(lockedNoteInSelection(documents, ["root"])?.objectId).toBe("locked");
+    expect(lockedNoteInSelection(documents, ["unlocked"])).toBeUndefined();
+  });
+
+  it("blocks a mixed selection as a whole but ignores deleted locked notes", () => {
+    const unlocked = doc("unlocked", null, 1024);
+    const locked = { ...doc("locked", null, 2048), locked: true };
+    const deletedLocked = { ...doc("deleted-locked", null, 3072), locked: true, deleted: true };
+
+    expect(lockedNoteInSelection([unlocked, locked], ["unlocked", "locked"])?.objectId).toBe("locked");
+    expect(lockedNoteInSelection([unlocked, deletedLocked], ["unlocked", "deleted-locked"])).toBeUndefined();
   });
 
   it("builds a sorted pinned shortcut list without deleted items", () => {

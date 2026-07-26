@@ -4,9 +4,9 @@
 
 ## Protected assets
 
-The application is designed to keep note titles, Markdown, tags, folder names, folder structure, derived outlines, active/open note identifiers, active editor mode, sidebar visibility state, attachment names, MIME types, attachment keys, and attachment bytes confidential from the server at rest.
+The application is designed to keep note titles, Markdown, tags, note lock state, folder names, folder structure, derived outlines, active/open note identifiers, active editor mode, sidebar visibility state, attachment names, MIME types, attachment keys, and attachment bytes confidential from the server at rest.
 
-The server necessarily observes usernames, display names, roles, account status, trash/history-retention preferences, history capture frequency and enablement, whether encrypted avatar/workspace/history records exist, random note/history IDs, history capture times and capture kinds, avatar/workspace/history ciphertext sizes and update times, random user/content/session/endpoint IDs, an ephemeral random synchronization-client ID, the reserved workspace object ID, ciphertext sizes, object counts, revisions, synchronization times, browser/device summaries, IP addresses, login counts and activity times, remembered status, and access patterns. SSE notifications expose only a user-scoped change cursor to the authenticated browser and do not carry object IDs or ciphertext. The server does not receive historical titles, Markdown, tags, attachment names or bytes, the avatar image, avatar MIME type, active/open note identifiers, editor mode, or sidebar state in plaintext. Users can view their own trusted-endpoint and encrypted note-history metadata; administrators can view account identity, status, object count, and aggregate ciphertext storage usage.
+The server necessarily observes usernames, display names, roles, account status, trash/history-retention preferences, history capture frequency and enablement, whether encrypted avatar/workspace/history records exist, random note/history IDs, history capture times and capture kinds, avatar/workspace/history ciphertext sizes and update times, random user/content/session/endpoint IDs, an ephemeral random synchronization-client ID, the reserved workspace object ID, ciphertext sizes, object counts, revisions, synchronization times, browser/device summaries, IP addresses, login counts and activity times, remembered status, and access patterns. SSE notifications expose only a user-scoped change cursor to the authenticated browser and do not carry object IDs or ciphertext. The server does not receive historical titles, Markdown, tags, note lock state, attachment names or bytes, the avatar image, avatar MIME type, active/open note identifiers, editor mode, or sidebar state in plaintext. Users can view their own trusted-endpoint and encrypted note-history metadata; administrators can view account identity, status, object count, and aggregate ciphertext storage usage.
 
 ## Threats covered by the design
 
@@ -20,6 +20,7 @@ The server necessarily observes usernames, display names, roles, account status,
 
 - An actively compromised server can replace the JavaScript application and capture a password or unlocked key.
 - Malware, a hostile browser extension, or physical access to an unlocked device can read plaintext.
+- Note locking prevents accidental client-side edits and trash operations; it is not authentication, server authorization, or protection against a malicious or outdated client.
 - Malware or hostile same-origin JavaScript can use a directly wrapped device credential while its browser profile remains trusted. With a local PIN configured, it can attempt PIN guesses against the stored authenticated ciphertext or use the current unlocked tab's short-lived refresh envelope; a short PIN is not a defense against an attacker who controls the origin or browser profile.
 - A user-created plaintext export is outside the encrypted storage boundary.
 - Traffic metadata and ciphertext sizes are not hidden.
@@ -94,6 +95,7 @@ The first account bootstraps the administrator role. The empty-database check an
 - Append-only server revisions.
 - Independent encrypted note history with retention, quota, clear markers, and local-first retry storage. User-visible history deletion never removes synchronization revisions.
 - Tombstone deletion and trash restoration.
+- Encrypted note-lock metadata blocks current clients from editing a protected note or trashing a selection containing it, including recursive folder selections.
 - Attachment tombstones follow their owning note. Physical removal occurs after the configured retention period or after an explicit confirmation for a manual purge.
 - Exportable plaintext Markdown and consistent server backups.
 - Consistent SQLite online backups and documented restore drills.

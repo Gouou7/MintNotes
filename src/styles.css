@@ -107,6 +107,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .tree-row[draggable="true"]:active { cursor: grabbing; }
 .tree-main { min-width: 0; flex: 1; height: 36px; display: grid; grid-template-columns: 14px 20px minmax(0, 1fr) auto; gap: 5px; align-items: center; text-align: left; border: 0; background: transparent; cursor: pointer; color: inherit; }
 .tree-main > span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-document-icon { position: relative; width: 20px; height: 20px; display: inline-grid; place-items: center; overflow: visible; }
+.tree-lock-badge { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; display: grid; place-items: center; border: 1px solid var(--surface); border-radius: 50%; color: var(--accent-on); background: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.22); }
 .tree-main-renaming { cursor: default; }
 .tree-rename-input { min-width: 0; width: 100%; padding: 4px 6px; border: 1px solid var(--accent); border-radius: 5px; outline: 0; color: var(--text-strong); background: var(--surface-raised); box-shadow: 0 0 0 2px var(--accent-soft); font: inherit; }
 .tree-main i { width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #dda43d; }
@@ -129,11 +131,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .note-pane { min-width: 0; min-height: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); }
 .note-toolbar { height: 57px; flex: 0 0 57px; display: flex; align-items: center; gap: 9px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--toolbar); z-index: 5; }
 .title-input { min-width: 100px; flex: 1; border: 0; background: transparent; color: var(--text-strong); caret-color: var(--text-strong); font-size: 16px; font-weight: 700; outline: 0; text-overflow: ellipsis; }
+.title-input:read-only { caret-color: transparent; }
 .mode-switch { display: flex; padding: 3px; border-radius: 9px; background: var(--surface-input); }
 .mode-switch button { min-height: 30px; padding: 4px 10px; border: 0; border-radius: 7px; background: transparent; cursor: pointer; font-size: 12px; color: var(--muted); }
 .mode-switch button.active { background: var(--surface-raised); box-shadow: 0 1px 4px rgba(0,0,0,.16); color: var(--accent-text); }
+.mode-switch button:disabled { cursor: default; opacity: .42; }
+.mode-switch button:disabled.active { opacity: 1; }
 .toolbar-icon, .pane-toggle { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
 .toolbar-icon:hover, .pane-toggle:hover, .side-header > button:hover { background: var(--surface-hover); }
+.note-lock-toggle.active { color: var(--accent-text); background: var(--accent-soft); }
 .pane-toggle { display: none; }
 .tree-collapsed .pane-toggle { display: block; }
 .right-pane-toggle { display: none; }
@@ -475,6 +481,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .context-menu { position: fixed; z-index: 150; width: 220px; max-height: min(430px, calc(100dvh - 20px)); overflow: auto; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: 0 14px 44px rgba(0,0,0,.34); }
 .context-menu button, .context-menu summary { display: block; width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; cursor: pointer; }
 .context-menu button:hover, .context-menu summary:hover { background: var(--surface-hover); }
+.context-menu button:disabled { cursor: not-allowed; opacity: .45; background: transparent; color: var(--muted); }
 .context-menu .danger { color: var(--danger); }
 .context-menu hr { border: 0; border-top: 1px solid var(--border); }
 .context-menu details button { padding-left: 22px; }
@@ -506,8 +513,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .note-pane { height: 100dvh; }
   .note-toolbar { gap: 3px; padding: 7px max(7px, env(safe-area-inset-right)) 7px max(7px, env(safe-area-inset-left)); }
   .pane-toggle { display: block; }
-  .title-input { font-size: 14px; }
-  .mode-switch button { padding: 4px 7px; }
+  .title-input { min-width: 0; font-size: 14px; }
+  .mode-switch button { padding: 4px 5px; }
   .live-editor-document, .readonly-markdown, .source-editor { width: 100%; padding: 30px 18px calc(80px + env(safe-area-inset-bottom)); }
   .property-row { grid-template-columns: 22px minmax(88px, 34%) minmax(0, 1fr) 28px; gap: 5px; }
   .properties-panel { margin-bottom: 22px; }

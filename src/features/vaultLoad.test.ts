@@ -31,6 +31,7 @@ describe("vault local loading", () => {
         parentId: null,
         tags: [],
         favorite: false,
+        locked: false,
         deleted: false,
         createdAt: object.updatedAt,
         updatedAt: object.updatedAt,
@@ -43,6 +44,26 @@ describe("vault local loading", () => {
     expect(result.documents.map((document) => document.objectId)).toEqual(["readable"]);
     expect(result.failed.map((object) => object.objectId)).toEqual(["damaged"]);
     expect(result.attachments).toEqual([]);
+  });
+
+  it("normalizes legacy documents without a lock field as unlocked", async () => {
+    const readable = encryptedObject("legacy");
+    const result = await decryptAvailableLocalObjects([readable], new Map(), async (object) => ({
+      kind: "note",
+      title: "Legacy",
+      markdown: "",
+      parentId: null,
+      tags: [],
+      favorite: false,
+      deleted: false,
+      createdAt: object.updatedAt,
+      updatedAt: object.updatedAt,
+      manualOrder: 0,
+      attachmentIds: [],
+      schemaVersion: 2
+    } as unknown as VaultObject));
+
+    expect(result.documents[0]?.locked).toBe(false);
   });
 
   it("changes the dismissible failure fingerprint when encrypted content changes", () => {

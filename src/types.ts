@@ -46,6 +46,7 @@ export interface VaultDocument {
   parentId: string | null;
   tags: string[];
   favorite: boolean;
+  locked: boolean;
   deleted: boolean;
   createdAt: string;
   updatedAt: string;
