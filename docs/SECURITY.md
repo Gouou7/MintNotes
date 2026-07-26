@@ -73,6 +73,7 @@ Every attachment chunk uses a fresh 96-bit nonce and authenticates the user ID, 
 - Immediate permanent deletion requires an authenticated session, an explicit client-side confirmation, a synchronized tombstone, and the server-side user scope derived from that session.
 - Browser CSRF resistance relies on `SameSite=Strict` cookies plus exact `Origin` validation when an `Origin` header is present. `APP_ORIGIN` must therefore match the public browser origin exactly.
 - Markdown does not execute raw HTML or scriptable embeds.
+- KaTeX and Mermaid execute only from the reviewed local application bundle. Mermaid uses strict rendering, removes event handlers and external resource references from generated SVG, and displays the result as a non-interactive Blob image. It does not add a CDN, remote font, frame, or new network origin.
 - The application uses a restrictive Content Security Policy and no runtime CDN scripts.
 - The CSP allows `'wasm-unsafe-eval'` only so the bundled Argon2id module can compile; JavaScript `'unsafe-eval'` remains disabled.
 - Login, registration, invitation, and recovery endpoints are rate limited.

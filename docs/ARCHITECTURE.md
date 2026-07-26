@@ -11,7 +11,7 @@ Mint Notes optimizes for a small deployment footprint, responsive editing under 
 ```text
 Browser / installed PWA
   - React responsive shell
-  - typora-web editor adapter
+  - typora-web editor adapter and reversible Math/Mermaid/WikiLink presentation codecs
   - crypto worker
   - encrypted IndexedDB
   - durable synchronization outbox
@@ -109,3 +109,9 @@ Attachment ownership is one note to many attachments. Duplicating a note creates
 Import parsing occurs in the browser. Markdown and ZIP inputs have no application-level archive, entry, or expanded-total size cap; available browser memory and storage provide the practical boundary. Entries are path-normalized, converted into application objects, encrypted, and committed locally before synchronization. ZIP input rejects more than 4,000 files, duplicate case-folded paths, and traversal outside the archive root. Referenced images are converted into attachments only when they satisfy the separate client attachment format and 25 MiB per-image limit.
 
 Plaintext Markdown exports are built entirely in the browser. ZIP exports retain folders and empty directories, place images under `_attachments/<uuid>.<ext>`, and rewrite note links to portable relative paths. Export aborts rather than silently omit an attachment that cannot be recovered locally or from the server.
+
+## Markdown presentation
+
+Math, Mermaid, WikiLink, and Callout appearance rendering is browser-only presentation over canonical Markdown. The maintained `typora-web` patch exposes renderer callbacks and cursor-aware decorations without exposing its private editor view to application code. Multiline display math temporarily uses a reserved `mint-math` fenced block only inside the mounted Live editor and is converted back before `onChange` reaches application state, encryption, IndexedDB, history, synchronization, or export. Reading mode parses the canonical syntax directly.
+
+Mermaid is loaded lazily, runs with strict security settings, and produces a sanitized SVG displayed through a short-lived Blob URL; no diagram source or rendering output is sent to the server. WikiLink lookup uses only the decrypted in-memory document tree and routes to an existing note or heading without a server-side plaintext lookup. Callout colors and icons are derived from their canonical marker text, including the optional Mint Notes `{color=... icon=...}` title suffix; incomplete markers remain ordinary portable blockquotes.

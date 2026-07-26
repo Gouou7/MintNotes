@@ -14,13 +14,17 @@ import { useI18n } from "../i18n";
 import { CalloutHeader } from "./Callout";
 import {
   canonicalizeCalloutsFromLive,
+  collapseEmptyCalloutBodyForMarkerEdit,
   materializeCalloutsForLive,
   parseCalloutMarker,
-  removeCalloutAtIndex,
+  type CalloutColor,
+  type CalloutIcon,
   type CalloutKind
 } from "./callouts";
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter, replaceFrontmatterBody } from "./frontmatter";
+import { canonicalizeMathBlocksFromLive, materializeMathBlocksForLive } from "./liveMathCodec";
+import { renderMathInto, renderMermaidInto } from "./richRenderers";
 
 interface Props {
   markdown: string;
@@ -28,6 +32,7 @@ interface Props {
   onChange: (markdown: string) => void;
   attachmentUrls?: Map<string, string>;
   onImageDrop?: (file: File, markdownOffset: number) => Promise<string>;
+  onWikiLink?: (target: string) => void;
 }
 
 export function TyporaEditor(props: Props) {
@@ -61,7 +66,7 @@ function SourceEditor({ markdown, onChange, onImageDrop }: Props) {
   );
 }
 
-function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDrop }: Props) {
+function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDrop, onWikiLink }: Props) {
   const frontmatter = parseFrontmatter(markdown);
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -71,17 +76,25 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
   const frontmatterRef = useRef(frontmatter);
   const editorMarkdownRef = useRef(markdown);
   const renderedMarkdownRef = useRef(materializeLiveMarkdown(frontmatter.body, attachmentUrls));
+  const wikiLinkRef = useRef(onWikiLink);
   const [calloutOverlays, setCalloutOverlays] = useState<LiveCalloutOverlay[]>([]);
   changeRef.current = onChange;
   frontmatterRef.current = frontmatter;
+  wikiLinkRef.current = onWikiLink;
   for (const [attachmentId, url] of attachmentUrls) attachmentUrlHistoryRef.current.set(url, attachmentId);
 
   useEffect(() => {
     if (!hostRef.current) return;
     const editor = createEditor(hostRef.current, {
       initialContent: renderedMarkdownRef.current,
+      liveSyntax: {
+        renderMath: (container, source) => renderMathInto(container, source),
+        renderMathBlock: (container, source) => renderMathInto(container, source, true),
+        renderMermaid: renderMermaidInto,
+        onWikiLink: (target) => wikiLinkRef.current?.(target)
+      },
       onChange: (next) => {
-        const canonicalizedLiveBody = canonicalizeCalloutsFromLive(next);
+        const canonicalizedLiveBody = canonicalizeCalloutsFromLive(canonicalizeMathBlocksFromLive(next));
         let canonicalBody = canonicalizedLiveBody;
         for (const [url, attachmentId] of attachmentUrlHistoryRef.current) {
           canonicalBody = canonicalBody.split(url).join(`webmd-attachment:${attachmentId}`);
@@ -90,7 +103,7 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
         const previousMarkdown = editorMarkdownRef.current;
         // Track the reversible live representation rather than typora-web's
         // serializer output, which omits a trailing empty callout paragraph.
-        renderedMarkdownRef.current = materializeCalloutsForLive(canonicalizedLiveBody);
+        renderedMarkdownRef.current = materializeLiveSyntax(canonicalizedLiveBody);
         if (canonical === previousMarkdown) return;
         editorMarkdownRef.current = canonical;
         changeRef.current(canonical);
@@ -162,6 +175,8 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
             key: `${index++}:${marker.rawType}:${marker.title}`,
             kind: marker.kind,
             title: marker.title,
+            color: marker.color,
+            icon: marker.icon,
             editingMarker,
             style: {
               top: rect.top - shellRect.top,
@@ -201,9 +216,9 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
     editorRef.current?.insertMarkdown(insertion, offset);
   };
 
-  const deleteEmptyCallout = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const editEmptyCalloutMarker = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (
-      (event.key !== "Backspace" && event.key !== "Delete")
+      event.key !== "Backspace"
       || event.nativeEvent.isComposing
       || !editorRef.current
     ) return;
@@ -238,15 +253,13 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
       return Boolean(parseCalloutMarker(firstLine));
     });
     const calloutIndex = liveCallouts.indexOf(blockquote as HTMLElement);
-    const removed = removeCalloutAtIndex(frontmatterRef.current.body, calloutIndex);
-    if (!removed) return;
+    const renderedMarkdown = materializeLiveMarkdown(frontmatterRef.current.body, attachmentUrls);
+    const collapsed = collapseEmptyCalloutBodyForMarkerEdit(renderedMarkdown, calloutIndex);
+    if (!collapsed) return;
 
     event.preventDefault();
     event.stopPropagation();
-    const nextRendered = materializeLiveMarkdown(removed.markdown, attachmentUrls);
-    const renderedOffset = materializeLiveMarkdown(removed.markdown.slice(0, removed.offset), attachmentUrls).length;
-
-    editorRef.current.replaceMarkdown(nextRendered, renderedOffset);
+    editorRef.current.replaceMarkdown(collapsed.markdown, collapsed.offset);
   };
 
   const changeProperties = (next: string) => {
@@ -262,20 +275,20 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
       <div
         ref={hostRef}
         className="typora-host"
-        onKeyDownCapture={deleteEmptyCallout}
+        onKeyDownCapture={editEmptyCalloutMarker}
         onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
         onDrop={(event) => void drop(event)}
       />
       <div className="live-callout-overlays">
         {calloutOverlays.map((overlay) => <div className="live-callout-overlay-group" key={overlay.key}>
-          <div className={`live-callout-surface callout-${overlay.kind}`} style={overlay.style} aria-hidden="true" />
+          <div className={`live-callout-surface callout-${overlay.kind}${overlay.color ? ` callout-color-${overlay.color}` : ""}`} style={overlay.style} aria-hidden="true" />
           <div
-            className={`live-callout-overlay callout-${overlay.kind}${overlay.editingMarker ? " is-marker-editing" : ""}`}
+            className={`live-callout-overlay callout-${overlay.kind}${overlay.color ? ` callout-color-${overlay.color}` : ""}${overlay.editingMarker ? " is-marker-editing" : ""}`}
             style={overlay.style}
             role="note"
             aria-label={overlay.title}
           >
-            <CalloutHeader kind={overlay.kind} title={overlay.title} />
+            <CalloutHeader kind={overlay.kind} title={overlay.title} icon={overlay.icon} />
           </div>
         </div>)}
       </div>
@@ -287,12 +300,18 @@ interface LiveCalloutOverlay {
   key: string;
   kind: CalloutKind;
   title: string;
+  color?: CalloutColor;
+  icon?: CalloutIcon;
   editingMarker: boolean;
   style: CSSProperties;
 }
 
 function materializeLiveMarkdown(markdown: string, attachmentUrls: Map<string, string>): string {
-  return materializeCalloutsForLive(materializeAttachmentUrls(markdown, attachmentUrls));
+  return materializeLiveSyntax(materializeAttachmentUrls(markdown, attachmentUrls));
+}
+
+function materializeLiveSyntax(markdown: string): string {
+  return materializeMathBlocksForLive(materializeCalloutsForLive(markdown));
 }
 
 function overlaysEqual(left: LiveCalloutOverlay[], right: LiveCalloutOverlay[]): boolean {
@@ -301,6 +320,8 @@ function overlaysEqual(left: LiveCalloutOverlay[], right: LiveCalloutOverlay[]):
     return entry.key === other?.key
       && entry.kind === other.kind
       && entry.title === other.title
+      && entry.color === other.color
+      && entry.icon === other.icon
       && entry.editingMarker === other.editingMarker
       && entry.style.top === other.style.top
       && entry.style.left === other.style.left

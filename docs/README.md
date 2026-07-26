@@ -6,7 +6,7 @@ Mint Notes documentation is organized by the task you are trying to complete. St
 
 | Goal | Canonical guide | Scope |
 | --- | --- | --- |
-| Use the application | [User guide](USER_GUIDE.md) | Accounts, editor modes, Callouts, YAML properties, organization, history, attachments, synchronization, import/export, trash, settings, and PWA behavior. |
+| Use the application | [User guide](USER_GUIDE.md) | Accounts, editor modes, math, Mermaid, WikiLinks, Callouts, YAML properties, organization, history, attachments, synchronization, import/export, trash, settings, and PWA behavior. |
 | Deploy or upgrade a server | [Production deployment](DEPLOYMENT.md) | Environment variables, Docker, reverse proxy, account bootstrap, acceptance checks, and schema compatibility. |
 | Back up or restore data | [Backup and restore](BACKUP_AND_RESTORE.md) | Online SQLite backups, retention, restore drills, and production replacement. |
 | Set up or verify development | [Development guide](DEVELOPMENT.md) | Contributor requirements, project layout, local servers, implementation boundaries, and verification commands. |

@@ -54,6 +54,7 @@ import {
 import { buildOutline } from "./editor/outline";
 import { ReadOnlyMarkdown } from "./editor/ReadOnlyMarkdown";
 import { TyporaEditor } from "./editor/TyporaEditor";
+import { parseWikiLinkTarget, resolveWikiLink } from "./editor/wikilinks";
 import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "./features/attachments";
 import { documentPatchChanges } from "./features/documentPatch";
 import { exportMarkdownZip, exportSingleMarkdown, importFiles } from "./features/importExport";
@@ -1838,6 +1839,24 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     setTreeOpen(false);
   };
 
+  const openWikiLink = (target: string) => {
+    const destination = resolveWikiLink(documentsRef.current, target, activeDocument);
+    if (!destination) {
+      showMessage(t("notice.wikiLinkNotFound", { target }));
+      return;
+    }
+    const { heading } = parseWikiLinkTarget(target);
+    void selectDocument(destination.objectId).then(() => {
+      if (!heading) return;
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        const normalized = heading.trim().toLocaleLowerCase();
+        const headingElement = [...(editorArea.current?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6") ?? [])]
+          .find((element) => element.textContent?.trim().toLocaleLowerCase() === normalized);
+        headingElement?.scrollIntoView({ block: "start" });
+      }));
+    });
+  };
+
   const selectTreeEntry = (entry: OpenDocument, event: ReactMouseEvent<HTMLButtonElement>) => {
     const additive = event.ctrlKey || event.metaKey;
     if (event.shiftKey) {
@@ -2541,14 +2560,14 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
         </div>}
         <div className="editor-area" ref={editorArea}>
           {activeDocument ? historyPreview
-            ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} attachmentUrls={attachmentUrls} />
+            ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
             : mode === "readonly"
-            ? <ReadOnlyMarkdown markdown={activeDocument.markdown} attachmentUrls={attachmentUrls} />
+            ? <ReadOnlyMarkdown markdown={activeDocument.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
             : <TyporaEditor key={`${editorSessionId}:${mode}`} markdown={activeDocument.markdown} mode={mode} attachmentUrls={attachmentUrls} onChange={(markdown) => {
               const latest = documentIndexRef.current.get(activeDocument.objectId);
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });
-            }} onImageDrop={async (file) => { const attachment = await addAttachment(activeDocument.objectId, file); return attachmentMarkdown(attachment.objectId, attachment.originalName); }} />
+            }} onWikiLink={openWikiLink} onImageDrop={async (file) => { const attachment = await addAttachment(activeDocument.objectId, file); return attachmentMarkdown(attachment.objectId, attachment.originalName); }} />
             : <div className="empty-editor"><div className="empty-icon"><AppIcon icon={Sparkles} size={34} /></div><h2>{t("app.emptyTitle")}</h2><p>{t("app.emptyDescription")}</p></div>}
         </div>
         <footer className="status-bar">

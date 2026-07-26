@@ -4,6 +4,12 @@ declare module "typora-web" {
     onChange?: (markdown: string) => void;
     onFocus?: () => void;
     onBlur?: () => void;
+    liveSyntax?: {
+      renderMath?: (container: HTMLElement, source: string) => void | (() => void);
+      renderMathBlock?: (container: HTMLElement, source: string) => void | (() => void);
+      renderMermaid?: (container: HTMLElement, source: string) => void | (() => void);
+      onWikiLink?: (target: string) => void;
+    };
   }
 
   export interface TyporaWebEditor {

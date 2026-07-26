@@ -438,6 +438,7 @@ const messages = {
   "notice.logoutLocalClearFailed": { en: "Unable to delete this account's local data. You have not been logged out.", "zh-CN": "无法删除当前账户的本地数据，尚未登出。", "zh-TW": "無法刪除目前帳戶的本機資料，尚未登出。" },
   "notice.attachmentLoadFailed": { en: "Unable to load attachment", "zh-CN": "附件加载失败", "zh-TW": "附件載入失敗" },
   "notice.restoreNameConflict": { en: "Cannot restore: “{title}” already exists in that directory.", "zh-CN": "无法恢复：“{title}”所在目录中已有同名项目。", "zh-TW": "無法復原：「{title}」所在目錄中已有同名項目。" },
+  "notice.wikiLinkNotFound": { en: "WikiLink target not found: {target}", "zh-CN": "找不到 WikiLink 目标：{target}", "zh-TW": "找不到 WikiLink 目標：{target}" },
   "notice.purgeSingleLabel": { en: "“{title}” and its child items and attachments", "zh-CN": "“{title}”及其子项目和附件", "zh-TW": "「{title}」及其子項目和附件" },
   "notice.purgeMultipleLabel": { en: "the selected {count} items and their child items and attachments", "zh-CN": "选中的 {count} 个项目及其子项目和附件", "zh-TW": "選取的 {count} 個項目及其子項目和附件" },
   "notice.purgeConfirm": { en: "Permanently delete {label}? Server revision history will also be removed. This cannot be undone.", "zh-CN": "永久删除{label}？服务器历史版本也会被清除，此操作无法撤销。", "zh-TW": "永久刪除{label}？伺服器歷史版本也會被清除，此操作無法復原。" },

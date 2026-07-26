@@ -1,7 +1,16 @@
 diff --git a/dist/lib/typora-web.js b/dist/lib/typora-web.js
-index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82c9ace294 100644
+index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b824a9c1a 100644
 --- a/dist/lib/typora-web.js
 +++ b/dist/lib/typora-web.js
+@@ -1,7 +1,7 @@
+ import { EditorState as e, Plugin as t, PluginKey as n, Selection as r, TextSelection as i } from "prosemirror-state";
+ import { Decoration as a, DecorationSet as o, EditorView as s } from "prosemirror-view";
+ import { keymap as c } from "prosemirror-keymap";
+ import { baseKeymap as l, chainCommands as u } from "prosemirror-commands";
+-import { history as d, redo as f, undo as p } from "prosemirror-history";
++import { closeHistory as closeHistoryEvent, history as d, redo as f, undo as p } from "prosemirror-history";
+ import { InputRule as m, inputRules as h, wrappingInputRule as g } from "prosemirror-inputrules";
+ import _ from "markdown-it-emoji/lib/data/full.mjs";
 @@ -1214,7 +1214,7 @@ function Je() {
  }
  function Ye(e) {
@@ -29,9 +38,10 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82
  }
  var vt = {
  	name: "table",
-@@ -2747,6 +2747,65 @@ function rn() {
+@@ -2747,6 +2747,150 @@ function rn() {
  		return e.dispatch(o), !0;
- 	} } });
+-	} } });
++    } } });
  }
 +function blockquoteInputPlugin() {
 +	let e = null;
@@ -81,7 +91,7 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82
 +			if (!i || i.type !== Y.nodes.paragraph) return;
 +			let s = /^\[!([a-z0-9_-]+)\][+-]?(?:[ \t]+[^\n]*)?/i.exec(i.textContent);
 +			if (!s) return;
-+			let c = r + 1, l = c + 1, u = l + s[0].length, d = n.from >= l && n.from <= u && n.to >= l && n.to <= u;
++			let c = r + 1, l = c + 1, u = l + s[0].length, d = n.$from.parent === i && n.$to.parent === i;
 +			t.push(a.node(r, r + e.nodeSize, {
 +				class: "live-callout",
 +				"data-callout-type": s[1].toLowerCase()
@@ -92,20 +102,126 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82
 +		return t.length > 0 ? o.create(e.doc, t) : o.empty;
 +	} } });
 +}
++function liveSyntaxWidget(e, t, n, r, o = !1) {
++	return a.widget(e, (e, a) => {
++		let s = document.createElement(o ? "div" : "span");
++		s.className = t, s.contentEditable = "false";
++		let c = n(s);
++		typeof c == "function" && (s.__liveSyntaxCleanup = c);
++		if (o) {
++			let t = () => {
++				let t = a();
++				typeof t == "number" && (e.dispatch(e.state.tr.setSelection(i.create(e.state.doc, t + 1))), e.focus());
++			};
++			s.addEventListener("mousedown", (e) => e.preventDefault()), s.addEventListener("click", t), s.__liveSyntaxReveal = t;
++		}
++		return s;
++	}, {
++		key: r,
++		side: -1,
++		destroy(e) {
++			e.__liveSyntaxReveal && e.removeEventListener("click", e.__liveSyntaxReveal), e.__liveSyntaxCleanup?.();
++		}
++	});
++}
++function inlineMathRanges(e) {
++	let t = [];
++	for (let n = 0; n < e.length; n++) {
++		if (e[n] !== "$" || e[n + 1] === "$" || n > 0 && e[n - 1] === "\\" || /\s/.test(e[n + 1] ?? "")) continue;
++		for (let r = n + 1; r < e.length; r++) {
++			if (e[r] !== "$" || e[r - 1] === "\\" || e[r + 1] === "$" || /\s/.test(e[r - 1] ?? "")) continue;
++			t.push({ from: n, to: r + 1, source: e.slice(n + 1, r) }), n = r;
++			break;
++		}
++	}
++	return t;
++}
++function wikiLinkRanges(e) {
++	let t = [], n = /\[\[([^\]\n]+)\]\]/g, r;
++	for (; (r = n.exec(e)); ) {
++		if (r.index > 0 && e[r.index - 1] === "!") continue;
++		let n = r[1].split("|"), a = (n.shift() ?? "").trim(), o = n.join("|").trim() || a;
++		a && t.push({ from: r.index, to: r.index + r[0].length, target: a, label: o });
++	}
++	return t;
++}
++function liveSyntaxDecorationPlugin(e = {}) {
++	return new t({ props: { decorations(t) {
++		let n = [], s = t.selection;
++		t.doc.descendants((t, c, l) => {
++			if (t.type === Y.nodes.paragraph && e.renderMathBlock) {
++				let l = /^\$\$([^\n]+)\$\$$/.exec(t.textContent);
++				if (l) {
++					let u = c + 1, d = c + t.nodeSize - 1, h = s.from >= u && s.from <= d && s.to >= u && s.to <= d;
++					n.push(a.node(c, c + t.nodeSize, {
++						class: `live-math-block-source${h ? " is-live-syntax-editing" : " is-live-syntax-rendered"}`
++					})), h || n.push(liveSyntaxWidget(c, "live-math-block-widget", (t) => e.renderMathBlock(t, l[1]), `math-block:${c}:${l[1]}`, !0));
++					return !1;
++				}
++			}
++			if (t.type === Y.nodes.code_block) {
++				let l = String(t.attrs.lang ?? "").toLowerCase(), u = l === "mermaid" ? e.renderMermaid : l === "mint-math" ? e.renderMathBlock : null;
++				if (!u) return;
++				let d = c + 1, h = c + t.nodeSize - 1, g = s.from >= d && s.to <= h;
++				n.push(a.node(c, c + t.nodeSize, {
++					class: `${l === "mermaid" ? "live-mermaid-source" : "live-math-block-source"}${g ? " is-live-syntax-editing" : " is-live-syntax-rendered"}`
++				}));
++				g || n.push(liveSyntaxWidget(c, l === "mermaid" ? "live-mermaid-widget" : "live-math-block-widget", (e) => u(e, t.textContent), `${l}:${c}:${t.textContent}`, !0));
++				return !1;
++			}
++			if (!t.isText || t.marks.some((e) => e.type === Y.marks.code) || l?.type === Y.nodes.code_block) return;
++			let u = t.text ?? "";
++			if (e.renderMath) for (let t of inlineMathRanges(u)) {
++				let l = c + t.from, d = c + t.to, h = s.from >= l && s.from <= d && s.to >= l && s.to <= d;
++				h || (n.push(a.inline(l, d, { class: "live-inline-math-source" })), n.push(liveSyntaxWidget(d, "live-inline-math-widget", (n) => e.renderMath(n, t.source), `math:${l}:${t.source}`)));
++			}
++			if (e.onWikiLink) for (let t of wikiLinkRanges(u)) {
++				let l = c + t.from, d = c + t.to, h = s.from >= l && s.from <= d && s.to >= l && s.to <= d;
++				if (h) continue;
++				n.push(a.inline(l, d, { class: "live-wikilink-source" })), n.push(liveSyntaxWidget(d, "live-wikilink-widget", (n) => {
++					let r = document.createElement("button");
++					return r.type = "button", r.className = "live-wikilink", r.textContent = t.label, r.setAttribute("aria-label", t.target), r.addEventListener("mousedown", (e) => e.preventDefault()), r.addEventListener("click", () => e.onWikiLink(t.target)), n.appendChild(r), () => r.replaceWith();
++				}, `wiki:${l}:${t.target}:${t.label}`));
++			}
++		});
++		return n.length > 0 ? o.create(t.doc, n) : o.empty;
++	} } });
++}
  //#endregion
  //#region src/editor.ts
  function an() {
-@@ -2768,6 +2827,9 @@ function on(e = {}) {
+@@ -2759,7 +2903,7 @@ function an() {
+-	} } });
++    } } });
+ }
+ function on(e = {}) {
+-	let { cursorWidget: t = !0 } = e, n = Ut(Y), r = [
++	let { cursorWidget: t = !0, liveSyntax: n = {} } = e, r = Ut(Y), i = [
+-		d(),
++        d(),
+-		c({
++        c({
+-			"Mod-z": p,
++            "Mod-z": p,
+@@ -2768,17 +2912,27 @@ function on(e = {}) {
  		}),
  		nn(),
  		rn(),
 +		blockquoteInputPlugin(),
 +		manualEscapeDecorationPlugin(),
 +		calloutDecorationPlugin(),
++		liveSyntaxDecorationPlugin(n),
  		Jt(),
  		...Wt(Y),
  		tn(),
-@@ -2779,6 +2841,12 @@ function on(e = {}) {
+-		an()
++        an()
+-	];
++    ];
+-	return t && r.push(re()), Object.keys(n).length > 0 && r.push(c(n)), r.push(c(l)), r;
++	return t && i.push(re()), Object.keys(r).length > 0 && i.push(c(r)), i.push(c(l)), i;
+ }
+ //#endregion
  //#region src/parser.ts
  var Q = new ne("commonmark", { html: !1 });
  for (let e of It()) Q.use(e);
@@ -118,7 +234,7 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82
  Q.block.ruler.at("paragraph", function(e, t, n) {
  	let r = e.md.block.ruler.getRules("paragraph"), i = e.parentType, a = t + 1;
  	for (e.parentType = "paragraph"; a < n && !e.isEmpty(a); a++) {
-@@ -2938,7 +3006,7 @@ function dn(e) {
+@@ -2938,7 +3092,7 @@ function dn(e) {
  }
  //#endregion
  //#region src/serializer.ts
@@ -127,7 +243,7 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82
  	marks: { ...Rt() },
  	escapeInline: fn,
  	escapeBlockStart: pn,
-@@ -3016,7 +3084,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
+@@ -3016,7 +3170,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
  				let e = n[i.type.name];
  				e && (this.out += typeof e.open == "function" ? e.open(r) : e.open), t = [...t, i];
  			}
@@ -136,7 +252,7 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82
  		e.forEach((e) => {
  			if (e.marks.find((e) => e.type === Y.marks.code) && this.config.codeMarkAsBacktickFence) {
  				o([]), this.write();
-@@ -3038,7 +3106,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
+@@ -3038,7 +3192,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
  			if (!e.isText) return;
  			o(e.marks), this.write(), s(e.marks, e);
  			let r = e.text ?? "", c = this.atBlankLine() && t.length === 0, l = !1;
@@ -145,7 +261,22 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82
  		}), o([]), this.tick("inner");
  	}
  }, gn = {
-@@ -3183,6 +3251,41 @@ function yn(t, n = {}) {
+@@ -3103,7 +3257,7 @@ function yn(t, n = {}) {
+-		let r = t ? dn(t) : Y.nodes.doc.createAndFill(), o = e.create({
++        let r = t ? dn(t) : Y.nodes.doc.createAndFill(), o = e.create({
+-			schema: Y,
++            schema: Y,
+-			doc: r,
++            doc: r,
+-			plugins: on({ cursorWidget: !1 })
++			plugins: on({ cursorWidget: !1, liveSyntax: n.liveSyntax })
+-		}), c = new s(a, {
++        }), c = new s(a, {
+-			state: o.apply(o.tr.setSelection(i.atStart(r))),
++            state: o.apply(o.tr.setSelection(i.atStart(r))),
+-			dispatchTransaction(e) {
++            dispatchTransaction(e) {
+@@ -3183,6 +3337,41 @@ function yn(t, n = {}) {
  			return 0;
  		}
  	}
@@ -182,12 +313,12 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..f482bee5329f36a2e408fefd2f9eef82
 +		try {
 +			s.setSelection(i.near(s.doc.resolve(u))).scrollIntoView();
 +		} catch {}
-+		c.dispatch(s), c.focus();
++		c.dispatch(s), c.dispatch(closeHistoryEvent(c.state.tr)), c.focus();
 +	}
  	function _() {
  		let e = $(c.state.doc), t = h();
  		o.value = e, a.hidden = !0, o.hidden = !1, f(), o.focus();
-@@ -3211,6 +3314,15 @@ function yn(t, n = {}) {
+@@ -3211,6 +3400,15 @@ function yn(t, n = {}) {
  		setMarkdown(e) {
  			l ? o.value = e : d(e);
  		},

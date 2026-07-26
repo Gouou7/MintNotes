@@ -65,6 +65,43 @@ Markdown remains the canonical note format in every mode. Switching modes does n
 
 In Live mode, a line-leading `>` remains visible while you type. Press Enter to confirm the completed line and render it as a blockquote, matching the delayed conversion used for headings. The Live editor does not automatically insert backslashes before any punctuation. To request a literal Markdown-significant symbol, type the backslash yourself in Live or Source mode—for example, `\>` displays as an ordinary `>` instead of starting a blockquote. Live mode hides that user-authored escape while the canonical Markdown retains it across reloads.
 
+### Math, diagrams, and WikiLinks
+
+Use `$...$` for inline KaTeX and `$$...$$` for display math. Display math may occupy one line or use opening and closing `$$` lines:
+
+```markdown
+Euler's identity is $e^{i\pi} + 1 = 0$.
+
+$$
+\int_0^1 x^2\,dx = \frac{1}{3}
+$$
+```
+
+Live and Reading modes render the formula; Source mode always shows the canonical delimiters. Selecting an inline formula or activating a display formula reveals its editable source in Live mode. Math inside inline-code spans or fenced code blocks remains literal.
+
+Put Mermaid source in a fenced block whose language is `mermaid`:
+
+````markdown
+```mermaid
+flowchart LR
+  Draft --> Review
+  Review --> Publish
+```
+````
+
+The browser renders Mermaid locally. Activating a diagram in Live mode reveals its fenced source. Diagram links and scripts are not interactive, external resource references are removed, and a diagram that cannot be parsed remains available in Source mode.
+
+WikiLinks use `[[Note title]]`. Add `|Label` to choose the displayed text, use a folder path to disambiguate duplicate titles, and append `#Heading` to open a section:
+
+```markdown
+[[Setup]]
+[[Guides/Setup|Setup guide]]
+[[Setup#Install]]
+[[#Local heading]]
+```
+
+A title-only WikiLink prefers a note in the current folder, then another matching live note. A folder path starts at the vault root. Missing targets show a notice; Mint Notes does not create a note implicitly. WikiLinks remain ordinary portable Markdown text in exports, so tools without WikiLink support can still display their source.
+
 ### Callouts
 
 Place an Obsidian-style callout marker on the first line of a blockquote:
@@ -77,9 +114,18 @@ Place an Obsidian-style callout marker on the first line of a blockquote:
 > This callout starts collapsed in Reading mode.
 ```
 
-Mint Notes recognizes Note, Abstract/Summary/TLDR, Info, Todo, Tip/Hint, Important, Success/Check/Done, Question/Help/FAQ, Warning/Attention, Caution, Failure/Fail/Missing, Danger/Error, Bug, Example, and Quote/Cite. Type names are case-insensitive. Unknown names use a neutral style so custom callouts remain readable. Add text after the marker for a custom title. A `+` suffix makes the callout collapsible and initially expanded; `-` makes it initially collapsed. Live mode keeps every callout expanded so its Markdown remains editable. Reading mode and historical previews honor the requested fold state.
+Mint Notes recognizes every built-in Obsidian type and alias: Note; Abstract/Summary/TLDR; Info; Todo; Tip/Hint/Important; Success/Check/Done; Question/Help/FAQ; Warning/Caution/Attention; Failure/Fail/Missing; Danger/Error; Bug; Example; and Quote/Cite. Aliases use the same color and icon as their official type while keeping the alias as the default title, such as Important or Caution. Type names are case-insensitive. Unknown names use a neutral style so custom callouts remain readable. Add a space and text after the marker for a custom title—for example, `> [!TIP] Custom title`. The title remains visible and editable while the marker line has focus. A `+` suffix makes the callout collapsible and initially expanded; `-` makes it initially collapsed. Live mode keeps every callout expanded so its Markdown remains editable. Reading mode and historical previews honor the requested fold state.
 
-In Live mode, deleting the last body text leaves one empty quoted line so the caret remains editable. Press Backspace or Delete again while that body is empty to remove the entire callout block; the standard undo command restores it. The callout frame follows added or removed body lines immediately. Live editing preserves the canonical `> [!TYPE]` marker directly and does not add highlight/backtick sentinels or synthesize backslash escapes.
+An optional Mint Notes appearance block may follow the title:
+
+```markdown
+> [!TIP]+ Deployment {color=purple icon=important}
+> Verify the backup before upgrading.
+```
+
+`color` accepts `gray`, `blue`, `cyan`, `green`, `purple`, `amber`, `red`, or `rose`. `icon` accepts these Mint Notes icon identifiers: `note`, `abstract`, `info`, `todo`, `tip`, `important`, `success`, `question`, `warning`, `caution`, `failure`, `danger`, `bug`, `example`, `quote`, or `custom`. Invalid or unknown attribute blocks remain part of the visible title instead of being discarded. Other Markdown tools may show the `{...}` block as title text because these appearance attributes are a Mint Notes extension.
+
+In Live mode, deleting the last body text leaves one empty quoted line so the caret remains editable. Press Backspace again while that body is empty to move the caret to the end of the `[!TYPE]` marker. If you continue deleting and make the marker incomplete, such as `> [!CAUTION`, the Callout immediately becomes an ordinary blockquote while preserving the incomplete marker and surrounding content. Retype `]` to restore the Callout style. Delete follows the editor's normal behavior and does not remove the entire Callout block. Standard undo restores each editing step. The callout frame follows added or removed body lines immediately. Live editing preserves the canonical `> [!TYPE]` marker directly and does not add highlight/backtick sentinels or synthesize backslash escapes.
 
 ### YAML properties
 

@@ -40,7 +40,7 @@ describe("ReadOnlyMarkdown", () => {
         "tags:",
         "---",
         "",
-        "> [!IMPORTANT]- Read this",
+        "> [!IMPORTANT]- Read this {color=cyan icon=tip}",
         "> Body",
         "",
         "> [!custom-kind]",
@@ -51,11 +51,37 @@ describe("ReadOnlyMarkdown", () => {
     expect(html).toContain("Note properties");
     expect(html).toContain("version");
     expect(html).toContain("{{date}}");
-    expect(html).toContain("callout-important");
+    expect(html).toContain("callout-tip");
+    expect(html).toContain("callout-color-cyan");
     expect(html).toContain("<summary>");
     expect(html).not.toContain("<details open");
     expect(html).toContain("Read this");
     expect(html).toContain("callout-custom");
     expect(html).not.toContain("[!IMPORTANT]");
+  });
+
+  it("renders math, Mermaid fences, and WikiLinks without raw HTML", () => {
+    localStorage.setItem("webmd-notes-language", "en");
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={[
+        "Inline $E = mc^2$.",
+        "",
+        "$$\\int_0^1 x^2\\,dx$$",
+        "",
+        "[[Guide/Setup#Install|Open setup]]",
+        "",
+        "```mermaid",
+        "graph TD",
+        "  A --> B",
+        "```"
+      ].join("\n")} /></I18nProvider>
+    );
+
+    expect(html).toContain("class=\"katex\"");
+    expect(html).toContain("class=\"katex-display\"");
+    expect(html).toContain("class=\"wiki-link\"");
+    expect(html).toContain("mint-wikilink:");
+    expect(html).toContain("class=\"mermaid-diagram\"");
+    expect(html).not.toContain("<script");
   });
 });

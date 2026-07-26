@@ -17,36 +17,37 @@ export type CalloutKind =
   | "custom";
 
 export type CalloutFold = "" | "+" | "-";
+export type CalloutColor = "gray" | "blue" | "cyan" | "green" | "purple" | "amber" | "red" | "rose";
+export type CalloutIcon = CalloutKind;
 
 export interface CalloutMarker {
   rawType: string;
   kind: CalloutKind;
   title: string;
   fold: CalloutFold;
+  color?: CalloutColor;
+  icon?: CalloutIcon;
 }
 
 interface CalloutDefinition {
   kind: Exclude<CalloutKind, "custom">;
-  title: string;
   aliases: string[];
 }
 
 const DEFINITIONS: CalloutDefinition[] = [
-  { kind: "note", title: "Note", aliases: ["note"] },
-  { kind: "abstract", title: "Abstract", aliases: ["abstract", "summary", "tldr"] },
-  { kind: "info", title: "Info", aliases: ["info"] },
-  { kind: "todo", title: "Todo", aliases: ["todo"] },
-  { kind: "tip", title: "Tip", aliases: ["tip", "hint"] },
-  { kind: "important", title: "Important", aliases: ["important"] },
-  { kind: "success", title: "Success", aliases: ["success", "check", "done"] },
-  { kind: "question", title: "Question", aliases: ["question", "help", "faq"] },
-  { kind: "warning", title: "Warning", aliases: ["warning", "attention"] },
-  { kind: "caution", title: "Caution", aliases: ["caution"] },
-  { kind: "failure", title: "Failure", aliases: ["failure", "fail", "missing"] },
-  { kind: "danger", title: "Danger", aliases: ["danger", "error"] },
-  { kind: "bug", title: "Bug", aliases: ["bug"] },
-  { kind: "example", title: "Example", aliases: ["example"] },
-  { kind: "quote", title: "Quote", aliases: ["quote", "cite"] }
+  { kind: "note", aliases: ["note"] },
+  { kind: "abstract", aliases: ["abstract", "summary", "tldr"] },
+  { kind: "info", aliases: ["info"] },
+  { kind: "todo", aliases: ["todo"] },
+  { kind: "tip", aliases: ["tip", "hint", "important"] },
+  { kind: "success", aliases: ["success", "check", "done"] },
+  { kind: "question", aliases: ["question", "help", "faq"] },
+  { kind: "warning", aliases: ["warning", "caution", "attention"] },
+  { kind: "failure", aliases: ["failure", "fail", "missing"] },
+  { kind: "danger", aliases: ["danger", "error"] },
+  { kind: "bug", aliases: ["bug"] },
+  { kind: "example", aliases: ["example"] },
+  { kind: "quote", aliases: ["quote", "cite"] }
 ];
 
 const ALIASES = new Map(DEFINITIONS.flatMap((definition) => (
@@ -60,21 +61,34 @@ const ESCAPED_MARKER = /^\\\[!([a-z0-9_-]+)\\\]([+-]?)(?:[ \t]+([^\r\n]*))?$/i;
 const ESCAPED_CALLOUT_LINE = /^([ \t]*)\\>[ \t]+\\\[!([a-z0-9_-]+)\\\]([+-]?)(?:[ \t]+([^\r\n]*))?$/i;
 const QUOTE_PREFIX = /^((?:[ \t]*>[ \t]?)+)(.*)$/;
 const FENCE = /^(`{3,}|~{3,})/;
+const ATTRIBUTE_BLOCK = /(?:^|[ \t]+)\{([^{}\r\n]*)\}[ \t]*$/;
+const ATTRIBUTE_ENTRY = /([a-z][a-z0-9_-]*)=([a-z0-9_-]+)/gi;
+const CALLOUT_COLORS = new Set<CalloutColor>(["gray", "blue", "cyan", "green", "purple", "amber", "red", "rose"]);
+const CALLOUT_ICONS = new Set<CalloutIcon>([
+  "note", "abstract", "info", "todo", "tip", "important", "success", "question",
+  "warning", "caution", "failure", "danger", "bug", "example", "quote", "custom"
+]);
 // Live-only text that keeps an otherwise empty body paragraph editable.
 const LIVE_EMPTY_BODY = "\u2060";
 
 export function calloutDefinition(rawType: string): { kind: CalloutKind; title: string } {
   const normalized = rawType.toLowerCase();
   const definition = ALIASES.get(normalized);
-  if (definition) return { kind: definition.kind, title: definition.title };
+  if (definition) return { kind: definition.kind, title: defaultCalloutTitle(normalized) };
   return {
     kind: "custom",
-    title: normalized
-      .split(/[-_]+/)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ") || "Callout"
+    title: defaultCalloutTitle(normalized)
   };
+}
+
+function defaultCalloutTitle(normalized: string): string {
+  if (normalized === "faq") return "FAQ";
+  if (normalized === "tldr") return "TLDR";
+  return normalized
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Callout";
 }
 
 function decodeLegacyTitle(value: string): string {
@@ -93,13 +107,37 @@ export function parseCalloutMarker(value: string): CalloutMarker | null {
   const rawType = match[1].toLowerCase();
   const definition = calloutDefinition(rawType);
   const customTitle = match[3]?.trim();
-  const title = legacyMaterialized && customTitle ? decodeLegacyTitle(customTitle) : customTitle;
+  const decodedTitle = legacyMaterialized && customTitle ? decodeLegacyTitle(customTitle) : customTitle;
+  const appearance = parseCalloutAppearance(decodedTitle ?? "");
   return {
     rawType,
     kind: definition.kind,
-    title: title || definition.title,
-    fold: (match[2] || "") as CalloutFold
+    title: appearance.title || definition.title,
+    fold: (match[2] || "") as CalloutFold,
+    color: appearance.color,
+    icon: appearance.icon
   };
+}
+
+function parseCalloutAppearance(value: string): { title: string; color?: CalloutColor; icon?: CalloutIcon } {
+  const block = ATTRIBUTE_BLOCK.exec(value);
+  if (!block) return { title: value };
+  const attributes = block[1];
+  const consumed: string[] = [];
+  let color: CalloutColor | undefined;
+  let icon: CalloutIcon | undefined;
+  let entry: RegExpExecArray | null;
+  ATTRIBUTE_ENTRY.lastIndex = 0;
+  while ((entry = ATTRIBUTE_ENTRY.exec(attributes))) {
+    consumed.push(entry[0]);
+    const key = entry[1].toLowerCase();
+    const option = entry[2].toLowerCase();
+    if (key === "color" && CALLOUT_COLORS.has(option as CalloutColor)) color = option as CalloutColor;
+    else if (key === "icon" && CALLOUT_ICONS.has(option as CalloutIcon)) icon = option as CalloutIcon;
+    else return { title: value };
+  }
+  if (!consumed.length || consumed.join(" ") !== attributes.trim().replace(/\s+/g, " ")) return { title: value };
+  return { title: value.slice(0, block.index).trimEnd(), color, icon };
 }
 
 interface QuoteLine {
@@ -276,12 +314,15 @@ export function canonicalizeCalloutsFromLive(markdown: string): string {
   return canonicalizeCalloutLines(markdown);
 }
 
-export interface RemovedCallout {
+export interface CollapsedEmptyCallout {
   markdown: string;
   offset: number;
 }
 
-export function removeCalloutAtIndex(markdown: string, calloutIndex: number): RemovedCallout | null {
+export function collapseEmptyCalloutBodyForMarkerEdit(
+  markdown: string,
+  calloutIndex: number
+): CollapsedEmptyCallout | null {
   if (calloutIndex < 0) return null;
   const eol = markdown.includes("\r\n") ? "\r\n" : "\n";
   const lines = markdown.split(/\r?\n/);
@@ -298,23 +339,20 @@ export function removeCalloutAtIndex(markdown: string, calloutIndex: number): Re
       continue;
     }
 
-    let start = lineIndex;
-    let end = lineIndex + 1;
-    while (end < lines.length) {
-      const followingQuote = parseQuoteLine(lines[end]);
-      if (!followingQuote || followingQuote.depth < quote.depth) break;
-      end += 1;
-    }
+    // Only collapse the exact separator and placeholder generated by
+    // materializeCalloutsForLive. Authored blank lines and body content must
+    // remain untouched.
+    if (
+      lines[lineIndex + 1] !== blankQuoteLine(quote.prefix)
+      || lines[lineIndex + 2] !== `${quote.prefix}${LIVE_EMPTY_BODY}`
+    ) return null;
 
-    if (end < lines.length && !lines[end].trim()) end += 1;
-    else if (start > 0 && !lines[start - 1].trim()) start -= 1;
-
-    const before = lines.slice(0, start);
-    const after = lines.slice(end);
-    const nextLines = [...before, ...after];
+    const nextLines = [
+      ...lines.slice(0, lineIndex + 1),
+      ...lines.slice(lineIndex + 3)
+    ];
     const nextMarkdown = nextLines.join(eol);
-    const beforeText = before.join(eol);
-    const offset = before.length && after.length ? beforeText.length + eol.length : beforeText.length;
+    const offset = lines.slice(0, lineIndex + 1).join(eol).length;
     return { markdown: nextMarkdown, offset };
   }
 
@@ -350,7 +388,9 @@ function transformMdast(node: MdNode) {
             className: `markdown-callout callout-${parsed.kind}`,
             "data-callout-kind": parsed.kind,
             "data-callout-title": parsed.title,
-            "data-callout-fold": parsed.fold
+            "data-callout-fold": parsed.fold,
+            ...(parsed.color ? { "data-callout-color": parsed.color } : {}),
+            ...(parsed.icon ? { "data-callout-icon": parsed.icon } : {})
           };
         }
       }

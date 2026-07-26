@@ -192,6 +192,41 @@ describe("TyporaEditor live mode", () => {
     await act(async () => root.unmount());
   });
 
+  it("keeps multiline math private to Live mode and forwards WikiLink navigation", async () => {
+    const editor = {
+      destroy: vi.fn(),
+      focus: vi.fn(),
+      setMarkdown: vi.fn()
+    } as unknown as TyporaWebEditor;
+    let editorChange: ((markdown: string) => void) | undefined;
+    vi.mocked(createEditor).mockImplementation((_host, options) => {
+      editorChange = options?.onChange;
+      return editor;
+    });
+    const onChange = vi.fn();
+    const onWikiLink = vi.fn();
+    const markdown = "$$\nE = mc^2\n$$\n\n[[Guide]]";
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(
+      <TyporaEditor markdown={markdown} mode="live" onChange={onChange} onWikiLink={onWikiLink} />
+    ));
+
+    const options = vi.mocked(createEditor).mock.calls[0]?.[1];
+    expect(options?.initialContent).toBe("```mint-math\nE = mc^2\n```\n\n[[Guide]]");
+    expect(options?.liveSyntax?.renderMath).toBeTypeOf("function");
+    expect(options?.liveSyntax?.renderMermaid).toBeTypeOf("function");
+    act(() => options?.liveSyntax?.onWikiLink?.("Guide"));
+    expect(onWikiLink).toHaveBeenCalledWith("Guide");
+
+    act(() => editorChange?.("```mint-math\nE = ma\n```\n\n[[Guide]]"));
+    expect(onChange).toHaveBeenCalledWith("$$\nE = ma\n$$\n\n[[Guide]]");
+
+    await act(async () => root.unmount());
+  });
+
   it("updates the callout overlay height when live body lines change", async () => {
     const editor = {
       destroy: vi.fn(),
@@ -199,6 +234,7 @@ describe("TyporaEditor live mode", () => {
       setMarkdown: vi.fn()
     } as unknown as TyporaWebEditor;
     let height = 80;
+    let markerParagraph: HTMLParagraphElement | null = null;
     let bodyParagraph: HTMLParagraphElement | null = null;
     vi.mocked(createEditor).mockImplementation((host) => {
       const blockquote = document.createElement("blockquote");
@@ -215,7 +251,7 @@ describe("TyporaEditor live mode", () => {
           toJSON: () => ({})
         })
       });
-      const markerParagraph = document.createElement("p");
+      markerParagraph = document.createElement("p");
       markerParagraph.textContent = "[!NOTE]";
       bodyParagraph = document.createElement("p");
       bodyParagraph.textContent = "Body";
@@ -233,6 +269,13 @@ describe("TyporaEditor live mode", () => {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
     expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("80px");
 
+    act(() => {
+      if (markerParagraph) markerParagraph.textContent = "[!NOTE] Custom title";
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(container.querySelector(".live-callout-overlay")?.getAttribute("aria-label")).toBe("Custom title");
+    expect(container.querySelector(".live-callout-overlay .callout-header strong")?.textContent).toBe("Custom title");
+
     height = 140;
     act(() => {
       bodyParagraph?.append(document.createTextNode("\nMore"));
@@ -249,10 +292,16 @@ describe("TyporaEditor live mode", () => {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
     expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("80px");
 
+    act(() => {
+      if (markerParagraph) markerParagraph.textContent = "[!NOTE";
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(container.querySelector(".live-callout-overlay")).toBeNull();
+
     await act(async () => root.unmount());
   });
 
-  it("deletes the whole callout when backspace is pressed in an already empty body", async () => {
+  it("moves an empty callout body back to its marker without deleting the block", async () => {
     let editorChange: ((markdown: string) => void) | undefined;
     const editor = {
       destroy: vi.fn(),
@@ -292,12 +341,21 @@ describe("TyporaEditor live mode", () => {
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
+
+    const deleteEvent = new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true });
+    act(() => bodyParagraph?.dispatchEvent(deleteEvent));
+    expect(deleteEvent.defaultPrevented).toBe(false);
+    expect(editor.replaceMarkdown).not.toHaveBeenCalled();
+
     const event = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
     act(() => bodyParagraph?.dispatchEvent(event));
 
     expect(event.defaultPrevented).toBe(true);
-    expect(onChange).toHaveBeenCalledWith("Before\n\nAfter");
-    expect(editor.replaceMarkdown).toHaveBeenCalledWith("Before\n\nAfter", "Before\n\n".length);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(editor.replaceMarkdown).toHaveBeenCalledWith(
+      "Before\n\n> [!NOTE]\n\nAfter",
+      "Before\n\n> [!NOTE]".length
+    );
     expect(editor.setMarkdown).not.toHaveBeenCalled();
     expect(editor.insertMarkdown).not.toHaveBeenCalled();
 

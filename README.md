@@ -10,7 +10,7 @@ If you find a bug or have a feature suggestion, please submit an issue—or ask 
 ## Features
 
 - **Local-first and end-to-end encrypted:** Input and local saves never wait for the network; titles, content, folders, and attachments are encrypted in the browser before synchronization.
-- **Markdown editing:** Typora-style live editing, source mode, reading mode, Obsidian-compatible callouts and YAML properties, a live outline, and text statistics.
+- **Markdown editing:** Typora-style live editing, source mode, reading mode, KaTeX math, Mermaid diagrams, WikiLinks, extensible Obsidian-style callouts, YAML properties, a live outline, and text statistics.
 - **Organization and history:** Folders, search, sorting, drag-and-drop, trash, and encrypted cross-device version history with preview and restore.
 - **Multi-user and device security:** Multi-user accounts, recovery keys, activation codes, remembered devices, PIN-encrypted local unlock credentials, automatic locking, and remote sign-out.
 - **Attachments and data migration:** Encrypted image attachments plus Markdown/ZIP import and export that preserve folder structure and attachment paths.
@@ -75,6 +75,8 @@ See the [documentation index](docs/README.md) to choose a guide by task.
 Thanks to the following open-source projects:
 
 - Markdown editor: [typora-web](https://github.com/Yuyz0112/typora-web)
+- Math renderer: [KaTeX](https://katex.org/)
+- Diagram renderer: [Mermaid](https://mermaid.js.org/)
 - Icon library: [Lucide React](https://lucide.dev/)
 
 ## License
