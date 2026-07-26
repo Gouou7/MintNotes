@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-26
+
 ### Added
 
 - Added lock and unlock actions to the contextual menu for a single note.
