@@ -58,6 +58,7 @@ import { TyporaEditor } from "./editor/TyporaEditor";
 import { parseWikiLinkTarget, resolveWikiLink } from "./editor/wikilinks";
 import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "./features/attachments";
 import { documentPatchChanges } from "./features/documentPatch";
+import { prepareObjectForPersistence } from "./features/objectPersistence";
 import { exportMarkdownZip, exportSingleMarkdown, importFiles } from "./features/importExport";
 import { SettingsPanel } from "./features/SettingsPanel";
 import {
@@ -741,7 +742,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
 
   const persistObject = async <T extends OpenDocument | OpenAttachment>(
     object: T,
-    options: { commitState?: boolean } = {}
+    options: { commitState?: boolean; preserveUpdatedAt?: boolean } = {}
   ): Promise<T> => {
     if (logoutStarted.current) return object;
     setSaveState("saving");
@@ -750,12 +751,9 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     if (logoutStarted.current) return object;
     const baseRevision = pending?.baseRevision ?? object.serverRevision;
     const intendedRevision = baseRevision + 1;
-    const next = {
-      ...object,
-      updatedAt: new Date().toISOString(),
-      serverRevision: baseRevision,
-      dirty: true
-    } as T;
+    const next = prepareObjectForPersistence(object, baseRevision, {
+      preserveUpdatedAt: options.preserveUpdatedAt
+    });
     const encrypted = await cryptoClient.encryptObject(user.id, object.objectId, object.kind, intendedRevision, plainObject(next));
     if (logoutStarted.current) return object;
     const nextGeneration = Date.now() * 1000 + ++generation.current;
@@ -2316,13 +2314,11 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     return next;
   };
 
-  const toggleActiveNoteLock = async () => {
-    const noteId = activeIdRef.current;
-    if (!noteId || historyPreview) return;
+  const toggleNoteLock = async (noteId: string) => {
     const initial = documentIndexRef.current.get(noteId);
     if (!initial || initial.kind !== "note") return;
     try {
-      if (!isLockedNote(initial)) {
+      if (noteId === activeIdRef.current && !isLockedNote(initial)) {
         const titleSaved = await commitDocumentTitle(noteId, titleDraft);
         if (!titleSaved) return;
         await flushDocument(noteId);
@@ -2330,8 +2326,11 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       const current = documentIndexRef.current.get(noteId);
       if (!current || current.kind !== "note") return;
       const locked = !isLockedNote(current);
-      await persistObject({ ...current, locked, dirty: true });
-      setEditorSessionId((value) => value + 1);
+      await persistObject(
+        { ...current, locked, dirty: true },
+        { preserveUpdatedAt: true }
+      );
+      if (noteId === activeIdRef.current) setEditorSessionId((value) => value + 1);
       requestPush("structural");
       showMessage(
         locked
@@ -2342,6 +2341,12 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     } catch (error) {
       showMessage(translateError(error, t, "notice.noteLockFailed"), "critical");
     }
+  };
+
+  const toggleActiveNoteLock = async () => {
+    const noteId = activeIdRef.current;
+    if (!noteId || historyPreview) return;
+    await toggleNoteLock(noteId);
   };
 
   const commitTreeRename = (objectId: string, value: string) => {
@@ -2626,7 +2631,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
             }).catch((error) => showMessage(translateError(error, t, "notice.attachmentSaveFailed"), "critical"));
           }} />
           {activeDocument && !historyPreview && <button className={`toolbar-icon note-lock-toggle ${activeDocumentLocked ? "active" : ""}`} onClick={() => void toggleActiveNoteLock()} title={activeDocumentLocked ? t("app.unlockNote") : t("app.lockNote")} aria-label={activeDocumentLocked ? t("app.unlockNote") : t("app.lockNote")} aria-pressed={activeDocumentLocked}><AppIcon icon={activeDocumentLocked ? LockKeyholeOpen : LockKeyhole} /></button>}
-          {activeDocument && !historyPreview && !activeDocumentLocked && <button className="toolbar-icon" onClick={() => attachmentInput.current?.click()} title={t("app.addImage")} aria-label={t("app.addImage")}><AppIcon icon={ImagePlus} /></button>}
+          {activeDocument && !historyPreview && <button className="toolbar-icon" disabled={activeDocumentLocked} onClick={() => attachmentInput.current?.click()} title={activeDocumentLocked ? t("app.unlockToEdit") : t("app.addImage")} aria-label={t("app.addImage")}><AppIcon icon={ImagePlus} /></button>}
           <button className="toolbar-icon right-pane-toggle" onClick={() => preferences.outlineCollapsed ? setPreferences({ ...preferences, outlineCollapsed: false }) : setOutlineOpen(true)} aria-label={t("app.openRight")}><AppIcon icon={PanelRightOpen} /></button>
         </header>
         {historyPreview && <div className="history-preview-banner">
@@ -2689,7 +2694,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       </aside>
 
       {(treeOpen || outlineOpen) && <button className="drawer-scrim" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} aria-label={t("app.closeSidebars")} />}
-      {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onMove={moveDocuments} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
+      {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onToggleLock={toggleNoteLock} onMove={moveDocuments} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
       {settingsOpen && <SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={setDisplayName} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} />}
       {message && <Toast notice={message} onDismiss={() => setMessage(null)} />}
     </div>
@@ -2771,7 +2776,7 @@ function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, expanded
   )) as ReactNode;
 }
 
-function ContextMenu({ document, selection, documents, position, onClose, onSelect, onRename, onMove, onCreate, onDuplicate, onExport, onPin, onDelete, onRestore, onPurge }: {
+function ContextMenu({ document, selection, documents, position, onClose, onSelect, onRename, onToggleLock, onMove, onCreate, onDuplicate, onExport, onPin, onDelete, onRestore, onPurge }: {
   document: OpenDocument;
   selection: OpenDocument[];
   documents: OpenDocument[];
@@ -2779,6 +2784,7 @@ function ContextMenu({ document, selection, documents, position, onClose, onSele
   onClose: () => void;
   onSelect: (id: string) => void;
   onRename: (id: string) => void;
+  onToggleLock: (id: string) => Promise<void>;
   onMove: (ids: string[], parentId: string | null) => void;
   onCreate: (kind: "note" | "folder", parentId: string | null) => Promise<string>;
   onDuplicate: (ids: string[]) => Promise<void>;
@@ -2802,7 +2808,7 @@ function ContextMenu({ document, selection, documents, position, onClose, onSele
     <div className="context-menu" style={{ left: Math.min(position.x, window.innerWidth - 230), top: Math.min(position.y, window.innerHeight - 430) }} onPointerDown={(event) => event.stopPropagation()}>
       {!single && <p className="context-selection-count">{t("app.selectedCount", { count: selected.length })}</p>}
       {single && document.kind === "note" && <button onClick={() => act(() => onSelect(document.objectId))}>{t("app.open")}</button>}
-      {!deleted && <>{single && <button disabled={isLockedNote(document)} title={isLockedNote(document) ? t("app.unlockToEdit") : undefined} onClick={() => act(() => onRename(document.objectId))}>{t("app.rename")}</button>}<button onClick={() => act(() => onPin(selectedIds, !allPinned))}>{allPinned ? t("app.unpin") : t("app.pinned")}</button></>}
+      {!deleted && <>{single && <button disabled={isLockedNote(document)} title={isLockedNote(document) ? t("app.unlockToEdit") : undefined} onClick={() => act(() => onRename(document.objectId))}>{t("app.rename")}</button>}{single && document.kind === "note" && <button onClick={() => act(() => onToggleLock(document.objectId))}>{isLockedNote(document) ? t("app.unlockNote") : t("app.lockNote")}</button>}<button onClick={() => act(() => onPin(selectedIds, !allPinned))}>{allPinned ? t("app.unpin") : t("app.pinned")}</button></>}
       {!deleted && single && document.kind === "folder" && <><button onClick={() => act(() => onCreate("note", document.objectId))}>{t("app.createNoteInFolder")}</button><button onClick={() => act(() => onCreate("folder", document.objectId))}>{t("app.createSubfolder")}</button></>}
       {!deleted && <button onClick={() => act(() => onDuplicate(selectedIds))}>{t("app.duplicate")}</button>}
       <button onClick={() => act(() => onExport(selectedIds))}>{t("app.export")}</button>

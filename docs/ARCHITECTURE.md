@@ -58,7 +58,7 @@ Network latency is outside the input and local-save path. Page visibility change
 
 Remote pulls do not replace a document while its current plaintext change is still waiting for the local encryption debounce. The later conditional push either commits that locally saved version or follows the normal conflict-copy path if another device changed the server revision.
 
-The note lock is a boolean inside the encrypted schema-v2 document payload. Toggling it flushes pending title and editor changes through the same local-first object/outbox path. A locked note derives an effective read-only editor mode without changing the workspace control record's remembered editor mode. Missing lock fields from older schema-v2 ciphertext normalize to `false`; no IndexedDB or server migration is required.
+The note lock is a boolean inside the encrypted schema-v2 document payload. Toggling it from the editor toolbar or a single note's contextual menu flushes pending title and editor changes through the same local-first object/outbox path. The lock-only revision preserves the document payload's existing `updatedAt`, so lock metadata synchronization does not alter the user-visible modification time or modification-time sorting. A locked note derives an effective read-only editor mode without changing the workspace control record's remembered editor mode. Missing lock fields from older schema-v2 ciphertext normalize to `false`; no IndexedDB or server migration is required.
 
 After acknowledgement, the server is the durable cross-device copy. The browser store is the low-latency write buffer, offline retry source, and working cache; it is not intended to survive an explicit logout.
 

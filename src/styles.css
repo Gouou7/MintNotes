@@ -144,7 +144,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .mode-switch button:disabled { cursor: default; opacity: .42; }
 .mode-switch button:disabled.active { opacity: 1; }
 .toolbar-icon, .pane-toggle { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
-.toolbar-icon:hover, .pane-toggle:hover, .side-header > button:hover { background: var(--surface-hover); }
+.toolbar-icon:not(:disabled):hover, .pane-toggle:hover, .side-header > button:hover { background: var(--surface-hover); }
+.toolbar-icon:disabled { color: var(--muted); cursor: not-allowed; opacity: .45; }
 .note-lock-toggle.active { color: var(--accent-text); background: var(--accent-soft); }
 .pane-toggle { display: none; }
 .tree-collapsed .pane-toggle { display: block; }

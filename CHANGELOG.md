@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added lock and unlock actions to the contextual menu for a single note.
+
+### Fixed
+
+- Fixed lock-state changes altering a note's modification time and modification-time sorting.
+- Kept the image attachment action visible but disabled while a note is locked, preserving the toolbar layout.
+
 ## [0.5.0] - 2026-07-26
 
 ### Added
