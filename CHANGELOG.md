@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-26
+
+### Added
+
+- Added inward edge-swipe gestures on phone-sized screens to open the directory drawer from the left or the Outline/History drawer from the right.
+
+### Changed
+
+- Changed PIN-protected vaults so an ordinary refresh of an unlocked tab can remain unlocked through a tab-scoped encrypted refresh envelope, while application launches, manual locks, inactivity locks, expired intervals, and invalid sessions still require the PIN.
+- Reorganized administrator account controls under **User management**, separating new-user activation from existing-account actions.
+
+### Fixed
+
+- Removed the off-screen drawer shadows that remained visible along both sides of the mobile editor.
+
 ## [0.2.1] - 2026-07-25
 
 ### Changed
