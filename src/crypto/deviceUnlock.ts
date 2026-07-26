@@ -8,8 +8,17 @@ import {
 } from "../storage/database";
 
 const SESSION_GRANT_KEY = "webmd-device-session-grant";
+const PIN_REFRESH_GRANT_KEY = "webmd-pin-refresh-grant-v1";
 const SESSION_CHANNEL = "webmd-device-session";
 const ACCOUNT_LOGOUT_EVENT = "webmd:local-account-logout";
+
+interface PinRefreshGrant {
+  userId: string;
+  endpointId: string;
+  ciphertext: string;
+  nonce: string;
+  lastActivityAt: number;
+}
 
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -34,6 +43,11 @@ export function hasCurrentBrowserSessionGrant(endpointId: string): boolean {
 
 export function clearCurrentBrowserSessionGrant(): void {
   sessionStorage.removeItem(SESSION_GRANT_KEY);
+  clearPinRefreshGrant();
+}
+
+export function clearPinRefreshGrant(): void {
+  sessionStorage.removeItem(PIN_REFRESH_GRANT_KEY);
 }
 
 export function listenForBrowserSessionGrantRequests(): () => void {
@@ -94,6 +108,7 @@ export async function rememberDeviceUnlock(
     };
     await localDb.deviceCredentials.put(credential);
     grantCurrentBrowserSession(endpointId);
+    await grantPinRefresh(credential);
     return credential;
   }
   const deviceKey = await crypto.subtle.generateKey(
@@ -145,9 +160,78 @@ function isLegacyPinCredential(credential: DeviceUnlockCredential): credential i
   return credential.version === 2 && Boolean(credential.pinSalt && credential.pinVerifier);
 }
 
-export async function restoreDeviceUnlock(userId: string, endpointId: string): Promise<boolean> {
+function readPinRefreshGrant(userId: string, endpointId: string): PinRefreshGrant | null {
+  try {
+    const grant = JSON.parse(sessionStorage.getItem(PIN_REFRESH_GRANT_KEY) ?? "null") as Partial<PinRefreshGrant> | null;
+    if (
+      grant?.userId !== userId
+      || grant.endpointId !== endpointId
+      || typeof grant.ciphertext !== "string"
+      || typeof grant.nonce !== "string"
+      || typeof grant.lastActivityAt !== "number"
+      || !Number.isFinite(grant.lastActivityAt)
+    ) return null;
+    return grant as PinRefreshGrant;
+  } catch {
+    return null;
+  }
+}
+
+async function grantPinRefresh(credential: DeviceUnlockCredential): Promise<void> {
+  if (!hasDevicePin(credential)) {
+    clearPinRefreshGrant();
+    return;
+  }
+  try {
+    const wrapped = await cryptoClient.wrapVaultForDevice(credential.userId, credential.deviceKey);
+    const grant: PinRefreshGrant = {
+      userId: credential.userId,
+      endpointId: credential.endpointId,
+      ciphertext: wrapped.ciphertext,
+      nonce: wrapped.nonce,
+      lastActivityAt: Date.now()
+    };
+    sessionStorage.setItem(PIN_REFRESH_GRANT_KEY, JSON.stringify(grant));
+  } catch {
+    clearPinRefreshGrant();
+  }
+}
+
+export function touchPinRefreshGrant(userId: string, endpointId: string): void {
+  const grant = readPinRefreshGrant(userId, endpointId);
+  if (!grant) return;
+  sessionStorage.setItem(PIN_REFRESH_GRANT_KEY, JSON.stringify({ ...grant, lastActivityAt: Date.now() }));
+}
+
+export async function restoreDeviceUnlock(
+  userId: string,
+  endpointId: string,
+  allowPinRefresh = false
+): Promise<boolean> {
   const credential = await getDeviceUnlock(userId, endpointId);
-  if (!credential || isPinProtectedCredential(credential) || isLegacyPinCredential(credential)) return false;
+  if (!credential) return false;
+  if (isPinProtectedCredential(credential) || isLegacyPinCredential(credential)) {
+    const grant = allowPinRefresh ? readPinRefreshGrant(userId, endpointId) : null;
+    const expired = Boolean(
+      grant
+      && credential.autoLockMinutes > 0
+      && Date.now() - grant.lastActivityAt >= credential.autoLockMinutes * 60 * 1000
+    );
+    if (!grant || expired) {
+      clearPinRefreshGrant();
+      return false;
+    }
+    try {
+      await cryptoClient.unlockVaultFromDevice(userId, credential.deviceKey, grant.ciphertext, grant.nonce);
+      grantCurrentBrowserSession(endpointId);
+      touchPinRefreshGrant(userId, endpointId);
+      return true;
+    } catch {
+      clearPinRefreshGrant();
+      await cryptoClient.lock().catch(() => undefined);
+      return false;
+    }
+  }
   try {
     await cryptoClient.unlockVaultFromDevice(userId, credential.deviceKey, credential.ciphertext, credential.nonce);
     if (credential.version === 2) {
@@ -203,6 +287,7 @@ export async function setDevicePin(userId: string, endpointId: string, pin: stri
     updatedAt: new Date().toISOString()
   };
   await localDb.deviceCredentials.put(protectedCredential);
+  await grantPinRefresh(protectedCredential);
 }
 
 export async function removeDevicePin(userId: string, endpointId: string): Promise<void> {
@@ -223,6 +308,7 @@ export async function removeDevicePin(userId: string, endpointId: string): Promi
     updatedAt: new Date().toISOString()
   };
   await localDb.deviceCredentials.put(directCredential);
+  clearPinRefreshGrant();
 }
 
 async function recordFailedPin(
@@ -233,6 +319,7 @@ async function recordFailedPin(
     await forgetDeviceUnlock(credential.userId);
     return "exhausted";
   }
+  clearPinRefreshGrant();
   await localDb.deviceCredentials.put({ ...credential, failedPinAttempts, updatedAt: new Date().toISOString() });
   return "invalid";
 }
@@ -259,6 +346,7 @@ export async function unlockDeviceWithPin(userId: string, endpointId: string, pi
     }
     await localDb.deviceCredentials.put({ ...credential, failedPinAttempts: 0, updatedAt: new Date().toISOString() });
     grantCurrentBrowserSession(endpointId);
+    await grantPinRefresh(credential);
     return "ok";
   }
 
@@ -286,6 +374,7 @@ export async function unlockDeviceWithPin(userId: string, endpointId: string, pi
     };
     await localDb.deviceCredentials.put(migrated);
     grantCurrentBrowserSession(endpointId);
+    await grantPinRefresh(migrated);
     return "ok";
   } catch (error) {
     await cryptoClient.lock().catch(() => undefined);
@@ -298,6 +387,7 @@ export async function setAutoLockMinutes(userId: string, endpointId: string, aut
   const credential = await getDeviceUnlock(userId, endpointId);
   if (!credential) throw new Error("当前设备没有可用的本机解锁凭据");
   await localDb.deviceCredentials.put({ ...credential, autoLockMinutes, updatedAt: new Date().toISOString() });
+  if (autoLockMinutes > 0) touchPinRefreshGrant(userId, endpointId);
 }
 
 export async function markEndpointRevocationPending(userId: string, endpointId: string): Promise<void> {

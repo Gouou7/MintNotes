@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cryptoClient } from "./client";
-import { hasDevicePin, isValidDevicePin, restoreDeviceUnlock, setDevicePin, unlockDeviceWithPin } from "./deviceUnlock";
+import { clearPinRefreshGrant, hasDevicePin, isValidDevicePin, restoreDeviceUnlock, setDevicePin, unlockDeviceWithPin } from "./deviceUnlock";
 import {
   localDb,
   type DirectDeviceUnlockCredential,
@@ -14,6 +14,7 @@ vi.mock("./client", () => ({
     lock: vi.fn(),
     unlockVaultFromDevice: vi.fn(),
     unlockVaultFromDeviceWithPin: vi.fn(),
+    wrapVaultForDevice: vi.fn(),
     wrapVaultForDeviceWithPin: vi.fn()
   }
 }));
@@ -86,6 +87,11 @@ describe("PIN-protected device unlock", () => {
       nonce: "protected-nonce",
       version: 1
     });
+    vi.mocked(cryptoClient.wrapVaultForDevice).mockResolvedValue({
+      ciphertext: "refresh-ciphertext",
+      nonce: "refresh-nonce",
+      version: 1
+    });
 
     await setDevicePin(directCredential.userId, directCredential.endpointId, "246810");
 
@@ -100,7 +106,7 @@ describe("PIN-protected device unlock", () => {
     expect(saved).not.toHaveProperty("nonce");
   });
 
-  it("never restores a PIN-protected credential during refresh", async () => {
+  it("does not restore a PIN-protected credential without an explicit refresh grant", async () => {
     vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(protectedCredential);
 
     await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId)).resolves.toBe(false);
@@ -109,10 +115,87 @@ describe("PIN-protected device unlock", () => {
     expect(cryptoClient.unlockVaultFromDeviceWithPin).not.toHaveBeenCalled();
   });
 
+  it("restores a PIN-protected credential only from the current tab's refresh grant", async () => {
+    vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(directCredential);
+    vi.spyOn(localDb.deviceCredentials, "put").mockResolvedValue(directCredential.userId);
+    vi.mocked(cryptoClient.wrapVaultForDeviceWithPin).mockResolvedValue({
+      ciphertext: "protected-ciphertext",
+      nonce: "protected-nonce",
+      version: 1
+    });
+    vi.mocked(cryptoClient.wrapVaultForDevice).mockResolvedValue({
+      ciphertext: "refresh-ciphertext",
+      nonce: "refresh-nonce",
+      version: 1
+    });
+    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810");
+
+    vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(protectedCredential);
+    vi.mocked(cryptoClient.unlockVaultFromDevice).mockResolvedValue({ unlocked: true });
+
+    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, true)).resolves.toBe(true);
+    expect(cryptoClient.unlockVaultFromDevice).toHaveBeenCalledWith(
+      protectedCredential.userId,
+      protectedCredential.deviceKey,
+      "refresh-ciphertext",
+      "refresh-nonce"
+    );
+    expect(cryptoClient.unlockVaultFromDeviceWithPin).not.toHaveBeenCalled();
+  });
+
+  it("clears the refresh grant so a later refresh remains locked", async () => {
+    vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(directCredential);
+    vi.spyOn(localDb.deviceCredentials, "put").mockResolvedValue(directCredential.userId);
+    vi.mocked(cryptoClient.wrapVaultForDeviceWithPin).mockResolvedValue({
+      ciphertext: "protected-ciphertext",
+      nonce: "protected-nonce",
+      version: 1
+    });
+    vi.mocked(cryptoClient.wrapVaultForDevice).mockResolvedValue({
+      ciphertext: "refresh-ciphertext",
+      nonce: "refresh-nonce",
+      version: 1
+    });
+    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810");
+    clearPinRefreshGrant();
+
+    vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(protectedCredential);
+    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, true)).resolves.toBe(false);
+    expect(cryptoClient.unlockVaultFromDevice).not.toHaveBeenCalled();
+  });
+
+  it("does not let a refresh bypass the configured inactivity timeout", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValueOnce(1_000);
+    vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(directCredential);
+    vi.spyOn(localDb.deviceCredentials, "put").mockResolvedValue(directCredential.userId);
+    vi.mocked(cryptoClient.wrapVaultForDeviceWithPin).mockResolvedValue({
+      ciphertext: "protected-ciphertext",
+      nonce: "protected-nonce",
+      version: 1
+    });
+    vi.mocked(cryptoClient.wrapVaultForDevice).mockResolvedValue({
+      ciphertext: "refresh-ciphertext",
+      nonce: "refresh-nonce",
+      version: 1
+    });
+    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810");
+
+    now.mockReturnValue(5 * 60 * 1000 + 1_000);
+    vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(protectedCredential);
+
+    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, true)).resolves.toBe(false);
+    expect(cryptoClient.unlockVaultFromDevice).not.toHaveBeenCalled();
+  });
+
   it("passes the entered PIN to the worker before releasing the vault", async () => {
     vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(protectedCredential);
     const put = vi.spyOn(localDb.deviceCredentials, "put").mockResolvedValue(protectedCredential.userId);
     vi.mocked(cryptoClient.unlockVaultFromDeviceWithPin).mockResolvedValue({ unlocked: true });
+    vi.mocked(cryptoClient.wrapVaultForDevice).mockResolvedValue({
+      ciphertext: "refresh-ciphertext",
+      nonce: "refresh-nonce",
+      version: 1
+    });
 
     await expect(unlockDeviceWithPin(protectedCredential.userId, protectedCredential.endpointId, "246810")).resolves.toBe("ok");
 
@@ -137,6 +220,11 @@ describe("PIN-protected device unlock", () => {
     vi.mocked(cryptoClient.wrapVaultForDeviceWithPin).mockResolvedValue({
       ciphertext: "migrated-ciphertext",
       nonce: "migrated-nonce",
+      version: 1
+    });
+    vi.mocked(cryptoClient.wrapVaultForDevice).mockResolvedValue({
+      ciphertext: "refresh-ciphertext",
+      nonce: "refresh-nonce",
       version: 1
     });
 

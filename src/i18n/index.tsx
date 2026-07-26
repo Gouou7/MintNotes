@@ -169,9 +169,9 @@ const messages = {
   "settings.permanentDeleteItem": { en: "Permanently delete {title}", "zh-CN": "永久删除 {title}", "zh-TW": "永久刪除 {title}" },
   "settings.setPin": { en: "Set PIN", "zh-CN": "设置 PIN", "zh-TW": "設定 PIN" },
   "settings.pinHelp": {
-    en: "The PIN is stored only on this device and can quickly unlock manual and automatic locks.",
-    "zh-CN": "PIN 仅保存在当前设备，可用于手动锁定后的快速解锁和自动锁定。",
-    "zh-TW": "PIN 僅儲存在目前裝置，可用於手動鎖定後的快速解鎖及自動鎖定。"
+    en: "The PIN stays on this device, is required when the app starts, and unlocks manual or optional automatic locks. An ordinary refresh stays unlocked.",
+    "zh-CN": "PIN 仅保存在当前设备；每次启动应用时需要输入，也可解锁手动锁定或可选的自动锁定。普通刷新会保持解锁。",
+    "zh-TW": "PIN 僅儲存在目前裝置；每次啟動應用程式時需要輸入，也可解鎖手動鎖定或選用的自動鎖定。一般重新整理會保持解鎖。"
   },
   "settings.newPin": { en: "New PIN", "zh-CN": "新 PIN", "zh-TW": "新 PIN" },
   "settings.pinMin": { en: "At least 4 characters", "zh-CN": "至少 4 个字符", "zh-TW": "至少 4 個字元" },

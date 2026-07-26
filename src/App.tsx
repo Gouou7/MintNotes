@@ -37,6 +37,7 @@ import { cryptoClient, type EncryptedProfileAvatar } from "./crypto/client";
 import {
   broadcastAccountLogout,
   clearCurrentBrowserSessionGrant,
+  clearPinRefreshGrant,
   clearPendingEndpointRevocation,
   forgetDeviceUnlock,
   flushPendingEndpointRevocations,
@@ -47,7 +48,8 @@ import {
   listenForBrowserSessionGrantRequests,
   rememberDeviceUnlock,
   requestBrowserSessionGrant,
-  restoreDeviceUnlock
+  restoreDeviceUnlock,
+  touchPinRefreshGrant
 } from "./crypto/deviceUnlock";
 import { buildOutline } from "./editor/outline";
 import { ReadOnlyMarkdown } from "./editor/ReadOnlyMarkdown";
@@ -203,6 +205,11 @@ function attachmentDisplaySignature(attachment: OpenAttachment): string {
   return [attachment.objectId, attachment.deleted, attachment.updatedAt, attachment.sha256].join(":");
 }
 
+function isReloadNavigation(): boolean {
+  const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+  return navigation?.type === "reload";
+}
+
 export default function App() {
   const { t } = useI18n();
   const [user, setUser] = useState<User | null>(null);
@@ -227,8 +234,8 @@ export default function App() {
         if (!active) return;
         setSession({ user: sessionUser, endpoint });
         setCredential(stored);
-        const needsPin = hasDevicePin(stored);
-        if (!needsPin && await restoreDeviceUnlock(sessionUser.id, endpoint.id) && active) setUser(sessionUser);
+        const allowPinRefresh = hasDevicePin(stored) && isReloadNavigation();
+        if (await restoreDeviceUnlock(sessionUser.id, endpoint.id, allowPinRefresh) && active) setUser(sessionUser);
       })
       .catch(async (value) => {
         if (!(value instanceof ApiError) || value.status !== 401) return;
@@ -2272,6 +2279,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
 
   const lock = async (logout = false) => {
     if (logoutStarted.current) return;
+    clearPinRefreshGrant();
     if (!logout) {
       await finishHistorySession(true);
       for (const id of [...saveTimers.current.keys()]) await flushDocument(id);
@@ -2334,6 +2342,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       const now = Date.now();
       if (now - lastArm < 1000) return;
       lastArm = now;
+      touchPinRefreshGrant(user.id, endpoint.id);
       arm();
     };
     for (const eventName of ["pointermove", "pointerdown", "keydown", "input", "touchstart", "scroll"] as const) window.addEventListener(eventName, activity, { passive: true });
@@ -2342,7 +2351,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       window.clearTimeout(timer);
       for (const eventName of ["pointermove", "pointerdown", "keydown", "input", "touchstart", "scroll"] as const) window.removeEventListener(eventName, activity);
     };
-  }, [credential?.autoLockMinutes]);
+  }, [credential?.autoLockMinutes, endpoint.id, user.id]);
 
   useEffect(() => {
     const close = () => setContextMenu(null);
