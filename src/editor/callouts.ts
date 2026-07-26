@@ -29,6 +29,11 @@ export interface CalloutMarker {
   icon?: CalloutIcon;
 }
 
+export interface CalloutTitleSourceRange {
+  start: number;
+  end: number;
+}
+
 interface CalloutDefinition {
   kind: Exclude<CalloutKind, "custom">;
   aliases: string[];
@@ -117,6 +122,22 @@ export function parseCalloutMarker(value: string): CalloutMarker | null {
     color: appearance.color,
     icon: appearance.icon
   };
+}
+
+export function calloutTitleSourceRange(value: string): CalloutTitleSourceRange | null {
+  const leadingWhitespace = value.length - value.trimStart().length;
+  const candidate = value.trim();
+  const match = MARKER.exec(candidate);
+  const rawTitle = match?.[3];
+  if (!match || rawTitle === undefined) return null;
+
+  const trimmedTitle = rawTitle.trim();
+  if (!trimmedTitle) return null;
+  const visibleTitle = parseCalloutAppearance(trimmedTitle).title;
+  const rawTitleStart = candidate.indexOf(rawTitle, match[0].length - rawTitle.length);
+  if (rawTitleStart < 0) return null;
+  const start = leadingWhitespace + rawTitleStart + rawTitle.indexOf(trimmedTitle);
+  return { start, end: start + visibleTitle.length };
 }
 
 function parseCalloutAppearance(value: string): { title: string; color?: CalloutColor; icon?: CalloutIcon } {

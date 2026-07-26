@@ -261,6 +261,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .typora-host blockquote.live-callout > :first-child { margin-top: 0; }
 .typora-host blockquote.live-callout > :last-child { margin-bottom: 0; }
 .typora-host blockquote.live-callout > p.live-callout-marker { position: absolute; z-index: 3; top: 13px; right: 17px; left: 17px; min-height: 24px; margin: 0; color: var(--callout-color); }
+.typora-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing { overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; }
+.typora-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing::-webkit-scrollbar { display: none; }
+.typora-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing::before { content: attr(data-callout-prefix); user-select: none; }
 .typora-host .live-callout-marker-hidden { visibility: hidden; }
 .typora-host .live-markdown-escape-hidden { font-size: 0; line-height: 0; color: transparent; }
 .typora-host .live-inline-math-source, .typora-host .live-wikilink-source { font-size: 0; line-height: 0; color: transparent; }
@@ -281,7 +284,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: .35em 0; }
 .live-callout-overlays { position: absolute; inset: 0; pointer-events: none; }
 .live-callout-surface { position: absolute; z-index: 0; border: 1px solid var(--callout-color); border-radius: 10px; background: var(--callout-soft); }
-.live-callout-overlay { position: absolute; z-index: 2; min-height: 50px; display: flex; align-items: flex-start; padding: 13px 17px; overflow: hidden; }
+.live-callout-overlay { position: absolute; z-index: 2; min-height: 50px; box-sizing: border-box; display: flex; align-items: flex-start; padding: 13px 17px; overflow: hidden; pointer-events: auto; cursor: text; }
+.live-callout-overlay.is-marker-editing { pointer-events: none; }
 .live-callout-overlay.is-marker-editing .callout-header { visibility: hidden; }
 .live-callout-overlay .callout-header { min-width: 0; }
 .live-callout-overlay .callout-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

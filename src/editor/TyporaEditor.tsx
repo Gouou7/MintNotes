@@ -2,6 +2,7 @@ import {
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
   useState
@@ -13,6 +14,7 @@ import { materializeAttachmentUrls } from "../features/attachmentFormat";
 import { useI18n } from "../i18n";
 import { CalloutHeader } from "./Callout";
 import {
+  calloutTitleSourceRange,
   canonicalizeCalloutsFromLive,
   collapseEmptyCalloutBodyForMarkerEdit,
   materializeCalloutsForLive,
@@ -171,10 +173,13 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
 
           const rect = blockquote.getBoundingClientRect();
           const editingMarker = Boolean(selectionAnchor && firstParagraph.contains(selectionAnchor));
+          const calloutIndex = index++;
           overlays.push({
-            key: `${index++}:${marker.rawType}:${marker.title}`,
+            key: `${calloutIndex}:${marker.rawType}:${marker.title}`,
+            calloutIndex,
             kind: marker.kind,
             title: marker.title,
+            markerText: firstLine,
             color: marker.color,
             icon: marker.icon,
             editingMarker,
@@ -214,6 +219,26 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
     const offset = editorRef.current.getMarkdownOffsetAtPoint(event.clientX, event.clientY);
     const insertion = await onImageDrop(file, offset);
     editorRef.current?.insertMarkdown(insertion, offset);
+  };
+
+  const focusCalloutMarker = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    overlay: LiveCalloutOverlay
+  ) => {
+    if (!editorRef.current || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    let markerOffset = overlay.markerText.length;
+    const target = event.target instanceof Element ? event.target.closest("strong") : null;
+    const titleRange = target && event.currentTarget.contains(target)
+      ? calloutTitleSourceRange(overlay.markerText)
+      : null;
+    if (target && titleRange) {
+      const titleOffset = textOffsetAtPoint(target, event.clientX, event.clientY);
+      markerOffset = Math.min(titleRange.end, titleRange.start + titleOffset);
+    }
+    editorRef.current.focusCalloutMarker(overlay.calloutIndex, markerOffset);
   };
 
   const editEmptyCalloutMarker = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -284,9 +309,10 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
           <div className={`live-callout-surface callout-${overlay.kind}${overlay.color ? ` callout-color-${overlay.color}` : ""}`} style={overlay.style} aria-hidden="true" />
           <div
             className={`live-callout-overlay callout-${overlay.kind}${overlay.color ? ` callout-color-${overlay.color}` : ""}${overlay.editingMarker ? " is-marker-editing" : ""}`}
-            style={overlay.style}
+            style={{ ...overlay.style, height: 50 }}
             role="note"
             aria-label={overlay.title}
+            onPointerDown={(event) => focusCalloutMarker(event, overlay)}
           >
             <CalloutHeader kind={overlay.kind} title={overlay.title} icon={overlay.icon} />
           </div>
@@ -298,8 +324,10 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
 
 interface LiveCalloutOverlay {
   key: string;
+  calloutIndex: number;
   kind: CalloutKind;
   title: string;
+  markerText: string;
   color?: CalloutColor;
   icon?: CalloutIcon;
   editingMarker: boolean;
@@ -318,8 +346,10 @@ function overlaysEqual(left: LiveCalloutOverlay[], right: LiveCalloutOverlay[]):
   return left.length === right.length && left.every((entry, index) => {
     const other = right[index];
     return entry.key === other?.key
+      && entry.calloutIndex === other.calloutIndex
       && entry.kind === other.kind
       && entry.title === other.title
+      && entry.markerText === other.markerText
       && entry.color === other.color
       && entry.icon === other.icon
       && entry.editingMarker === other.editingMarker
@@ -328,4 +358,32 @@ function overlaysEqual(left: LiveCalloutOverlay[], right: LiveCalloutOverlay[]):
       && entry.style.width === other.style.width
       && entry.style.height === other.style.height;
   });
+}
+
+function textOffsetAtPoint(element: Element, clientX: number, clientY: number): number {
+  const ownerDocument = element.ownerDocument as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const caretPosition = ownerDocument.caretPositionFromPoint?.(clientX, clientY);
+  const offsetNode = caretPosition?.offsetNode;
+  const offset = caretPosition?.offset;
+  if (offsetNode && offset !== undefined && element.contains(offsetNode)) {
+    return textOffsetWithin(element, offsetNode, offset);
+  }
+
+  const caretRange = ownerDocument.caretRangeFromPoint?.(clientX, clientY);
+  if (caretRange && element.contains(caretRange.startContainer)) {
+    return textOffsetWithin(element, caretRange.startContainer, caretRange.startOffset);
+  }
+
+  const rect = element.getBoundingClientRect();
+  return clientX <= rect.left ? 0 : element.textContent?.length ?? 0;
+}
+
+function textOffsetWithin(element: Element, node: Node, offset: number): number {
+  const range = element.ownerDocument.createRange();
+  range.selectNodeContents(element);
+  range.setEnd(node, offset);
+  return range.toString().length;
 }

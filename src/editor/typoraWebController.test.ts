@@ -132,6 +132,45 @@ describe("typora-web public controller", () => {
     editor.destroy();
   });
 
+  it("focuses top-level and nested callout markers without changing Markdown", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const markdown = [
+      "> [!NOTE] Outer",
+      ">",
+      "> Body",
+      "> > [!WARNING]- Nested",
+      "> >",
+      "> > Details"
+    ].join("\n");
+    const editor = createEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next)
+    });
+    const serialized = editor.getMarkdown();
+
+    expect(editor.focusCalloutMarker(0, 8)).toBe(true);
+    const outerMarker = host.querySelector<HTMLParagraphElement>("blockquote > p.live-callout-marker");
+    expect(outerMarker?.classList.contains("is-live-callout-marker-editing")).toBe(true);
+    expect(outerMarker?.dataset.calloutPrefix).toBe("> ");
+    expect(document.getSelection()?.anchorOffset).toBe(8);
+    expect(editor.getMarkdown()).toBe(serialized);
+    expect(changes).toEqual([]);
+
+    expect(editor.focusCalloutMarker(1, 999)).toBe(true);
+    const nestedMarker = host.querySelector<HTMLParagraphElement>("blockquote blockquote > p.live-callout-marker");
+    expect(nestedMarker?.classList.contains("is-live-callout-marker-editing")).toBe(true);
+    expect(nestedMarker?.dataset.calloutPrefix).toBe("> > ");
+    expect(document.getSelection()?.anchorOffset).toBe("[!WARNING]- Nested".length);
+    expect(editor.getMarkdown()).toBe(serialized);
+    expect(changes).toEqual([]);
+
+    expect(editor.focusCalloutMarker(-1)).toBe(false);
+    expect(editor.focusCalloutMarker(2)).toBe(false);
+    editor.destroy();
+  });
+
   it("keeps a canonical callout line free of generated escapes", () => {
     const host = document.createElement("div");
     document.body.append(host);

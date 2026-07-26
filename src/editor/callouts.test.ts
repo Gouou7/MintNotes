@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calloutTitleSourceRange,
   calloutDefinition,
   canonicalizeCalloutsFromLive,
   collapseEmptyCalloutBodyForMarkerEdit,
@@ -72,6 +73,20 @@ describe("callouts", () => {
       color: undefined,
       icon: undefined
     });
+  });
+
+  it("locates only the visible authored title inside a marker line", () => {
+    expect(calloutTitleSourceRange("[!NOTE] Related")).toEqual({ start: 8, end: 15 });
+    expect(calloutTitleSourceRange("[!TIP]+ Styled {color=purple icon=important}")).toEqual({
+      start: 8,
+      end: 14
+    });
+    expect(calloutTitleSourceRange("[!TIP] Literal {unknown=value}")).toEqual({
+      start: 7,
+      end: 30
+    });
+    expect(calloutTitleSourceRange("[!NOTE]")).toBeNull();
+    expect(calloutTitleSourceRange("[!NOTE]   ")).toBeNull();
   });
 
   it("round-trips canonical live markers without highlight or backslash syntax", () => {

@@ -18,6 +18,7 @@ declare module "typora-web" {
     getMarkdownOffsetAtPoint(clientX: number, clientY: number): number;
     insertMarkdown(markdown: string, offset?: number): void;
     replaceMarkdown(markdown: string, offset?: number): void;
+    focusCalloutMarker(calloutIndex: number, markerOffset?: number): boolean;
     toggleSource(): void;
     isSourceMode(): boolean;
     focus(): void;

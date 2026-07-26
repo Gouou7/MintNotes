@@ -1,9 +1,8 @@
 diff --git a/dist/lib/typora-web.js b/dist/lib/typora-web.js
-index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b824a9c1a 100644
+index 612197ca1cc1155524d3f86121988a9a468ca369..78f139bc036f991aa103219ee6a07d8f061e6477 100644
 --- a/dist/lib/typora-web.js
 +++ b/dist/lib/typora-web.js
-@@ -1,7 +1,7 @@
- import { EditorState as e, Plugin as t, PluginKey as n, Selection as r, TextSelection as i } from "prosemirror-state";
+@@ -2,7 +2,7 @@ import { EditorState as e, Plugin as t, PluginKey as n, Selection as r, TextSele
  import { Decoration as a, DecorationSet as o, EditorView as s } from "prosemirror-view";
  import { keymap as c } from "prosemirror-keymap";
  import { baseKeymap as l, chainCommands as u } from "prosemirror-commands";
@@ -11,6 +10,7 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
 +import { closeHistory as closeHistoryEvent, history as d, redo as f, undo as p } from "prosemirror-history";
  import { InputRule as m, inputRules as h, wrappingInputRule as g } from "prosemirror-inputrules";
  import _ from "markdown-it-emoji/lib/data/full.mjs";
+ import { liftListItem as v, sinkListItem as y, splitListItem as b } from "prosemirror-schema-list";
 @@ -1214,7 +1214,7 @@ function Je() {
  }
  function Ye(e) {
@@ -38,11 +38,12 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
  }
  var vt = {
  	name: "table",
-@@ -2747,6 +2747,150 @@ function rn() {
+@@ -2745,6 +2745,157 @@ function rn() {
+ 		if (!i || i.length === 0) return !1;
+ 		let a = e.state.schema.text(" "), o = e.state.tr.replaceWith(t, n, a).setStoredMarks(null);
  		return e.dispatch(o), !0;
--	} } });
 +    } } });
- }
++}
 +function blockquoteInputPlugin() {
 +	let e = null;
 +	return new t({
@@ -91,12 +92,19 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
 +			if (!i || i.type !== Y.nodes.paragraph) return;
 +			let s = /^\[!([a-z0-9_-]+)\][+-]?(?:[ \t]+[^\n]*)?/i.exec(i.textContent);
 +			if (!s) return;
-+			let c = r + 1, l = c + 1, u = l + s[0].length, d = n.$from.parent === i && n.$to.parent === i;
++			let c = r + 1, l = c + 1, u = l + s[0].length, d = n.$from.parent === i && n.$to.parent === i, h = 1;
++			if (d) {
++				let e = n.$from.doc.resolve(r);
++				for (let t = 0; t <= e.depth; t++) e.node(t).type === Y.nodes.blockquote && h++;
++			}
 +			t.push(a.node(r, r + e.nodeSize, {
 +				class: "live-callout",
 +				"data-callout-type": s[1].toLowerCase()
 +			}));
-+			t.push(a.node(c, c + i.nodeSize, { class: "live-callout-marker" }));
++			t.push(a.node(c, c + i.nodeSize, {
++				class: `live-callout-marker${d ? " is-live-callout-marker-editing" : ""}`,
++				...(d ? { "data-callout-prefix": "> ".repeat(h) } : {})
++			}));
 +			d || t.push(a.inline(l, u, { class: "live-callout-marker-hidden" }));
 +		});
 +		return t.length > 0 ? o.create(e.doc, t) : o.empty;
@@ -185,25 +193,27 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
 +			}
 +		});
 +		return n.length > 0 ? o.create(t.doc, n) : o.empty;
-+	} } });
-+}
+ 	} } });
+ }
  //#endregion
- //#region src/editor.ts
- function an() {
-@@ -2759,7 +2903,7 @@ function an() {
+@@ -2756,29 +2907,39 @@ function an() {
+ 		if (!r) return !1;
+ 		let i = r.getAttribute("href");
+ 		return i ? (n.preventDefault(), window.open(i, "_blank", "noopener,noreferrer"), !0) : !1;
 -	} } });
 +    } } });
  }
  function on(e = {}) {
 -	let { cursorWidget: t = !0 } = e, n = Ut(Y), r = [
-+	let { cursorWidget: t = !0, liveSyntax: n = {} } = e, r = Ut(Y), i = [
 -		d(),
-+        d(),
 -		c({
-+        c({
 -			"Mod-z": p,
++	let { cursorWidget: t = !0, liveSyntax: n = {} } = e, r = Ut(Y), i = [
++        d(),
++        c({
 +            "Mod-z": p,
-@@ -2768,17 +2912,27 @@ function on(e = {}) {
+ 			"Mod-y": f,
+ 			"Mod-Shift-z": f
  		}),
  		nn(),
  		rn(),
@@ -215,10 +225,10 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
  		...Wt(Y),
  		tn(),
 -		an()
-+        an()
 -	];
-+    ];
 -	return t && r.push(re()), Object.keys(n).length > 0 && r.push(c(n)), r.push(c(l)), r;
++        an()
++    ];
 +	return t && i.push(re()), Object.keys(r).length > 0 && i.push(c(r)), i.push(c(l)), i;
  }
  //#endregion
@@ -234,7 +244,7 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
  Q.block.ruler.at("paragraph", function(e, t, n) {
  	let r = e.md.block.ruler.getRules("paragraph"), i = e.parentType, a = t + 1;
  	for (e.parentType = "paragraph"; a < n && !e.isEmpty(a); a++) {
-@@ -2938,7 +3092,7 @@ function dn(e) {
+@@ -2938,7 +3099,7 @@ function dn(e) {
  }
  //#endregion
  //#region src/serializer.ts
@@ -243,7 +253,7 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
  	marks: { ...Rt() },
  	escapeInline: fn,
  	escapeBlockStart: pn,
-@@ -3016,7 +3170,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
+@@ -3016,7 +3177,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
  				let e = n[i.type.name];
  				e && (this.out += typeof e.open == "function" ? e.open(r) : e.open), t = [...t, i];
  			}
@@ -252,7 +262,7 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
  		e.forEach((e) => {
  			if (e.marks.find((e) => e.type === Y.marks.code) && this.config.codeMarkAsBacktickFence) {
  				o([]), this.write();
-@@ -3038,7 +3192,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
+@@ -3038,7 +3199,7 @@ var fn = (e) => /[\\`*_\[\]<>]/.test(e) ? `\\${e}` : e, pn = (e) => /[#\->+*_]/.
  			if (!e.isText) return;
  			o(e.marks), this.write(), s(e.marks, e);
  			let r = e.text ?? "", c = this.atBlankLine() && t.length === 0, l = !1;
@@ -261,22 +271,31 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
  		}), o([]), this.tick("inner");
  	}
  }, gn = {
-@@ -3103,7 +3257,7 @@ function yn(t, n = {}) {
+@@ -3100,15 +3261,15 @@ function yn(t, n = {}) {
+ 	o.className = "typora-web-source", o.hidden = !0, r.append(a, o), t.append(r);
+ 	let c, l = !1;
+ 	function u(t) {
 -		let r = t ? dn(t) : Y.nodes.doc.createAndFill(), o = e.create({
-+        let r = t ? dn(t) : Y.nodes.doc.createAndFill(), o = e.create({
 -			schema: Y,
-+            schema: Y,
 -			doc: r,
-+            doc: r,
 -			plugins: on({ cursorWidget: !1 })
-+			plugins: on({ cursorWidget: !1, liveSyntax: n.liveSyntax })
 -		}), c = new s(a, {
-+        }), c = new s(a, {
 -			state: o.apply(o.tr.setSelection(i.atStart(r))),
-+            state: o.apply(o.tr.setSelection(i.atStart(r))),
 -			dispatchTransaction(e) {
++        let r = t ? dn(t) : Y.nodes.doc.createAndFill(), o = e.create({
++            schema: Y,
++            doc: r,
++			plugins: on({ cursorWidget: !1, liveSyntax: n.liveSyntax })
++        }), c = new s(a, {
++            state: o.apply(o.tr.setSelection(i.atStart(r))),
 +            dispatchTransaction(e) {
-@@ -3183,6 +3337,41 @@ function yn(t, n = {}) {
+ 				let t = c.state.apply(e);
+-				c.updateState(t), n.onChange?.($(t.doc));
++				c.updateState(t), e.docChanged && n.onChange?.($(t.doc));
+ 			},
+ 			handleDOMEvents: {
+ 				focus: () => (n.onFocus?.(), !1),
+@@ -3183,6 +3344,61 @@ function yn(t, n = {}) {
  			return 0;
  		}
  	}
@@ -315,10 +334,30 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
 +		} catch {}
 +		c.dispatch(s), c.dispatch(closeHistoryEvent(c.state.tr)), c.focus();
 +	}
++	function C(e, t) {
++		if (l || !Number.isInteger(e) || e < 0) return !1;
++		let n = 0, r = null;
++		c.state.doc.descendants((t, a) => {
++			if (r || t.type !== Y.nodes.blockquote) return;
++			let o = t.firstChild;
++			if (!o || o.type !== Y.nodes.paragraph || !/^\[![a-z0-9_-]+\][+-]?(?:[ \t]+[^\n]*)?/i.test(o.textContent)) return;
++			if (n++ !== e) return;
++			r = { from: a + 2, size: o.content.size };
++			return !1;
++		});
++		if (!r) return !1;
++		let a = Math.max(0, Math.min(t ?? r.size, r.size));
++		try {
++			c.dispatch(c.state.tr.setSelection(i.create(c.state.doc, r.from + a)).scrollIntoView()), c.focus();
++			return !0;
++		} catch {
++			return !1;
++		}
++	}
  	function _() {
  		let e = $(c.state.doc), t = h();
  		o.value = e, a.hidden = !0, o.hidden = !1, f(), o.focus();
-@@ -3211,6 +3400,15 @@ function yn(t, n = {}) {
+@@ -3211,6 +3427,18 @@ function yn(t, n = {}) {
  		setMarkdown(e) {
  			l ? o.value = e : d(e);
  		},
@@ -330,6 +369,9 @@ index 612197ca1cc1155524d3f86121988a9a468ca369..2fbf6f36ea6485e963429435a8de358b
 +		},
 +		replaceMarkdown(e, t) {
 +			E(e, t);
++		},
++		focusCalloutMarker(e, t) {
++			return C(e, t);
 +		},
  		toggleSource() {
  			l ? v() : _();

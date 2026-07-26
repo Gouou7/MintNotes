@@ -227,10 +227,11 @@ describe("TyporaEditor live mode", () => {
     await act(async () => root.unmount());
   });
 
-  it("updates the callout overlay height when live body lines change", async () => {
+  it("keeps the Callout frame in sync and makes only its header interactive", async () => {
     const editor = {
       destroy: vi.fn(),
       focus: vi.fn(),
+      focusCalloutMarker: vi.fn(() => true),
       setMarkdown: vi.fn()
     } as unknown as TyporaWebEditor;
     let height = 80;
@@ -267,7 +268,8 @@ describe("TyporaEditor live mode", () => {
       <TyporaEditor markdown={"> [!NOTE]\n> Body"} mode="live" onChange={vi.fn()} />
     ));
     await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
-    expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("80px");
+    expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("50px");
+    expect(container.querySelector<HTMLElement>(".live-callout-surface")?.style.height).toBe("80px");
 
     act(() => {
       if (markerParagraph) markerParagraph.textContent = "[!NOTE] Custom title";
@@ -276,13 +278,46 @@ describe("TyporaEditor live mode", () => {
     expect(container.querySelector(".live-callout-overlay")?.getAttribute("aria-label")).toBe("Custom title");
     expect(container.querySelector(".live-callout-overlay .callout-header strong")?.textContent).toBe("Custom title");
 
+    const title = container.querySelector<HTMLElement>(".live-callout-overlay .callout-header strong");
+    const icon = container.querySelector<HTMLElement>(".live-callout-overlay .callout-icon");
+    const overlay = container.querySelector<HTMLElement>(".live-callout-overlay");
+    if (!title?.firstChild || !icon || !overlay) throw new Error("Missing interactive Callout header");
+    Object.defineProperty(document, "caretPositionFromPoint", {
+      configurable: true,
+      value: vi.fn(() => ({ offsetNode: title.firstChild!, offset: 3 }))
+    });
+
+    act(() => title.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: 100,
+      clientY: 10
+    })));
+    expect(editor.focusCalloutMarker).toHaveBeenLastCalledWith(0, 11);
+
+    act(() => icon.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      cancelable: true
+    })));
+    expect(editor.focusCalloutMarker).toHaveBeenLastCalledWith(0, "[!NOTE] Custom title".length);
+
+    act(() => overlay.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      cancelable: true
+    })));
+    expect(editor.focusCalloutMarker).toHaveBeenLastCalledWith(0, "[!NOTE] Custom title".length);
+    Reflect.deleteProperty(document, "caretPositionFromPoint");
+
     height = 140;
     act(() => {
       bodyParagraph?.append(document.createTextNode("\nMore"));
       window.dispatchEvent(new Event("resize"));
     });
     await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
-    expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("140px");
+    expect(container.querySelector<HTMLElement>(".live-callout-surface")?.style.height).toBe("140px");
 
     height = 80;
     act(() => {
@@ -290,7 +325,7 @@ describe("TyporaEditor live mode", () => {
       window.dispatchEvent(new Event("resize"));
     });
     await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
-    expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("80px");
+    expect(container.querySelector<HTMLElement>(".live-callout-surface")?.style.height).toBe("80px");
 
     act(() => {
       if (markerParagraph) markerParagraph.textContent = "[!NOTE";
