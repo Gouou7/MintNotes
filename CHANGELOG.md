@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added end-to-end encrypted note locking that synchronizes across devices, keeps locked notes in Reading mode without changing the workspace's selected editor mode, and shows lock badges in the directory and pinned-note lists.
 - Added recursive trash protection for locked notes, including folders and multi-item selections containing a locked descendant, while explicit note copies remain unlocked.
 
+### Fixed
+
+- Fixed touch devices requiring a second tap to open a note or expand or collapse a folder in the mobile directory drawer.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added
