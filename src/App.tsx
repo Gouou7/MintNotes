@@ -65,6 +65,7 @@ import {
   packBySerializedSize,
   type SyncIntent
 } from "./features/syncCoordinator";
+import { isAcknowledgedLocalEcho } from "./features/syncChanges";
 import { decryptAvailableLocalObjects, decryptFailureFingerprint } from "./features/vaultLoad";
 import { canMoveDocument, compareDocuments, descendantsOf, isFolderDropZone, nextManualOrder, pinnedDocuments, reorderedSiblings, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "./features/tree";
 import { formatNoteTime } from "./features/noteTime";
@@ -1050,6 +1051,13 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       if (logoutStarted.current) return failedObjectIds;
       const result = await api<{ changes: SyncChange[]; cursor: number; hasMore: boolean }>(`/api/sync?since=${cursor}&limit=500&compact=1`);
       if (logoutStarted.current) return failedObjectIds;
+      const localVersions = await localDb.objects.bulkGet(
+        result.changes.map((change) => localKey(user.id, change.objectId))
+      );
+      if (logoutStarted.current) return failedObjectIds;
+      const localVersionByKey = new Map(
+        localVersions.flatMap((object) => object ? [[object.key, object] as const] : [])
+      );
       const localPuts: LocalEncryptedObject[] = [];
       const purgedIds: string[] = [];
       const outboxDeletes: string[] = [];
@@ -1098,6 +1106,11 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
         } else if (pending) {
           continue;
         }
+        // A successful push leaves its exact encrypted envelope in IndexedDB,
+        // but its change sequence is still unseen because source SSE hints are
+        // deliberately suppressed. Advance the cursor without presenting that
+        // later pull as an update from another device.
+        if (isAcknowledgedLocalEcho(localVersionByKey.get(key), change)) continue;
         let decrypted: VaultObject;
         try {
           decrypted = await cryptoClient.decryptObject(user.id, change.objectId, change.objectType, change.revision, change.ciphertext, change.nonce);

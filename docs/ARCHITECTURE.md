@@ -75,6 +75,7 @@ Locking clears decrypted memory and the tab's refresh envelope but retains the P
 - While an unlocked page is visible, one authenticated same-origin SSE connection carries only a latest-cursor hint. The hint wakes the delta pull but is not itself a correctness boundary. A five-minute cursor check remains active while SSE is healthy; unavailable SSE falls back to 60/120/300-second foreground checks.
 - Object outbox entries are packed into requests of at most 50 objects and 1.5 MiB. Oversized individual envelopes use the compatible single-object route. Attachment chunks still upload before their manifest and owning note.
 - Pull pages scan up to 500 change-log entries and may compact repeated revisions of one object within the page. IndexedDB applies each page with bulk operations, while React receives one indexed merge after the complete pull.
+- Source-client SSE suppression means a client can later encounter its own accepted change during a cursor check. An exact match of object type, revision, ciphertext, nonce, encryption version, and deletion state advances the cursor silently; only a different encrypted version is treated as a remote update.
 - A stale `baseRevision` produces a conflict response. The client preserves both versions rather than selecting a winner by timestamp.
 - Document conflicts become a new local object named with the `（冲突副本）` suffix. Attachment-manifest conflicts preserve the server manifest and leave local encrypted chunks intact for diagnosis.
 - The workspace control record is replaceable UI state rather than user content. Remote workspace state restores during startup but never changes an already open note, editor mode, or sidebar during a live session. A concurrent revision is rebased without creating a visible conflict note.
@@ -84,6 +85,8 @@ Locking clears decrypted memory and the tab's refresh envelope but retains the P
 - Local startup decrypts objects independently and publishes every readable document before network synchronization. A failed object remains encrypted in IndexedDB, including any durable outbox entry, rather than aborting the entire vault load. Dismissing repeated notification for an exact failed revision stores only an object/revision/nonce fingerprint in local metadata; it does not remove the encrypted object, and a changed fingerprint is reported again.
 - Pulled ciphertext is authenticated and decrypted before it replaces the last known-good local object. Failed remote objects are isolated while later revisions may repair them. When the local store is empty or safely repairable, the client resets its cursor and performs a full pull; it creates the initial welcome note only after that pull verifies an empty account.
 - Device clocks are display metadata only and never determine conflict winners.
+
+The generated Service Worker is updated only when its precache script changes. When a waiting worker is detected, the browser fingerprints the currently deployed `sw.js` before prompting. Duplicate lifecycle callbacks and reopen/refresh cycles for the same fingerprint are suppressed for 24 hours; a different fingerprint prompts immediately. Confirming activates the waiting worker and reloads the application through the existing update path.
 
 ## Data storage
 
