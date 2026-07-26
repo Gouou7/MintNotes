@@ -61,6 +61,8 @@ describe("LockScreen keyboard submission", () => {
     roots.push(root);
     await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
 
+    expect(container.querySelector(".auth-subtitle")).toBeNull();
+    expect(container.textContent).not.toContain("当前设备仍保持登录");
     const pin = container.querySelector("input[type='password']") as HTMLInputElement;
     const pinSubmit = button(container, "使用 PIN 解锁");
     const pinRequestSubmit = vi.spyOn(pin.form!, "requestSubmit").mockImplementation(() => undefined);

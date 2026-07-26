@@ -391,7 +391,6 @@ export function SettingsPanel({ user, endpoint, credential, onCredentialChange, 
             </div>
             <div className="about-introduction">
               <p>{t("settings.aboutDescription")}</p>
-              <p className="about-feedback">{t("settings.aboutFeedback")}</p>
             </div>
             <h3>{t("settings.acknowledgements")}</h3>
             <p className="settings-help">{t("settings.aboutHelp")}</p>

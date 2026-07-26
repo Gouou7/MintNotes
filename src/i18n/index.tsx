@@ -103,11 +103,6 @@ const messages = {
     "zh-TW": "正在復原此裝置的加密保險箱…"
   },
   "lock.title": { en: "Vault locked", "zh-CN": "保险箱已锁定", "zh-TW": "保險箱已鎖定" },
-  "lock.subtitle": {
-    en: "Locking cleared plaintext from memory. This device remains logged in.",
-    "zh-CN": "锁定只清除了内存中的明文；当前设备仍保持登录。",
-    "zh-TW": "鎖定只會清除記憶體中的明文；目前裝置仍保持登入。"
-  },
   "lock.devicePin": { en: "Device PIN", "zh-CN": "本机 PIN", "zh-TW": "本機 PIN" },
   "lock.unlocking": { en: "Unlocking…", "zh-CN": "正在解锁…", "zh-TW": "正在解鎖…" },
   "lock.unlockWithPin": { en: "Unlock with PIN", "zh-CN": "使用 PIN 解锁", "zh-TW": "使用 PIN 解鎖" },
@@ -169,9 +164,9 @@ const messages = {
   "settings.permanentDeleteItem": { en: "Permanently delete {title}", "zh-CN": "永久删除 {title}", "zh-TW": "永久刪除 {title}" },
   "settings.setPin": { en: "Set PIN", "zh-CN": "设置 PIN", "zh-TW": "設定 PIN" },
   "settings.pinHelp": {
-    en: "The PIN stays on this device, is required when the app starts, and unlocks manual or optional automatic locks. An ordinary refresh stays unlocked.",
-    "zh-CN": "PIN 仅保存在当前设备；每次启动应用时需要输入，也可解锁手动锁定或可选的自动锁定。普通刷新会保持解锁。",
-    "zh-TW": "PIN 僅儲存在目前裝置；每次啟動應用程式時需要輸入，也可解鎖手動鎖定或選用的自動鎖定。一般重新整理會保持解鎖。"
+    en: "After you set a PIN, it will be required each time the app starts. The PIN applies only to this device.",
+    "zh-CN": "设置 PIN 之后，每次启动将要求输入 PIN；PIN 只应用于当前设备。",
+    "zh-TW": "設定 PIN 之後，每次啟動將要求輸入 PIN；PIN 只套用於目前裝置。"
   },
   "settings.newPin": { en: "New PIN", "zh-CN": "新 PIN", "zh-TW": "新 PIN" },
   "settings.pinMin": { en: "At least 4 characters", "zh-CN": "至少 4 个字符", "zh-TW": "至少 4 個字元" },
@@ -240,11 +235,6 @@ const messages = {
     "zh-CN": "Mint Notes 是一款使用 AI 开发的玩具级项目。目标是提供轻量部署、安全储存、简单使用的笔记体验。本项目支持 PWA 自适应布局，采用端到端加密，你可以安全地将笔记服务部署在远程服务器，并使用你熟悉的 Markdown 语法进行笔记编辑。",
     "zh-TW": "Mint Notes 是一款使用 AI 開發的玩具級專案。目標是提供輕量部署、安全儲存、簡單使用的筆記體驗。本專案支援 PWA 自適應版面配置，採用端對端加密，你可以安全地將筆記服務部署在遠端伺服器，並使用你熟悉的 Markdown 語法進行筆記編輯。"
   },
-  "settings.aboutFeedback": {
-    en: "If you find a bug or have a feature suggestion, please don't tell me—tell your AI!",
-    "zh-CN": "如果你发现 Bug 或者有功能建议，请不要向我提，向你的 AI 提！",
-    "zh-TW": "如果你發現 Bug 或者有功能建議，請不要向我提，向你的 AI 提！"
-  },
   "settings.acknowledgements": { en: "Acknowledgements", "zh-CN": "致谢", "zh-TW": "致謝" },
   "settings.markdownEditor": { en: "Markdown editor", "zh-CN": "Markdown 编辑器", "zh-TW": "Markdown 編輯器" },
   "settings.iconLibrary": { en: "Icon library", "zh-CN": "图标包", "zh-TW": "圖示套件" },
@@ -285,7 +275,8 @@ const messages = {
     "zh-CN": "创建和管理用户账户。管理员无法查看用户的笔记内容。",
     "zh-TW": "建立和管理使用者帳戶。管理員無法查看使用者的筆記內容。"
   },
-  "admin.createPending": { en: "Create pending user", "zh-CN": "创建待激活用户", "zh-TW": "建立待啟用使用者" },
+  "admin.userManagement": { en: "User management", "zh-CN": "用户管理", "zh-TW": "使用者管理" },
+  "admin.createPending": { en: "Add user", "zh-CN": "新增用户", "zh-TW": "新增使用者" },
   "admin.createPendingHelp": {
     en: "After you specify a username and display name, a registration activation code valid for 72 hours is generated.",
     "zh-CN": "指定用户名和显示名称后，将生成一个 72 小时内有效的注册激活码。",

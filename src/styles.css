@@ -406,7 +406,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .about-product p { margin: 0; color: var(--muted); font-size: calc(14px + var(--font-adjust)); }
 .about-introduction { display: grid; gap: 11px; max-width: 720px; }
 .about-introduction p { margin: 0; color: var(--muted); font-size: calc(13px + var(--font-adjust)); line-height: 1.7; }
-.about-introduction p.about-feedback { color: var(--text-strong); font-weight: 600; }
 .about-credits { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
 .about-credits li { display: grid; gap: 3px; }
 .about-credits a { width: fit-content; color: var(--accent-text); font-weight: 650; text-decoration: none; }
@@ -421,6 +420,10 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .admin-heading > span { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 9px; background: color-mix(in srgb, var(--warning-text) 12%, transparent); }
 .admin-heading h3, .admin-heading p { margin: 0; }
 .admin-heading p { margin-top: 3px; font-size: calc(12px + var(--font-adjust)); line-height: 1.4; }
+.admin-user-management { display: grid; gap: 20px; }
+.admin-user-management > h3 { margin-bottom: -5px; }
+.admin-subsection { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.admin-subsection h4 { margin: 0; color: var(--text-strong); font-size: calc(14px + var(--font-adjust)); }
 .activation-result { display: grid; gap: 7px; padding: 12px; border: 1px solid var(--accent); border-radius: 9px; background: var(--accent-soft); }
 .activation-result code { overflow: auto; padding: 8px; background: var(--surface); border-radius: 6px; }
 .user-list { display: grid; gap: 7px; }

@@ -141,6 +141,7 @@ describe("SettingsPanel", () => {
     expect(container.querySelector(".notice")).toBeNull();
     expect(container.textContent).not.toContain("本机 PIN 与自动锁定");
     expect(container.textContent).not.toContain("保存自动锁定设置");
+    expect(container.textContent).toContain("设置 PIN 之后，每次启动将要求输入 PIN；PIN 只应用于当前设备。");
     expect(container.textContent).toContain("重置恢复密钥");
   });
 
@@ -156,6 +157,11 @@ describe("SettingsPanel", () => {
   it("separates administrator settings and removes the encrypted snapshot", async () => {
     const container = await renderSettings();
     expect(container.querySelector(".admin-tab")?.textContent).toContain("管理员设置");
+    await act(async () => button(container, "管理员设置").click());
+    const management = container.querySelector(".admin-user-management");
+    expect(management?.firstElementChild?.textContent).toBe("用户管理");
+    expect([...management!.querySelectorAll(".admin-subsection > h4")].map((heading) => heading.textContent)).toEqual(["新增用户", "现有用户"]);
+    expect(container.textContent).not.toContain("创建待激活用户");
     await act(async () => button(container, "数据迁移").click());
     expect(container.textContent).not.toContain("密文快照");
     const userContainer = await renderSettings({ ...admin, role: "user" });
@@ -167,7 +173,8 @@ describe("SettingsPanel", () => {
     await act(async () => button(container, "关于").click());
     expect(container.querySelector(".about-product")?.textContent).toContain(`Mint Notes版本 ${packageMetadata.displayVersion}`);
     expect(container.querySelector(".about-introduction")?.textContent).toContain("Mint Notes 是一款使用 AI 开发的玩具级项目");
-    expect(container.querySelector(".about-feedback")?.textContent).toBe("如果你发现 Bug 或者有功能建议，请不要向我提，向你的 AI 提！");
+    expect(container.querySelector(".about-feedback")).toBeNull();
+    expect(container.textContent).not.toContain("如果你发现 Bug 或者有功能建议");
     expect(container.textContent).toContain("致谢");
     expect(container.querySelector(".about-credits")?.textContent).toContain("typora-webMarkdown 编辑器");
     expect(container.querySelector(".about-credits")?.textContent).toContain("Lucide React图标包");
