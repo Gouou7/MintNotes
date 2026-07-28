@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-28
+
 ### Added
 
 - Added copy-result feedback and a downloadable plaintext backup to the one-time registration recovery-key screen, which now requires explicit confirmation that the key was stored before entering the vault.
