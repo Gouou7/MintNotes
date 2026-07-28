@@ -284,6 +284,8 @@ Administrators manage activation codes and accounts under **Administrator settin
 
 Install Mint Notes from the browser's PWA/install menu after opening it over HTTPS. The application shell is cached for offline startup, and an unlocked vault can continue editing without network access.
 
+On supported iPhones and iPads, the installed application extends its toolbar background beneath the system status area while keeping controls inside the device safe area. The time, connectivity indicators, and Dynamic Island remain system-owned and visible. Some iOS/WebKit releases may still reserve an opaque strip above Home Screen web applications; Mint Notes cannot draw into that system-owned area. After an application update that changes the installed appearance, fully close and reopen Mint Notes; removing and adding it to the Home Screen again may be necessary if iOS retains older installation metadata.
+
 An application-update prompt appears only when the browser has installed a changed Service Worker and is waiting to activate it. Mint Notes fingerprints the deployed Service Worker content, so restarting the same server build does not create a new version. Duplicate callbacks, refreshes, and reopenings for the same pending version are suppressed for 24 hours; a genuinely different deployed version prompts immediately. Confirm the prompt only after the status bar shows that the latest edit is saved locally. Confirmation activates the waiting version and reloads the application.
 
 The installed application keeps its interface at the device viewport scale. Two-finger pinch gestures do not zoom the application shell; use the text-size setting under **Settings > General** when larger interface text is required.

@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Changed Live Callout headers so clicking the rendered title row reveals the complete editable marker with its `>` quote prefix, places the caret near the clicked title character, and keeps long marker lines usable without covering the body.
+- Changed installed iOS and iPadOS layouts to extend application surfaces beneath the translucent system status area while keeping toolbars, drawers, settings, notifications, editor content, and bottom controls inside device safe areas.
+
+### Fixed
+
+- Fixed login and lock screens being clipped in short mobile landscape viewports instead of allowing the complete form to scroll.
 
 ## [0.6.0] - 2026-07-26
 
