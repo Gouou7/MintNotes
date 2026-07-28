@@ -401,7 +401,6 @@ const messages = {
   "app.addImage": { en: "Add image attachment", "zh-CN": "添加图片附件", "zh-TW": "新增圖片附件" },
   "app.openRight": { en: "Open right sidebar", "zh-CN": "打开右侧栏", "zh-TW": "開啟右側欄" },
   "app.emptyTitle": { en: "Select or create a note", "zh-CN": "选择或创建一篇笔记", "zh-TW": "選擇或建立一篇筆記" },
-  "app.emptyDescription": { en: "All titles, content, and attachments are encrypted in the browser.", "zh-CN": "所有标题、内容和附件都会在浏览器中加密。", "zh-TW": "所有標題、內容和附件都會在瀏覽器中加密。" },
   "app.emptyNoteHint": { en: "Start writing…", "zh-CN": "开始写作…", "zh-TW": "開始寫作…" },
   "app.createdAt": { en: "Created: {date}", "zh-CN": "创建时间: {date}", "zh-TW": "建立時間：{date}" },
   "app.updatedAt": { en: "Modified: {date}", "zh-CN": "修改时间: {date}", "zh-TW": "修改時間：{date}" },

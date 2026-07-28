@@ -6,21 +6,16 @@ import {
   FilePlus2,
   FolderPlus,
   History as HistoryIcon,
-  ImagePlus,
   ListCollapse,
   ListTree,
   LocateFixed,
   LockKeyhole,
-  LockKeyholeOpen,
   PanelLeftClose,
-  PanelLeftOpen,
   PanelRightClose,
-  PanelRightOpen,
   Pin,
   RotateCcw,
   Search,
   Settings,
-  Sparkles,
   Trash2,
   X
 } from "lucide-react";
@@ -118,6 +113,7 @@ import type {
   VaultObject
 } from "../../types";
 import { ContextMenu, draggedDocumentIds, TreeDocumentIcon, TreeLevel, type TreeDropTarget } from "./VaultTree";
+import { EmptyEditor, NoteToolbar } from "./NoteToolbar";
 import { useObjectPersistence } from "./useObjectPersistence";
 import {
   countPendingSyncEntries,
@@ -2393,17 +2389,31 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       <PaneResizer label={t("app.resizeLeft")} side="left" value={preferences.treeWidth} min={TREE_WIDTH_MIN} max={TREE_WIDTH_MAX} onResize={(treeWidth) => setPreferences((current) => ({ ...current, treeWidth }))} />
 
       <main className="note-pane">
-        <header className="note-toolbar">
-          <button className="pane-toggle" onClick={() => preferences.treeCollapsed ? setPreferences({ ...preferences, treeCollapsed: false }) : setTreeOpen(true)} aria-label={t("app.openLeft")}><AppIcon icon={PanelLeftOpen} /></button>
-          {activeDocument ? <input ref={titleInput} className="title-input" value={historyPreview?.payload.title ?? titleDraft} readOnly={Boolean(historyPreview) || activeDocumentLocked} onChange={(event) => setTitleDraft(event.target.value)} onBlur={(event) => {
+        <NoteToolbar
+          titleInput={titleInput}
+          active={Boolean(activeDocument)}
+          title={historyPreview?.payload.title ?? titleDraft}
+          titleReadOnly={Boolean(historyPreview) || activeDocumentLocked}
+          locked={activeDocumentLocked}
+          historyPreview={Boolean(historyPreview)}
+          displayedMode={displayedMode}
+          onOpenLeft={() => preferences.treeCollapsed ? setPreferences({ ...preferences, treeCollapsed: false }) : setTreeOpen(true)}
+          onTitleChange={(event) => setTitleDraft(event.target.value)}
+          onTitleBlur={(event) => {
             if (historyPreview || activeDocumentLocked) return;
+            if (!activeDocument) return;
             const noteId = activeDocument.objectId;
             void commitDocumentTitle(noteId, event.currentTarget.value).then((updated) => {
               if (!updated) setTitleDraft(documentIndexRef.current.get(noteId)?.title ?? "");
             });
-          }} onKeyDown={(event) => { focusEditorFromTitle(event, editorSurface.current); }} aria-label={t("app.noteTitle")} /> : <strong>{t("app.selectNote")}</strong>}
-          <div className="mode-switch" aria-label={t("app.displayMode")}><button disabled={Boolean(historyPreview) || activeDocumentLocked} className={displayedMode === "live" ? "active" : ""} onClick={() => setMode("live")}>{t("app.modeLive")}</button><button disabled={Boolean(historyPreview) || activeDocumentLocked} className={displayedMode === "source" ? "active" : ""} onClick={() => setMode("source")}>{t("app.modeSource")}</button><button disabled={Boolean(historyPreview) || activeDocumentLocked} className={displayedMode === "readonly" ? "active" : ""} onClick={() => setMode("readonly")}>{t("app.modeReading")}</button></div>
-          <input ref={attachmentInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => {
+          }}
+          onTitleKeyDown={(event) => { focusEditorFromTitle(event, editorSurface.current); }}
+          onModeChange={setMode}
+          onToggleLock={() => void toggleActiveNoteLock()}
+          onAddImage={() => attachmentInput.current?.click()}
+          onOpenRight={() => preferences.outlineCollapsed ? setPreferences({ ...preferences, outlineCollapsed: false }) : setOutlineOpen(true)}
+        />
+        <input ref={attachmentInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => {
             const file = event.target.files?.[0];
             const noteId = activeDocument?.objectId;
             event.target.value = "";
@@ -2412,10 +2422,6 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
               if (latest) patchDocument(noteId, { markdown: latest.markdown + attachmentMarkdown(attachment.objectId, attachment.originalName) }, 0);
             }).catch((error) => showMessage(translateError(error, t, "notice.attachmentSaveFailed"), "critical"));
           }} />
-          {activeDocument && !historyPreview && <button className={`toolbar-icon note-lock-toggle ${activeDocumentLocked ? "active" : ""}`} onClick={() => void toggleActiveNoteLock()} title={activeDocumentLocked ? t("app.unlockNote") : t("app.lockNote")} aria-label={activeDocumentLocked ? t("app.unlockNote") : t("app.lockNote")} aria-pressed={activeDocumentLocked}><AppIcon icon={activeDocumentLocked ? LockKeyholeOpen : LockKeyhole} /></button>}
-          {activeDocument && !historyPreview && <button className="toolbar-icon" disabled={activeDocumentLocked} onClick={() => attachmentInput.current?.click()} title={activeDocumentLocked ? t("app.unlockToEdit") : t("app.addImage")} aria-label={t("app.addImage")}><AppIcon icon={ImagePlus} /></button>}
-          <button className="toolbar-icon right-pane-toggle" onClick={() => preferences.outlineCollapsed ? setPreferences({ ...preferences, outlineCollapsed: false }) : setOutlineOpen(true)} aria-label={t("app.openRight")}><AppIcon icon={PanelRightOpen} /></button>
-        </header>
         {historyPreview && <div className="history-preview-banner">
           <span><AppIcon icon={HistoryIcon} size={16} /><strong>{t("history.preview")}</strong><small>{formatNoteTime(historyPreview.item.capturedAt)}</small></span>
           <div>
@@ -2435,7 +2441,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });
             }} onWikiLink={openWikiLink} onImageDrop={async (file) => { const attachment = await addAttachment(activeDocument.objectId, file); return attachmentMarkdown(attachment.objectId, attachment.originalName); }} />
-            : <div className="empty-editor"><div className="empty-icon"><AppIcon icon={Sparkles} size={34} /></div><h2>{t("app.emptyTitle")}</h2><p>{t("app.emptyDescription")}</p></div>}
+            : <EmptyEditor />}
         </div>
         <footer className="status-bar">
           <span className="status-meta" title={activeDocument ? `${t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })} · ${t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })} · ${statusDetail}` : statusDetail}>
