@@ -22,4 +22,15 @@ describe("installed PWA shell", () => {
     expect(styles).toMatch(/\.settings-modal > header\s*\{[^}]*var\(--safe-area-top\)/s);
     expect(styles).toMatch(/\.auth-shell, \.loading-shell\s*\{[^}]*height: 100dvh;[^}]*overflow: auto/s);
   });
+
+  it("keeps responsive sidebar controls available at their intended breakpoints", () => {
+    expect(styles).toContain(".mobile-outline-close, .mobile-tree-close { display: none; }");
+    expect(styles).toMatch(/@media \(max-width: 1100px\)[\s\S]*?\.right-pane-collapse \{ display: none; \}/);
+    expect(styles).toMatch(/@media \(max-width: 720px\)[\s\S]*?\.tree-pane-collapse \{ display: none; \}[\s\S]*?\.mobile-tree-close \{ display: block; \}/);
+    expect(styles).not.toContain(".desktop-collapse { display: none; }");
+  });
+
+  it("places transient notifications below the top toolbar", () => {
+    expect(styles).toMatch(/\.toast-notice\s*\{[^}]*top: calc\(73px \+ var\(--safe-area-top\)\)/s);
+  });
 });

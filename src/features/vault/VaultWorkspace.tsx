@@ -2355,7 +2355,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   return (
     <div className={`app-shell font-${preferences.fontSize} ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
       <aside className="tree-pane">
-        <header className="side-header"><img className="brand-small" src="/icon.svg" alt="" aria-hidden="true" /><strong>Mint Notes</strong><button className="desktop-collapse" onClick={() => setPreferences({ ...preferences, treeCollapsed: true })} title={t("app.collapseDirectory")} aria-label={t("app.collapseDirectory")}><AppIcon icon={PanelLeftClose} /></button><button onClick={() => setTreeOpen(false)} className="mobile-only" aria-label={t("app.closeDirectory")}><AppIcon icon={X} /></button></header>
+        <header className="side-header"><img className="brand-small" src="/icon.svg" alt="" aria-hidden="true" /><strong>Mint Notes</strong><button className="tree-pane-collapse" onClick={() => setPreferences({ ...preferences, treeCollapsed: true })} title={t("app.collapseDirectory")} aria-label={t("app.collapseDirectory")}><AppIcon icon={PanelLeftClose} /></button><button onClick={() => setTreeOpen(false)} className="mobile-tree-close" aria-label={t("app.closeDirectory")}><AppIcon icon={PanelLeftClose} /></button></header>
         {pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>
           <div className="tree-section-label"><AppIcon icon={Pin} size={13} />{t("app.pinned")}</div>
           {pinned.map((entry) => <div className={`tree-row pinned-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""}`} key={`pinned-${entry.objectId}`} role="treeitem" aria-selected={selectedIds.has(entry.objectId)} onContextMenu={(event) => { event.preventDefault(); openTreeContext(entry, event.clientX, event.clientY); }}>
@@ -2454,8 +2454,8 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
             <button className={preferences.rightPanelTab === "outline" ? "active" : ""} aria-current={preferences.rightPanelTab === "outline" ? "page" : undefined} onClick={() => setPreferences({ ...preferences, rightPanelTab: "outline" })}><AppIcon icon={ListTree} size={16} />{t("app.outline")}</button>
             <button className={preferences.rightPanelTab === "history" ? "active" : ""} aria-current={preferences.rightPanelTab === "history" ? "page" : undefined} onClick={() => setPreferences({ ...preferences, rightPanelTab: "history" })}><AppIcon icon={HistoryIcon} size={16} />{t("history.title")}</button>
           </nav>
-          <button className="desktop-collapse" onClick={() => setPreferences({ ...preferences, outlineCollapsed: true })} title={t("app.collapseRight")} aria-label={t("app.collapseRight")}><AppIcon icon={PanelRightClose} /></button>
-          <button onClick={() => setOutlineOpen(false)} className="mobile-outline-close" aria-label={t("app.closeRight")}><AppIcon icon={X} /></button>
+          <button className="right-pane-collapse" onClick={() => setPreferences({ ...preferences, outlineCollapsed: true })} title={t("app.collapseRight")} aria-label={t("app.collapseRight")}><AppIcon icon={PanelRightClose} /></button>
+          <button onClick={() => setOutlineOpen(false)} className="mobile-outline-close" aria-label={t("app.closeRight")}><AppIcon icon={PanelRightClose} /></button>
         </header>
         <section className="right-panel-content" aria-label={preferences.rightPanelTab === "outline" ? t("app.noteOutline") : t("history.list")}>
           {preferences.rightPanelTab === "outline"
