@@ -102,7 +102,7 @@ const messages = {
     "zh-CN": "正在恢复本设备的加密保险箱…",
     "zh-TW": "正在復原此裝置的加密保險箱…"
   },
-  "lock.title": { en: "Vault locked", "zh-CN": "保险箱已锁定", "zh-TW": "保險箱已鎖定" },
+  "lock.title": { en: "Notes locked", "zh-CN": "笔记已锁定", "zh-TW": "筆記已鎖定" },
   "lock.devicePin": { en: "Device PIN", "zh-CN": "本机 PIN", "zh-TW": "本機 PIN" },
   "lock.unlocking": { en: "Unlocking…", "zh-CN": "正在解锁…", "zh-TW": "正在解鎖…" },
   "lock.unlockWithPin": { en: "Unlock with PIN", "zh-CN": "使用 PIN 解锁", "zh-TW": "使用 PIN 解鎖" },

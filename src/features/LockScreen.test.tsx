@@ -61,6 +61,13 @@ describe("LockScreen keyboard submission", () => {
     roots.push(root);
     await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
 
+    expect(container.querySelector(".lock-card h1")?.textContent).toBe(user.displayName);
+    expect(container.querySelector(".lock-card h1")?.getAttribute("title")).toBe(user.displayName);
+    expect(container.querySelector(".lock-status")?.textContent).toContain("笔记已锁定");
+    expect(container.querySelector(".lock-status svg")).not.toBeNull();
+    expect(container.textContent).not.toContain("保险箱已锁定");
+    expect(container.textContent).not.toContain(`@${user.username}`);
+    expect(container.querySelector(".lock-card img:not(.brand-mark)")).toBeNull();
     expect(container.querySelector(".auth-subtitle")).toBeNull();
     expect(container.textContent).not.toContain("当前设备仍保持登录");
     const pin = container.querySelector("input[type='password']") as HTMLInputElement;

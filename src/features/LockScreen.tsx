@@ -70,7 +70,8 @@ export function LockScreen({ user, endpoint, credential, onUnlocked, onTrustExha
   return <main className="auth-shell">
     <section className="auth-card lock-card">
       <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
-      <h1><AppIcon icon={LockKeyhole} />{t("lock.title")}</h1>
+      <h1 className="lock-user-name" title={user.displayName}>{user.displayName}</h1>
+      <p className="lock-status"><AppIcon icon={LockKeyhole} size={18} />{t("lock.title")}</p>
       {!usePassword && hasDevicePin(credential) ? <form onSubmit={unlockWithPin}>
         <label>{t("lock.devicePin")}<input type="password" value={pin} onChange={(event) => setPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" autoFocus required /></label>
         {error && <p className="error">{error}</p>}

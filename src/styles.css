@@ -366,7 +366,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .notice { color: #4e9b58; background: color-mix(in srgb, #4e9b58 14%, var(--surface)); }
 .recovery-card { display: grid; gap: 12px; }
 .lock-card { display: grid; gap: 14px; }
-.lock-card h1 { display: flex; align-items: center; justify-content: center; gap: 9px; }
+.lock-user-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lock-status { display: flex; align-items: center; justify-content: center; gap: 7px; margin: -4px 0 0; color: var(--muted); text-align: center; }
 .lock-card form { margin-top: 4px; }
 .auth-card button.danger-text { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; color: var(--danger); background: transparent; }
 .recovery-card textarea { font-family: ui-monospace, monospace; word-break: break-all; resize: none; }
