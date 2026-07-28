@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed asynchronous local encryption allowing an older save of the same object to overwrite a newer edit in IndexedDB or its synchronization outbox.
+- Fixed conflict, duplicate, and history-restored note copies reusing the source note's attachment ownership; copies now receive independent attachment IDs and keys, while incomplete attachment recovery keeps the local change pending for a safe retry instead of creating a broken copy.
+
 ## [0.7.0] - 2026-07-28
 
 ### Changed

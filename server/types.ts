@@ -16,6 +16,26 @@ export interface SessionContext {
   lastSeenAt: string;
 }
 
+declare const authenticatedScopeBrand: unique symbol;
+
+export interface AuthenticatedScope {
+  readonly userId: string;
+  readonly sessionId: string;
+  readonly endpointId: string;
+  readonly [authenticatedScopeBrand]: true;
+}
+
+export function authenticatedScope(request: FastifyRequest): AuthenticatedScope {
+  if (!request.sessionUser || !request.sessionContext) {
+    throw new Error("Authenticated scope requested before authentication");
+  }
+  return {
+    userId: request.sessionUser.id,
+    sessionId: request.sessionContext.id,
+    endpointId: request.sessionContext.endpointId
+  } as AuthenticatedScope;
+}
+
 declare module "fastify" {
   interface FastifyRequest {
     sessionUser: SessionUser | null;

@@ -43,21 +43,36 @@ pnpm dev:server
 
 | Path | Responsibility |
 | --- | --- |
-| `src/App.tsx` | Unlocked application state, local persistence orchestration, synchronization, conflicts, trash, and lock lifecycle. |
+| `src/App.tsx` | Top-level routing between authentication, device lock, and the unlocked vault. |
 | `src/components/` | Shared presentation primitives, including the standard icon wrapper. |
 | `src/editor/` | `typora-web` adapter, source/live drop handling, read-only rendering, and outline extraction. |
 | `src/features/history.ts` and `src/components/HistoryPanel.tsx` | History payload/deduplication policy and right-panel history presentation. |
+| `src/features/session/` | Session restoration, trusted-device state, cross-tab invalidation, and locked-session commands. |
+| `src/features/vault/` | Unlocked-vault composition, typed state/controller hooks, serialized object persistence, and vault-specific presentation such as the document tree. |
 | `src/i18n/` | Typed English, Simplified Chinese, and Traditional Chinese messages, browser-language resolution, date formatting, and language preference context. |
 | `src/crypto/` | Browser Worker key derivation, password/recovery/device envelopes, AES-GCM object encryption, and attachment chunk encryption. |
 | `src/storage/` | Dexie schema for encrypted IndexedDB objects, chunks, preferences, cursors, and durable outboxes. |
 | `src/features/` | Authentication, settings, administration, file-tree and device-local workspace-state utilities, legacy workspace migration, synchronization coordination and batching, attachments, import/export, and text statistics. |
-| `server/` | Fastify routes, session authentication, user-scoped ciphertext storage and synchronization hints, SQLite schema, and online backup. |
+| `server/index.ts` and `server/app.ts` | Process startup and dependency composition; neither file owns route or SQL behavior. |
+| `server/auth/`, `server/admin/`, `server/attachments/`, and `server/sync/` | Session-derived guards, domain routes, validation, and repositories. User-owned operations receive authenticated scope rather than a request-supplied user ID. |
+| `src/features/vault/VaultWorkspace.tsx` and `server/routes.ts` | Integration coordinators retained while remaining history/account/document workflows are extracted. They are not extension points; touching embedded behavior requires moving it to a focused module first. |
+| Other `server/` modules | SQLite schema, history/trash policies, synchronization events, maintenance jobs, and online backup. |
 | `scripts/` | Crypto Worker integration test and API smoke test. |
 | `patches/` | Maintained `typora-web` compatibility layer for canonical Markdown live editing and public controller extensions. |
 | `deploy/` | Reverse-proxy example. |
 | `docs/` | Task-oriented documentation and its [navigation index](README.md). |
 
 Read [`AGENTS.md`](../AGENTS.md), [Architecture](ARCHITECTURE.md), and the [Security model](SECURITY.md) before changing authentication, encryption, persistence, synchronization, service-worker behavior, or database schemas.
+
+## Module boundaries
+
+`App.tsx`, `VaultApp.tsx`, `server/index.ts`, and `server/app.ts` are composition boundaries. They may select a surface, construct dependencies, register modules, and own shutdown wiring, but they must not accumulate encryption, persistence, synchronization, route-handler, or SQL algorithms.
+
+Client state stays in focused hooks and controllers with explicit dependency objects. Views receive typed state and commands and do not call Dexie, the Crypto Worker, or synchronization APIs directly. Same-object durable writes go through the object persistence controller; attachment-bearing copies go through the shared attachment clone service.
+
+Server HTTP modules validate input and obtain user scope from the authenticated request. Repositories and services receive that scope explicitly. A body, parameter, or query field must never select the owning user. New route families belong in a domain route module instead of the startup or application-composition files.
+
+When a change crosses domains, keep orchestration in the narrowest controller that owns the workflow and expose small typed ports to collaborators. If related behavior is still embedded in a broad module, extract that cohesive behavior and its tests as part of the change rather than growing the broad module.
 
 ## UI icons and branding
 

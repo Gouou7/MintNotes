@@ -46,6 +46,7 @@ Tablet collapses the right tool panel into a drawer. Mobile renders the editor a
 editor change
   -> immediate in-memory document update
   -> 500 ms idle debounce, with a 5 second durability deadline
+  -> enqueue in the per-user, per-object persistence lane
   -> encrypt in browser worker
   -> atomic IndexedDB object + outbox transaction
   -> show "saved locally"
@@ -54,7 +55,7 @@ editor change
   -> show "synced" after acknowledgement
 ```
 
-Network latency is outside the input and local-save path. Page visibility changes, note switches, and ordinary lock operations request an immediate local flush. Confirmed logout is the deliberate destructive exception: it stops new local writes and synchronization, cancels pending save timers without flushing them, and deletes the current user's encrypted cache and outboxes.
+Network latency is outside the input and local-save path. Encryption and IndexedDB commits for one object are serialized even when an earlier Worker request finishes after a newer edit was queued; unrelated objects may still persist concurrently. Completion tokens prevent an older durable write from replacing newer in-memory state. A flush waits for both the debounce timer and any in-flight write for that object. Page visibility changes, note switches, and ordinary lock operations request an immediate local flush. Confirmed logout is the deliberate destructive exception: it stops new local writes and synchronization, waits for in-flight local transactions, cancels pending save timers without flushing them, and then deletes the current user's encrypted cache and outboxes.
 
 Remote pulls do not replace a document while its current plaintext change is still waiting for the local encryption debounce. The later conditional push either commits that locally saved version or follows the normal conflict-copy path if another device changed the server revision.
 
@@ -79,7 +80,7 @@ Locking clears decrypted memory and the tab's refresh envelope but retains the P
 - Pull pages scan up to 500 change-log entries and may compact repeated revisions of one object within the page. IndexedDB applies each page with bulk operations, while React receives one indexed merge after the complete pull.
 - Source-client SSE suppression means a client can later encounter its own accepted change during a cursor check. An exact match of object type, revision, ciphertext, nonce, encryption version, and deletion state advances the cursor silently; only a different encrypted version is treated as a remote update.
 - A stale `baseRevision` produces a conflict response. The client preserves both versions rather than selecting a winner by timestamp.
-- Document conflicts become a new local object named with the `（冲突副本）` suffix. Attachment-manifest conflicts preserve the server manifest and leave local encrypted chunks intact for diagnosis.
+- Document conflicts become a new local object named with the `（冲突副本）` suffix. Before the remote version replaces the source, every attachment referenced by either encrypted document metadata or Markdown is recovered and copied to a new UUID, key, and target-note ownership. If the complete attachment graph cannot be recovered, the original pending object and synchronization cursor are retained for retry rather than creating an incomplete conflict copy. Attachment-manifest conflicts preserve the server manifest and leave local encrypted chunks intact for diagnosis.
 - Explicit note and history copies start unlocked; conflict copies preserve the local source's lock state.
 - Active/open note IDs, editor mode, and sidebar state are device-local preferences and never enter the object outbox. Updated clients ignore the reserved legacy workspace object during pulls and discard any local pending legacy write; a pre-upgrade device may migrate only the legacy record already present before its first network pull.
 - A remote update, lock-state change, or deletion of the actively edited note is committed as ciphertext locally but deferred in the visible editor. Pending local content becomes a conflict copy whose editor session remains mounted; a clean remote version becomes visible after the user leaves the note.
@@ -106,6 +107,8 @@ SQLite schema v2 additively stores per-account history settings, opaque encrypte
 Each attachment has a random UUID and an independently generated AES key stored only inside its vault-key-encrypted manifest. The browser validates supported image signatures, encrypts 1 MiB chunks with unique nonces, commits them to IndexedDB, and then inserts a `webmd-attachment:<uuid>` Markdown reference. Synchronization uploads chunks before the manifest and note revision. Other devices fetch ciphertext chunks lazily and create short-lived Blob URLs only after authenticated decryption and a full SHA-256 check.
 
 Attachment ownership is one note to many attachments. Duplicating a note creates new attachment UUIDs and keys. Moving a note to trash tombstones its manifests without deleting chunks; confirmed manual purge or expiry under the account retention policy removes manifest history and chunks.
+
+The browser entrypoint routes session state only. Session restoration and cross-tab trust live in the session controller; the unlocked vault composes dedicated in-memory model, object-persistence, attachment-copy, tree-view, synchronization, history, and lifecycle responsibilities. On the server, `index.ts` starts the process and `app.ts` composes dependencies. Session authentication, object storage, attachment/admin routes, maintenance, history/trash policy, and synchronization events remain independently owned modules. These boundaries do not change the wire protocol or the browser/server plaintext boundary.
 
 ## Import and export
 

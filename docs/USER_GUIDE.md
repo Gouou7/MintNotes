@@ -200,7 +200,7 @@ Remote changes are applied to the local encrypted database in batches so a large
 
 If one encrypted local or remote object cannot pass decryption and integrity checks, Mint Notes isolates that object instead of aborting the whole vault load. Other readable notes remain visible, the original local ciphertext and any pending edits are retained, and a full server pull is attempted when it is safe to do so. A new welcome note is created only after an online full pull confirms that the account is actually empty. The persistent local warning offers **Do not show this version again**; this records only the exact object revision and nonce in local preferences and does not delete or modify its ciphertext. A changed revision is reported again. Do not clear the site's browser data, because it may contain the only pending encrypted copy.
 
-When two devices update the same object from the same base revision, Mint Notes does not choose a winner by timestamp. It retains the server version and creates a local note named with a localized **conflict copy** suffix for the conflicting document data.
+When two devices update the same object from the same base revision, Mint Notes does not choose a winner by timestamp. It retains the server version and creates a local note named with a localized **conflict copy** suffix for the conflicting document data. Attachments in that copy receive independent IDs and encryption keys, so deleting the original note cannot break the conflict copy. If every referenced attachment cannot currently be recovered, Mint Notes keeps the pending local version and synchronization cursor for retry instead of creating an incomplete copy.
 
 ## Search and sorting
 

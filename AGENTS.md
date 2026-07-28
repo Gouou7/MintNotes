@@ -47,17 +47,23 @@ When documents disagree, use this evidence order: implementation code, automated
 
 ## Module responsibilities
 
-- `src/App.tsx`: unlocked application orchestration, in-memory documents, local-save scheduling, synchronization, conflict copies, tree operations, trash/purge coordination, and lock lifecycle.
+- `src/App.tsx`: top-level session-state routing only. It selects authentication, lock, and unlocked-vault surfaces and must not contain vault persistence, synchronization, document, or attachment algorithms.
 - `src/components/`: shared presentation primitives, including the standard Lucide icon wrapper.
 - `src/editor/`: the `typora-web` adapter, source/live image-drop handling, read-only Markdown rendering, and outline extraction.
 - `src/crypto/`: browser-only Argon2id/HMAC key derivation, key envelopes, authenticated object encryption, and attachment-chunk encryption. Do not move plaintext cryptographic work to the server.
 - `src/storage/`: Dexie schema for encrypted IndexedDB objects, attachment chunks, per-user preferences/cursors, and durable outboxes.
+- `src/features/vault/`: unlocked-vault composition, typed controllers, in-memory indexes, object-write serialization, and vault-specific views. Keep persistence, attachment-copy, synchronization, history, and document commands in their owning modules rather than adding them to `VaultApp.tsx` or a view component.
 - `src/features/`: authentication, settings, administration, attachments, import/export, tree utilities, and language-aware text statistics.
-- `server/`: Fastify authentication, session-derived authorization, opaque encrypted-object storage, SQLite revisions/changes, attachment chunks, account activation, and static PWA delivery.
+- `server/index.ts` and `server/app.ts`: process startup and application composition only. Authentication/session behavior, domain routes, repositories, and maintenance jobs belong in their modules under `server/`.
+- `server/`: Fastify domain routes and services, session-derived authorization, opaque encrypted-object storage, SQLite revisions/changes, attachment chunks, account activation, and static PWA delivery.
 - `scripts/`: built crypto Worker integration and API smoke tests.
 - `patches/`: the project-maintained `typora-web` compatibility layer for public controller methods and canonical Markdown live-editing behavior.
 - `deploy/`: production reverse-proxy example.
 - `docs/`: task-oriented user, development, architecture, security, deployment, and backup documentation, with navigation in `docs/README.md`.
+
+When changing a responsibility currently coordinated by `src/App.tsx`, `src/features/vault/VaultApp.tsx`, `server/index.ts`, or `server/app.ts`, do not add domain logic to those entrypoints. Extend the existing owning module, or first extract a cohesive typed controller/service/repository with focused tests. Do not create a new catch-all orchestration file as a substitute; see `docs/DEVELOPMENT.md` for dependency direction and routing.
+
+`src/features/vault/VaultWorkspace.tsx` and `server/routes.ts` remain integration coordinators for responsibilities that have not yet acquired a narrower owner. Treat them as extraction boundaries, not extension points: a change to embedded synchronization, history, account, or document-command behavior must first move that cohesive behavior into a typed vault hook/controller or server domain route/service with focused tests.
 
 ## Security constraints
 
