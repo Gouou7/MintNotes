@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-28
+
 ### Fixed
 
 - Fixed the empty editor toolbar shifting its mode switch and hiding note actions; Live, Source, Reading, note-lock, and image controls now keep the regular note layout while remaining disabled until a note is selected, and the redundant encryption description has been removed from the welcome state.
