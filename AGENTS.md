@@ -124,10 +124,16 @@ docker compose config
 
 `test:crypto-worker` loads the built Worker from `dist/assets`, and `test:smoke` runs `server-dist/index.js`; run `pnpm build` before both.
 
+Interactive UI verification policy:
+
+- Do not use the Browser, Chrome, or Computer Use tools for routine changes, small UI/style/copy adjustments, or as a default completion check.
+- Use those tools only when the user explicitly requests browser or desktop-app testing, or when the change is genuinely major and release-critical: for example, a broad interaction redesign or a cross-cutting change to the editor lifecycle, service-worker update flow, authentication/unlock flow, synchronization/conflict handling, or attachment durability that cannot be covered adequately by automated checks.
+- For all other changes, run only the fastest relevant non-interactive command-line checks and targeted smoke tests from the list below. Report any remaining visual or interaction checks for the user to perform manually instead of expanding the task into browser or desktop automation.
+
 At minimum:
 
 - Run `pnpm typecheck` and `pnpm test` after TypeScript behavior changes.
 - Also run `pnpm test:crypto-worker` after encryption, key-envelope, Worker, or attachment-crypto changes.
 - Also run `pnpm test:smoke` after authentication, authorization, API, SQLite, activation, password, quota, or purge changes.
 - Run `docker compose config` after Docker, environment, port, volume, or reverse-proxy-related configuration changes.
-- Verify production build and relevant desktop/tablet/mobile flows after editor lifecycle, service-worker, theme, pane, drag/drop, or responsive-layout changes.
+- For major editor-lifecycle, service-worker, theme, pane, drag/drop, or responsive-layout changes, run the production build and identify the relevant desktop/tablet/mobile flows that still require verification; apply the interactive UI verification policy above when deciding whether the Agent or the user performs those checks.
