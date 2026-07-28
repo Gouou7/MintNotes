@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added copy-result feedback and a downloadable plaintext backup to the one-time registration recovery-key screen, which now requires explicit confirmation that the key was stored before entering the vault.
+
+### Changed
+
+- Changed new-note editing so Enter in the title moves focus directly into the Markdown body; empty Live and Source editors show a presentation-only **Start writing…** hint that disappears as soon as the editor receives focus.
+- Refined the note toolbar with a larger rounded title field aligned to the editor-mode control, and simplified the phone status bar to keep synchronization state and word and character counts readable without horizontal scrolling.
+
 ### Fixed
 
 - Fixed asynchronous local encryption allowing an older save of the same object to overwrite a newer edit in IndexedDB or its synchronization outbox.

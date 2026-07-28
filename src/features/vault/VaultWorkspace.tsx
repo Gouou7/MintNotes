@@ -39,7 +39,7 @@ import {
 } from "../../crypto/deviceUnlock";
 import { buildOutline } from "../../editor/outline";
 import { ReadOnlyMarkdown } from "../../editor/ReadOnlyMarkdown";
-import { TyporaEditor } from "../../editor/TyporaEditor";
+import { TyporaEditor, type TyporaEditorHandle } from "../../editor/TyporaEditor";
 import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/wikilinks";
 import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
 import { AttachmentCloneService } from "../attachmentClone";
@@ -68,6 +68,7 @@ import {
   shouldCaptureHistoryBaseline
 } from "../history";
 import { focusAndSelectName } from "../focusName";
+import { focusEditorFromTitle } from "./editorFocus";
 import { countText } from "../wordCount";
 import {
   beginMobileDrawerGesture,
@@ -258,6 +259,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   const documentTree = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const editorArea = useRef<HTMLDivElement>(null);
+  const editorSurface = useRef<TyporaEditorHandle>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const pendingTitleFocus = useRef<string | null>(null);
   const pendingTitleSave = useRef<Promise<boolean>>(Promise.resolve(true));
@@ -2344,7 +2346,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
             void commitDocumentTitle(noteId, event.currentTarget.value).then((updated) => {
               if (!updated) setTitleDraft(documentIndexRef.current.get(noteId)?.title ?? "");
             });
-          }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} aria-label={t("app.noteTitle")} /> : <strong>{t("app.selectNote")}</strong>}
+          }} onKeyDown={(event) => { focusEditorFromTitle(event, editorSurface.current); }} aria-label={t("app.noteTitle")} /> : <strong>{t("app.selectNote")}</strong>}
           <div className="mode-switch" aria-label={t("app.displayMode")}><button disabled={Boolean(historyPreview) || activeDocumentLocked} className={displayedMode === "live" ? "active" : ""} onClick={() => setMode("live")}>{t("app.modeLive")}</button><button disabled={Boolean(historyPreview) || activeDocumentLocked} className={displayedMode === "source" ? "active" : ""} onClick={() => setMode("source")}>{t("app.modeSource")}</button><button disabled={Boolean(historyPreview) || activeDocumentLocked} className={displayedMode === "readonly" ? "active" : ""} onClick={() => setMode("readonly")}>{t("app.modeReading")}</button></div>
           <input ref={attachmentInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => {
             const file = event.target.files?.[0];
@@ -2373,7 +2375,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
             ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
             : displayedMode === "readonly"
             ? <ReadOnlyMarkdown markdown={activeDocument.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : <TyporaEditor key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} attachmentUrls={attachmentUrls} onChange={(markdown) => {
+            : <TyporaEditor ref={editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} onChange={(markdown) => {
               const latest = documentIndexRef.current.get(activeDocument.objectId);
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });
@@ -2382,7 +2384,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
         </div>
         <footer className="status-bar">
           <span className="status-meta" title={activeDocument ? `${t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })} · ${t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })} · ${statusText(saveState, t)}` : statusText(saveState, t)}>
-            {activeDocument && <><span>{t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })}</span><span aria-hidden="true">·</span><span>{t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })}</span><span aria-hidden="true">·</span></>}
+            {activeDocument && <span className="status-note-time"><span>{t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })}</span><span aria-hidden="true">·</span><span>{t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })}</span><span aria-hidden="true">·</span></span>}
             <span className={`status-${saveState}`}>{statusText(saveState, t)}</span>
           </span>
           <span className="status-count" title={t("app.countHelp")}>{t("app.count", { words: statistics.words, characters: statistics.characters })}</span>

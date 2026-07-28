@@ -1,9 +1,12 @@
 import { type FormEvent, useEffect, useState } from "react";
+import { Check, Copy, Download } from "lucide-react";
 import { api } from "../api";
+import { AppIcon } from "../components/AppIcon";
 import { LanguageSelect } from "../components/LanguageSelect";
 import { cryptoClient, type RegistrationCrypto } from "../crypto/client";
 import { translateError, useI18n } from "../i18n";
 import { submitFormOnEnter } from "./formKeyboard";
+import { downloadRecoveryKey } from "./recoveryKey";
 import type { AuthEndpoint, KdfParams, User } from "../types";
 
 interface Props {
@@ -44,6 +47,8 @@ export function AuthScreen({ onUnlocked }: Props) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(false);
   const [newRecovery, setNewRecovery] = useState<{ code: string; user: User; endpoint: AuthEndpoint } | null>(null);
+  const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
+  const [recoveryCopyState, setRecoveryCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   const loadAuthConfig = async (): Promise<AuthConfig | null> => {
     setAuthConfig({ status: "loading" });
@@ -164,6 +169,16 @@ export function AuthScreen({ onUnlocked }: Props) {
     }
   };
 
+  const copyRecoveryKey = async () => {
+    if (!newRecovery) return;
+    try {
+      await navigator.clipboard.writeText(newRecovery.code);
+      setRecoveryCopyState("copied");
+    } catch {
+      setRecoveryCopyState("failed");
+    }
+  };
+
   if (newRecovery) {
     return (
       <main className="auth-shell">
@@ -173,8 +188,22 @@ export function AuthScreen({ onUnlocked }: Props) {
           <h1>{t("auth.recovery.title")}</h1>
           <p>{t("auth.recovery.description")}</p>
           <textarea readOnly value={newRecovery.code} rows={3} />
-          <button onClick={() => navigator.clipboard.writeText(newRecovery.code)}>{t("auth.recovery.copy")}</button>
-          <button className="primary" onClick={() => void onUnlocked(newRecovery.user, newRecovery.endpoint)}>{t("auth.recovery.saved")}</button>
+          <div className="recovery-actions">
+            <button onClick={() => void copyRecoveryKey()}>
+              <AppIcon icon={recoveryCopyState === "copied" ? Check : Copy} size={16} />
+              {recoveryCopyState === "copied" ? t("auth.recovery.copied") : t("auth.recovery.copy")}
+            </button>
+            <button onClick={() => downloadRecoveryKey(newRecovery.user.username, newRecovery.code)}>
+              <AppIcon icon={Download} size={16} />
+              {t("auth.recovery.download")}
+            </button>
+          </div>
+          {recoveryCopyState === "failed" && <p className="error recovery-feedback" role="alert">{t("auth.recovery.copyFailed")}</p>}
+          <label className="recovery-confirm">
+            <input type="checkbox" checked={recoveryConfirmed} onChange={(event) => setRecoveryConfirmed(event.target.checked)} />
+            <span>{t("auth.recovery.confirm")}</span>
+          </label>
+          <button className="primary" disabled={!recoveryConfirmed} onClick={() => void onUnlocked(newRecovery.user, newRecovery.endpoint)}>{t("auth.recovery.saved")}</button>
         </section>
       </main>
     );

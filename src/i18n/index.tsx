@@ -35,6 +35,18 @@ const messages = {
     "zh-TW": "伺服器無法替你復原筆記。請將下方的復原金鑰儲存在密碼管理器或離線安全位置。"
   },
   "auth.recovery.copy": { en: "Copy recovery key", "zh-CN": "复制恢复密钥", "zh-TW": "複製復原金鑰" },
+  "auth.recovery.copied": { en: "Recovery key copied", "zh-CN": "恢复密钥已复制", "zh-TW": "復原金鑰已複製" },
+  "auth.recovery.copyFailed": {
+    en: "The recovery key could not be copied. Select it above and copy it manually.",
+    "zh-CN": "无法复制恢复密钥。请选中上方密钥并手动复制。",
+    "zh-TW": "無法複製復原金鑰。請選取上方金鑰並手動複製。"
+  },
+  "auth.recovery.download": { en: "Download recovery key", "zh-CN": "下载恢复密钥", "zh-TW": "下載復原金鑰" },
+  "auth.recovery.confirm": {
+    en: "I confirm that I stored the recovery key in a secure location.",
+    "zh-CN": "我确认已将恢复密钥保存在安全位置。",
+    "zh-TW": "我確認已將復原金鑰儲存在安全位置。"
+  },
   "auth.recovery.saved": { en: "I have stored it safely", "zh-CN": "我已经安全保存", "zh-TW": "我已安全儲存" },
   "auth.register.title": { en: "Create encrypted account", "zh-CN": "创建加密账户", "zh-TW": "建立加密帳戶" },
   "auth.activate.title": { en: "Register with activation code", "zh-CN": "使用激活码注册", "zh-TW": "使用啟用碼註冊" },
@@ -370,6 +382,7 @@ const messages = {
   "app.openRight": { en: "Open right sidebar", "zh-CN": "打开右侧栏", "zh-TW": "開啟右側欄" },
   "app.emptyTitle": { en: "Select or create a note", "zh-CN": "选择或创建一篇笔记", "zh-TW": "選擇或建立一篇筆記" },
   "app.emptyDescription": { en: "All titles, content, and attachments are encrypted in the browser.", "zh-CN": "所有标题、内容和附件都会在浏览器中加密。", "zh-TW": "所有標題、內容和附件都會在瀏覽器中加密。" },
+  "app.emptyNoteHint": { en: "Start writing…", "zh-CN": "开始写作…", "zh-TW": "開始寫作…" },
   "app.createdAt": { en: "Created: {date}", "zh-CN": "创建时间: {date}", "zh-TW": "建立時間：{date}" },
   "app.updatedAt": { en: "Modified: {date}", "zh-CN": "修改时间: {date}", "zh-TW": "修改時間：{date}" },
   "app.countHelp": { en: "Words are segmented by language and exclude punctuation; characters exclude whitespace but include symbols", "zh-CN": "字词按语言分段，标点不计入；字符排除空白但包含符号", "zh-TW": "字詞依語言分段，標點不計入；字元排除空白但包含符號" },

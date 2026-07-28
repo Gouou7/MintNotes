@@ -17,7 +17,7 @@ Later accounts use one of two paths:
 
 Usernames are 3-48 characters and use lowercase letters, numbers, `.`, `_`, or `-`. A master password must contain at least 10 characters.
 
-Account creation displays a recovery key once. Save it before entering the vault. The server cannot recreate the master password, recovery key, or vault key.
+Account creation displays a recovery key once. Copying it reports whether the browser clipboard accepted the key, and a plaintext download is available as a fallback. Save the key in a password manager or another secure location, then explicitly confirm that it has been stored before entering the vault. The server cannot recreate the master password, recovery key, or vault key.
 
 Use **Forgot password** to reset a master password with the account's recovery key. Without that recovery key, the encrypted vault cannot be recovered.
 
@@ -35,7 +35,7 @@ Status and warning messages, including transient results from Settings and Admin
 
 ## Organize notes and folders
 
-Use the new-note or new-folder icon above the tree to create a root item. A new note opens with its complete default title selected in the title field, ready to replace by typing. A new folder opens an inline name field in the tree with its complete default name selected; press Enter or leave the field to save the name, or press Escape to keep the generated default. The same behavior applies when creating child items from a folder's contextual menu. The right-aligned collapse-all button immediately closes every expanded folder. The adjacent location button clears the current search, expands every ancestor folder, selects the active note, and scrolls its tree row into view. The sort icon opens the sorting choices.
+Use the new-note or new-folder icon above the tree to create a root item. A new note opens with its complete default title selected in the title field, ready to replace by typing. Press Enter after naming the note to save the title and move focus directly into the editable Markdown body. A new folder opens an inline name field in the tree with its complete default name selected; press Enter or leave the field to save the name, or press Escape to keep the generated default. The same behavior applies when creating child items from a folder's contextual menu. The right-aligned collapse-all button immediately closes every expanded folder. The adjacent location button clears the current search, expands every ancestor folder, selects the active note, and scrolls its tree row into view. The sort icon opens the sorting choices.
 
 Creating a note opens it in **Live** mode even if the previously viewed note was in Source or Reading mode, so the new note is immediately editable. A verified empty account receives a welcome note in the interface language active during its first unlock.
 
@@ -64,6 +64,8 @@ The center toolbar provides three modes:
 - **Reading:** render the current Markdown without editing controls.
 
 Markdown remains the canonical note format in every mode. Switching modes does not convert it to a proprietary document format. The right outline is generated from H1-H6 headings and never uploads as separate plaintext metadata.
+
+An empty Live or Source editor shows a **Start writing…** hint at the first editable line. The hint disappears as soon as the editor receives focus, keeping the insertion caret unobstructed, and is presentation only: it is never added to Markdown, history, IndexedDB, synchronization, or exports.
 
 Use the lock button immediately to the left of the image action, or **Lock note** in a single note's contextual menu, to protect it from accidental editing or deletion. Locking the current note saves pending title and editor changes locally first, then shows the note in Reading mode without changing this device's remembered Live/Source/Reading choice. Live and Source are disabled while the note is locked; the title, YAML properties, and **Restore as current** history action are also unavailable. The image action remains visible but disabled to keep the toolbar layout stable. Use the same toolbar or contextual-menu action to unlock it and restore the underlying device-local mode. Changing only the lock state does not change the note's modification time. The file tree and pinned shortcuts show a small lock badge on protected notes.
 
@@ -151,7 +153,7 @@ In Live mode, edit, rename, add, or remove top-level scalar properties and simpl
 
 Nested objects, nested lists, multiline values, anchors, and aliases are shown read-only in the panel and must be edited in Source mode. Invalid YAML is preserved unchanged and shown with a source-editing notice. Notes without frontmatter do not show a properties panel. Mint Notes never evaluates template text such as `{{date}}` and does not automatically create or update `created` or `modified`.
 
-The left side of the status bar shows the active note's creation time, latest modification time, and local save or synchronization state. Moving the caret or changing the selection without changing the title or Markdown does not update the modification time. The right side counts words with language-aware segmentation. Punctuation is excluded from the word count. The character count excludes whitespace but includes symbols.
+On desktop, the left side of the status bar shows the active note's creation time, latest modification time, and local save or synchronization state. On phone-sized screens, it keeps only the save or synchronization state so the essential status remains readable without horizontal scrolling; creation and modification times remain available through the status tooltip on pointer-based browsers. Moving the caret or changing the selection without changing the title or Markdown does not update the modification time. The right side counts words with language-aware segmentation. Punctuation is excluded from the word count. The character count excludes whitespace but includes symbols.
 
 ## Use note history
 

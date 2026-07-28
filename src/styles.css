@@ -139,10 +139,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .side-footer button { font-size: 12px; }
 
 .note-pane { min-width: 0; min-height: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); }
-.note-toolbar { height: calc(57px + var(--safe-area-top)); flex: 0 0 calc(57px + var(--safe-area-top)); display: flex; align-items: center; gap: 9px; padding: calc(8px + var(--safe-area-top)) max(14px, var(--safe-area-right)) 8px max(14px, var(--safe-area-left)); border-bottom: 1px solid var(--border); background: var(--toolbar); z-index: 5; }
-.title-input { min-width: 100px; flex: 1; border: 0; background: transparent; color: var(--text-strong); caret-color: var(--text-strong); font-size: 16px; font-weight: 700; outline: 0; text-overflow: ellipsis; }
+.note-toolbar { --toolbar-control-height: 36px; height: calc(57px + var(--safe-area-top)); flex: 0 0 calc(57px + var(--safe-area-top)); display: flex; align-items: center; gap: 9px; padding: calc(8px + var(--safe-area-top)) max(14px, var(--safe-area-right)) 8px max(14px, var(--safe-area-left)); border-bottom: 1px solid var(--border); background: var(--toolbar); z-index: 5; }
+.title-input { min-width: 100px; height: var(--toolbar-control-height); flex: 1; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 9px; background: transparent; color: var(--text-strong); caret-color: var(--text-strong); font-size: 19px; font-weight: 700; outline: 0; text-overflow: ellipsis; }
+.title-input:focus-visible { outline: 0; background: var(--surface-raised); box-shadow: 0 0 0 2px var(--accent); }
 .title-input:read-only { caret-color: transparent; }
-.mode-switch { display: flex; padding: 3px; border-radius: 9px; background: var(--surface-input); }
+.mode-switch { display: flex; height: var(--toolbar-control-height); box-sizing: border-box; padding: 3px; border-radius: 9px; background: var(--surface-input); }
 .mode-switch button { min-height: 30px; padding: 4px 10px; border: 0; border-radius: 7px; background: transparent; cursor: pointer; font-size: 12px; color: var(--muted); }
 .mode-switch button.active { background: var(--surface-raised); box-shadow: 0 1px 4px rgba(0,0,0,.16); color: var(--accent-text); }
 .mode-switch button:disabled { cursor: default; opacity: .42; }
@@ -173,9 +174,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .live-editor-document { position: relative; display: flex; flex-direction: column; }
 .typora-host { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .typora-host > .typora-web-wrap, .typora-host .typora-web-editor-host { display: flex; flex: 1; flex-direction: column; }
+.typora-host.is-empty::before { content: attr(data-empty-hint); position: absolute; z-index: 2; top: 0; left: 0; padding-left: 10px; border-left: 2px solid var(--accent); color: var(--muted); font-size: calc(15px + var(--font-adjust)); line-height: 1.7; pointer-events: none; }
+.typora-host.is-empty:focus-within::before { display: none; }
 .source-editor { display: block; width: min(900px, calc(100% - 48px)); height: 100%; min-height: 0; margin: 0 auto; padding: 46px 24px 120px; border: 0; resize: none; outline: 0; overflow: auto; color: var(--text); caret-color: var(--text-strong); background: transparent; font: 15px/1.75 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; tab-size: 2; }
 .source-editor { font-size: calc(15px + var(--font-adjust)); }
 .source-editor:focus-visible { outline: none; }
+.source-editor:focus::placeholder { color: transparent; }
 .typora-host > .ProseMirror, .typora-host .ProseMirror { flex: 1; min-height: 100%; outline: none; color: var(--text); font-size: calc(16px + var(--font-adjust)); }
 .typora-host .ProseMirror h1, .typora-host .ProseMirror h2, .typora-host .ProseMirror h3, .typora-host .ProseMirror h4, .typora-host .ProseMirror h5 { color: var(--text-strong); }
 .typora-host .ProseMirror h6, .typora-host .ProseMirror blockquote { color: var(--muted); }
@@ -299,6 +303,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .empty-icon { display: grid; place-items: center; color: var(--accent); }
 .status-bar { height: 28px; flex: 0 0 28px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 13px; border-top: 1px solid var(--border); color: var(--muted); background: var(--sidebar); font-size: 11px; }
 .status-meta { min-width: 0; display: flex; align-items: center; gap: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.status-note-time { min-width: 0; display: flex; align-items: center; gap: 5px; }
 .status-count { flex: 0 0 auto; white-space: nowrap; }
 .status-error { color: var(--danger); }
 .status-offline { color: #d69b3a; }
@@ -365,6 +370,12 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .error { color: var(--danger); background: var(--danger-soft); }
 .notice { color: #4e9b58; background: color-mix(in srgb, #4e9b58 14%, var(--surface)); }
 .recovery-card { display: grid; gap: 12px; }
+.recovery-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.recovery-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; }
+.auth-card label.recovery-confirm { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 9px; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: var(--surface); cursor: pointer; font-weight: 500; line-height: 1.45; }
+.auth-card label.recovery-confirm input { width: 17px; height: 17px; margin: 1px 0 0; padding: 0; accent-color: var(--accent); }
+.recovery-feedback { text-align: left !important; }
+.recovery-card .primary:disabled { cursor: not-allowed; }
 .lock-card { display: grid; gap: 14px; }
 .lock-user-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lock-status { display: flex; align-items: center; justify-content: center; gap: 7px; margin: -4px 0 0; color: var(--muted); text-align: center; }
@@ -530,14 +541,14 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .note-pane { height: 100dvh; }
   .note-toolbar { gap: 3px; padding: calc(7px + var(--safe-area-top)) max(7px, var(--safe-area-right)) 7px max(7px, var(--safe-area-left)); }
   .pane-toggle { display: block; }
-  .title-input { min-width: 0; font-size: 14px; }
+  .title-input { min-width: 0; padding: 0 7px; font-size: 16px; }
   .mode-switch button { padding: 4px 5px; }
   .live-editor-document, .readonly-markdown, .source-editor { width: 100%; padding: 30px max(18px, var(--safe-area-right)) calc(80px + var(--safe-area-bottom)) max(18px, var(--safe-area-left)); }
   .property-row { grid-template-columns: 22px minmax(88px, 34%) minmax(0, 1fr) 28px; gap: 5px; }
   .properties-panel { margin-bottom: 22px; }
-  .status-bar { height: calc(47px + var(--safe-area-bottom)); flex-basis: calc(47px + var(--safe-area-bottom)); flex-wrap: wrap; gap: 1px 8px; padding: 3px max(13px, var(--safe-area-right)) calc(3px + var(--safe-area-bottom)) max(13px, var(--safe-area-left)); }
-  .status-meta { width: 100%; overflow-x: auto; scrollbar-width: none; }
-  .status-meta::-webkit-scrollbar { display: none; }
+  .status-bar { height: calc(34px + var(--safe-area-bottom)); flex-basis: calc(34px + var(--safe-area-bottom)); gap: 8px; padding: 0 max(13px, var(--safe-area-right)) var(--safe-area-bottom) max(13px, var(--safe-area-left)); }
+  .status-note-time { display: none; }
+  .status-meta { width: auto; overflow: hidden; }
   .status-count { margin-left: auto; }
   .history-preview-banner { align-items: stretch; flex-direction: column; padding: 8px; }
   .history-preview-banner > div { overflow-x: auto; padding-bottom: 1px; }
@@ -567,4 +578,5 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .settings-tabs button.admin-tab.active { box-shadow: inset 0 3px 0 color-mix(in srgb, var(--warning-text) 65%, transparent); }
   .user-row { align-items: flex-start; flex-direction: column; }
   .user-actions { justify-content: flex-start; }
+  .recovery-actions { grid-template-columns: 1fr; }
 }

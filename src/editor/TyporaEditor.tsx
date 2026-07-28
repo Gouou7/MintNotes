@@ -1,8 +1,10 @@
 import {
+  forwardRef,
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  useImperativeHandle,
   useEffect,
   useRef,
   useState
@@ -35,16 +37,22 @@ interface Props {
   attachmentUrls?: Map<string, string>;
   onImageDrop?: (file: File, markdownOffset: number) => Promise<string>;
   onWikiLink?: (target: string) => void;
+  emptyHint?: string;
 }
 
-export function TyporaEditor(props: Props) {
-  if (props.mode === "source") return <SourceEditor {...props} />;
-  return <LiveEditor {...props} />;
+export interface TyporaEditorHandle {
+  focus: () => void;
 }
 
-function SourceEditor({ markdown, onChange, onImageDrop }: Props) {
+export const TyporaEditor = forwardRef<TyporaEditorHandle, Props>(function TyporaEditor(props, ref) {
+  if (props.mode === "source") return <SourceEditor {...props} ref={ref} />;
+  return <LiveEditor {...props} ref={ref} />;
+});
+
+const SourceEditor = forwardRef<TyporaEditorHandle, Props>(function SourceEditor({ markdown, onChange, onImageDrop }, ref) {
   const { t } = useI18n();
   const textarea = useRef<HTMLTextAreaElement>(null);
+  useImperativeHandle(ref, () => ({ focus: () => textarea.current?.focus() }), []);
   const drop = async (event: DragEvent<HTMLTextAreaElement>) => {
     const file = Array.from(event.dataTransfer.files).find((entry) => entry.type.startsWith("image/"));
     if (!file || !onImageDrop) return;
@@ -62,13 +70,14 @@ function SourceEditor({ markdown, onChange, onImageDrop }: Props) {
       onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
       onDrop={(event) => void drop(event)}
       aria-label={t("app.markdownSource")}
+      placeholder={t("app.emptyNoteHint")}
       spellCheck={false}
       autoFocus
     />
   );
-}
+});
 
-function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDrop, onWikiLink }: Props) {
+const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDrop, onWikiLink, emptyHint }, ref) {
   const frontmatter = parseFrontmatter(markdown);
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -83,6 +92,7 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
   changeRef.current = onChange;
   frontmatterRef.current = frontmatter;
   wikiLinkRef.current = onWikiLink;
+  useImperativeHandle(ref, () => ({ focus: () => editorRef.current?.focus() }), []);
   for (const [attachmentId, url] of attachmentUrls) attachmentUrlHistoryRef.current.set(url, attachmentId);
 
   useEffect(() => {
@@ -299,7 +309,8 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
       {frontmatter.status !== "absent" && <FrontmatterProperties markdown={markdown} editable onChange={changeProperties} />}
       <div
         ref={hostRef}
-        className="typora-host"
+        className={`typora-host${emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? " is-empty" : ""}`}
+        data-empty-hint={emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? emptyHint : undefined}
         onKeyDownCapture={editEmptyCalloutMarker}
         onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
         onDrop={(event) => void drop(event)}
@@ -320,7 +331,7 @@ function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDro
       </div>
     </div>
   );
-}
+});
 
 interface LiveCalloutOverlay {
   key: string;

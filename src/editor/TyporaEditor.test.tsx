@@ -1,9 +1,9 @@
-import { act } from "react";
+import { act, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditor, type TyporaWebEditor } from "typora-web";
 import { I18nProvider } from "../i18n";
-import { TyporaEditor } from "./TyporaEditor";
+import { TyporaEditor, type TyporaEditorHandle } from "./TyporaEditor";
 
 vi.mock("typora-web", () => ({ createEditor: vi.fn() }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -12,10 +12,40 @@ const attachmentId = "11111111-1111-4111-8111-111111111111";
 
 afterEach(() => {
   document.body.replaceChildren();
+  localStorage.clear();
   vi.clearAllMocks();
 });
 
 describe("TyporaEditor live mode", () => {
+  it("exposes focus and shows a non-persistent hint for an empty note", async () => {
+    localStorage.setItem("webmd-notes-language", "en");
+    const editor = {
+      destroy: vi.fn(),
+      focus: vi.fn(),
+      setMarkdown: vi.fn()
+    } as unknown as TyporaWebEditor;
+    vi.mocked(createEditor).mockReturnValue(editor);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const ref = createRef<TyporaEditorHandle>();
+    const render = (markdown: string) => (
+      <I18nProvider>
+        <TyporaEditor ref={ref} markdown={markdown} mode="live" emptyHint="Start writing…" onChange={vi.fn()} />
+      </I18nProvider>
+    );
+
+    await act(async () => root.render(render("")));
+    expect(container.querySelector(".typora-host.is-empty")?.getAttribute("data-empty-hint")).toBe("Start writing…");
+    act(() => ref.current?.focus());
+    expect(editor.focus).toHaveBeenCalledTimes(2);
+
+    await act(async () => root.render(render("Body")));
+    expect(container.querySelector(".typora-host.is-empty")).toBeNull();
+
+    await act(async () => root.unmount());
+  });
+
   it("updates an attachment image without rebuilding the editor document", async () => {
     const editor = {
       destroy: vi.fn(),

@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api";
+import { cryptoClient } from "../crypto/client";
 import { I18nProvider } from "../i18n";
 import { AuthScreen } from "./AuthScreen";
 
@@ -45,10 +46,19 @@ async function click(target: HTMLButtonElement) {
   await act(async () => { await Promise.resolve(); });
 }
 
+async function setInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  await act(async () => {
+    setter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 afterEach(async () => {
   for (const root of roots.splice(0)) await act(async () => root.unmount());
   document.body.replaceChildren();
   localStorage.clear();
+  Reflect.deleteProperty(navigator, "clipboard");
   vi.clearAllMocks();
 });
 
@@ -114,6 +124,48 @@ describe("AuthScreen account entry points", () => {
     expect(container.querySelector("h1")?.textContent).toBe("创建加密账户");
     expect(container.textContent).toContain("这是服务器上的首个账户，创建后将成为管理员。");
     expect(container.textContent).not.toContain("使用激活码注册");
+  });
+
+  it("requires explicit recovery-key confirmation and reports a successful copy", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const container = await renderAuth({ allowRegistration: false, bootstrapAllowed: true });
+    await click(button(container, "注册"));
+    const textInputs = [...container.querySelectorAll("input:not([type='password'])")] as HTMLInputElement[];
+    const passwordInputs = [...container.querySelectorAll("input[type='password']")] as HTMLInputElement[];
+    await setInputValue(textInputs[0]!, "audit-user");
+    await setInputValue(textInputs[1]!, "Audit user");
+    for (const input of passwordInputs) await setInputValue(input, "AuditPass-2026!");
+    vi.mocked(cryptoClient.createRegistration).mockResolvedValueOnce({
+      authSecret: "auth",
+      kdfSalt: "salt",
+      kdfParams: { algorithm: "argon2id", opsLimit: 3, memLimit: 64, version: 1 },
+      wrappedVaultKey: "wrapped",
+      wrappedVaultNonce: "nonce",
+      recoveryAuthSecret: "recovery-auth",
+      recoveryWrappedVaultKey: "recovery-wrapped",
+      recoveryWrappedVaultNonce: "recovery-nonce",
+      recoveryCode: "recovery-code"
+    });
+    vi.mocked(api).mockResolvedValueOnce({
+      user: { id: "user-id", username: "audit-user", displayName: "Audit user", role: "admin" },
+      endpoint: { id: "endpoint-id", remembered: false }
+    });
+    vi.mocked(cryptoClient.lock).mockResolvedValue(undefined);
+
+    await click(button(container, "创建账户"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(container.querySelector("h1")?.textContent).toBe("保存恢复密钥");
+    expect(button(container, "我已经安全保存").disabled).toBe(true);
+    expect(button(container, "下载恢复密钥")).toBeTruthy();
+    await click(button(container, "复制恢复密钥"));
+    expect(writeText).toHaveBeenCalledWith("recovery-code");
+    expect(button(container, "恢复密钥已复制")).toBeTruthy();
+
+    const confirmation = container.querySelector(".recovery-confirm input") as HTMLInputElement;
+    await act(async () => confirmation.click());
+    expect(button(container, "我已经安全保存").disabled).toBe(false);
   });
 
   it("explains recovery-key password reset", async () => {
