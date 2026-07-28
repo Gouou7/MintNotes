@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Changed new-note editing so Enter in the title moves focus directly into the Markdown body; empty Live and Source editors show a presentation-only **Start writing…** hint that disappears as soon as the editor receives focus.
 - Refined the note toolbar with a larger rounded title field aligned to the editor-mode control, and simplified the phone status bar to keep synchronization state and word and character counts readable without horizontal scrolling.
+- Simplified the status bar to four user-facing synchronization states while retaining detailed local-save tooltips, distinguishing an explicitly offline browser from an unreachable server, and preventing local persistence failures from claiming that the latest change was saved.
 
 ### Fixed
 

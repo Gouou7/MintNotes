@@ -188,13 +188,12 @@ Editing never waits for a network request. After half a second without input, or
 
 The status bar reports:
 
-- **Ready:** no save is currently running.
-- **Saving:** encryption and local persistence are in progress.
-- **Saved locally:** the encrypted local copy is durable and still needs server acknowledgement.
-- **Syncing:** queued ciphertext is being uploaded or remote changes are being pulled.
-- **Synced:** no local object or attachment chunk remains in the outbox.
-- **Offline · saved locally:** editing can continue in the unlocked vault; synchronization resumes after reconnecting.
-- **Synchronization problem:** the local encrypted copy remains available and the app will retry.
+- **Synced:** the initial server check has completed and no local object, attachment chunk, or history snapshot remains in an outbox.
+- **Syncing:** the latest change is durable in encrypted local storage and is waiting for server acknowledgement, queued ciphertext is being uploaded, or remote changes are being pulled.
+- **Sync error · saved locally:** the browser is online but the server request failed or was rejected. The encrypted local copy remains available and the app retries automatically.
+- **Offline · saved locally:** the browser has explicitly detected that the device is offline. Editing can continue in the unlocked vault and synchronization resumes after reconnecting.
+
+Local saving remains separate from network synchronization. While encryption and the atomic IndexedDB object/outbox write are in progress, the visible status does not change. After that durable write completes, it changes to **Syncing**. On pointer-based browsers, the status tooltip distinguishes local saving, waiting for the server, active network synchronization, an unreachable server, and an explicit offline condition. A local encryption or IndexedDB failure instead produces a persistent critical warning and never claims that the latest change was saved locally.
 
 Synchronization pulls remote changes at startup after unlock, after reconnecting, when the page becomes visible, and when the server sends a lightweight change notification. It no longer performs a complete synchronization every five seconds. While the unlocked page is visible, a five-minute safety check covers missed notifications; hidden and locked pages do not poll. Attachment chunks upload before their manifest and owning note update.
 

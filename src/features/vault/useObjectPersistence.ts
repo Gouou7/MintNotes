@@ -8,8 +8,7 @@ import {
 } from "../../storage/database";
 import type { OpenAttachment, OpenDocument, VaultObject } from "../../types";
 import { ObjectWriteCoordinator, prepareObjectForPersistence } from "../objectPersistence";
-
-export type SaveState = "ready" | "saving" | "local" | "syncing" | "synced" | "offline" | "error";
+import type { SaveState } from "./useSyncStatus";
 
 type PersistableObject = OpenDocument | OpenAttachment;
 
@@ -22,7 +21,9 @@ export interface ObjectPersistenceDependencies {
   userId: string;
   generation: { current: number };
   isActive: () => boolean;
-  setSaveState: (state: SaveState) => void;
+  setSaveState: (state: Exclude<SaveState, "error">) => void;
+  onPersistenceError: (objectId: string, error: unknown) => void;
+  onPersistenceSuccess: (objectId: string) => void;
   upsertDocument: (document: OpenDocument) => void;
   upsertAttachment: (attachment: OpenAttachment) => void;
 }
@@ -88,9 +89,13 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
         await localDb.outbox.put(outbox);
       });
       return dependencies.isActive() ? next : object;
+    }).catch((error: unknown) => {
+      if (dependencies.isActive()) dependencies.onPersistenceError(object.objectId, error);
+      throw error;
     });
 
     if (!dependencies.isActive()) return object;
+    dependencies.onPersistenceSuccess(object.objectId);
     if (coordinated.isLatest && options.commitState !== false) {
       if (coordinated.value.kind === "attachment") {
         dependencies.upsertAttachment(coordinated.value as OpenAttachment);

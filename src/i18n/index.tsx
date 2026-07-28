@@ -327,13 +327,33 @@ const messages = {
   "admin.userDeleted": { en: "@{username} permanently deleted", "zh-CN": "@{username} 已永久删除", "zh-TW": "@{username} 已永久刪除" },
   "admin.deleteFailed": { en: "Unable to delete user", "zh-CN": "无法删除用户", "zh-TW": "無法刪除使用者" },
 
-  "app.save.ready": { en: "Ready", "zh-CN": "就绪", "zh-TW": "就緒" },
-  "app.save.saving": { en: "Saving…", "zh-CN": "正在保存…", "zh-TW": "正在儲存…" },
-  "app.save.local": { en: "Saved locally", "zh-CN": "已保存到本地", "zh-TW": "已儲存在本機" },
+  "app.save.saving": { en: "Saving locally…", "zh-CN": "正在保存到本地…", "zh-TW": "正在儲存到本機…" },
+  "app.save.local": { en: "Saved locally · waiting for the server", "zh-CN": "已保存到本地 · 正在等待服务器", "zh-TW": "已儲存在本機 · 正在等待伺服器" },
   "app.save.syncing": { en: "Syncing…", "zh-CN": "正在同步…", "zh-TW": "正在同步…" },
   "app.save.synced": { en: "Synced", "zh-CN": "已同步", "zh-TW": "已同步" },
   "app.save.offline": { en: "Offline · saved locally", "zh-CN": "离线 · 已保存到本地", "zh-TW": "離線 · 已儲存在本機" },
-  "app.save.error": { en: "Synchronization problem", "zh-CN": "同步出现问题", "zh-TW": "同步發生問題" },
+  "app.save.error": { en: "Sync error · saved locally", "zh-CN": "同步错误 · 已保存到本地", "zh-TW": "同步錯誤 · 已儲存在本機" },
+  "app.save.syncingDetail": { en: "Synchronizing with the server…", "zh-CN": "正在与服务器同步…", "zh-TW": "正在與伺服器同步…" },
+  "app.save.offlineDetail": {
+    en: "Device is offline · changes are saved locally and will synchronize after reconnecting",
+    "zh-CN": "设备当前离线 · 修改已保存到本地，联网后自动同步",
+    "zh-TW": "裝置目前離線 · 修改已儲存在本機，連線後自動同步"
+  },
+  "app.save.unreachableDetail": {
+    en: "Unable to connect to the server · changes are saved locally and synchronization will retry automatically",
+    "zh-CN": "无法连接服务器 · 修改已保存到本地，将自动重试",
+    "zh-TW": "無法連線到伺服器 · 修改已儲存在本機，將自動重試"
+  },
+  "app.save.serverErrorDetail": {
+    en: "The server rejected synchronization: {reason} · changes are saved locally and synchronization will retry automatically",
+    "zh-CN": "服务器拒绝同步：{reason} · 修改已保存到本地，将自动重试",
+    "zh-TW": "伺服器拒絕同步：{reason} · 修改已儲存在本機，將自動重試"
+  },
+  "app.save.localFailureDetail": {
+    en: "Local save failed · the latest changes are not yet safely stored",
+    "zh-CN": "本地保存失败 · 最新修改尚未安全保存",
+    "zh-TW": "本機儲存失敗 · 最新修改尚未安全儲存"
+  },
   "app.loadingNotes": { en: "Decrypting local notes…", "zh-CN": "正在解密本地笔记…", "zh-TW": "正在解密本機筆記…" },
   "app.untitled": { en: "Untitled note", "zh-CN": "无标题笔记", "zh-TW": "無標題筆記" },
   "app.newFolder": { en: "New folder", "zh-CN": "新文件夹", "zh-TW": "新資料夾" },
@@ -444,6 +464,11 @@ const messages = {
   "notice.activeRemoteUpdated": { en: "The current note was updated on another device. To avoid interrupting editing, the remote version will be applied after you leave this note.", "zh-CN": "当前笔记在其他设备上已更新；为避免打断编辑，将在离开当前笔记后应用远端版本。", "zh-TW": "目前筆記已在其他裝置上更新；為避免中斷編輯，將在離開目前筆記後套用遠端版本。" },
   "notice.remoteIntegrity": { en: "{count} encrypted server items failed integrity checks. The last readable local versions were retained.", "zh-CN": "{count} 个服务器加密项目未能通过完整性校验；已保留本机最后一次可读版本。", "zh-TW": "{count} 個伺服器加密項目未通過完整性驗證；已保留本機最後一次可讀版本。" },
   "notice.syncFailed": { en: "Synchronization failed. Changes remain saved locally.", "zh-CN": "同步失败，修改仍保存在本地", "zh-TW": "同步失敗，修改仍儲存在本機" },
+  "notice.localSaveFailed": {
+    en: "Local save failed. The latest changes are still open but are not yet safely stored.",
+    "zh-CN": "本地保存失败，最新修改仍在当前页面中，但尚未安全保存。",
+    "zh-TW": "本機儲存失敗，最新修改仍在目前頁面中，但尚未安全儲存。"
+  },
   "notice.localDecryptFailed": { en: "{count} local encrypted items could not be decrypted. Other notes loaded normally. {detail}", "zh-CN": "{count} 个本地加密项目暂时无法解密，其他笔记已正常加载。{detail}", "zh-TW": "{count} 個本機加密項目暫時無法解密，其他筆記已正常載入。{detail}" },
   "notice.pendingDecryptFailed": { en: "{count} contain unsynchronized changes and were retained unchanged.", "zh-CN": "其中 {count} 个含未同步修改，已原样保留。", "zh-TW": "其中 {count} 個包含未同步修改，已原樣保留。" },
   "notice.ciphertextRetained": { en: "The original ciphertext was retained.", "zh-CN": "已保留原始密文。", "zh-TW": "已保留原始密文。" },

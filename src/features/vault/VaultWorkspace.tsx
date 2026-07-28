@@ -118,7 +118,15 @@ import type {
   VaultObject
 } from "../../types";
 import { ContextMenu, draggedDocumentIds, TreeDocumentIcon, TreeLevel, type TreeDropTarget } from "./VaultTree";
-import { useObjectPersistence, type SaveState } from "./useObjectPersistence";
+import { useObjectPersistence } from "./useObjectPersistence";
+import {
+  countPendingSyncEntries,
+  settledSyncPhase,
+  syncStatusDetailText,
+  useSyncStatus,
+  visibleSyncStatusText,
+  type SyncFailure
+} from "./useSyncStatus";
 import { useVaultModel } from "./useVaultModel";
 import { attachmentGraphSignature, useAttachmentUrls } from "./useAttachmentUrls";
 
@@ -170,16 +178,10 @@ function makeDocument(
   };
 }
 
-function statusText(state: SaveState, t: Translate) {
-  return ({
-    ready: t("app.save.ready"),
-    saving: t("app.save.saving"),
-    local: t("app.save.local"),
-    syncing: t("app.save.syncing"),
-    synced: t("app.save.synced"),
-    offline: t("app.save.offline"),
-    error: t("app.save.error")
-  } satisfies Record<SaveState, string>)[state];
+function synchronizationFailure(error: unknown, t: Translate): SyncFailure {
+  return error instanceof ApiError
+    ? { kind: "server", reason: translateError(error, t, "notice.syncFailed") }
+    : { kind: "unreachable" };
 }
 
 export function VaultWorkspace({ user, endpoint, credential, onCredentialChange, onDisplayNameChange, onLocked }: {
@@ -224,10 +226,17 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [preferences, setPreferences] = useState<UiPreferences>(() => ({ ...DEFAULT_PREFERENCES, language: languagePreference }));
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
-  const [saveState, setSaveState] = useState<SaveState>(navigator.onLine ? "ready" : "offline");
+  const {
+    status: syncStatus,
+    setPhase: setSaveState,
+    setSyncError,
+    markLocalFailure,
+    markLocalSuccess
+  } = useSyncStatus(navigator.onLine);
   const [message, setMessage] = useState<ToastNotice | null>(null);
   const messageSequence = useRef(0);
   const [loading, setLoading] = useState(true);
+  const [loadFailure, setLoadFailure] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ objectId: string; x: number; y: number } | null>(null);
   const [purging, setPurging] = useState(false);
   const [historySettings, setHistorySettings] = useState<HistorySettings>(DEFAULT_HISTORY_SETTINGS);
@@ -521,6 +530,11 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
     generation,
     isActive: () => !logoutStarted.current,
     setSaveState,
+    onPersistenceError: (objectId) => {
+      markLocalFailure(objectId);
+      showMessage(t("notice.localSaveFailed"), "critical");
+    },
+    onPersistenceSuccess: markLocalSuccess,
     upsertDocument,
     upsertAttachment
   });
@@ -563,7 +577,11 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       saveDeadlines.current.delete(document.objectId);
       if (logoutStarted.current) return;
       const current = documentIndexRef.current.get(document.objectId);
-      if (current) void persistObject(current).then(() => requestPush("editor"));
+      if (current) {
+        void persistObject(current)
+          .then(() => requestPush("editor"))
+          .catch(() => undefined);
+      }
     }, wait));
   };
 
@@ -1135,9 +1153,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       setSaveState("offline");
       return;
     }
-    const queued = await localDb.outbox.where("userId").equals(user.id).count()
-      + await localDb.attachmentOutbox.where("userId").equals(user.id).count()
-      + await localDb.historyOutbox.where("userId").equals(user.id).count();
+    const queued = await countPendingSyncEntries(user.id);
     if (logoutStarted.current) return;
     if (!intent.pull && (!intent.push || queued === 0)) return;
 
@@ -1154,14 +1170,13 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       }
       if (intent.push) await pushPending();
       if (logoutStarted.current) return;
-      const remaining = await localDb.outbox.where("userId").equals(user.id).count()
-        + await localDb.attachmentOutbox.where("userId").equals(user.id).count()
-        + await localDb.historyOutbox.where("userId").equals(user.id).count();
+      const remaining = await countPendingSyncEntries(user.id);
       setSaveState(remaining ? "local" : "synced");
     } catch (error) {
       if (logoutStarted.current) return;
-      setSaveState(navigator.onLine ? "error" : "offline");
-      showMessage(translateError(error, t, "notice.syncFailed"));
+      if (navigator.onLine) setSyncError(synchronizationFailure(error, t));
+      else setSaveState("offline");
+      showMessage(error instanceof ApiError ? translateError(error, t, "notice.syncFailed") : t("notice.syncFailed"));
       requestFallbackPull();
     } finally {
       if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
@@ -1393,13 +1408,19 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
             openNoteIds: []
           }));
         }
+        if (initialPullError) {
+          if (navigator.onLine) setSyncError(synchronizationFailure(initialPullError, t));
+          else setSaveState("offline");
+        } else {
+          const remaining = await countPendingSyncEntries(user.id);
+          setSaveState(settledSyncPhase(navigator.onLine, remaining));
+        }
         setWorkspaceLoaded(true);
         setLoading(false);
         requestPush("structural");
       } catch (error) {
         if (cancelled || logoutStarted.current) return;
-        showMessage(translateError(error, t, "notice.openDatabaseFailed"), "critical");
-        setSaveState("error");
+        setLoadFailure(translateError(error, t, "notice.openDatabaseFailed"));
         setLoading(false);
       }
     })();
@@ -2317,6 +2338,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   };
 
   if (loading) return <main className="loading-shell"><div className="spinner" /><p>{t("app.loadingNotes")}</p></main>;
+  if (loadFailure) return <main className="loading-shell" role="alert"><p>{loadFailure}</p></main>;
 
   const contextDocument = contextMenu ? documentIndexRef.current.get(contextMenu.objectId) ?? null : null;
   const contextDocuments = contextDocument
@@ -2326,6 +2348,10 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
     "--tree-width": `${preferences.treeWidth}px`,
     "--outline-width": `${preferences.outlineWidth}px`
   } as CSSProperties;
+  const statusLabel = syncStatus.failedLocalObjectIds.size
+    ? null
+    : visibleSyncStatusText(syncStatus.visible, t);
+  const statusDetail = syncStatusDetailText(syncStatus, t);
   return (
     <div className={`app-shell font-${preferences.fontSize} ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
       <aside className="tree-pane">
@@ -2412,9 +2438,9 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
             : <div className="empty-editor"><div className="empty-icon"><AppIcon icon={Sparkles} size={34} /></div><h2>{t("app.emptyTitle")}</h2><p>{t("app.emptyDescription")}</p></div>}
         </div>
         <footer className="status-bar">
-          <span className="status-meta" title={activeDocument ? `${t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })} · ${t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })} · ${statusText(saveState, t)}` : statusText(saveState, t)}>
-            {activeDocument && <span className="status-note-time"><span>{t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })}</span><span aria-hidden="true">·</span><span>{t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })}</span><span aria-hidden="true">·</span></span>}
-            <span className={`status-${saveState}`}>{statusText(saveState, t)}</span>
+          <span className="status-meta" title={activeDocument ? `${t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })} · ${t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })} · ${statusDetail}` : statusDetail}>
+            {activeDocument && <span className="status-note-time"><span>{t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })}</span><span aria-hidden="true">·</span><span>{t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })}</span>{statusLabel && <span aria-hidden="true">·</span>}</span>}
+            {statusLabel && <span className={`status-${syncStatus.visible}`}>{statusLabel}</span>}
           </span>
           <span className="status-count" title={t("app.countHelp")}>{t("app.count", { words: statistics.words, characters: statistics.characters })}</span>
         </footer>
