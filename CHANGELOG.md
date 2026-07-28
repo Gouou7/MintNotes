@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fixed manual tree sorting lacking a clear between-row drop target and moving same-position single or multi-item drops; a connected mint insertion marker now distinguishes before/after placement from full-row folder drops.
 - Fixed asynchronous local encryption allowing an older save of the same object to overwrite a newer edit in IndexedDB or its synchronization outbox.
 - Fixed conflict, duplicate, and history-restored note copies reusing the source note's attachment ownership; copies now receive independent attachment IDs and keys, while incomplete attachment recovery keeps the local change pending for a safe retry instead of creating a broken copy.
 

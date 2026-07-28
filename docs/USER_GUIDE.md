@@ -44,7 +44,7 @@ Note and folder names share one namespace within each directory. Creating anothe
 Items can be dragged:
 
 - Drop a note or folder into the middle of a folder row to move it inside. The destination folder is highlighted while it is ready to accept the item.
-- In **Manual** sorting, drop near the upper or lower edge of a row to reorder siblings.
+- In **Manual** sorting, drag near the upper or lower edge of a row to show a connected mint insertion marker, then drop to reorder siblings at that exact position. Dropping an item or selection back onto its current position leaves the order unchanged.
 - In A-Z, creation-time, or modification-time sorting, dragging can still change the parent folder but does not override the selected sort order.
 
 Click an item to select it. Hold `Ctrl` on Windows/Linux or `Command` on macOS while clicking to add or remove individual notes and folders from the selection. Hold `Shift` while clicking to select a continuous range in the currently visible tree order; collapsed descendants are not part of that range. Right-click any selected row to move, drag, pin, duplicate, export, or trash the selection as a batch. Pinned notes and folders also appear as shortcuts in the **Pinned** section above the file tree and can be unpinned from either location. Their original position and folder hierarchy do not change. When both a folder and one of its descendants are selected, recursive operations process that subtree only once. Opening, renaming, and creating children remain single-item actions.

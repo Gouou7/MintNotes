@@ -75,6 +75,33 @@ export function isFolderDropZone(kind: OpenDocument["kind"], ratio: number): boo
   return kind === "folder" && ratio >= .25 && ratio <= .75;
 }
 
+export type TreeDropPosition = "before" | "inside" | "after";
+
+export function treeDropPosition(
+  kind: OpenDocument["kind"],
+  ratio: number,
+  manualSorting: boolean
+): TreeDropPosition | null {
+  if (isFolderDropZone(kind, ratio)) return "inside";
+  if (!manualSorting) return null;
+  return ratio < .5 ? "before" : "after";
+}
+
+export function resolveManualDropBeforeId(
+  documents: OpenDocument[],
+  movingIds: ReadonlySet<string>,
+  parentId: string | null,
+  beforeId: string | null
+): string | null {
+  if (!beforeId || !movingIds.has(beforeId)) return beforeId;
+  const siblings = documents
+    .filter((entry) => !entry.deleted && entry.parentId === parentId)
+    .sort(compareDocuments("manual"));
+  const targetIndex = siblings.findIndex((entry) => entry.objectId === beforeId);
+  if (targetIndex < 0) return null;
+  return siblings.slice(targetIndex).find((entry) => !movingIds.has(entry.objectId))?.objectId ?? null;
+}
+
 export function visibleTreeOrder(
   documents: OpenDocument[],
   expanded: Set<string>,
@@ -126,12 +153,24 @@ export function reorderedSiblings(
   parentId: string | null,
   beforeId: string | null
 ): Array<{ objectId: string; parentId: string | null; manualOrder: number }> {
-  const moving = documents.find((entry) => entry.objectId === objectId);
-  if (!moving) return [];
+  return reorderedSiblingBatch(documents, [objectId], parentId, beforeId);
+}
+
+export function reorderedSiblingBatch(
+  documents: OpenDocument[],
+  objectIds: string[],
+  parentId: string | null,
+  beforeId: string | null
+): Array<{ objectId: string; parentId: string | null; manualOrder: number }> {
+  const moving = objectIds
+    .map((objectId) => documents.find((entry) => entry.objectId === objectId))
+    .filter(Boolean) as OpenDocument[];
+  if (!moving.length) return [];
+  const movingIds = new Set(moving.map((entry) => entry.objectId));
   const siblings = documents
-    .filter((entry) => !entry.deleted && entry.parentId === parentId && entry.objectId !== objectId)
+    .filter((entry) => !entry.deleted && entry.parentId === parentId && !movingIds.has(entry.objectId))
     .sort(compareDocuments("manual"));
-  const index = beforeId ? Math.max(0, siblings.findIndex((entry) => entry.objectId === beforeId)) : siblings.length;
-  siblings.splice(index < 0 ? siblings.length : index, 0, moving);
+  const beforeIndex = beforeId ? siblings.findIndex((entry) => entry.objectId === beforeId) : -1;
+  siblings.splice(beforeIndex >= 0 ? beforeIndex : siblings.length, 0, ...moving);
   return siblings.map((entry, order) => ({ objectId: entry.objectId, parentId, manualOrder: (order + 1) * 1024 }));
 }

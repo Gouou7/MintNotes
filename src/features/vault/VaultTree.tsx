@@ -8,11 +8,18 @@ import {
   canMoveDocument,
   isFolderDropZone,
   lockedNoteInSelection,
-  selectionRoots
+  selectionRoots,
+  treeDropPosition,
+  type TreeDropPosition
 } from "../tree";
 import { isLockedNote } from "../noteLock";
 
 const MULTI_DRAG_TYPE = "application/x-webmd-objects";
+
+export interface TreeDropTarget {
+  objectId: string;
+  position: TreeDropPosition;
+}
 
 export function draggedDocumentIds(dataTransfer: DataTransfer): string[] {
   const multiple = dataTransfer.getData(MULTI_DRAG_TYPE);
@@ -37,29 +44,34 @@ export function TreeDocumentIcon({ document }: { document: OpenDocument }) {
   </span>;
 }
 
-export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, expanded, dropTargetId, renamingDocumentId, onDropTarget, onSelect, onContext, onDragSelection, onMove, onRenameCommit, onRenameCancel }: {
+export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, expanded, manualSorting, draggingIds, dropTarget, renamingDocumentId, onDropTarget, onSelect, onContext, onDragSelection, onDragFinish, onMove, onRenameCommit, onRenameCancel }: {
   childrenByParent: Map<string | null, OpenDocument[]>;
   parentId: string | null;
   activeId: string | null;
   selectedIds: Set<string>;
   expanded: Set<string>;
-  dropTargetId: string | null;
+  manualSorting: boolean;
+  draggingIds: ReadonlySet<string>;
+  dropTarget: TreeDropTarget | null;
   renamingDocumentId: string | null;
-  onDropTarget: (objectId: string | null) => void;
+  onDropTarget: (target: TreeDropTarget | null) => void;
   onSelect: (document: OpenDocument, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onContext: (document: OpenDocument, x: number, y: number) => void;
   onDragSelection: (document: OpenDocument) => string[];
+  onDragFinish: () => void;
   onMove: (ids: string[], parentId: string | null, beforeId?: string | null) => void;
   onRenameCommit: (objectId: string, value: string) => void;
   onRenameCancel: () => void;
 }) {
   const { t } = useI18n();
   const children = childrenByParent.get(parentId) ?? [];
-  return children.map((entry, entryIndex) => (
-    <div className="tree-node" key={entry.objectId}>
+  return children.map((entry, entryIndex) => {
+    const dropPosition = dropTarget?.objectId === entry.objectId ? dropTarget.position : null;
+    return <div className="tree-node" key={entry.objectId}>
       <div
-        className={`tree-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""} ${dropTargetId === entry.objectId ? "drop-target" : ""}`}
+        className={`tree-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""} ${dropPosition === "inside" ? "drop-target" : ""} ${dropPosition === "before" ? "drop-before" : ""} ${dropPosition === "after" ? "drop-after" : ""}`}
         data-object-id={entry.objectId}
+        data-drop-position={dropPosition ?? undefined}
         role="treeitem"
         aria-selected={selectedIds.has(entry.objectId)}
         draggable={!entry.deleted && renamingDocumentId !== entry.objectId}
@@ -69,19 +81,23 @@ export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, e
           event.dataTransfer.setData("application/x-webmd-object", ids[0] ?? entry.objectId);
           event.dataTransfer.effectAllowed = "move";
         }}
-        onDragEnd={() => onDropTarget(null)}
+        onDragEnd={() => { onDropTarget(null); onDragFinish(); }}
         onDragOver={(event) => {
           if (!event.dataTransfer.types.includes(MULTI_DRAG_TYPE) && !event.dataTransfer.types.includes("application/x-webmd-object")) return;
           event.preventDefault();
           const rect = event.currentTarget.getBoundingClientRect();
           const ratio = (event.clientY - rect.top) / rect.height;
-          onDropTarget(isFolderDropZone(entry.kind, ratio) ? entry.objectId : null);
+          const position = treeDropPosition(entry.kind, ratio, manualSorting);
+          onDropTarget(position && !(position !== "inside" && draggingIds.has(entry.objectId))
+            ? { objectId: entry.objectId, position }
+            : null);
         }}
-        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTargetId === entry.objectId) onDropTarget(null); }}
+        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget?.objectId === entry.objectId) onDropTarget(null); }}
         onDrop={(event) => {
           event.preventDefault();
           event.stopPropagation();
           onDropTarget(null);
+          onDragFinish();
           const ids = draggedDocumentIds(event.dataTransfer);
           if (!ids.length) return;
           const rect = event.currentTarget.getBoundingClientRect();
@@ -98,9 +114,9 @@ export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, e
             : <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span className="tree-spacer" /><TreeDocumentIcon document={entry} /><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>}
         <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); onContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={17} /></button>
       </div>
-      {entry.kind === "folder" && expanded.has(entry.objectId) && <div className="tree-children" role="group"><TreeLevel childrenByParent={childrenByParent} parentId={entry.objectId} activeId={activeId} selectedIds={selectedIds} expanded={expanded} dropTargetId={dropTargetId} renamingDocumentId={renamingDocumentId} onDropTarget={onDropTarget} onSelect={onSelect} onContext={onContext} onDragSelection={onDragSelection} onMove={onMove} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} /></div>}
+      {entry.kind === "folder" && expanded.has(entry.objectId) && <div className="tree-children" role="group"><TreeLevel childrenByParent={childrenByParent} parentId={entry.objectId} activeId={activeId} selectedIds={selectedIds} expanded={expanded} manualSorting={manualSorting} draggingIds={draggingIds} dropTarget={dropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={onDropTarget} onSelect={onSelect} onContext={onContext} onDragSelection={onDragSelection} onDragFinish={onDragFinish} onMove={onMove} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} /></div>}
     </div>
-  )) as ReactNode;
+  }) as ReactNode;
 }
 
 export function ContextMenu({ document, selection, documents, position, onClose, onSelect, onRename, onToggleLock, onMove, onCreate, onDuplicate, onExport, onPin, onDelete, onRestore, onPurge }: {

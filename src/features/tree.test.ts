@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OpenDocument } from "../types";
-import { canMoveDocument, compareDocuments, isFolderDropZone, lockedNoteInSelection, pinnedDocuments, reorderedSiblings, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle, visibleTreeOrder } from "./tree";
+import { canMoveDocument, compareDocuments, isFolderDropZone, lockedNoteInSelection, pinnedDocuments, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeDropPosition, treeSelectionRange, uniqueSiblingTitle, visibleTreeOrder } from "./tree";
 
 function doc(objectId: string, parentId: string | null, manualOrder: number, kind: "note" | "folder" = "note"): OpenDocument {
   return { objectId, parentId, manualOrder, kind, title: objectId, markdown: "", tags: [], favorite: false, locked: false, deleted: false, createdAt: "2026-01-01", updatedAt: "2026-01-01", attachmentIds: [], schemaVersion: 2, serverRevision: 0, dirty: false };
@@ -16,6 +16,7 @@ describe("tree operations", () => {
   it("renumbers manual siblings deterministically", () => {
     const documents = [doc("a", null, 1024), doc("b", null, 2048), doc("c", null, 3072)];
     expect(reorderedSiblings(documents, "c", null, "a").map((entry) => entry.objectId)).toEqual(["c", "a", "b"]);
+    expect(reorderedSiblings(documents, "a", null, "missing").map((entry) => entry.objectId)).toEqual(["b", "c", "a"]);
     expect(documents.slice().sort(compareDocuments("manual")).map((entry) => entry.objectId)).toEqual(["a", "b", "c"]);
   });
 
@@ -88,5 +89,31 @@ describe("tree operations", () => {
     expect(isFolderDropZone("folder", .5)).toBe(true);
     expect(isFolderDropZone("folder", .1)).toBe(false);
     expect(isFolderDropZone("note", .5)).toBe(false);
+  });
+
+  it("describes manual insertion positions separately from inside-folder drops", () => {
+    expect(treeDropPosition("folder", .1, true)).toBe("before");
+    expect(treeDropPosition("folder", .5, true)).toBe("inside");
+    expect(treeDropPosition("folder", .9, true)).toBe("after");
+    expect(treeDropPosition("note", .1, true)).toBe("before");
+    expect(treeDropPosition("note", .9, true)).toBe("after");
+    expect(treeDropPosition("note", .5, false)).toBeNull();
+    expect(treeDropPosition("folder", .5, false)).toBe("inside");
+  });
+
+  it("keeps drops onto the moving selection anchored at its original position", () => {
+    const documents = [
+      doc("a", null, 1024),
+      doc("b", null, 2048),
+      doc("c", null, 3072)
+    ];
+    expect(resolveManualDropBeforeId(documents, new Set(["b"]), null, "b")).toBe("c");
+    expect(resolveManualDropBeforeId(documents, new Set(["c"]), null, "c")).toBeNull();
+    expect(resolveManualDropBeforeId(documents, new Set(["a", "b"]), null, "a")).toBe("c");
+    expect(resolveManualDropBeforeId(documents, new Set(["a"]), null, "c")).toBe("c");
+    const anchoredBeforeId = resolveManualDropBeforeId(documents, new Set(["b"]), null, "b");
+    expect(reorderedSiblings(documents, "b", null, anchoredBeforeId).map((entry) => entry.objectId)).toEqual(["a", "b", "c"]);
+    const batchBeforeId = resolveManualDropBeforeId(documents, new Set(["a", "b"]), null, "a");
+    expect(reorderedSiblingBatch(documents, ["a", "b"], null, batchBeforeId).map((entry) => entry.objectId)).toEqual(["a", "b", "c"]);
   });
 });

@@ -55,7 +55,7 @@ import {
 } from "../syncCoordinator";
 import { isAcknowledgedLocalEcho } from "../syncChanges";
 import { decryptAvailableLocalObjects, decryptFailureFingerprint, normalizeVaultObject } from "../vaultLoad";
-import { canMoveDocument, compareDocuments, descendantsOf, isFolderDropZone, lockedNoteInSelection, nextManualOrder, pinnedDocuments, reorderedSiblings, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "../tree";
+import { canMoveDocument, compareDocuments, descendantsOf, isFolderDropZone, lockedNoteInSelection, nextManualOrder, pinnedDocuments, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "../tree";
 import { derivedNoteLockState, effectiveEditorMode, isLockedNote } from "../noteLock";
 import { formatNoteTime } from "../noteTime";
 import {
@@ -117,7 +117,7 @@ import type {
   User,
   VaultObject
 } from "../../types";
-import { ContextMenu, draggedDocumentIds, TreeDocumentIcon, TreeLevel } from "./VaultTree";
+import { ContextMenu, draggedDocumentIds, TreeDocumentIcon, TreeLevel, type TreeDropTarget } from "./VaultTree";
 import { useObjectPersistence, type SaveState } from "./useObjectPersistence";
 import { useVaultModel } from "./useVaultModel";
 import { attachmentGraphSignature, useAttachmentUrls } from "./useAttachmentUrls";
@@ -216,7 +216,8 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   const [mode, setMode] = useState<EditorMode>("live");
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [folderDropTarget, setFolderDropTarget] = useState<string | null>(null);
+  const [treeDraggingIds, setTreeDraggingIds] = useState<Set<string>>(new Set());
+  const [treeDropTarget, setTreeDropTarget] = useState<TreeDropTarget | null>(null);
   const [renamingDocumentId, setRenamingDocumentId] = useState<string | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
@@ -1668,10 +1669,23 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   };
 
   const beginTreeDrag = (entry: OpenDocument): string[] => {
-    if (selectedIds.has(entry.objectId)) return selectionRoots(documentsRef.current, selectedIds);
-    setSelectedIds(new Set([entry.objectId]));
-    selectionAnchor.current = entry.objectId;
-    return [entry.objectId];
+    const ids = selectedIds.has(entry.objectId)
+      ? selectionRoots(documentsRef.current, selectedIds)
+      : [entry.objectId];
+    if (!selectedIds.has(entry.objectId)) {
+      setSelectedIds(new Set(ids));
+      selectionAnchor.current = entry.objectId;
+    }
+    setTreeDraggingIds(new Set(ids.flatMap((id) => [...descendantsOf(documentsRef.current, id)])));
+    return ids;
+  };
+
+  const updateTreeDropTarget = (target: TreeDropTarget | null) => {
+    setTreeDropTarget((current) => (
+      current?.objectId === target?.objectId && current?.position === target?.position
+        ? current
+        : target
+    ));
   };
 
   const setDeletedMany = async (objectIds: string[], deleted: boolean) => {
@@ -1798,8 +1812,23 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       const title = (duplicateTitle ?? destinationConflict)!.title;
       return showMessage(t("notice.batchMoveNameConflict", { title }));
     }
-    if (beforeId && movingTreeIds.has(beforeId)) beforeId = null;
-    for (const entry of moving) await moveDocument(entry.objectId, parentId, beforeId);
+    if (preferences.sortMode === "manual") {
+      beforeId = resolveManualDropBeforeId(documentsRef.current, movingTreeIds, parentId, beforeId);
+      let changed = false;
+      for (const change of reorderedSiblingBatch(documentsRef.current, roots, parentId, beforeId)) {
+        const document = documentsRef.current.find((entry) => entry.objectId === change.objectId);
+        if (document && (document.parentId !== change.parentId || document.manualOrder !== change.manualOrder)) {
+          changed = true;
+          await persistObject({ ...document, ...change, dirty: true });
+        }
+      }
+      if (changed) {
+        if (parentId) setExpanded((current) => new Set(current).add(parentId!));
+        requestPush("structural");
+      }
+    } else {
+      for (const entry of moving) await moveDocument(entry.objectId, parentId, beforeId);
+    }
     setSelectedIds(new Set(roots));
     selectionAnchor.current = roots[roots.length - 1] ?? null;
   };
@@ -2322,8 +2351,8 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
             <label className="tree-sort-action" title={t("app.sort")}><AppIcon icon={ArrowDownAZ} /><select value={preferences.sortMode} onChange={(event) => setPreferences({ ...preferences, sortMode: event.target.value as UiPreferences["sortMode"] })} aria-label={t("app.sort")}><option value="alphabetical">A–Z</option><option value="created">{t("app.sortCreated")}</option><option value="updated">{t("app.sortUpdated")}</option><option value="manual">{t("app.sortManual")}</option></select></label>
           </span>
         </nav>
-        <div ref={documentTree} className="document-tree" role="tree" aria-multiselectable="true" onClick={(event) => { if (event.target === event.currentTarget) { setSelectedIds(new Set()); selectionAnchor.current = null; } }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFolderDropTarget(null); }} onDrop={(event) => { setFolderDropTarget(null); const ids = draggedDocumentIds(event.dataTransfer); if (ids.length) void moveDocuments(ids, null); }}>
-          <TreeLevel childrenByParent={treeChildren} parentId={null} activeId={activeId} selectedIds={selectedIds} expanded={expanded} dropTargetId={folderDropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={setFolderDropTarget} onSelect={selectTreeEntry} onContext={openTreeContext} onDragSelection={beginTreeDrag} onMove={moveDocuments} onRenameCommit={commitTreeRename} onRenameCancel={() => setRenamingDocumentId(null)} />
+        <div ref={documentTree} className="document-tree" role="tree" aria-multiselectable="true" onClick={(event) => { if (event.target === event.currentTarget) { setSelectedIds(new Set()); selectionAnchor.current = null; } }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTreeDropTarget(null); }} onDrop={(event) => { setTreeDropTarget(null); setTreeDraggingIds(new Set()); const ids = draggedDocumentIds(event.dataTransfer); if (ids.length) void moveDocuments(ids, null); }}>
+          <TreeLevel childrenByParent={treeChildren} parentId={null} activeId={activeId} selectedIds={selectedIds} expanded={expanded} manualSorting={preferences.sortMode === "manual"} draggingIds={treeDraggingIds} dropTarget={treeDropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={updateTreeDropTarget} onSelect={selectTreeEntry} onContext={openTreeContext} onDragSelection={beginTreeDrag} onDragFinish={() => setTreeDraggingIds(new Set())} onMove={moveDocuments} onRenameCommit={commitTreeRename} onRenameCancel={() => setRenamingDocumentId(null)} />
           {!searched.length && <p className="empty-tree">{t("app.noMatches")}</p>}
         </div>
         <footer className="side-footer">
