@@ -1,9 +1,13 @@
-import type { OpenDocument, VaultDocument } from "../types";
+import type { OpenDocument, UiPreferences, VaultDocument, WorkspaceEditorMode } from "../types";
 
 export const WORKSPACE_OBJECT_ID = "00000000-0000-4000-8000-000000000001";
-export type WorkspaceEditorMode = "live" | "source" | "readonly";
+export type { WorkspaceEditorMode } from "../types";
 
-export interface WorkspaceState {
+export function shouldSynchronizeWorkspaceObject(objectId: string): boolean {
+  return objectId !== WORKSPACE_OBJECT_ID;
+}
+
+export interface LegacyWorkspaceState {
   version: 1;
   activeNoteId: string | null;
   openNoteIds: string[];
@@ -12,8 +16,13 @@ export interface WorkspaceState {
   outlineCollapsed: boolean;
 }
 
-export const DEFAULT_WORKSPACE_STATE: WorkspaceState = {
-  version: 1,
+export type DeviceWorkspacePreferences = Pick<
+  UiPreferences,
+  "workspaceVersion" | "activeNoteId" | "openNoteIds" | "editorMode" | "treeCollapsed" | "outlineCollapsed"
+>;
+
+export const DEFAULT_DEVICE_WORKSPACE_PREFERENCES: DeviceWorkspacePreferences = {
+  workspaceVersion: 1,
   activeNoteId: null,
   openNoteIds: [],
   editorMode: "live",
@@ -21,21 +30,28 @@ export const DEFAULT_WORKSPACE_STATE: WorkspaceState = {
   outlineCollapsed: false
 };
 
-export function parseWorkspaceState(document: Pick<VaultDocument, "markdown">): WorkspaceState | null {
+function normalizeOpenNoteIds(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((entry): entry is string => typeof entry === "string"))]
+    : [];
+}
+
+function normalizeEditorMode(value: unknown): WorkspaceEditorMode {
+  return value === "source" || value === "readonly" ? value : "live";
+}
+
+export function parseLegacyWorkspaceState(document: Pick<VaultDocument, "markdown">): LegacyWorkspaceState | null {
   try {
-    const parsed = JSON.parse(document.markdown) as Partial<WorkspaceState>;
+    const parsed = JSON.parse(document.markdown) as Partial<LegacyWorkspaceState>;
     if (parsed.version !== 1) return null;
-    const openNoteIds = Array.isArray(parsed.openNoteIds)
-      ? [...new Set(parsed.openNoteIds.filter((value): value is string => typeof value === "string"))]
-      : [];
+    const openNoteIds = normalizeOpenNoteIds(parsed.openNoteIds);
     const activeNoteId = typeof parsed.activeNoteId === "string" ? parsed.activeNoteId : null;
     if (activeNoteId && !openNoteIds.includes(activeNoteId)) openNoteIds.push(activeNoteId);
-    const editorMode = parsed.editorMode === "source" || parsed.editorMode === "readonly" ? parsed.editorMode : "live";
     return {
       version: 1,
       activeNoteId,
       openNoteIds,
-      editorMode,
+      editorMode: normalizeEditorMode(parsed.editorMode),
       treeCollapsed: parsed.treeCollapsed === true,
       outlineCollapsed: parsed.outlineCollapsed === true
     };
@@ -44,34 +60,44 @@ export function parseWorkspaceState(document: Pick<VaultDocument, "markdown">): 
   }
 }
 
-export function workspaceStateEquals(left: WorkspaceState | null, right: WorkspaceState): boolean {
-  return Boolean(left
-    && left.activeNoteId === right.activeNoteId
-    && left.editorMode === right.editorMode
-    && left.treeCollapsed === right.treeCollapsed
-    && left.outlineCollapsed === right.outlineCollapsed
-    && left.openNoteIds.length === right.openNoteIds.length
-    && left.openNoteIds.every((id, index) => id === right.openNoteIds[index]));
+export function resolveDeviceWorkspacePreferences(
+  stored: Partial<UiPreferences>,
+  legacy: LegacyWorkspaceState | null
+): DeviceWorkspacePreferences {
+  if (stored.workspaceVersion === 1) {
+    const openNoteIds = normalizeOpenNoteIds(stored.openNoteIds);
+    const activeNoteId = typeof stored.activeNoteId === "string" ? stored.activeNoteId : null;
+    if (activeNoteId && !openNoteIds.includes(activeNoteId)) openNoteIds.push(activeNoteId);
+    return {
+      workspaceVersion: 1,
+      activeNoteId,
+      openNoteIds,
+      editorMode: normalizeEditorMode(stored.editorMode),
+      treeCollapsed: stored.treeCollapsed === true,
+      outlineCollapsed: stored.outlineCollapsed === true
+    };
+  }
+  if (legacy) {
+    return {
+      workspaceVersion: 1,
+      activeNoteId: legacy.activeNoteId,
+      openNoteIds: [...legacy.openNoteIds],
+      editorMode: legacy.editorMode,
+      treeCollapsed: typeof stored.treeCollapsed === "boolean" ? stored.treeCollapsed : legacy.treeCollapsed,
+      outlineCollapsed: typeof stored.outlineCollapsed === "boolean" ? stored.outlineCollapsed : legacy.outlineCollapsed
+    };
+  }
+  return {
+    ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
+    openNoteIds: []
+  };
 }
 
-export function makeWorkspaceDocument(state: WorkspaceState, current: OpenDocument | null = null): OpenDocument {
-  const now = new Date().toISOString();
-  return {
-    objectId: WORKSPACE_OBJECT_ID,
-    kind: "note",
-    title: "Mint Notes workspace",
-    markdown: JSON.stringify(state),
-    parentId: null,
-    tags: [],
-    favorite: false,
-    locked: false,
-    deleted: false,
-    createdAt: current?.createdAt ?? now,
-    updatedAt: now,
-    manualOrder: 0,
-    attachmentIds: [],
-    schemaVersion: 2,
-    serverRevision: current?.serverRevision ?? 0,
-    dirty: true
-  };
+export function resolveDeviceActiveNoteId(
+  activeNoteId: string | null,
+  documents: readonly OpenDocument[]
+): string | null {
+  if (!activeNoteId) return null;
+  const active = documents.find((document) => document.objectId === activeNoteId);
+  return active?.kind === "note" && !active.deleted ? active.objectId : null;
 }

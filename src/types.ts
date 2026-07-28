@@ -159,8 +159,13 @@ export type SortMode = "alphabetical" | "created" | "updated" | "manual";
 export type ThemePreference = "system" | "light" | "dark";
 export type FontSizePreference = "small" | "standard" | "large";
 export type LanguagePreference = "system" | "en" | "zh-CN" | "zh-TW";
+export type WorkspaceEditorMode = "live" | "source" | "readonly";
 
 export interface UiPreferences {
+  workspaceVersion: 1;
+  activeNoteId: string | null;
+  openNoteIds: string[];
+  editorMode: WorkspaceEditorMode;
   theme: ThemePreference;
   fontSize: FontSizePreference;
   language: LanguagePreference;

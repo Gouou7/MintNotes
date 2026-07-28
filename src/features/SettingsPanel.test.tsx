@@ -22,7 +22,21 @@ vi.mock("../crypto/deviceUnlock", () => ({
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const roots: Root[] = [];
-const preferences: UiPreferences = { theme: "system", fontSize: "standard", language: "zh-CN", sortMode: "alphabetical", treeCollapsed: false, outlineCollapsed: false, treeWidth: 272, outlineWidth: 236, rightPanelTab: "outline" };
+const preferences: UiPreferences = {
+  workspaceVersion: 1,
+  activeNoteId: null,
+  openNoteIds: [],
+  editorMode: "live",
+  theme: "system",
+  fontSize: "standard",
+  language: "zh-CN",
+  sortMode: "alphabetical",
+  treeCollapsed: false,
+  outlineCollapsed: false,
+  treeWidth: 272,
+  outlineWidth: 236,
+  rightPanelTab: "outline"
+};
 const historySettings: HistorySettings = { enabled: true, intervalMinutes: 10, retentionDays: 90, count: 3, usedBytes: 4096, quotaBytes: 256 * 1024 * 1024, clearedBefore: null };
 const admin: User = { id: "admin-id", username: "admin", displayName: "Administrator", role: "admin" };
 const deletedAt = "2026-07-20T12:00:00.000Z";

@@ -50,7 +50,7 @@ pnpm dev:server
 | `src/i18n/` | Typed English, Simplified Chinese, and Traditional Chinese messages, browser-language resolution, date formatting, and language preference context. |
 | `src/crypto/` | Browser Worker key derivation, password/recovery/device envelopes, AES-GCM object encryption, and attachment chunk encryption. |
 | `src/storage/` | Dexie schema for encrypted IndexedDB objects, chunks, preferences, cursors, and durable outboxes. |
-| `src/features/` | Authentication, settings, administration, file-tree and versioned workspace-state utilities, synchronization coordination and batching, attachments, import/export, and text statistics. |
+| `src/features/` | Authentication, settings, administration, file-tree and device-local workspace-state utilities, legacy workspace migration, synchronization coordination and batching, attachments, import/export, and text statistics. |
 | `server/` | Fastify routes, session authentication, user-scoped ciphertext storage and synchronization hints, SQLite schema, and online backup. |
 | `scripts/` | Crypto Worker integration test and API smoke test. |
 | `patches/` | Maintained `typora-web` compatibility layer for canonical Markdown live editing and public controller extensions. |

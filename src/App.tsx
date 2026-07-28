@@ -95,12 +95,13 @@ import { AuthScreen } from "./features/AuthScreen";
 import { LockScreen } from "./features/LockScreen";
 import { isLanguagePreference, translateError, useI18n, type Translate } from "./i18n";
 import {
-  makeWorkspaceDocument,
-  parseWorkspaceState,
+  DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
+  parseLegacyWorkspaceState,
+  resolveDeviceActiveNoteId,
+  resolveDeviceWorkspacePreferences,
+  shouldSynchronizeWorkspaceObject,
   WORKSPACE_OBJECT_ID,
-  workspaceStateEquals,
-  type WorkspaceEditorMode,
-  type WorkspaceState
+  type WorkspaceEditorMode
 } from "./features/workspace";
 import {
   chunkKey,
@@ -136,9 +137,10 @@ import type {
 type EditorMode = WorkspaceEditorMode;
 type SaveState = "ready" | "saving" | "local" | "syncing" | "synced" | "offline" | "error";
 type CachedAttachmentUrl = { signature: string; url: string };
-type CreateDocumentOptions = { focusName?: boolean };
+type CreateDocumentOptions = { focusName?: boolean; activate?: boolean };
 
 const DEFAULT_PREFERENCES: UiPreferences = {
+  ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
   theme: "system",
   fontSize: "standard",
   language: "system",
@@ -375,8 +377,6 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
   const [attachments, setAttachments] = useState<OpenAttachment[]>([]);
   const attachmentsRef = useRef<OpenAttachment[]>([]);
   const attachmentIndexRef = useRef(new Map<string, OpenAttachment>());
-  const [workspaceRecord, setWorkspaceRecord] = useState<OpenDocument | null>(null);
-  const workspaceRecordRef = useRef<OpenDocument | null>(null);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeIdRef = useRef<string | null>(null);
@@ -699,28 +699,6 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     attachmentIndexRef.current = new Map(value.map((entry) => [entry.objectId, entry]));
     setAttachments(value);
   };
-  const replaceWorkspaceRecord = (record: OpenDocument | null, applyState = true) => {
-    workspaceRecordRef.current = record;
-    setWorkspaceRecord(record);
-    if (!record || !applyState) return;
-    const state = parseWorkspaceState(record);
-    if (!state) return;
-    setPreferences((current) => ({
-      ...current,
-      treeCollapsed: state.treeCollapsed,
-      outlineCollapsed: state.outlineCollapsed
-    }));
-    setMode(state.editorMode);
-    const active = state.activeNoteId
-      ? documentsRef.current.find((entry) => entry.objectId === state.activeNoteId && entry.kind === "note" && !entry.deleted)
-      : null;
-    if (active) {
-      activeIdRef.current = active.objectId;
-      setActiveId(active.objectId);
-      setSelectedIds(new Set([active.objectId]));
-      selectionAnchor.current = active.objectId;
-    }
-  };
   const upsertDocument = (document: OpenDocument) => replaceDocuments((current) => (
     documentIndexRef.current.has(document.objectId)
       ? current.map((entry) => entry.objectId === document.objectId ? document : entry)
@@ -783,8 +761,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     });
     if (logoutStarted.current) return object;
     if (options.commitState !== false) {
-      if (next.objectId === WORKSPACE_OBJECT_ID) replaceWorkspaceRecord(next as OpenDocument, false);
-      else if (next.kind === "attachment") upsertAttachment(next as OpenAttachment);
+      if (next.kind === "attachment") upsertAttachment(next as OpenAttachment);
       else upsertDocument(next as OpenDocument);
     }
     setSaveState(navigator.onLine ? "local" : "offline");
@@ -798,9 +775,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     saveTimers.current.delete(objectId);
     saveDeadlines.current.delete(objectId);
     if (logoutStarted.current) return;
-    const current = objectId === WORKSPACE_OBJECT_ID
-      ? workspaceRecordRef.current
-      : documentIndexRef.current.get(objectId);
+    const current = documentIndexRef.current.get(objectId);
     if (current) await persistObject(current);
   };
 
@@ -818,25 +793,6 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       saveDeadlines.current.delete(document.objectId);
       if (logoutStarted.current) return;
       const current = documentIndexRef.current.get(document.objectId);
-      if (current) void persistObject(current).then(() => requestPush("editor"));
-    }, wait));
-  };
-
-  const queueWorkspace = (state: WorkspaceState, delay = 1_500, maxWait = 10_000) => {
-    if (logoutStarted.current) return;
-    const document = makeWorkspaceDocument(state, workspaceRecordRef.current);
-    replaceWorkspaceRecord(document, false);
-    const existing = saveTimers.current.get(WORKSPACE_OBJECT_ID);
-    if (existing !== undefined) window.clearTimeout(existing);
-    const now = Date.now();
-    const deadline = saveDeadlines.current.get(WORKSPACE_OBJECT_ID) ?? now + maxWait;
-    saveDeadlines.current.set(WORKSPACE_OBJECT_ID, deadline);
-    const wait = Math.max(0, Math.min(delay, deadline - now));
-    saveTimers.current.set(WORKSPACE_OBJECT_ID, window.setTimeout(() => {
-      saveTimers.current.delete(WORKSPACE_OBJECT_ID);
-      saveDeadlines.current.delete(WORKSPACE_OBJECT_ID);
-      if (logoutStarted.current) return;
-      const current = workspaceRecordRef.current;
       if (current) void persistObject(current).then(() => requestPush("editor"));
     }, wait));
   };
@@ -941,10 +897,13 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     const defaultTitle = kind === "note" ? t("app.untitled") : t("app.newFolder");
     const documentTitle = uniqueSiblingTitle(documentsRef.current, title.trim() || defaultTitle, parentId);
     const document = makeDocument(documentsRef.current, kind, documentTitle, parentId, markdown);
+    const activate = options.activate !== false;
     if (options.focusName) setSearch("");
     upsertDocument(document);
-    setSelectedIds(new Set([document.objectId]));
-    selectionAnchor.current = document.objectId;
+    if (activate) {
+      setSelectedIds(new Set([document.objectId]));
+      selectionAnchor.current = document.objectId;
+    }
     if (kind === "folder") {
       const foldersToExpand = new Set([document.objectId]);
       let ancestorId = parentId;
@@ -958,7 +917,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     if (kind === "folder" && options.focusName) {
       beginTreeRename(document.objectId);
     }
-    if (kind === "note") {
+    if (kind === "note" && activate) {
       const previousActiveId = activeIdRef.current;
       if (previousActiveId && previousActiveId !== document.objectId) applyDeferredActiveRemote(previousActiveId);
       if (options.focusName) pendingTitleFocus.current = document.objectId;
@@ -1027,7 +986,6 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     if (!commitState) return;
     replaceDocuments((all) => all.filter((entry) => entry.objectId !== objectId));
     replaceAttachments((all) => all.filter((entry) => entry.objectId !== objectId));
-    if (objectId === WORKSPACE_OBJECT_ID) replaceWorkspaceRecord(null, false);
     setSelectedIds((current) => {
       if (!current.has(objectId)) return current;
       const next = new Set(current);
@@ -1037,7 +995,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     if (selectionAnchor.current === objectId) selectionAnchor.current = null;
   };
 
-  const pullChanges = async ({ applyWorkspace = false }: { applyWorkspace?: boolean } = {}) => {
+  const pullChanges = async () => {
     if (logoutStarted.current) return new Set<string>();
     let cursor = Number((await localDb.meta.get(cursorKey(user.id)))?.value ?? 0);
     let hasMore = true;
@@ -1049,9 +1007,6 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     const attachmentUpserts = new Map<string, OpenAttachment>();
     const removedDocumentIds = new Set<string>();
     const removedAttachmentIds = new Set<string>();
-    let remoteWorkspace: OpenDocument | null = null;
-    let workspaceRebaseRevision: number | null = null;
-    let workspaceToRebase: OpenDocument | null = null;
     let activeConflictId: string | null = null;
     let deferredActiveChanged = false;
     let deferredActiveDeleted = false;
@@ -1072,9 +1027,16 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       const outboxDeletes: string[] = [];
 
       for (const change of result.changes) {
+        const key = localKey(user.id, change.objectId);
+        if (!shouldSynchronizeWorkspaceObject(change.objectId)) {
+          purgedIds.push(change.objectId);
+          pendingByKey.delete(key);
+          failedObjectIds.delete(change.objectId);
+          continue;
+        }
         if (change.purged) {
           purgedIds.push(change.objectId);
-          pendingByKey.delete(localKey(user.id, change.objectId));
+          pendingByKey.delete(key);
           if (change.objectId === activeIdRef.current) {
             deferredActiveRemoteId.current = change.objectId;
             deferredActiveRemote.current = null;
@@ -1084,21 +1046,16 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
             removedDocumentIds.add(change.objectId);
             removedAttachmentIds.add(change.objectId);
           }
-          if (change.objectId === WORKSPACE_OBJECT_ID) remoteWorkspace = null;
           failedObjectIds.delete(change.objectId);
           continue;
         }
-        const key = localKey(user.id, change.objectId);
         const pending = pendingByKey.get(key);
         // Never let a remote pull replace plaintext that is still waiting for
         // the local encryption debounce. The subsequent conditional push will
         // preserve it or create a conflict copy if the server also changed.
         if (saveTimers.current.has(change.objectId)) continue;
         if (pending && change.revision > pending.baseRevision) {
-          if (change.objectId === WORKSPACE_OBJECT_ID) {
-            workspaceRebaseRevision = change.revision;
-            workspaceToRebase = workspaceRecordRef.current;
-          } else if (pending.operation === "upsert") {
+          if (pending.operation === "upsert") {
             const wasActive = activeIdRef.current === change.objectId;
             const conflict = await preserveConflict(pending, false, false);
             if (conflict) {
@@ -1150,10 +1107,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
         };
         localPuts.push(localObject);
         const open = { ...decrypted, objectId: change.objectId, serverRevision: change.revision, dirty: false };
-        if (change.objectId === WORKSPACE_OBJECT_ID && decrypted.kind === "note") {
-          remoteWorkspace = open as OpenDocument;
-          if (workspaceToRebase) workspaceRebaseRevision = change.revision;
-        } else if (decrypted.kind === "attachment") {
+        if (decrypted.kind === "attachment") {
           attachmentUpserts.set(change.objectId, open as OpenAttachment);
           removedAttachmentIds.delete(change.objectId);
         } else if (change.objectId === activeIdRef.current && activeConflictId === null) {
@@ -1208,17 +1162,6 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       setActiveId(activeConflictId);
       setSelectedIds(new Set([activeConflictId]));
       selectionAnchor.current = activeConflictId;
-    }
-    if (remoteWorkspace) replaceWorkspaceRecord(remoteWorkspace, applyWorkspace && !workspaceToRebase);
-    else if (removedDocumentIds.has(WORKSPACE_OBJECT_ID)) replaceWorkspaceRecord(null, false);
-
-    if (workspaceRebaseRevision !== null && workspaceToRebase) {
-      await persistObject({
-        ...workspaceToRebase,
-        serverRevision: workspaceRebaseRevision,
-        dirty: true
-      });
-      requestPush("structural");
     }
     if (removedDocumentIds.size || removedAttachmentIds.size) {
       setSelectedIds((current) => new Set([...current].filter((id) => !removedDocumentIds.has(id) && !removedAttachmentIds.has(id))));
@@ -1320,9 +1263,17 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
 
     const storedEntries = await localDb.outbox.where("userId").equals(user.id).sortBy("generation");
     if (logoutStarted.current) return false;
-    const purgeEntries = storedEntries.filter((entry) => entry.operation === "purge");
+    const legacyWorkspaceEntries = storedEntries.filter((entry) => !shouldSynchronizeWorkspaceObject(entry.objectId));
+    if (legacyWorkspaceEntries.length) {
+      await localDb.transaction("rw", localDb.objects, localDb.outbox, async () => {
+        await localDb.objects.delete(localKey(user.id, WORKSPACE_OBJECT_ID));
+        await localDb.outbox.bulkDelete(legacyWorkspaceEntries.map((entry) => entry.key));
+      });
+    }
+    const currentEntries = storedEntries.filter((entry) => shouldSynchronizeWorkspaceObject(entry.objectId));
+    const purgeEntries = currentEntries.filter((entry) => entry.operation === "purge");
     if (purgeEntries.length) await localDb.outbox.bulkDelete(purgeEntries.map((entry) => entry.key));
-    const entries = storedEntries.filter((entry) => entry.operation === "upsert");
+    const entries = currentEntries.filter((entry) => entry.operation === "upsert");
     if (!entries.length) return (await pushHistoryPending()) || chunkEntries.length > 0;
 
     const packed = packBySerializedSize(
@@ -1331,7 +1282,6 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     );
     const documentAcks = new Map<string, number>();
     const attachmentAcks = new Map<string, number>();
-    let workspaceAck: number | null = null;
     let conflictDetected = false;
 
     const acceptResult = async (entry: OutboxEntry, result: BatchWriteResult) => {
@@ -1343,8 +1293,7 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
       const current = await localDb.outbox.get(entry.key);
       if (!current || current.generation === entry.generation) {
         await localDb.outbox.delete(entry.key);
-        if (entry.objectId === WORKSPACE_OBJECT_ID) workspaceAck = result.revision;
-        else if (entry.objectType === "attachment") attachmentAcks.set(entry.objectId, result.revision);
+        if (entry.objectType === "attachment") attachmentAcks.set(entry.objectId, result.revision);
         else documentAcks.set(entry.objectId, result.revision);
         return;
       }
@@ -1397,9 +1346,6 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
     if (logoutStarted.current) return false;
     if (documentAcks.size) replaceDocuments(acknowledgeByObjectId(documentsRef.current, documentAcks));
     if (attachmentAcks.size) replaceAttachments(acknowledgeByObjectId(attachmentsRef.current, attachmentAcks));
-    if (workspaceAck !== null && workspaceRecordRef.current) {
-      replaceWorkspaceRecord({ ...workspaceRecordRef.current, serverRevision: workspaceAck, dirty: false }, false);
-    }
     if (conflictDetected) {
       await localDb.meta.put({ key: cursorKey(user.id), value: "0" });
       requestPull(0);
@@ -1505,15 +1451,12 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
           localDb.meta.get(ignoredDecryptFailuresKey(user.id))
         ]);
         if (cancelled || logoutStarted.current) return;
-        if (storedPreferences) {
-          const storedUiPreferences = JSON.parse(storedPreferences.value) as Partial<UiPreferences>;
-          setPreferences({
-            ...DEFAULT_PREFERENCES,
-            ...storedUiPreferences,
-            language: isLanguagePreference(storedUiPreferences.language) ? storedUiPreferences.language : languagePreference
-          });
+        let storedUiPreferences: Partial<UiPreferences> = {};
+        try {
+          storedUiPreferences = JSON.parse(storedPreferences?.value ?? "{}") as Partial<UiPreferences>;
+        } catch {
+          // Malformed device-local preferences fall back to defaults.
         }
-        setPreferencesLoaded(true);
         const pendingByKey = new Map(pending.map((entry) => [entry.key, entry]));
         const decryptableStored: LocalEncryptedObject[] = [];
         for (const object of stored) {
@@ -1527,15 +1470,34 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
         const opened = await decryptAvailableLocalObjects(decryptableStored, pendingByKey, (object) => (
           cryptoClient.decryptObject(user.id, object.objectId, object.objectType, object.revision, object.ciphertext, object.nonce)
         ));
-        const failedLocalObjects = opened.failed;
         if (cancelled || logoutStarted.current) return;
         // Commit every successfully decrypted record before any network work.
         // One damaged/stale ciphertext must never make the entire vault look
         // empty, and the original encrypted record remains untouched in Dexie.
         const localWorkspace = opened.documents.find((entry) => entry.objectId === WORKSPACE_OBJECT_ID) ?? null;
+        const legacyWorkspace = localWorkspace ? parseLegacyWorkspaceState(localWorkspace) : null;
+        const deviceWorkspace = resolveDeviceWorkspacePreferences(storedUiPreferences, legacyWorkspace);
+        const loadedPreferences: UiPreferences = {
+          ...DEFAULT_PREFERENCES,
+          ...storedUiPreferences,
+          ...deviceWorkspace,
+          language: isLanguagePreference(storedUiPreferences.language) ? storedUiPreferences.language : languagePreference
+        };
+        await localDb.transaction("rw", localDb.objects, localDb.outbox, localDb.meta, async () => {
+          await localDb.objects.delete(localKey(user.id, WORKSPACE_OBJECT_ID));
+          await localDb.outbox.delete(localKey(user.id, WORKSPACE_OBJECT_ID));
+          await localDb.meta.put({ key: preferencesKey(user.id), value: JSON.stringify(loadedPreferences) });
+        });
+        pendingByKey.delete(localKey(user.id, WORKSPACE_OBJECT_ID));
         replaceDocuments(opened.documents.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID));
         replaceAttachments(opened.attachments);
-        if (localWorkspace) replaceWorkspaceRecord(localWorkspace);
+        setPreferences(loadedPreferences);
+        setMode(loadedPreferences.editorMode);
+        setPreferencesLoaded(true);
+
+        const failedLocalObjects = opened.failed.filter((object) => object.objectId !== WORKSPACE_OBJECT_ID);
+        const storedContent = stored.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID);
+        const pendingContent = pending.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID);
 
         let ignoredFailureFingerprints = new Set<string>();
         try {
@@ -1547,20 +1509,19 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
         const repairableFailures = failedLocalObjects.filter((object) => !ignoredFailureFingerprints.has(decryptFailureFingerprint(object)));
         const canRepairFromServer = repairableFailures.length > 0
           && repairableFailures.every((object) => !pendingByKey.has(object.key));
-        const mustVerifyServerFromStart = canRepairFromServer || (stored.length === 0 && pending.length === 0);
+        const mustVerifyServerFromStart = canRepairFromServer || (storedContent.length === 0 && pendingContent.length === 0);
         if (mustVerifyServerFromStart && !logoutStarted.current) await localDb.meta.put({ key: cursorKey(user.id), value: "0" });
         let initialPullError: unknown;
         let failedRemoteIds = new Set<string>();
         try {
-          failedRemoteIds = await pullChanges({ applyWorkspace: true });
+          failedRemoteIds = await pullChanges();
         } catch (error) {
           initialPullError = error;
         }
 
         const loadedIds = new Set([
           ...documentsRef.current.map((entry) => entry.objectId),
-          ...attachmentsRef.current.map((entry) => entry.objectId),
-          ...(workspaceRecordRef.current ? [WORKSPACE_OBJECT_ID] : [])
+          ...attachmentsRef.current.map((entry) => entry.objectId)
         ]);
         const unresolved = failedLocalObjects.filter((object) => !loadedIds.has(object.objectId));
         const visibleFailures = unresolved.filter((object) => !ignoredFailureFingerprints.has(decryptFailureFingerprint(object)));
@@ -1591,22 +1552,26 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
           showMessage(navigator.onLine ? t("notice.localRestoredSyncRetry") : t("notice.loadedOffline"), "warning");
         }
 
-        const storedContent = stored.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID);
-        const pendingContent = pending.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID);
         const verifiedEmptyVault = storedContent.length === 0 && pendingContent.length === 0 && !initialPullError && failedRemoteIds.size === 0;
         if (verifiedEmptyVault && !documentsRef.current.some((entry) => entry.kind === "note" && !entry.deleted)) {
-          await createDocument("note", t("app.welcomeTitle"), null, t("app.welcomeMarkdown"));
+          await createDocument("note", t("app.welcomeTitle"), null, t("app.welcomeMarkdown"), { activate: false });
         }
-        const remembered = workspaceRecordRef.current ? parseWorkspaceState(workspaceRecordRef.current) : null;
-        const restored = remembered?.activeNoteId
-          ? documentsRef.current.find((entry) => entry.objectId === remembered.activeNoteId && entry.kind === "note" && !entry.deleted)
-          : null;
-        const initial = restored ?? documentsRef.current.find((entry) => entry.kind === "note" && !entry.deleted);
-        if (initial) {
-          activeIdRef.current = initial.objectId;
-          setActiveId(initial.objectId);
-          setSelectedIds(new Set([initial.objectId]));
-          selectionAnchor.current = initial.objectId;
+        const restoredActiveId = resolveDeviceActiveNoteId(loadedPreferences.activeNoteId, documentsRef.current);
+        if (restoredActiveId) {
+          activeIdRef.current = restoredActiveId;
+          setActiveId(restoredActiveId);
+          setSelectedIds(new Set([restoredActiveId]));
+          selectionAnchor.current = restoredActiveId;
+        } else {
+          activeIdRef.current = null;
+          setActiveId(null);
+          setSelectedIds(new Set());
+          selectionAnchor.current = null;
+          setPreferences((current) => ({
+            ...current,
+            activeNoteId: null,
+            openNoteIds: []
+          }));
         }
         setWorkspaceLoaded(true);
         setLoading(false);
@@ -1635,16 +1600,24 @@ function VaultApp({ user, endpoint, credential, onCredentialChange, onLocked }: 
 
   useEffect(() => {
     if (!workspaceLoaded) return;
-    const state: WorkspaceState = {
-      version: 1,
-      activeNoteId: activeId,
-      openNoteIds: activeId ? [activeId] : [],
-      editorMode: mode,
-      treeCollapsed: preferences.treeCollapsed,
-      outlineCollapsed: preferences.outlineCollapsed
-    };
-    if (!workspaceStateEquals(workspaceRecord ? parseWorkspaceState(workspaceRecord) : null, state)) queueWorkspace(state);
-  }, [activeId, mode, preferences.treeCollapsed, preferences.outlineCollapsed, workspaceLoaded]);
+    setPreferences((current) => {
+      const openNoteIds = activeId ? [activeId] : [];
+      if (current.workspaceVersion === 1
+        && current.activeNoteId === activeId
+        && current.editorMode === mode
+        && current.openNoteIds.length === openNoteIds.length
+        && current.openNoteIds.every((id, index) => id === openNoteIds[index])) {
+        return current;
+      }
+      return {
+        ...current,
+        workspaceVersion: 1,
+        activeNoteId: activeId,
+        openNoteIds,
+        editorMode: mode
+      };
+    });
+  }, [activeId, mode, workspaceLoaded]);
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-color-scheme: dark)");
