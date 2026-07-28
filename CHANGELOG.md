@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-28
+
 ### Changed
 
 - Changed the PIN lock screen to show the current account's display name as the primary heading and the localized **Notes locked** status beneath it, without retaining or displaying the encrypted profile avatar.
