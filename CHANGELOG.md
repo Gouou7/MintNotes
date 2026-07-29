@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-07-29
+
 ### Added
 
 - Added offline cold-start access for remembered devices. Devices without a local PIN open their encrypted local vault directly; PIN-protected devices require the PIN, and non-remembered sessions remain unavailable offline.
