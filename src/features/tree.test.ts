@@ -91,14 +91,13 @@ describe("tree operations", () => {
     expect(isFolderDropZone("note", .5)).toBe(false);
   });
 
-  it("describes manual insertion positions separately from inside-folder drops", () => {
-    expect(treeDropPosition("folder", .1, true)).toBe("before");
-    expect(treeDropPosition("folder", .5, true)).toBe("inside");
-    expect(treeDropPosition("folder", .9, true)).toBe("after");
-    expect(treeDropPosition("note", .1, true)).toBe("before");
-    expect(treeDropPosition("note", .9, true)).toBe("after");
-    expect(treeDropPosition("note", .5, false)).toBeNull();
-    expect(treeDropPosition("folder", .5, false)).toBe("inside");
+  it("describes insertion edges in every sort mode separately from inside-folder drops", () => {
+    expect(treeDropPosition("folder", .1)).toBe("before");
+    expect(treeDropPosition("folder", .5)).toBe("inside");
+    expect(treeDropPosition("folder", .9)).toBe("after");
+    expect(treeDropPosition("note", .1)).toBe("before");
+    expect(treeDropPosition("note", .5)).toBe("after");
+    expect(treeDropPosition("note", .9)).toBe("after");
   });
 
   it("keeps drops onto the moving selection anchored at its original position", () => {

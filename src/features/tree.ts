@@ -79,11 +79,9 @@ export type TreeDropPosition = "before" | "inside" | "after";
 
 export function treeDropPosition(
   kind: OpenDocument["kind"],
-  ratio: number,
-  manualSorting: boolean
-): TreeDropPosition | null {
+  ratio: number
+): TreeDropPosition {
   if (isFolderDropZone(kind, ratio)) return "inside";
-  if (!manualSorting) return null;
   return ratio < .5 ? "before" : "after";
 }
 

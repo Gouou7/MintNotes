@@ -31,7 +31,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function ManualTree({ draggingIds = new Set(["note-b"]) }: { draggingIds?: ReadonlySet<string> }) {
+function TreeFeedback({ draggingIds = new Set(["note-b"]) }: { draggingIds?: ReadonlySet<string> }) {
   const [dropTarget, setDropTarget] = useState<TreeDropTarget | null>(null);
   return <I18nProvider>
     <TreeLevel
@@ -40,7 +40,6 @@ function ManualTree({ draggingIds = new Set(["note-b"]) }: { draggingIds?: Reado
       activeId={null}
       selectedIds={new Set()}
       expanded={new Set()}
-      manualSorting
       draggingIds={draggingIds}
       dropTarget={dropTarget}
       renamingDocumentId={null}
@@ -70,12 +69,12 @@ function dragOver(row: HTMLElement, clientY: number, draggedId = "note-b") {
   row.dispatchEvent(event);
 }
 
-describe("VaultTree manual drag feedback", () => {
-  it("marks the exact before and after insertion edges", async () => {
+describe("VaultTree drag feedback", () => {
+  it("marks the before and after insertion edges independently of sorting", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    await act(async () => root.render(<ManualTree />));
+    await act(async () => root.render(<TreeFeedback />));
 
     const row = container.querySelector<HTMLElement>(".tree-row");
     expect(row).not.toBeNull();
@@ -91,7 +90,7 @@ describe("VaultTree manual drag feedback", () => {
     expect(row?.classList.contains("drop-after")).toBe(true);
     expect(row?.dataset.dropPosition).toBe("after");
 
-    await act(async () => root.render(<ManualTree draggingIds={new Set([note.objectId])} />));
+    await act(async () => root.render(<TreeFeedback draggingIds={new Set([note.objectId])} />));
     act(() => dragOver(row!, 104, note.objectId));
     expect(row?.classList.contains("drop-before")).toBe(false);
     expect(row?.classList.contains("drop-after")).toBe(false);

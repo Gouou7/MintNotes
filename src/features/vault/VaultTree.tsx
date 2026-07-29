@@ -44,13 +44,12 @@ export function TreeDocumentIcon({ document }: { document: OpenDocument }) {
   </span>;
 }
 
-export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, expanded, manualSorting, draggingIds, dropTarget, renamingDocumentId, onDropTarget, onSelect, onContext, onDragSelection, onDragFinish, onMove, onRenameCommit, onRenameCancel }: {
+export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, expanded, draggingIds, dropTarget, renamingDocumentId, onDropTarget, onSelect, onContext, onDragSelection, onDragFinish, onMove, onRenameCommit, onRenameCancel }: {
   childrenByParent: Map<string | null, OpenDocument[]>;
   parentId: string | null;
   activeId: string | null;
   selectedIds: Set<string>;
   expanded: Set<string>;
-  manualSorting: boolean;
   draggingIds: ReadonlySet<string>;
   dropTarget: TreeDropTarget | null;
   renamingDocumentId: string | null;
@@ -87,8 +86,8 @@ export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, e
           event.preventDefault();
           const rect = event.currentTarget.getBoundingClientRect();
           const ratio = (event.clientY - rect.top) / rect.height;
-          const position = treeDropPosition(entry.kind, ratio, manualSorting);
-          onDropTarget(position && !(position !== "inside" && draggingIds.has(entry.objectId))
+          const position = treeDropPosition(entry.kind, ratio);
+          onDropTarget(!(position !== "inside" && draggingIds.has(entry.objectId))
             ? { objectId: entry.objectId, position }
             : null);
         }}
@@ -114,7 +113,7 @@ export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, e
             : <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span className="tree-spacer" /><TreeDocumentIcon document={entry} /><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>}
         <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); onContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={17} /></button>
       </div>
-      {entry.kind === "folder" && expanded.has(entry.objectId) && <div className="tree-children" role="group"><TreeLevel childrenByParent={childrenByParent} parentId={entry.objectId} activeId={activeId} selectedIds={selectedIds} expanded={expanded} manualSorting={manualSorting} draggingIds={draggingIds} dropTarget={dropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={onDropTarget} onSelect={onSelect} onContext={onContext} onDragSelection={onDragSelection} onDragFinish={onDragFinish} onMove={onMove} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} /></div>}
+      {entry.kind === "folder" && expanded.has(entry.objectId) && <div className="tree-children" role="group"><TreeLevel childrenByParent={childrenByParent} parentId={entry.objectId} activeId={activeId} selectedIds={selectedIds} expanded={expanded} draggingIds={draggingIds} dropTarget={dropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={onDropTarget} onSelect={onSelect} onContext={onContext} onDragSelection={onDragSelection} onDragFinish={onDragFinish} onMove={onMove} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} /></div>}
     </div>
   }) as ReactNode;
 }
