@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LocalEncryptedObject } from "../storage/database";
 import type { VaultObject } from "../types";
-import { decryptAvailableLocalObjects, decryptFailureFingerprint } from "./vaultLoad";
+import { decryptAvailableLocalObjects, decryptFailureFingerprint, shouldCreateWelcomeNote } from "./vaultLoad";
 
 function encryptedObject(objectId: string): LocalEncryptedObject {
   return {
@@ -70,5 +70,29 @@ describe("vault local loading", () => {
     const original = encryptedObject("damaged");
     expect(decryptFailureFingerprint({ ...original, nonce: "new-nonce" })).not.toBe(decryptFailureFingerprint(original));
     expect(decryptFailureFingerprint({ ...original, revision: 2 })).not.toBe(decryptFailureFingerprint(original));
+  });
+
+  it("creates a welcome note only after a verified successful empty-server pull", () => {
+    expect(shouldCreateWelcomeNote({
+      serverSessionVerified: true,
+      storedContentCount: 0,
+      pendingContentCount: 0,
+      initialPullFailed: false,
+      failedRemoteCount: 0
+    })).toBe(true);
+    expect(shouldCreateWelcomeNote({
+      serverSessionVerified: false,
+      storedContentCount: 0,
+      pendingContentCount: 0,
+      initialPullFailed: false,
+      failedRemoteCount: 0
+    })).toBe(false);
+    expect(shouldCreateWelcomeNote({
+      serverSessionVerified: true,
+      storedContentCount: 0,
+      pendingContentCount: 1,
+      initialPullFailed: false,
+      failedRemoteCount: 0
+    })).toBe(false);
   });
 });

@@ -10,6 +10,20 @@ export function normalizeVaultObject(object: VaultObject): VaultObject {
   return { ...object, locked: object.locked === true };
 }
 
+export function shouldCreateWelcomeNote(options: {
+  serverSessionVerified: boolean;
+  storedContentCount: number;
+  pendingContentCount: number;
+  initialPullFailed: boolean;
+  failedRemoteCount: number;
+}): boolean {
+  return options.serverSessionVerified
+    && options.storedContentCount === 0
+    && options.pendingContentCount === 0
+    && !options.initialPullFailed
+    && options.failedRemoteCount === 0;
+}
+
 export async function decryptAvailableLocalObjects(
   stored: LocalEncryptedObject[],
   pendingByKey: Map<string, OutboxEntry>,

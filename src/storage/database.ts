@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { HistoryCaptureKind, ObjectType } from "../types";
+import type { AuthEndpoint, HistoryCaptureKind, ObjectType, User } from "../types";
 
 export interface LocalEncryptedObject {
   key: string;
@@ -43,11 +43,19 @@ export interface LocalMeta {
   value: string;
 }
 
+export interface VerifiedDeviceSession {
+  version: 1;
+  user: User;
+  endpoint: AuthEndpoint;
+  verifiedAt: string;
+}
+
 interface DeviceUnlockCredentialBase {
   userId: string;
   endpointId: string;
   mode: "remembered" | "session";
   deviceKey: CryptoKey;
+  verifiedSession?: VerifiedDeviceSession;
   failedPinAttempts: number;
   autoLockMinutes: number;
   updatedAt: string;

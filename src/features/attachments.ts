@@ -69,14 +69,15 @@ export async function createLocalAttachment(
 export async function ensureAttachmentChunks(
   userId: string,
   attachment: OpenAttachment,
-  continueOperation?: ContinueOperation
+  continueOperation?: ContinueOperation,
+  allowNetwork = navigator.onLine
 ): Promise<EncryptedAttachmentChunk[]> {
   requireActiveOperation(continueOperation);
   const stored = await localDb.attachmentChunks.where("[userId+attachmentId]").equals([userId, attachment.objectId]).toArray();
   const byIndex = new Map(stored.map((chunk) => [chunk.chunkIndex, chunk]));
   for (let index = 0; index < attachment.chunkCount; index += 1) {
     if (byIndex.has(index)) continue;
-    if (!navigator.onLine) throw new Error(`附件“${attachment.originalName}”尚未缓存，离线时无法读取`);
+    if (!navigator.onLine || !allowNetwork) throw new Error(`附件“${attachment.originalName}”尚未缓存，离线时无法读取`);
     const downloaded = await downloadAttachmentChunk(`/api/attachments/${attachment.objectId}/chunks/${index}`);
     requireActiveOperation(continueOperation);
     const local: LocalAttachmentChunk = {
@@ -106,9 +107,10 @@ export async function ensureAttachmentChunks(
 export async function decryptAttachmentBlob(
   userId: string,
   attachment: OpenAttachment,
-  continueOperation?: ContinueOperation
+  continueOperation?: ContinueOperation,
+  allowNetwork = navigator.onLine
 ): Promise<Blob> {
-  const chunks = await ensureAttachmentChunks(userId, attachment, continueOperation);
+  const chunks = await ensureAttachmentChunks(userId, attachment, continueOperation, allowNetwork);
   requireActiveOperation(continueOperation);
   const bytes = await cryptoClient.decryptAttachment(userId, attachment.objectId, attachment, chunks);
   requireActiveOperation(continueOperation);

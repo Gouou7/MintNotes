@@ -11,6 +11,7 @@ import type { AuthEndpoint, KdfParams, User } from "../types";
 
 interface Props {
   onUnlocked: (user: User, endpoint: AuthEndpoint) => Promise<void>;
+  offlineUnavailable?: boolean;
 }
 
 type Mode = "login" | "register" | "activate" | "recover";
@@ -32,7 +33,7 @@ type AuthConfigState =
   | { status: "ready"; value: AuthConfig }
   | { status: "error" };
 
-export function AuthScreen({ onUnlocked }: Props) {
+export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
   const { languagePreference, setLanguagePreference, t } = useI18n();
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
@@ -62,7 +63,9 @@ export function AuthScreen({ onUnlocked }: Props) {
     }
   };
 
-  useEffect(() => { void loadAuthConfig(); }, []);
+  useEffect(() => {
+    if (!offlineUnavailable) void loadAuthConfig();
+  }, [offlineUnavailable]);
 
   const openRegistration = async () => {
     if (authConfig.status === "loading") return;
@@ -233,7 +236,8 @@ export function AuthScreen({ onUnlocked }: Props) {
           {error && <p className={notice ? "notice" : "error"}>{error}</p>}
           <button type="submit" className="primary" disabled={busy}>{busy ? t("auth.processingKeys") : mode === "login" ? t("auth.login") : mode === "register" ? t("auth.createAccount") : mode === "activate" ? t("auth.activateCreate") : t("auth.resetPassword")}</button>
         </form>
-        {mode === "login" && authConfig.status === "error" && <p className="auth-config-error">{t("auth.configError")}</p>}
+        {mode === "login" && offlineUnavailable && <p className="auth-config-error">{t("auth.offlineUnavailable")}</p>}
+        {mode === "login" && !offlineUnavailable && authConfig.status === "error" && <p className="auth-config-error">{t("auth.configError")}</p>}
         <div className="auth-actions">
           {mode !== "login" && <button onClick={() => setMode("login")}>{t("auth.backToLogin")}</button>}
           {mode === "login" && <button disabled={authConfig.status === "loading"} onClick={() => void openRegistration()}>{t("auth.register")}</button>}

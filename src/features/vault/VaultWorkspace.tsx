@@ -28,8 +28,10 @@ import { cryptoClient, type EncryptedProfileAvatar } from "../../crypto/client";
 import {
   broadcastAccountLogout,
   clearCurrentBrowserSessionGrant,
+  clearPendingEndpointRevocation,
   clearPinRefreshGrant,
   hasDevicePin,
+  markEndpointRevocationPending,
   touchPinRefreshGrant
 } from "../../crypto/deviceUnlock";
 import { buildOutline } from "../../editor/outline";
@@ -49,7 +51,7 @@ import {
   type SyncIntent
 } from "../syncCoordinator";
 import { isAcknowledgedLocalEcho } from "../syncChanges";
-import { decryptAvailableLocalObjects, decryptFailureFingerprint, normalizeVaultObject } from "../vaultLoad";
+import { decryptAvailableLocalObjects, decryptFailureFingerprint, normalizeVaultObject, shouldCreateWelcomeNote } from "../vaultLoad";
 import { canMoveDocument, compareDocuments, descendantsOf, isFolderDropZone, lockedNoteInSelection, nextManualOrder, pinnedDocuments, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "../tree";
 import { derivedNoteLockState, effectiveEditorMode, isLockedNote } from "../noteLock";
 import { formatNoteTime } from "../noteTime";
@@ -180,10 +182,11 @@ function synchronizationFailure(error: unknown, t: Translate): SyncFailure {
     : { kind: "unreachable" };
 }
 
-export function VaultWorkspace({ user, endpoint, credential, onCredentialChange, onDisplayNameChange, onLocked }: {
+export function VaultWorkspace({ user, endpoint, credential, serverSessionVerified, onCredentialChange, onDisplayNameChange, onLocked }: {
   user: User;
   endpoint: AuthEndpoint;
   credential: DeviceUnlockCredential | null;
+  serverSessionVerified: boolean;
   onCredentialChange: (credential: DeviceUnlockCredential | null) => void;
   onDisplayNameChange: (displayName: string) => void;
   onLocked: (logout: boolean) => void;
@@ -228,7 +231,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
     setSyncError,
     markLocalFailure,
     markLocalSuccess
-  } = useSyncStatus(navigator.onLine);
+  } = useSyncStatus(navigator.onLine && serverSessionVerified);
   const [message, setMessage] = useState<ToastNotice | null>(null);
   const messageSequence = useRef(0);
   const [loading, setLoading] = useState(true);
@@ -260,6 +263,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   const fallbackTimer = useRef<number | null>(null);
   const fallbackDelay = useRef(60_000);
   const syncStatusTimer = useRef<number | null>(null);
+  const serverSessionVerifiedRef = useRef(serverSessionVerified);
   const deferredActiveRemote = useRef<OpenDocument | null>(null);
   const deferredActiveRemoteId = useRef<string | null>(null);
   const documentTree = useRef<HTMLDivElement>(null);
@@ -270,6 +274,10 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   const pendingTitleFocus = useRef<string | null>(null);
   const pendingTitleSave = useRef<Promise<boolean>>(Promise.resolve(true));
   const attachmentInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    serverSessionVerifiedRef.current = serverSessionVerified;
+  }, [serverSessionVerified]);
 
   useEffect(() => {
     // React StrictMode replays effect setup and cleanup once in development.
@@ -300,6 +308,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   };
 
   const refreshHistorySettings = async (): Promise<HistorySettings> => {
+    if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
     const settings = await api<HistorySettings>("/api/account/note-history-settings");
     applyHistorySettings(settings);
     return settings;
@@ -314,10 +323,10 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
         applyHistorySettings({ ...DEFAULT_HISTORY_SETTINGS, ...parsed });
       })
       .catch(() => undefined)
-      .then(() => refreshHistorySettings())
+      .then(() => serverSessionVerified ? refreshHistorySettings() : undefined)
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [user.id]);
+  }, [serverSessionVerified, user.id]);
 
   useEffect(() => {
     if (historySettings.enabled) return;
@@ -428,7 +437,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
     try {
       const local = await localHistoryForNote(noteId);
       const localItems = local.map(localHistoryListItem);
-      if (!navigator.onLine) {
+      if (!navigator.onLine || !serverSessionVerified) {
         setHistoryItems((current) => append ? mergeHistoryItems(current, localItems) : localItems);
         setHistoryCursor(null);
         setHistoryHasMore(false);
@@ -476,6 +485,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       const key = historyKey(user.id, item.noteId, item.historyId);
       let snapshot = await localDb.historySnapshots.get(key);
       if (!snapshot) {
+        if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
         const remote = await api<EncryptedHistorySnapshot>(`/api/notes/${item.noteId}/history/${item.historyId}`);
         snapshot = { ...remote, key, userId: user.id };
         await localDb.historySnapshots.put(snapshot);
@@ -510,6 +520,10 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
 
   useEffect(() => {
     let cancelled = false;
+    if (!serverSessionVerified) {
+      updateAvatarUrl(null);
+      return () => { cancelled = true; };
+    }
     void api<{ avatar: (EncryptedProfileAvatar & { updatedAt: string }) | null }>("/api/account/avatar")
       .then(async ({ avatar }) => avatar ? cryptoClient.decryptProfileAvatar(user.id, avatar) : null)
       .then((avatar) => { if (!cancelled) updateAvatarUrl(avatar); })
@@ -519,12 +533,13 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current);
       avatarUrlRef.current = null;
     };
-  }, [user.id]);
+  }, [serverSessionVerified, user.id]);
 
   const objectPersistence = useObjectPersistence({
     userId: user.id,
     generation,
     isActive: () => !logoutStarted.current,
+    canSynchronize: () => navigator.onLine && serverSessionVerifiedRef.current,
     setSaveState,
     onPersistenceError: (objectId) => {
       markLocalFailure(objectId);
@@ -1145,7 +1160,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
 
   const executeSync = async (intent: SyncIntent) => {
     if (logoutStarted.current) return;
-    if (!navigator.onLine) {
+    if (!navigator.onLine || !serverSessionVerified) {
       setSaveState("offline");
       return;
     }
@@ -1191,7 +1206,8 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       readAttachment: (attachment) => decryptAttachmentBlob(
         user.id,
         attachment,
-        () => !logoutStarted.current
+        () => !logoutStarted.current,
+        serverSessionVerified
       ),
       createAttachment: (ownerNoteId, source, plaintext) => createLocalAttachment(
         user.id,
@@ -1244,7 +1260,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
 
   function requestFallbackPull() {
     if (logoutStarted.current) return;
-    if (fallbackTimer.current !== null || document.visibilityState !== "visible" || !navigator.onLine) return;
+    if (fallbackTimer.current !== null || !serverSessionVerified || document.visibilityState !== "visible" || !navigator.onLine) return;
     const delay = fallbackDelay.current;
     fallbackTimer.current = window.setTimeout(() => {
       fallbackTimer.current = null;
@@ -1262,7 +1278,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   useEffect(() => {
     const coordinator = new SyncCoordinator({
       execute: (intent) => executeSyncRef.current(intent),
-      canRun: () => navigator.onLine && document.visibilityState === "visible"
+      canRun: () => navigator.onLine && serverSessionVerifiedRef.current && document.visibilityState === "visible"
     });
     syncCoordinator.current = coordinator;
     return () => {
@@ -1344,10 +1360,14 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
         if (mustVerifyServerFromStart && !logoutStarted.current) await localDb.meta.put({ key: cursorKey(user.id), value: "0" });
         let initialPullError: unknown;
         let failedRemoteIds = new Set<string>();
-        try {
-          failedRemoteIds = await pullChanges();
-        } catch (error) {
-          initialPullError = error;
+        if (serverSessionVerified) {
+          try {
+            failedRemoteIds = await pullChanges();
+          } catch (error) {
+            initialPullError = error;
+          }
+        } else {
+          initialPullError = new Error("Server session has not been verified");
         }
 
         const loadedIds = new Set([
@@ -1383,7 +1403,13 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
           showMessage(navigator.onLine ? t("notice.localRestoredSyncRetry") : t("notice.loadedOffline"), "warning");
         }
 
-        const verifiedEmptyVault = storedContent.length === 0 && pendingContent.length === 0 && !initialPullError && failedRemoteIds.size === 0;
+        const verifiedEmptyVault = shouldCreateWelcomeNote({
+          serverSessionVerified,
+          storedContentCount: storedContent.length,
+          pendingContentCount: pendingContent.length,
+          initialPullFailed: Boolean(initialPullError),
+          failedRemoteCount: failedRemoteIds.size
+        });
         if (verifiedEmptyVault && !documentsRef.current.some((entry) => entry.kind === "note" && !entry.deleted)) {
           await createDocument("note", t("app.welcomeTitle"), null, t("app.welcomeMarkdown"), { activate: false });
         }
@@ -1405,11 +1431,11 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
           }));
         }
         if (initialPullError) {
-          if (navigator.onLine) setSyncError(synchronizationFailure(initialPullError, t));
+          if (navigator.onLine && serverSessionVerified) setSyncError(synchronizationFailure(initialPullError, t));
           else setSaveState("offline");
         } else {
           const remaining = await countPendingSyncEntries(user.id);
-          setSaveState(settledSyncPhase(navigator.onLine, remaining));
+          setSaveState(settledSyncPhase(navigator.onLine && serverSessionVerified, remaining));
         }
         setWorkspaceLoaded(true);
         setLoading(false);
@@ -1481,9 +1507,9 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       fallbackTimer.current = null;
     };
     const openEvents = async () => {
-      if (logoutStarted.current || !navigator.onLine || document.visibilityState !== "visible" || eventSource.current) return;
+      if (logoutStarted.current || !serverSessionVerified || !navigator.onLine || document.visibilityState !== "visible" || eventSource.current) return;
       const cursor = Number((await localDb.meta.get(cursorKey(user.id)))?.value ?? 0);
-      if (logoutStarted.current || !navigator.onLine || document.visibilityState !== "visible" || eventSource.current) return;
+      if (logoutStarted.current || !serverSessionVerified || !navigator.onLine || document.visibilityState !== "visible" || eventSource.current) return;
       const source = new EventSource(
         `/api/sync/events?since=${cursor}&clientId=${encodeURIComponent(syncClientId.current)}`,
         { withCredentials: true }
@@ -1499,6 +1525,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
     };
     const online = () => {
       clearFallback();
+      if (!serverSessionVerified) return;
       void syncCoordinator.current?.runNow({ pull: true, push: true }).finally(() => void openEvents());
     };
     const offline = () => {
@@ -1513,13 +1540,16 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
         void finishHistorySession(true);
         for (const id of [...saveTimers.current.keys()]) void flushDocument(id);
       } else {
+        if (!serverSessionVerified) return;
         void syncCoordinator.current?.runNow({ pull: true, push: true }).finally(() => void openEvents());
       }
     };
     window.addEventListener("online", online);
     window.addEventListener("offline", offline);
     document.addEventListener("visibilitychange", visibility);
-    void openEvents();
+    if (serverSessionVerified && navigator.onLine && document.visibilityState === "visible") {
+      void syncCoordinator.current?.runNow({ pull: true, push: true }).finally(() => void openEvents());
+    }
     return () => {
       closeEvents();
       clearFallback();
@@ -1527,7 +1557,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
       window.removeEventListener("offline", offline);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [workspaceLoaded, user.id]);
+  }, [serverSessionVerified, workspaceLoaded, user.id]);
 
   const indexedActiveDocument = activeId ? documentIndexRef.current.get(activeId) : null;
   const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
@@ -1571,6 +1601,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
     signature: activeAttachmentSignature,
     attachments: attachmentsRef,
     isActive: () => !logoutStarted.current,
+    allowNetwork: serverSessionVerified,
     onError: (error) => showMessage(translateError(error, t, "notice.attachmentLoadFailed"))
   });
   const attachmentUrls = attachmentUrlController.urls;
@@ -1762,7 +1793,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
 
   const purgeTrash = async (objectIds: string[] | null) => {
     if (purging) return;
-    if (!navigator.onLine) return showMessage(t("notice.purgeOnlineOnly"));
+    if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.purgeOnlineOnly"));
     setPurging(true);
     try {
       await synchronize();
@@ -1916,7 +1947,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   };
 
   const deleteHistorySnapshot = async (item: HistoryListItem) => {
-    if (!navigator.onLine) return showMessage(t("notice.historyDeleteOnlineOnly"));
+    if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.deleteConfirm", { date: formatNoteTime(item.capturedAt) }))) return;
     try {
       await api(`/api/notes/${item.noteId}/history/${item.historyId}`, { method: "DELETE" });
@@ -1936,7 +1967,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
 
   const clearCurrentHistory = async () => {
     if (!activeDocument) return;
-    if (!navigator.onLine) return showMessage(t("notice.historyDeleteOnlineOnly"));
+    if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.clearNoteConfirm", { title: activeDocument.title }))) return;
     try {
       await api(`/api/notes/${activeDocument.objectId}/history`, { method: "DELETE" });
@@ -1956,7 +1987,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
   };
 
   const clearAllHistory = async () => {
-    if (!navigator.onLine) return showMessage(t("notice.historyDeleteOnlineOnly"));
+    if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.clearAllConfirm"))) return;
     try {
       await api("/api/account/note-history", { method: "DELETE" });
@@ -2133,7 +2164,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
     await exportMarkdownZip(
       documentsRef.current,
       attachmentsRef.current,
-      (attachment) => decryptAttachmentBlob(user.id, attachment, () => !logoutStarted.current),
+      (attachment) => decryptAttachmentBlob(user.id, attachment, () => !logoutStarted.current, serverSessionVerified),
       objectId
     );
   };
@@ -2145,7 +2176,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
     await exportMarkdownZip(
       documentsRef.current,
       attachmentsRef.current,
-      (attachment) => decryptAttachmentBlob(user.id, attachment, () => !logoutStarted.current),
+      (attachment) => decryptAttachmentBlob(user.id, attachment, () => !logoutStarted.current, serverSessionVerified),
       roots
     );
   };
@@ -2215,7 +2246,13 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
     for (const cached of attachmentUrlCache.current.values()) URL.revokeObjectURL(cached.url);
     attachmentUrlCache.current.clear();
     onLocked(logout);
-    if (logout) void api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    if (logout) {
+      const loggedOut = await api("/api/auth/logout", { method: "POST" })
+        .then(() => true)
+        .catch(() => false);
+      if (loggedOut) await clearPendingEndpointRevocation(endpoint.id).catch(() => undefined);
+      else await markEndpointRevocationPending(user.id, endpoint.id).catch(() => undefined);
+    }
   };
 
   const manualLock = () => {
@@ -2483,7 +2520,7 @@ export function VaultWorkspace({ user, endpoint, credential, onCredentialChange,
 
       {(treeOpen || outlineOpen) && <button className="drawer-scrim" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} aria-label={t("app.closeSidebars")} />}
       {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onToggleLock={toggleNoteLock} onMove={moveDocuments} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
-      {settingsOpen && <SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} />}
+      {settingsOpen && <SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} />}
       {message && <Toast notice={message} onDismiss={() => setMessage(null)} />}
     </div>
   );

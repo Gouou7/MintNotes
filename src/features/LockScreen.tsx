@@ -13,12 +13,13 @@ interface Props {
   user: User;
   endpoint: AuthEndpoint;
   credential: DeviceUnlockCredential;
+  serverSessionVerified: boolean;
   onUnlocked: (refreshCredential?: boolean) => Promise<void>;
   onTrustExhausted: () => Promise<void>;
   onLogout: () => Promise<void>;
 }
 
-export function LockScreen({ user, endpoint, credential, onUnlocked, onTrustExhausted, onLogout }: Props) {
+export function LockScreen({ user, endpoint, credential, serverSessionVerified, onUnlocked, onTrustExhausted, onLogout }: Props) {
   const { t } = useI18n();
   const [pin, setPin] = useState("");
   const [password, setPassword] = useState("");
@@ -72,11 +73,12 @@ export function LockScreen({ user, endpoint, credential, onUnlocked, onTrustExha
       <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
       <h1 className="lock-user-name" title={user.displayName}>{user.displayName}</h1>
       <p className="lock-status"><AppIcon icon={LockKeyhole} size={18} />{t("lock.title")}</p>
+      {!serverSessionVerified && <p className="auth-guidance warning">{t("lock.offline")}</p>}
       {!usePassword && hasDevicePin(credential) ? <form onSubmit={unlockWithPin}>
         <label>{t("lock.devicePin")}<input type="password" value={pin} onChange={(event) => setPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" autoFocus required /></label>
         {error && <p className="error">{error}</p>}
         <button type="submit" className="primary" disabled={busy}>{busy ? t("lock.unlocking") : t("lock.unlockWithPin")}</button>
-        <button type="button" onClick={() => { setUsePassword(true); setError(""); }}>{t("lock.usePassword")}</button>
+        {serverSessionVerified && <button type="button" onClick={() => { setUsePassword(true); setError(""); }}>{t("lock.usePassword")}</button>}
       </form> : <form onSubmit={unlockWithPassword}>
         <label>{t("auth.masterPassword")}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete="current-password" enterKeyHint="done" autoFocus required /></label>
         {error && <p className="error">{error}</p>}

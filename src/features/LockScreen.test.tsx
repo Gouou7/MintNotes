@@ -59,7 +59,7 @@ describe("LockScreen keyboard submission", () => {
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
+    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} serverSessionVerified onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
 
     expect(container.querySelector(".lock-card h1")?.textContent).toBe(user.displayName);
     expect(container.querySelector(".lock-card h1")?.getAttribute("title")).toBe(user.displayName);
@@ -93,12 +93,25 @@ describe("LockScreen keyboard submission", () => {
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={onLogout} /></I18nProvider>));
+    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} serverSessionVerified onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={onLogout} /></I18nProvider>));
 
     await act(async () => button(container, "退出登录").click());
     expect(onLogout).not.toHaveBeenCalled();
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
     await act(async () => button(container, "登出").click());
     expect(onLogout).toHaveBeenCalledOnce();
+  });
+
+  it("requires the local PIN and hides master-password fallback in offline mode", async () => {
+    localStorage.setItem("webmd-notes-language", "zh-CN");
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} serverSessionVerified={false} onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
+
+    expect(container.textContent).toContain("离线模式");
+    expect(button(container, "使用 PIN 解锁")).toBeTruthy();
+    expect(container.textContent).not.toContain("改用主密码");
   });
 });

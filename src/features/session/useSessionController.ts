@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../api";
 import { cryptoClient } from "../../crypto/client";
 import {
@@ -8,13 +8,16 @@ import {
   forgetDeviceUnlock,
   flushPendingEndpointRevocations,
   getDeviceUnlock,
+  getRememberedOfflineDevice,
   grantCurrentBrowserSession,
   hasCurrentBrowserSessionGrant,
   hasDevicePin,
   listenForBrowserSessionGrantRequests,
+  markEndpointRevocationPending,
   rememberDeviceUnlock,
   requestBrowserSessionGrant,
-  restoreDeviceUnlock
+  restoreDeviceUnlock,
+  updateVerifiedDeviceSession
 } from "../../crypto/deviceUnlock";
 import { deleteLocalUserData, localDb, type DeviceUnlockCredential } from "../../storage/database";
 import type { AuthEndpoint, User } from "../../types";
@@ -26,58 +29,178 @@ function isReloadNavigation(): boolean {
   return navigation?.type === "reload";
 }
 
+export function sessionsMatch(left: AuthSession, right: AuthSession): boolean {
+  return left.user.id === right.user.id
+    && left.endpoint.id === right.endpoint.id
+    && right.endpoint.remembered;
+}
+
 export function useSessionController() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [credential, setCredential] = useState<DeviceUnlockCredential | null>(null);
   const [restoringDevice, setRestoringDevice] = useState(true);
+  const [serverSessionVerified, setServerSessionVerified] = useState(false);
+  const [offlineUnavailable, setOfflineUnavailable] = useState(false);
+  const verificationInFlight = useRef<Promise<void> | null>(null);
+
+  const clearSessionState = useCallback(async (userId?: string) => {
+    if (userId) await forgetDeviceUnlock(userId).catch(() => undefined);
+    await cryptoClient.lock().catch(() => undefined);
+    setUser(null);
+    setSession(null);
+    setCredential(null);
+    setServerSessionVerified(false);
+    setOfflineUnavailable(false);
+  }, []);
+
+  const restoreOfflineSession = useCallback(async (): Promise<boolean> => {
+    const remembered = await getRememberedOfflineDevice();
+    if (!remembered) {
+      setOfflineUnavailable(true);
+      return false;
+    }
+    const { credential: stored, session: verified } = remembered;
+    const offlineSession = { user: verified.user, endpoint: verified.endpoint };
+    if (!hasDevicePin(stored)) {
+      const restored = await restoreDeviceUnlock(stored.userId, stored.endpointId, false);
+      if (!restored) {
+        await forgetDeviceUnlock(stored.userId).catch(() => undefined);
+        setOfflineUnavailable(true);
+        return false;
+      }
+      setUser(verified.user);
+    }
+    setSession(offlineSession);
+    setCredential(stored);
+    setServerSessionVerified(false);
+    setOfflineUnavailable(false);
+    return true;
+  }, []);
+
+  const restoreVerifiedSession = useCallback(async (
+    remote: AuthSession,
+    preserveUnlockState = false
+  ): Promise<boolean> => {
+    const stored = await getDeviceUnlock(remote.user.id, remote.endpoint.id);
+    if (!stored) return false;
+    if (stored.mode === "session") {
+      const browserSessionGranted = hasCurrentBrowserSessionGrant(remote.endpoint.id)
+        || await requestBrowserSessionGrant(remote.endpoint.id);
+      if (!browserSessionGranted) {
+        await forgetDeviceUnlock(remote.user.id);
+        await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+        return false;
+      }
+    }
+    const updated = await updateVerifiedDeviceSession(remote.user, remote.endpoint) ?? stored;
+    setSession(remote);
+    setCredential(updated);
+    setServerSessionVerified(true);
+    setOfflineUnavailable(false);
+    if (preserveUnlockState) {
+      setUser((current) => current ? remote.user : null);
+      return true;
+    }
+    const allowPinRefresh = hasDevicePin(updated) && isReloadNavigation();
+    if (await restoreDeviceUnlock(remote.user.id, remote.endpoint.id, allowPinRefresh)) {
+      setUser(remote.user);
+    }
+    return true;
+  }, []);
 
   useEffect(() => listenForBrowserSessionGrantRequests(), []);
 
   useEffect(() => {
     let active = true;
-    void flushPendingEndpointRevocations().then(() => api<AuthSession>("/api/auth/me"))
-      .then(async ({ user: sessionUser, endpoint }) => {
-        const stored = await getDeviceUnlock(sessionUser.id, endpoint.id);
-        if (!stored) return;
-        const browserSessionGranted = hasCurrentBrowserSessionGrant(endpoint.id)
-          || await requestBrowserSessionGrant(endpoint.id);
-        if (stored.mode === "session" && !browserSessionGranted) {
-          await forgetDeviceUnlock(sessionUser.id);
-          await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    void (async () => {
+      if (!navigator.onLine) {
+        await restoreOfflineSession();
+        return;
+      }
+      try {
+        await flushPendingEndpointRevocations();
+        const remote = await api<AuthSession>("/api/auth/me");
+        if (active) await restoreVerifiedSession(remote);
+      } catch (value) {
+        if (!active) return;
+        if (value instanceof ApiError && value.status === 401) {
+          const credentials = await localDb.deviceCredentials.toArray();
+          await Promise.all(credentials.map((entry) => forgetDeviceUnlock(entry.userId)));
           return;
         }
-        if (!active) return;
-        setSession({ user: sessionUser, endpoint });
-        setCredential(stored);
-        const allowPinRefresh = hasDevicePin(stored) && isReloadNavigation();
-        if (await restoreDeviceUnlock(sessionUser.id, endpoint.id, allowPinRefresh) && active) {
-          setUser(sessionUser);
-        }
-      })
-      .catch(async (value) => {
-        if (!(value instanceof ApiError) || value.status !== 401) return;
-        const credentials = await localDb.deviceCredentials.toArray();
-        await Promise.all(credentials.map((entry) => forgetDeviceUnlock(entry.userId)));
-      })
-      .finally(() => { if (active) setRestoringDevice(false); });
+        await restoreOfflineSession();
+      }
+    })().finally(() => {
+      if (active) setRestoringDevice(false);
+    });
     return () => { active = false; };
-  }, []);
+  }, [restoreOfflineSession, restoreVerifiedSession]);
 
   useEffect(() => {
     const invalidate = () => {
-      const current = session;
-      void (async () => {
-        if (current) await forgetDeviceUnlock(current.user.id).catch(() => undefined);
-        await cryptoClient.lock().catch(() => undefined);
-        setUser(null);
-        setSession(null);
-        setCredential(null);
-      })();
+      const currentUserId = session?.user.id;
+      void clearSessionState(currentUserId);
     };
     window.addEventListener("webmd:session-invalid", invalidate);
     return () => window.removeEventListener("webmd:session-invalid", invalidate);
-  }, [session]);
+  }, [clearSessionState, session?.user.id]);
+
+  useEffect(() => {
+    if (!session || serverSessionVerified) return;
+    let cancelled = false;
+
+    const verify = () => {
+      if (
+        cancelled
+        || verificationInFlight.current
+        || !navigator.onLine
+        || document.visibilityState !== "visible"
+      ) return;
+      const expected = session;
+      const attempt = (async () => {
+        try {
+          await flushPendingEndpointRevocations();
+          const remote = await api<AuthSession>("/api/auth/me");
+          if (cancelled) return;
+          if (!sessionsMatch(expected, remote)) {
+            await clearSessionState(expected.user.id);
+            return;
+          }
+          await restoreVerifiedSession(remote, true);
+        } catch (value) {
+          if (cancelled) return;
+          if (value instanceof ApiError && value.status === 401) {
+            await clearSessionState(expected.user.id);
+          }
+        }
+      })().finally(() => {
+        if (verificationInFlight.current === attempt) verificationInFlight.current = null;
+      });
+      verificationInFlight.current = attempt;
+    };
+
+    const visibility = () => {
+      if (document.visibilityState === "visible") verify();
+    };
+    const timer = window.setInterval(verify, 30_000);
+    window.addEventListener("online", verify);
+    document.addEventListener("visibilitychange", visibility);
+    verify();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("online", verify);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, [clearSessionState, restoreVerifiedSession, serverSessionVerified, session]);
+
+  useEffect(() => {
+    if (!offlineUnavailable || session) return;
+    const online = () => setOfflineUnavailable(false);
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+  }, [offlineUnavailable, session]);
 
   useEffect(() => {
     const logoutAcrossTabs = (event: Event) => {
@@ -88,6 +211,7 @@ export function useSessionController() {
       setUser(null);
       setSession(null);
       setCredential(null);
+      setServerSessionVerified(false);
       void cryptoClient.lock()
         .catch(() => undefined)
         .then(() => deleteLocalUserData(current.user.id).catch(() => undefined));
@@ -99,54 +223,61 @@ export function useSessionController() {
   const handleUnlocked = async (unlockedUser: User, endpoint: AuthEndpoint) => {
     await clearPendingEndpointRevocation(endpoint.id).catch(() => undefined);
     const stored = await rememberDeviceUnlock(
-      unlockedUser.id,
-      endpoint.id,
+      unlockedUser,
+      endpoint,
       endpoint.remembered ? "remembered" : "session"
     ).catch(() => undefined);
     setSession({ user: unlockedUser, endpoint });
     setCredential(stored ?? null);
     setUser(unlockedUser);
+    setServerSessionVerified(true);
+    setOfflineUnavailable(false);
   };
 
   const logoutLockedSession = async () => {
-    const endpointId = session?.endpoint.id;
-    if (session) {
-      await deleteLocalUserData(session.user.id);
-      broadcastAccountLogout(session.user.id);
+    const current = session;
+    if (current) {
+      await deleteLocalUserData(current.user.id);
+      broadcastAccountLogout(current.user.id);
     }
     clearCurrentBrowserSessionGrant();
     await cryptoClient.lock().catch(() => undefined);
     const loggedOut = await api("/api/auth/logout", { method: "POST" })
       .then(() => true)
       .catch(() => false);
-    if (loggedOut && endpointId) {
-      await clearPendingEndpointRevocation(endpointId).catch(() => undefined);
+    if (current) {
+      if (loggedOut) await clearPendingEndpointRevocation(current.endpoint.id).catch(() => undefined);
+      else await markEndpointRevocationPending(current.user.id, current.endpoint.id).catch(() => undefined);
     }
     setUser(null);
     setSession(null);
     setCredential(null);
+    setServerSessionVerified(false);
   };
 
   const handleTrustExhausted = async () => {
-    const endpointId = session?.endpoint.id;
-    if (session) await forgetDeviceUnlock(session.user.id).catch(() => undefined);
+    const current = session;
+    if (current) await forgetDeviceUnlock(current.user.id).catch(() => undefined);
     clearCurrentBrowserSessionGrant();
     await cryptoClient.lock().catch(() => undefined);
     const loggedOut = await api("/api/auth/logout", { method: "POST" })
       .then(() => true)
       .catch(() => false);
-    if (loggedOut && endpointId) {
-      await clearPendingEndpointRevocation(endpointId).catch(() => undefined);
+    if (current) {
+      if (loggedOut) await clearPendingEndpointRevocation(current.endpoint.id).catch(() => undefined);
+      else await markEndpointRevocationPending(current.user.id, current.endpoint.id).catch(() => undefined);
     }
     setUser(null);
     setSession(null);
     setCredential(null);
+    setServerSessionVerified(false);
   };
 
   const unlockStoredSession = async (refreshCredential = false) => {
     if (!session || !credential) return;
     if (refreshCredential) {
-      const next = await rememberDeviceUnlock(session.user.id, session.endpoint.id, credential.mode);
+      if (!serverSessionVerified) return;
+      const next = await rememberDeviceUnlock(session.user, session.endpoint, credential.mode);
       setCredential(next);
     }
     grantCurrentBrowserSession(session.endpoint.id);
@@ -154,10 +285,16 @@ export function useSessionController() {
   };
 
   const updateDisplayName = (displayName: string) => {
+    const nextSession = session
+      ? { ...session, user: { ...session.user, displayName } }
+      : null;
     setUser((current) => current ? { ...current, displayName } : current);
-    setSession((current) => current
-      ? { ...current, user: { ...current.user, displayName } }
-      : current);
+    setSession(nextSession);
+    if (serverSessionVerified && nextSession) {
+      void updateVerifiedDeviceSession(nextSession.user, nextSession.endpoint)
+        .then((next) => { if (next) setCredential(next); })
+        .catch(() => undefined);
+    }
   };
 
   const handleVaultLocked = (logout: boolean) => {
@@ -166,6 +303,7 @@ export function useSessionController() {
     if (logout) {
       setSession(null);
       setCredential(null);
+      setServerSessionVerified(false);
     } else {
       void getDeviceUnlock(user.id, session.endpoint.id)
         .then((next) => setCredential(next ?? null));
@@ -177,6 +315,8 @@ export function useSessionController() {
     session,
     credential,
     restoringDevice,
+    serverSessionVerified,
+    offlineUnavailable,
     handleUnlocked,
     logoutLockedSession,
     handleTrustExhausted,

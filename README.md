@@ -12,9 +12,9 @@ If you find a bug or have a feature suggestion, please submit an issue—or ask 
 - **Local-first and end-to-end encrypted:** Input and local saves never wait for the network; titles, content, folders, and attachments are encrypted in the browser before synchronization.
 - **Markdown editing:** Typora-style live editing, source mode, reading mode, KaTeX math, Mermaid diagrams, WikiLinks, extensible Obsidian-style callouts, YAML properties, a live outline, and text statistics.
 - **Organization and history:** Folders, search, sorting, drag-and-drop, note locking, trash, and encrypted cross-device version history with preview and restore.
-- **Multi-user and device security:** Multi-user accounts, recovery keys, activation codes, remembered devices, PIN-encrypted local unlock credentials, automatic locking, and remote sign-out.
+- **Multi-user and device security:** Multi-user accounts, recovery keys, activation codes, remembered devices with offline cold-start access, optional PIN-encrypted local unlock credentials, automatic locking, and remote sign-out.
 - **Attachments and data migration:** Encrypted image attachments plus Markdown/ZIP import and export that preserve folder structure and attachment paths.
-- **PWA and multi-device synchronization:** Installable desktop, tablet, and mobile layouts with offline editing, themes, and multilingual interfaces.
+- **PWA and multi-device synchronization:** Installable desktop, tablet, and mobile layouts with remembered-device offline startup and editing, deferred synchronization, themes, and multilingual interfaces.
 - **Lightweight self-hosting:** One Docker service backed by SQLite, with a consistent online-backup workflow.
 
 ## Technology

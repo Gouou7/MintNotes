@@ -4,8 +4,10 @@ import {
   type DeviceUnlockCredential,
   type DirectDeviceUnlockCredential,
   type LegacyDeviceUnlockCredential,
-  type PinProtectedDeviceUnlockCredential
+  type PinProtectedDeviceUnlockCredential,
+  type VerifiedDeviceSession
 } from "../storage/database";
+import type { AuthEndpoint, User } from "../types";
 
 const SESSION_GRANT_KEY = "webmd-device-session-grant";
 const PIN_REFRESH_GRANT_KEY = "webmd-pin-refresh-grant-v1";
@@ -94,15 +96,19 @@ export async function requestBrowserSessionGrant(endpointId: string): Promise<bo
 }
 
 export async function rememberDeviceUnlock(
-  userId: string,
-  endpointId: string,
+  user: User,
+  endpoint: AuthEndpoint,
   mode: "remembered" | "session"
 ): Promise<DeviceUnlockCredential> {
+  const userId = user.id;
+  const endpointId = endpoint.id;
   const previous = await localDb.deviceCredentials.get(userId);
+  const verifiedSession = createVerifiedSession(user, endpoint);
   if (previous?.endpointId === endpointId && hasDevicePin(previous)) {
     const credential: DeviceUnlockCredential = {
       ...previous,
       mode,
+      verifiedSession,
       failedPinAttempts: 0,
       updatedAt: new Date().toISOString()
     };
@@ -122,6 +128,7 @@ export async function rememberDeviceUnlock(
     endpointId,
     mode,
     deviceKey,
+    verifiedSession,
     ciphertext: wrapped.ciphertext,
     nonce: wrapped.nonce,
     version: 3,
@@ -140,6 +147,59 @@ export async function getDeviceUnlock(userId: string, endpointId?: string): Prom
   if (!credential || (credential.version !== 2 && credential.version !== 3) || (endpointId && credential.endpointId !== endpointId)) return undefined;
   if (credential.version === 3 && credential.protection !== "device" && credential.protection !== "pin") return undefined;
   return credential;
+}
+
+function createVerifiedSession(user: User, endpoint: AuthEndpoint): VerifiedDeviceSession {
+  return {
+    version: 1,
+    user,
+    endpoint,
+    verifiedAt: new Date().toISOString()
+  };
+}
+
+export function verifiedSessionForCredential(
+  credential: DeviceUnlockCredential | null | undefined
+): VerifiedDeviceSession | null {
+  const verified = credential?.verifiedSession;
+  if (
+    !credential
+    || credential.mode !== "remembered"
+    || !verified
+    || verified.version !== 1
+    || verified.user.id !== credential.userId
+    || verified.endpoint.id !== credential.endpointId
+    || !verified.endpoint.remembered
+    || Number.isNaN(Date.parse(verified.verifiedAt))
+  ) return null;
+  return verified;
+}
+
+export async function getRememberedOfflineDevice(): Promise<{
+  credential: DeviceUnlockCredential;
+  session: VerifiedDeviceSession;
+} | null> {
+  const candidates = (await localDb.deviceCredentials.toArray())
+    .map((credential) => ({ credential, session: verifiedSessionForCredential(credential) }))
+    .filter((entry): entry is { credential: DeviceUnlockCredential; session: VerifiedDeviceSession } => Boolean(entry.session))
+    .sort((left, right) => Date.parse(right.session.verifiedAt) - Date.parse(left.session.verifiedAt));
+  return candidates[0] ?? null;
+}
+
+export async function updateVerifiedDeviceSession(
+  user: User,
+  endpoint: AuthEndpoint
+): Promise<DeviceUnlockCredential | undefined> {
+  const credential = await getDeviceUnlock(user.id, endpoint.id);
+  if (!credential) return undefined;
+  const updated: DeviceUnlockCredential = {
+    ...credential,
+    mode: endpoint.remembered ? "remembered" : "session",
+    verifiedSession: createVerifiedSession(user, endpoint),
+    updatedAt: new Date().toISOString()
+  };
+  await localDb.deviceCredentials.put(updated);
+  return updated;
 }
 
 export function hasDevicePin(credential: DeviceUnlockCredential | null | undefined): boolean {
@@ -240,6 +300,7 @@ export async function restoreDeviceUnlock(
         endpointId: credential.endpointId,
         mode: credential.mode,
         deviceKey: credential.deviceKey,
+        verifiedSession: credential.verifiedSession,
         ciphertext: credential.ciphertext,
         nonce: credential.nonce,
         version: 3,
@@ -276,6 +337,7 @@ export async function setDevicePin(userId: string, endpointId: string, pin: stri
     endpointId,
     mode: credential.mode,
     deviceKey: credential.deviceKey,
+    verifiedSession: credential.verifiedSession,
     version: 3,
     protection: "pin",
     pinKdfVersion: 1,
@@ -299,6 +361,7 @@ export async function removeDevicePin(userId: string, endpointId: string): Promi
     endpointId,
     mode: credential.mode,
     deviceKey: credential.deviceKey,
+    verifiedSession: credential.verifiedSession,
     version: 3,
     protection: "device",
     ciphertext: wrapped.ciphertext,
@@ -362,6 +425,7 @@ export async function unlockDeviceWithPin(userId: string, endpointId: string, pi
       endpointId,
       mode: credential.mode,
       deviceKey: credential.deviceKey,
+      verifiedSession: credential.verifiedSession,
       version: 3,
       protection: "pin",
       pinKdfVersion: 1,

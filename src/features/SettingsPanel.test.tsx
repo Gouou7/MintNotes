@@ -77,7 +77,7 @@ async function renderSettings(user: User = admin, onNotify = vi.fn(), onPreferen
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container); roots.push(root);
-  await act(async () => root.render(<I18nProvider><SettingsPanel user={user} endpoint={{ id: "endpoint", remembered: false }} credential={null} onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={vi.fn()} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={vi.fn()} avatarUrl={null} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
+  await act(async () => root.render(<I18nProvider><SettingsPanel user={user} endpoint={{ id: "endpoint", remembered: false }} credential={null} serverSessionVerified onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={vi.fn()} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={vi.fn()} avatarUrl={null} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
   await act(async () => { await Promise.resolve(); });
   return container;
 }

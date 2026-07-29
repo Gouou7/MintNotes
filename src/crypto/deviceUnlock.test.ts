@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cryptoClient } from "./client";
-import { clearPinRefreshGrant, hasDevicePin, isValidDevicePin, restoreDeviceUnlock, setDevicePin, unlockDeviceWithPin } from "./deviceUnlock";
+import {
+  clearPinRefreshGrant,
+  getRememberedOfflineDevice,
+  hasDevicePin,
+  isValidDevicePin,
+  restoreDeviceUnlock,
+  setDevicePin,
+  unlockDeviceWithPin,
+  updateVerifiedDeviceSession,
+  verifiedSessionForCredential
+} from "./deviceUnlock";
 import {
   localDb,
   type DirectDeviceUnlockCredential,
@@ -47,6 +57,15 @@ const directCredential: DirectDeviceUnlockCredential = {
   autoLockMinutes: 0,
   updatedAt: protectedCredential.updatedAt
 };
+const verifiedDirectCredential: DirectDeviceUnlockCredential = {
+  ...directCredential,
+  verifiedSession: {
+    version: 1,
+    user: { id: directCredential.userId, username: "user", displayName: "User", role: "user" },
+    endpoint: { id: directCredential.endpointId, remembered: true },
+    verifiedAt: "2026-07-25T01:00:00.000Z"
+  }
+};
 const legacyCredential: LegacyDeviceUnlockCredential = {
   ...directCredential,
   version: 2,
@@ -70,6 +89,60 @@ describe("device PIN validation", () => {
   it("rejects PINs shorter than four characters", () => {
     expect(isValidDevicePin("abc")).toBe(false);
     expect(isValidDevicePin("")).toBe(false);
+  });
+});
+
+describe("remembered offline device trust", () => {
+  it("accepts only matching remembered credentials with a verified session snapshot", () => {
+    expect(verifiedSessionForCredential(verifiedDirectCredential)?.user.id).toBe(directCredential.userId);
+    expect(verifiedSessionForCredential({ ...verifiedDirectCredential, mode: "session" })).toBeNull();
+    expect(verifiedSessionForCredential({
+      ...verifiedDirectCredential,
+      verifiedSession: {
+        ...verifiedDirectCredential.verifiedSession!,
+        endpoint: { id: "different-endpoint", remembered: true }
+      }
+    })).toBeNull();
+    expect(verifiedSessionForCredential(directCredential)).toBeNull();
+  });
+
+  it("selects the most recently verified eligible remembered device", async () => {
+    const older = {
+      ...verifiedDirectCredential,
+      userId: "older-user",
+      endpointId: "older-endpoint",
+      verifiedSession: {
+        ...verifiedDirectCredential.verifiedSession!,
+        user: { ...verifiedDirectCredential.verifiedSession!.user, id: "older-user" },
+        endpoint: { id: "older-endpoint", remembered: true },
+        verifiedAt: "2026-07-24T01:00:00.000Z"
+      }
+    };
+    vi.spyOn(localDb.deviceCredentials, "toArray").mockResolvedValue([
+      older,
+      verifiedDirectCredential,
+      { ...verifiedDirectCredential, userId: "session-user", mode: "session" }
+    ]);
+
+    await expect(getRememberedOfflineDevice()).resolves.toEqual({
+      credential: verifiedDirectCredential,
+      session: verifiedDirectCredential.verifiedSession
+    });
+  });
+
+  it("backfills the verified session without replacing the wrapped credential", async () => {
+    const user = { id: directCredential.userId, username: "user", displayName: "Updated", role: "user" as const };
+    const endpoint = { id: directCredential.endpointId, remembered: true };
+    vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(directCredential);
+    const put = vi.spyOn(localDb.deviceCredentials, "put").mockResolvedValue(directCredential.userId);
+
+    await updateVerifiedDeviceSession(user, endpoint);
+
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      ciphertext: directCredential.ciphertext,
+      nonce: directCredential.nonce,
+      verifiedSession: expect.objectContaining({ version: 1, user, endpoint })
+    }));
   });
 });
 

@@ -97,7 +97,7 @@ When changing a responsibility currently coordinated by `src/App.tsx`, `src/feat
 - Moving a note to trash tombstones its attachments; physical chunk deletion occurs only after the explicit synchronized purge flow.
 - The bundled browser client enforces a 25 MiB raster-image limit. Raising only `MAX_ATTACHMENT_SIZE_MB` does not increase the client limit.
 - PNG, JPEG, GIF, WebP, and AVIF are detected by file signatures. SVG must not be rendered directly.
-- The current offline boundary begins after vault unlock. Do not document cold offline restart/unlock as supported until the authentication and key-envelope flow implements it.
+- Offline cold startup is available only to a remembered device with a matching versioned last-verified user/endpoint snapshot. A direct device credential may unlock locally; a PIN-protected credential must show the PIN lock screen and must not use a refresh or cross-tab grant to bypass it. Cached identity is for local routing and display only: synchronization, SSE, remote attachment reads, and every account/admin/server-policy request remain disabled until `/api/auth/me` revalidates the same remembered endpoint. A confirmed `401`, endpoint-mode downgrade, or identity mismatch deletes local trust and locks the vault without deleting encrypted objects or outboxes.
 
 ## Editor and PWA constraints
 

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added offline cold-start access for remembered devices. Devices without a local PIN open their encrypted local vault directly; PIN-protected devices require the PIN, and non-remembered sessions remain unavailable offline.
+- Added a versioned last-verified local session snapshot and foreground revalidation. Local-only sessions keep network features disabled until `/api/auth/me` confirms the same remembered endpoint, then resume synchronization in pull-before-push order.
+
+### Fixed
+
+- Fixed server or reverse-proxy unavailability sending remembered devices to the login page with a misleading registration-configuration error.
+- Fixed offline logout and exhausted-PIN revocation requests being lost after local account data was removed; the endpoint revocation is now retained for the next online startup.
+
+### Security
+
+- Server authorization is never inferred from the cached identity snapshot. A confirmed `401`, a non-remembered endpoint, or an identity mismatch deletes local trust and locks the vault while retaining encrypted objects and pending synchronization data.
+
 ## [0.8.1] - 2026-07-28
 
 ### Fixed

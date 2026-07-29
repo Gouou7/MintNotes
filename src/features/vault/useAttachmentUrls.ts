@@ -30,6 +30,7 @@ export function useAttachmentUrls(options: {
   signature: string;
   attachments: { current: OpenAttachment[] };
   isActive: () => boolean;
+  allowNetwork: boolean;
   onError: (error: unknown) => void;
 }) {
   const [urls, setUrls] = useState<Map<string, string>>(new Map());
@@ -59,7 +60,8 @@ export function useAttachmentUrls(options: {
           const blob = await decryptAttachmentBlob(
             options.userId,
             attachment,
-            options.isActive
+            options.isActive,
+            options.allowNetwork
           );
           const url = URL.createObjectURL(blob);
           if (cancelled) {
@@ -89,7 +91,7 @@ export function useAttachmentUrls(options: {
         }
       }
     };
-  }, [options.activeDocumentId, options.signature]);
+  }, [options.activeDocumentId, options.allowNetwork, options.signature]);
 
   useEffect(() => () => {
     for (const cached of cache.current.values()) URL.revokeObjectURL(cached.url);

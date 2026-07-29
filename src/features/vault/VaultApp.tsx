@@ -6,6 +6,7 @@ export interface VaultAppProps {
   user: User;
   endpoint: AuthEndpoint;
   credential: DeviceUnlockCredential | null;
+  serverSessionVerified: boolean;
   onCredentialChange: (credential: DeviceUnlockCredential | null) => void;
   onDisplayNameChange: (displayName: string) => void;
   onLocked: (logout: boolean) => void;

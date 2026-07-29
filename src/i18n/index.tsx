@@ -90,6 +90,11 @@ const messages = {
     "zh-CN": "无法获取注册配置，点击“注册”重试。",
     "zh-TW": "無法取得註冊設定，點選「註冊」重試。"
   },
+  "auth.offlineUnavailable": {
+    en: "Offline access is available only on a remembered device that has completed one online verification with this version.",
+    "zh-CN": "离线访问仅适用于已记住、且已使用当前版本完成过一次在线验证的设备。",
+    "zh-TW": "離線存取僅適用於已記住、且已使用目前版本完成過一次線上驗證的裝置。"
+  },
   "auth.passwordMin": {
     en: "The master password must contain at least 10 characters",
     "zh-CN": "主密码至少需要 10 个字符",
@@ -115,6 +120,11 @@ const messages = {
     "zh-TW": "正在復原此裝置的加密保險箱…"
   },
   "lock.title": { en: "Notes locked", "zh-CN": "笔记已锁定", "zh-TW": "筆記已鎖定" },
+  "lock.offline": {
+    en: "Offline mode · enter the local PIN to open cached notes. Master-password unlock requires the server.",
+    "zh-CN": "离线模式 · 输入本机 PIN 可打开缓存笔记；主密码解锁需要连接服务器。",
+    "zh-TW": "離線模式 · 輸入本機 PIN 可開啟快取筆記；主密碼解鎖需要連線伺服器。"
+  },
   "lock.devicePin": { en: "Device PIN", "zh-CN": "本机 PIN", "zh-TW": "本機 PIN" },
   "lock.unlocking": { en: "Unlocking…", "zh-CN": "正在解锁…", "zh-TW": "正在解鎖…" },
   "lock.unlockWithPin": { en: "Unlock with PIN", "zh-CN": "使用 PIN 解锁", "zh-TW": "使用 PIN 解鎖" },
@@ -128,6 +138,11 @@ const messages = {
   "lock.invalidPassword": { en: "Incorrect master password", "zh-CN": "主密码不正确", "zh-TW": "主密碼不正確" },
 
   "settings.title": { en: "Settings", "zh-CN": "设置", "zh-TW": "設定" },
+  "settings.localOnly": {
+    en: "Local-only mode · server account and synchronization controls will be available after the session is verified.",
+    "zh-CN": "仅本地模式 · 会话重新验证后，服务器账户和同步控制才会恢复。",
+    "zh-TW": "僅本機模式 · 工作階段重新驗證後，伺服器帳戶與同步控制才會恢復。"
+  },
   "settings.close": { en: "Close settings", "zh-CN": "关闭设置", "zh-TW": "關閉設定" },
   "settings.general": { en: "General", "zh-CN": "常规", "zh-TW": "一般" },
   "settings.security": { en: "Security", "zh-CN": "安全", "zh-TW": "安全性" },
@@ -475,6 +490,11 @@ const messages = {
   "notice.remoteIntegrityOthers": { en: "{count} encrypted server items failed integrity checks. Other notes loaded normally and all readable local versions were retained.", "zh-CN": "{count} 个服务器加密项目未能通过完整性校验；其他笔记已正常加载，本机可读版本均已保留。", "zh-TW": "{count} 個伺服器加密項目未通過完整性驗證；其他筆記已正常載入，本機可讀版本均已保留。" },
   "notice.localRestoredSyncRetry": { en: "Notes were restored locally, but server synchronization failed and will retry automatically.", "zh-CN": "笔记已从本地恢复，但本次服务器同步失败，稍后会自动重试。", "zh-TW": "筆記已從本機復原，但本次伺服器同步失敗，稍後會自動重試。" },
   "notice.loadedOffline": { en: "Local notes loaded while offline.", "zh-CN": "离线状态下已加载本地笔记。", "zh-TW": "已在離線狀態載入本機筆記。" },
+  "notice.onlineSessionRequired": {
+    en: "This action requires an online, verified server session.",
+    "zh-CN": "此操作需要联网并完成服务器会话验证。",
+    "zh-TW": "此操作需要連線並完成伺服器工作階段驗證。"
+  },
   "notice.openDatabaseFailed": { en: "Unable to open the local encrypted database", "zh-CN": "无法打开本地加密数据库", "zh-TW": "無法開啟本機加密資料庫" },
   "notice.logoutLocalClearFailed": { en: "Unable to delete this account's local data. You have not been logged out.", "zh-CN": "无法删除当前账户的本地数据，尚未登出。", "zh-TW": "無法刪除目前帳戶的本機資料，尚未登出。" },
   "notice.attachmentLoadFailed": { en: "Unable to load attachment", "zh-CN": "附件加载失败", "zh-TW": "附件載入失敗" },

@@ -16,17 +16,19 @@ export default function App() {
       user={session.session.user}
       endpoint={session.session.endpoint}
       credential={session.credential}
+      serverSessionVerified={session.serverSessionVerified}
       onUnlocked={session.unlockStoredSession}
       onTrustExhausted={session.handleTrustExhausted}
       onLogout={session.logoutLockedSession}
     />;
   }
-  if (!session.user) return <AuthScreen onUnlocked={session.handleUnlocked} />;
+  if (!session.user) return <AuthScreen onUnlocked={session.handleUnlocked} offlineUnavailable={session.offlineUnavailable} />;
   return <VaultApp
     key={session.user.id}
     user={session.user}
     endpoint={session.session!.endpoint}
     credential={session.credential}
+    serverSessionVerified={session.serverSessionVerified}
     onCredentialChange={session.setCredential}
     onDisplayNameChange={session.updateDisplayName}
     onLocked={session.handleVaultLocked}

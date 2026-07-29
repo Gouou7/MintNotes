@@ -21,6 +21,7 @@ export interface ObjectPersistenceDependencies {
   userId: string;
   generation: { current: number };
   isActive: () => boolean;
+  canSynchronize: () => boolean;
   setSaveState: (state: Exclude<SaveState, "error">) => void;
   onPersistenceError: (objectId: string, error: unknown) => void;
   onPersistenceSuccess: (objectId: string) => void;
@@ -104,7 +105,7 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
       }
     }
     if (coordinated.isLatest) {
-      dependencies.setSaveState(navigator.onLine ? "local" : "offline");
+      dependencies.setSaveState(dependencies.canSynchronize() ? "local" : "offline");
     }
     return coordinated.value;
   };

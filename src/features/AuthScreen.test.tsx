@@ -22,7 +22,10 @@ vi.mock("../crypto/client", () => ({
 
 const roots: Root[] = [];
 
-async function renderAuth(config: { allowRegistration: boolean; bootstrapAllowed: boolean } | Error) {
+async function renderAuth(
+  config: { allowRegistration: boolean; bootstrapAllowed: boolean } | Error,
+  offlineUnavailable = false
+) {
   localStorage.setItem("webmd-notes-language", "zh-CN");
   if (config instanceof Error) vi.mocked(api).mockRejectedValueOnce(config);
   else vi.mocked(api).mockResolvedValueOnce(config);
@@ -30,7 +33,7 @@ async function renderAuth(config: { allowRegistration: boolean; bootstrapAllowed
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => { root.render(<I18nProvider><AuthScreen onUnlocked={vi.fn()} /></I18nProvider>); });
+  await act(async () => { root.render(<I18nProvider><AuthScreen onUnlocked={vi.fn()} offlineUnavailable={offlineUnavailable} /></I18nProvider>); });
   await act(async () => { await Promise.resolve(); });
   return container;
 }
@@ -183,5 +186,14 @@ describe("AuthScreen account entry points", () => {
     vi.mocked(api).mockResolvedValueOnce({ allowRegistration: true, bootstrapAllowed: false });
     await click(button(container, "注册"));
     expect(container.querySelector("h1")?.textContent).toBe("创建加密账户");
+  });
+
+  it("shows the remembered-device requirement instead of a registration error while offline", async () => {
+    vi.mocked(api).mockReset();
+    const container = await renderAuth(new Error("unused"), true);
+
+    expect(container.textContent).toContain("离线访问仅适用于已记住");
+    expect(container.textContent).not.toContain("无法获取注册配置");
+    expect(api).not.toHaveBeenCalled();
   });
 });
