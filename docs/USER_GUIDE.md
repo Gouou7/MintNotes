@@ -66,6 +66,8 @@ The center toolbar provides three modes:
 
 Markdown remains the canonical note format in every mode. Switching modes does not convert it to a proprietary document format. The right outline is generated from H1-H6 headings and never uploads as separate plaintext metadata.
 
+In Reading mode and read-only historical previews, hover over a fenced code block to reveal its copy button in the upper-right corner. Select it to copy the complete code block. The button remains visible on touch devices and can also be reached with the keyboard.
+
 An empty Live or Source editor shows a **Start writing…** hint at the first editable line. The hint disappears as soon as the editor receives focus, keeping the insertion caret unobstructed, and is presentation only: it is never added to Markdown, history, IndexedDB, synchronization, or exports.
 
 Use the lock button immediately to the left of the image action, or **Lock note** in a single note's contextual menu, to protect it from accidental editing or deletion. Locking the current note saves pending title and editor changes locally first, then shows the note in Reading mode without changing this device's remembered Live/Source/Reading choice. Live and Source are disabled while the note is locked; the title, YAML properties, and **Restore as current** history action are also unavailable. The image action remains visible but disabled to keep the toolbar layout stable. Use the same toolbar or contextual-menu action to unlock it and restore the underlying device-local mode. Changing only the lock state does not change the note's modification time. The file tree and pinned shortcuts show a small lock badge on protected notes.

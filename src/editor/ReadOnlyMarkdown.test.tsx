@@ -1,7 +1,18 @@
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
 import { ReadOnlyMarkdown } from "./ReadOnlyMarkdown";
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+afterEach(() => {
+  document.body.replaceChildren();
+  localStorage.clear();
+  Reflect.deleteProperty(navigator, "clipboard");
+  vi.clearAllMocks();
+});
 
 describe("ReadOnlyMarkdown", () => {
   it("renders an attachment reference from its in-memory Blob URL", () => {
@@ -83,5 +94,31 @@ describe("ReadOnlyMarkdown", () => {
     expect(html).toContain("mint-wikilink:");
     expect(html).toContain("class=\"mermaid-diagram\"");
     expect(html).not.toContain("<script");
+  });
+
+  it("copies every line from a fenced code block", async () => {
+    localStorage.setItem("webmd-notes-language", "en");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(
+      <I18nProvider><ReadOnlyMarkdown markdown={[
+        "```ts",
+        "const first = 1;",
+        "const second = first + 1;",
+        "```"
+      ].join("\n")} /></I18nProvider>
+    ));
+    const copyButton = container.querySelector<HTMLButtonElement>(".readonly-code-copy");
+    expect(copyButton?.getAttribute("aria-label")).toBe("Copy code");
+
+    await act(async () => copyButton?.click());
+
+    expect(writeText).toHaveBeenCalledWith("const first = 1;\nconst second = first + 1;\n");
+    expect(copyButton?.getAttribute("aria-label")).toBe("Code copied");
+    await act(async () => root.unmount());
   });
 });

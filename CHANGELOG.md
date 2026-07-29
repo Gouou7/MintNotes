@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Added image insertion by drag-and-drop or clipboard paste in both Live and Source editing modes, while leaving ordinary text paste unchanged.
+- Added a copy button to fenced code blocks in Reading mode and read-only history previews, with hover reveal, touch and keyboard access, and localized copy feedback.
 
 ### Fixed
 

@@ -197,7 +197,20 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .readonly-markdown h1:first-child { margin-top: 0; }
 .readonly-markdown code { padding: .14em .32em; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; }
 .readonly-markdown pre { overflow: auto; padding: 16px; border-radius: 8px; }
+.readonly-code-block { position: relative; margin: 1em 0; }
+.readonly-markdown .readonly-code-block pre { margin: 0; padding-right: 52px; }
 .readonly-markdown pre code { padding: 0; background: transparent; color: inherit; }
+.readonly-code-copy { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,.16); border-radius: 7px; opacity: 0; color: #f2f2ef; background: rgba(36,36,34,.9); box-shadow: 0 2px 8px rgba(0,0,0,.24); cursor: pointer; transition: opacity .14s ease, color .14s ease, background .14s ease, transform .14s ease; }
+.readonly-code-block:hover .readonly-code-copy, .readonly-code-copy:focus-visible { opacity: 1; }
+.readonly-code-copy:hover { background: #343432; transform: translateY(-1px); }
+.readonly-code-copy[data-copy-state="copied"] { color: var(--accent); }
+.readonly-code-copy[data-copy-state="failed"] { color: var(--danger); }
+@media (hover: none), (pointer: coarse) {
+  .readonly-code-copy { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .readonly-code-copy { transition: none; }
+}
 .readonly-markdown table { border-collapse: collapse; width: 100%; }
 .readonly-markdown th, .readonly-markdown td { border: 1px solid var(--border); padding: 7px 10px; }
 .readonly-markdown a { color: var(--accent-text); }

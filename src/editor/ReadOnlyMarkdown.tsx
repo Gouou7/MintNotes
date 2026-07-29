@@ -1,7 +1,10 @@
+import { Check, Copy } from "lucide-react";
 import rehypeKatex from "rehype-katex";
+import { Children, isValidElement, type HTMLAttributes, type ReactNode, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { AppIcon } from "../components/AppIcon";
 import { materializeAttachmentUrls } from "../features/attachmentFormat";
 import { useI18n } from "../i18n";
 import { CalloutBlock } from "./Callout";
@@ -17,6 +20,59 @@ import { parseFrontmatter } from "./frontmatter";
 import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
 import { MermaidDiagram } from "./richRenderers";
 import { remarkWikiLinks } from "./wikilinks";
+
+function renderedText(children: ReactNode): string {
+  return Children.toArray(children).map((child) => {
+    if (typeof child === "string" || typeof child === "number") return String(child);
+    if (isValidElement<{ children?: ReactNode }>(child)) return renderedText(child.props.children);
+    return "";
+  }).join("");
+}
+
+function ReadOnlyCodeBlock({
+  children,
+  ...props
+}: HTMLAttributes<HTMLPreElement>) {
+  const { t } = useI18n();
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const resetTimer = useRef<number | undefined>(undefined);
+  const label = copyState === "copied"
+    ? t("editor.codeCopied")
+    : copyState === "failed"
+      ? t("editor.codeCopyFailed")
+      : t("editor.copyCode");
+
+  useEffect(() => () => window.clearTimeout(resetTimer.current), []);
+
+  const copyCode = async () => {
+    window.clearTimeout(resetTimer.current);
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard API unavailable");
+      await navigator.clipboard.writeText(renderedText(children));
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+    resetTimer.current = window.setTimeout(() => setCopyState("idle"), 1800);
+  };
+
+  return (
+    <div className="readonly-code-block">
+      <pre {...props}>{children}</pre>
+      <button
+        type="button"
+        className="readonly-code-copy"
+        data-copy-state={copyState}
+        aria-label={label}
+        title={label}
+        onClick={() => void copyCode()}
+      >
+        <AppIcon icon={copyState === "copied" ? Check : Copy} size={15} />
+        <span className="sr-only" aria-live="polite">{copyState === "idle" ? "" : label}</span>
+      </button>
+    </div>
+  );
+}
 
 export function ReadOnlyMarkdown({
   markdown,
@@ -72,7 +128,7 @@ export function ReadOnlyMarkdown({
             if (classNames.includes("language-mermaid") && textChild && "value" in textChild) {
               return <MermaidDiagram source={String(textChild.value ?? "").replace(/\n$/, "")} />;
             }
-            return <pre {...props}>{children}</pre>;
+            return <ReadOnlyCodeBlock {...props}>{children}</ReadOnlyCodeBlock>;
           },
           a: ({ node, href, children, ...props }) => {
             const properties = node?.properties ?? {};
