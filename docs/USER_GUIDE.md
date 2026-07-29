@@ -173,7 +173,7 @@ Deleting one version, clearing the current note's history, and clearing all acco
 
 ## Add images
 
-Drop a supported image into the live or source editor to insert it at the drop position. The image toolbar button provides a file-picker fallback.
+Drop a supported image into the live or source editor to insert it at the drop position. You can also copy an image to the clipboard and paste it at the current cursor with `Ctrl+V` on Windows/Linux or `Command+V` on macOS. Ordinary text paste is unchanged. The image toolbar button provides a file-picker fallback.
 
 After local encryption finishes, an inserted image appears in the active note without requiring a refresh. It remains available when switching among Live, Source, and Reading modes; the temporary in-memory Blob URL used for display is never written into the canonical Markdown.
 

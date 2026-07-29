@@ -2477,7 +2477,15 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
               const latest = documentIndexRef.current.get(activeDocument.objectId);
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });
-            }} onWikiLink={openWikiLink} onImageDrop={async (file) => { const attachment = await addAttachment(activeDocument.objectId, file); return attachmentMarkdown(attachment.objectId, attachment.originalName); }} />
+            }} onWikiLink={openWikiLink} onImageInsert={async (file) => {
+              try {
+                const attachment = await addAttachment(activeDocument.objectId, file);
+                return attachmentMarkdown(attachment.objectId, attachment.originalName);
+              } catch (error) {
+                showMessage(translateError(error, t, "notice.attachmentSaveFailed"), "critical");
+                return null;
+              }
+            }} />
             : <EmptyEditor />}
         </div>
         <footer className="status-bar">

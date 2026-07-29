@@ -6,9 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added image insertion by drag-and-drop or clipboard paste in both Live and Source editing modes, while leaving ordinary text paste unchanged.
+
 ### Fixed
 
 - Added between-row drop feedback to A-Z, creation-time, and modification-time sorting so moving notes or folders out of nested directories has a clear destination indicator without overriding the selected sort order.
+- Fixed dragged images failing to insert in Source mode after local attachment encryption completed.
 
 ## [0.8.2] - 2026-07-29
 

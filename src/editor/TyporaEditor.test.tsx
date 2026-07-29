@@ -16,6 +16,33 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function imageTransfer(file: File, files: File[] = [file]): DataTransfer {
+  return {
+    files,
+    items: [{
+      getAsFile: () => file,
+      kind: "file",
+      type: file.type
+    }]
+  } as unknown as DataTransfer;
+}
+
+function transferEvent(
+  type: "drop" | "paste",
+  transfer: DataTransfer,
+  coordinates?: { clientX: number; clientY: number }
+): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, type === "paste" ? "clipboardData" : "dataTransfer", { value: transfer });
+  if (coordinates) {
+    Object.defineProperties(event, {
+      clientX: { value: coordinates.clientX },
+      clientY: { value: coordinates.clientY }
+    });
+  }
+  return event;
+}
+
 describe("TyporaEditor live mode", () => {
   it("exposes focus and shows a non-persistent hint for an empty note", async () => {
     localStorage.setItem("webmd-notes-language", "en");
@@ -151,6 +178,56 @@ describe("TyporaEditor live mode", () => {
 
     expect(editor.setMarkdown).toHaveBeenCalledOnce();
     expect(editor.setMarkdown).toHaveBeenCalledWith(`before\n\n![image](${blobUrl})`);
+
+    await act(async () => root.unmount());
+  });
+
+  it("inserts dragged and pasted clipboard images", async () => {
+    const editor = {
+      destroy: vi.fn(),
+      focus: vi.fn(),
+      getMarkdownOffsetAtPoint: vi.fn(() => 7),
+      insertMarkdown: vi.fn(),
+      setMarkdown: vi.fn()
+    } as unknown as TyporaWebEditor;
+    vi.mocked(createEditor).mockReturnValue(editor);
+    const onImageInsert = vi.fn(async () => `\n![image](webmd-attachment:${attachmentId})\n`);
+    const image = new File(["image"], "image.png", { type: "image/png" });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(
+      <TyporaEditor
+        markdown="Before after"
+        mode="live"
+        onChange={vi.fn()}
+        onImageInsert={onImageInsert}
+      />
+    ));
+    const host = container.querySelector<HTMLElement>(".typora-host");
+    if (!host) throw new Error("Missing Live editor host");
+
+    await act(async () => {
+      host.dispatchEvent(transferEvent("drop", imageTransfer(image), { clientX: 40, clientY: 80 }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(editor.getMarkdownOffsetAtPoint).toHaveBeenCalledWith(40, 80);
+    expect(editor.insertMarkdown).toHaveBeenLastCalledWith(
+      `\n![image](webmd-attachment:${attachmentId})\n`,
+      7
+    );
+
+    const pasteEvent = transferEvent("paste", imageTransfer(image, []));
+    await act(async () => {
+      host.dispatchEvent(pasteEvent);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(pasteEvent.defaultPrevented).toBe(true);
+    expect(onImageInsert).toHaveBeenCalledTimes(2);
+    expect(editor.insertMarkdown).toHaveBeenLastCalledWith(
+      `\n![image](webmd-attachment:${attachmentId})\n`
+    );
 
     await act(async () => root.unmount());
   });
@@ -423,6 +500,89 @@ describe("TyporaEditor live mode", () => {
     );
     expect(editor.setMarkdown).not.toHaveBeenCalled();
     expect(editor.insertMarkdown).not.toHaveBeenCalled();
+
+    await act(async () => root.unmount());
+  });
+});
+
+describe("TyporaEditor source mode", () => {
+  it("inserts a dragged image at the captured source selection", async () => {
+    let finishInsertion: ((insertion: string) => void) | undefined;
+    const onImageInsert = vi.fn(() => new Promise<string>((resolve) => {
+      finishInsertion = resolve;
+    }));
+    const onChange = vi.fn();
+    const image = new File(["image"], "image.png", { type: "image/png" });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(
+      <I18nProvider>
+        <TyporaEditor
+          markdown="Before selected after"
+          mode="source"
+          onChange={onChange}
+          onImageInsert={onImageInsert}
+        />
+      </I18nProvider>
+    ));
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea");
+    if (!textarea) throw new Error("Missing Source editor");
+    textarea.setSelectionRange(7, 15);
+
+    const dropEvent = transferEvent("drop", imageTransfer(image));
+    act(() => {
+      textarea.dispatchEvent(dropEvent);
+    });
+    expect(dropEvent.defaultPrevented).toBe(true);
+    expect(onImageInsert).toHaveBeenCalledWith(image);
+
+    await act(async () => {
+      finishInsertion?.("![pasted](webmd-attachment:image)");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(onChange).toHaveBeenCalledWith("Before ![pasted](webmd-attachment:image) after");
+
+    await act(async () => root.unmount());
+  });
+
+  it("pastes a clipboard image while leaving ordinary text paste untouched", async () => {
+    const onImageInsert = vi.fn(async () => "![clipboard](webmd-attachment:image)");
+    const onChange = vi.fn();
+    const image = new File(["image"], "clipboard.png", { type: "image/png" });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(
+      <I18nProvider>
+        <TyporaEditor
+          markdown="Before after"
+          mode="source"
+          onChange={onChange}
+          onImageInsert={onImageInsert}
+        />
+      </I18nProvider>
+    ));
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea");
+    if (!textarea) throw new Error("Missing Source editor");
+    textarea.setSelectionRange(7, 7);
+
+    const imagePaste = transferEvent("paste", imageTransfer(image, []));
+    await act(async () => {
+      textarea.dispatchEvent(imagePaste);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(imagePaste.defaultPrevented).toBe(true);
+    expect(onChange).toHaveBeenCalledWith("Before ![clipboard](webmd-attachment:image)after");
+
+    const textPaste = transferEvent("paste", { files: [], items: [] } as unknown as DataTransfer);
+    act(() => {
+      textarea.dispatchEvent(textPaste);
+    });
+    expect(textPaste.defaultPrevented).toBe(false);
+    expect(onImageInsert).toHaveBeenCalledOnce();
 
     await act(async () => root.unmount());
   });

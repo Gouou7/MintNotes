@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  type ClipboardEvent as ReactClipboardEvent,
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -35,7 +36,7 @@ interface Props {
   mode: "live" | "source";
   onChange: (markdown: string) => void;
   attachmentUrls?: Map<string, string>;
-  onImageDrop?: (file: File, markdownOffset: number) => Promise<string>;
+  onImageInsert?: (file: File) => Promise<string | null>;
   onWikiLink?: (target: string) => void;
   emptyHint?: string;
 }
@@ -49,17 +50,32 @@ export const TyporaEditor = forwardRef<TyporaEditorHandle, Props>(function Typor
   return <LiveEditor {...props} ref={ref} />;
 });
 
-const SourceEditor = forwardRef<TyporaEditorHandle, Props>(function SourceEditor({ markdown, onChange, onImageDrop }, ref) {
+const SourceEditor = forwardRef<TyporaEditorHandle, Props>(function SourceEditor({ markdown, onChange, onImageInsert }, ref) {
   const { t } = useI18n();
   const textarea = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(ref, () => ({ focus: () => textarea.current?.focus() }), []);
+  const insertImage = async (file: File, start: number, end: number) => {
+    if (!onImageInsert) return;
+    const insertion = await onImageInsert(file);
+    if (insertion === null) return;
+    const currentMarkdown = textarea.current?.value ?? markdown;
+    onChange(currentMarkdown.slice(0, start) + insertion + currentMarkdown.slice(end));
+  };
   const drop = async (event: DragEvent<HTMLTextAreaElement>) => {
-    const file = Array.from(event.dataTransfer.files).find((entry) => entry.type.startsWith("image/"));
-    if (!file || !onImageDrop) return;
+    const file = imageFileFromTransfer(event.dataTransfer);
+    if (!file || !onImageInsert) return;
     event.preventDefault();
-    const offset = event.currentTarget.selectionStart ?? markdown.length;
-    const insertion = await onImageDrop(file, offset);
-    onChange(markdown.slice(0, offset) + insertion + markdown.slice(event.currentTarget.selectionEnd ?? offset));
+    const start = event.currentTarget.selectionStart ?? markdown.length;
+    const end = event.currentTarget.selectionEnd ?? start;
+    await insertImage(file, start, end);
+  };
+  const paste = async (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
+    const file = imageFileFromTransfer(event.clipboardData);
+    if (!file || !onImageInsert) return;
+    event.preventDefault();
+    const start = event.currentTarget.selectionStart ?? markdown.length;
+    const end = event.currentTarget.selectionEnd ?? start;
+    await insertImage(file, start, end);
   };
   return (
     <textarea
@@ -69,6 +85,7 @@ const SourceEditor = forwardRef<TyporaEditorHandle, Props>(function SourceEditor
       onChange={(event) => onChange(event.target.value)}
       onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
       onDrop={(event) => void drop(event)}
+      onPaste={(event) => void paste(event)}
       aria-label={t("app.markdownSource")}
       placeholder={t("app.emptyNoteHint")}
       spellCheck={false}
@@ -77,7 +94,7 @@ const SourceEditor = forwardRef<TyporaEditorHandle, Props>(function SourceEditor
   );
 });
 
-const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageDrop, onWikiLink, emptyHint }, ref) {
+const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageInsert, onWikiLink, emptyHint }, ref) {
   const frontmatter = parseFrontmatter(markdown);
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -222,13 +239,24 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
   }, []);
 
   const drop = async (event: DragEvent<HTMLDivElement>) => {
-    const file = Array.from(event.dataTransfer.files).find((entry) => entry.type.startsWith("image/"));
-    if (!file || !onImageDrop || !editorRef.current) return;
+    const file = imageFileFromTransfer(event.dataTransfer);
+    if (!file || !onImageInsert || !editorRef.current) return;
     event.preventDefault();
     event.stopPropagation();
     const offset = editorRef.current.getMarkdownOffsetAtPoint(event.clientX, event.clientY);
-    const insertion = await onImageDrop(file, offset);
+    const insertion = await onImageInsert(file);
+    if (insertion === null) return;
     editorRef.current?.insertMarkdown(insertion, offset);
+  };
+  const paste = async (event: ReactClipboardEvent<HTMLDivElement>) => {
+    const file = imageFileFromTransfer(event.clipboardData);
+    const editor = editorRef.current;
+    if (!file || !onImageInsert || !editor) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const insertion = await onImageInsert(file);
+    if (insertion === null) return;
+    if (editorRef.current === editor) editor.insertMarkdown(insertion);
   };
 
   const focusCalloutMarker = (
@@ -314,6 +342,7 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
         onKeyDownCapture={editEmptyCalloutMarker}
         onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
         onDrop={(event) => void drop(event)}
+        onPaste={(event) => void paste(event)}
       />
       <div className="live-callout-overlays">
         {calloutOverlays.map((overlay) => <div className="live-callout-overlay-group" key={overlay.key}>
@@ -347,6 +376,17 @@ interface LiveCalloutOverlay {
 
 function materializeLiveMarkdown(markdown: string, attachmentUrls: Map<string, string>): string {
   return materializeLiveSyntax(materializeAttachmentUrls(markdown, attachmentUrls));
+}
+
+function imageFileFromTransfer(transfer: Pick<DataTransfer, "files" | "items">): File | null {
+  const file = Array.from(transfer.files).find((entry) => entry.type.startsWith("image/"));
+  if (file) return file;
+  for (const item of Array.from(transfer.items)) {
+    if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+    const entry = item.getAsFile();
+    if (entry) return entry;
+  }
+  return null;
 }
 
 function materializeLiveSyntax(markdown: string): string {
