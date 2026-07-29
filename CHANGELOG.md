@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-07-29
+
 ### Added
 
 - Added image insertion by drag-and-drop or clipboard paste in both Live and Source editing modes, while leaving ordinary text paste unchanged.
