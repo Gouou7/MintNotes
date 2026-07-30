@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed pinned nested notes and folders remaining hidden when selected from the Pinned section while their parent folders were collapsed; the complete path now expands and the original tree row scrolls into view.
+
 ## [0.8.4] - 2026-07-30
 
 ### Fixed

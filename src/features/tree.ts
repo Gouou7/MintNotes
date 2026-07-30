@@ -71,6 +71,21 @@ export function pinnedDocuments(documents: OpenDocument[], mode: SortMode): Open
   return documents.filter((entry) => entry.favorite && !entry.deleted).sort(compareDocuments(mode));
 }
 
+export function folderRevealPath(documents: OpenDocument[], objectId: string): string[] {
+  const byId = new Map(documents.map((entry) => [entry.objectId, entry]));
+  const path: string[] = [];
+  const seen = new Set<string>();
+  let currentId: string | null = objectId;
+  while (currentId && !seen.has(currentId)) {
+    seen.add(currentId);
+    const current = byId.get(currentId);
+    if (!current) break;
+    if (current.kind === "folder") path.push(current.objectId);
+    currentId = current.parentId;
+  }
+  return path.reverse();
+}
+
 export function isFolderDropZone(kind: OpenDocument["kind"], ratio: number): boolean {
   return kind === "folder" && ratio >= .25 && ratio <= .75;
 }

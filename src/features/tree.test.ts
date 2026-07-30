@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OpenDocument } from "../types";
-import { canMoveDocument, compareDocuments, isFolderDropZone, lockedNoteInSelection, pinnedDocuments, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeDropPosition, treeSelectionRange, uniqueSiblingTitle, visibleTreeOrder } from "./tree";
+import { canMoveDocument, compareDocuments, folderRevealPath, isFolderDropZone, lockedNoteInSelection, pinnedDocuments, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeDropPosition, treeSelectionRange, uniqueSiblingTitle, visibleTreeOrder } from "./tree";
 
 function doc(objectId: string, parentId: string | null, manualOrder: number, kind: "note" | "folder" = "note"): OpenDocument {
   return { objectId, parentId, manualOrder, kind, title: objectId, markdown: "", tags: [], favorite: false, locked: false, deleted: false, createdAt: "2026-01-01", updatedAt: "2026-01-01", attachmentIds: [], schemaVersion: 2, serverRevision: 0, dirty: false };
@@ -83,6 +83,17 @@ describe("tree operations", () => {
     const folder = { ...doc("folder", null, 2048, "folder"), favorite: true, title: "A folder" };
     const deleted = { ...doc("deleted", null, 3072), favorite: true, deleted: true };
     expect(pinnedDocuments([note, deleted, folder], "alphabetical").map((entry) => entry.objectId)).toEqual(["folder", "note"]);
+  });
+
+  it("builds the complete expansion path for pinned nested folders and notes", () => {
+    const root = doc("root", null, 1024, "folder");
+    const child = doc("child", "root", 1024, "folder");
+    const nested = doc("nested", "child", 1024, "folder");
+    const note = doc("note", "nested", 1024);
+
+    expect(folderRevealPath([nested, note, root, child], "nested")).toEqual(["root", "child", "nested"]);
+    expect(folderRevealPath([nested, note, root, child], "root")).toEqual(["root"]);
+    expect(folderRevealPath([nested, note, root, child], "note")).toEqual(["root", "child", "nested"]);
   });
 
   it("only treats the middle of a folder row as an inside-folder drop zone", () => {

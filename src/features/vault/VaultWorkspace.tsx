@@ -52,7 +52,7 @@ import {
 } from "../syncCoordinator";
 import { isAcknowledgedLocalEcho } from "../syncChanges";
 import { decryptAvailableLocalObjects, decryptFailureFingerprint, normalizeVaultObject, shouldCreateWelcomeNote } from "../vaultLoad";
-import { canMoveDocument, compareDocuments, descendantsOf, isFolderDropZone, lockedNoteInSelection, nextManualOrder, pinnedDocuments, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "../tree";
+import { canMoveDocument, compareDocuments, descendantsOf, folderRevealPath, isFolderDropZone, lockedNoteInSelection, nextManualOrder, pinnedDocuments, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "../tree";
 import { derivedNoteLockState, effectiveEditorMode, isLockedNote } from "../noteLock";
 import { formatNoteTime } from "../noteTime";
 import {
@@ -1665,6 +1665,39 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     setTreeOpen(false);
   };
 
+  const selectPinnedEntry = (entry: OpenDocument, event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (entry.kind !== "folder") {
+      selectTreeEntry(entry, event);
+    } else {
+      const additive = event.ctrlKey || event.metaKey;
+      if (event.shiftKey) {
+        const range = treeSelectionRange(visibleTree, selectionAnchor.current, entry.objectId);
+        setSelectedIds((current) => additive ? new Set([...current, ...range]) : new Set(range));
+        if (!selectionAnchor.current) selectionAnchor.current = entry.objectId;
+      } else if (additive) {
+        setSelectedIds((current) => {
+          const next = new Set(current);
+          if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId);
+          return next;
+        });
+        selectionAnchor.current = entry.objectId;
+      } else {
+        setSelectedIds(new Set([entry.objectId]));
+        selectionAnchor.current = entry.objectId;
+      }
+    }
+    setSearch("");
+    setExpanded((current) => new Set([
+      ...current,
+      ...folderRevealPath(documentsRef.current, entry.objectId)
+    ]));
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      documentTree.current
+        ?.querySelector<HTMLElement>(`[data-object-id="${entry.objectId}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }));
+  };
+
   const openWikiLink = (target: string) => {
     const destination = resolveWikiLink(documentsRef.current, target, activeDocument);
     if (!destination) {
@@ -2401,7 +2434,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         {pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>
           <div className="tree-section-label"><AppIcon icon={Pin} size={13} />{t("app.pinned")}</div>
           {pinned.map((entry) => <div className={`tree-row pinned-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""}`} key={`pinned-${entry.objectId}`} role="treeitem" aria-selected={selectedIds.has(entry.objectId)} onContextMenu={(event) => { event.preventDefault(); openTreeContext(entry, event.clientX, event.clientY); }}>
-            <button className="tree-main" onClick={(event) => selectTreeEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><TreeDocumentIcon document={entry} /><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>
+            <button className="tree-main" onClick={(event) => selectPinnedEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><TreeDocumentIcon document={entry} /><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>
             <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); openTreeContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={17} /></button>
           </div>)}
         </div>}
