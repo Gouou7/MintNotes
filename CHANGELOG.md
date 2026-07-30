@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-07-30
+
 ### Fixed
 
 - Fixed continuous Live editing occasionally losing the caret or reverting newer text when an older encrypted local save completed while later input was still waiting in the debounce window.
