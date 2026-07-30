@@ -148,8 +148,11 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
 
   useEffect(() => {
     if (!editorRef.current) return;
+    // Attachment Blob URLs are presentation state. The image observer below
+    // updates them in place; feeding them through setMarkdown would rebuild
+    // typora-web's internal ProseMirror view and discard the active selection.
+    if (markdown === editorMarkdownRef.current) return;
     const renderedMarkdown = materializeLiveMarkdown(frontmatter.body, attachmentUrls);
-    if (markdown === editorMarkdownRef.current && renderedMarkdown === renderedMarkdownRef.current) return;
     editorMarkdownRef.current = markdown;
     renderedMarkdownRef.current = renderedMarkdown;
     editorRef.current.setMarkdown(renderedMarkdown);

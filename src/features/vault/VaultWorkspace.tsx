@@ -568,7 +568,11 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       saveDeadlines.current.delete(objectId);
       if (!logoutStarted.current) {
         const current = documentIndexRef.current.get(objectId);
-        if (current) await persistObject(current);
+        if (current) {
+          await persistObject(current, {
+            commitState: () => documentIndexRef.current.get(objectId) === current
+          });
+        }
       }
     }
     await objectPersistence.drain(objectId);
@@ -589,7 +593,9 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       if (logoutStarted.current) return;
       const current = documentIndexRef.current.get(document.objectId);
       if (current) {
-        void persistObject(current)
+        void persistObject(current, {
+          commitState: () => documentIndexRef.current.get(document.objectId) === current
+        })
           .then(() => requestPush("editor"))
           .catch(() => undefined);
       }
@@ -1115,7 +1121,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         objectId: current.objectId,
         serverRevision: result.revision,
         dirty: true
-      });
+      }, { commitState: false });
       requestPush("editor");
     };
 
@@ -2101,7 +2107,10 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     }
     const next = { ...target, title, dirty: true };
     scheduleHistoryEdit(target, next);
-    await persistObject(next);
+    upsertDocument(next);
+    await persistObject(next, {
+      commitState: () => documentIndexRef.current.get(objectId) === next
+    });
     requestPush("structural");
     return true;
   };

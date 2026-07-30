@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed continuous Live editing occasionally losing the caret or reverting newer text when an older encrypted local save completed while later input was still waiting in the debounce window.
+- Fixed attachment Blob URL updates rebuilding the Live editor and discarding its active focus or selection while an image finished loading.
+
 ## [0.8.3] - 2026-07-29
 
 ### Added

@@ -177,7 +177,7 @@ Deleting one version, clearing the current note's history, and clearing all acco
 
 Drop a supported image into the live or source editor to insert it at the drop position. You can also copy an image to the clipboard and paste it at the current cursor with `Ctrl+V` on Windows/Linux or `Command+V` on macOS. Ordinary text paste is unchanged. The image toolbar button provides a file-picker fallback.
 
-After local encryption finishes, an inserted image appears in the active note without requiring a refresh. It remains available when switching among Live, Source, and Reading modes; the temporary in-memory Blob URL used for display is never written into the canonical Markdown.
+After local encryption finishes, an inserted image appears in the active note without requiring a refresh. Live mode updates the rendered image in place when its temporary Blob URL becomes available, preserving the active editor and caret. The image remains available when switching among Live, Source, and Reading modes; the temporary in-memory Blob URL used for display is never written into the canonical Markdown.
 
 Supported formats are PNG, JPEG, GIF, WebP, and AVIF. The browser verifies file signatures and rejects SVG. The bundled client limits each image to 25 MiB.
 
@@ -187,7 +187,7 @@ An attachment belongs to one note. Copying the note creates a separate encrypted
 
 ## Local save and synchronization
 
-Editing never waits for a network request. After half a second without input, or at least once every five seconds during continuous typing, the browser encrypts the latest document and atomically writes both the encrypted object and a durable outbox entry to IndexedDB. Network uploads combine nearby changes and send the latest durable version after two seconds of inactivity or at least once every fifteen seconds during continuous editing. Once acknowledged, the server is the durable cross-device copy; the local encrypted store exists as a low-latency working cache and retry queue.
+Editing never waits for a network request. After half a second without input, or at least once every five seconds during continuous typing, the browser encrypts the latest document and atomically writes both the encrypted object and a durable outbox entry to IndexedDB. If typing continues while that write is in progress, its completion does not replace the newer in-memory text or disturb the active Live editor caret. Network uploads combine nearby changes and send the latest durable version after two seconds of inactivity or at least once every fifteen seconds during continuous editing. Once acknowledged, the server is the durable cross-device copy; the local encrypted store exists as a low-latency working cache and retry queue.
 
 The status bar reports:
 

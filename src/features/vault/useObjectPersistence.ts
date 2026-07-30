@@ -13,7 +13,7 @@ import type { SaveState } from "./useSyncStatus";
 type PersistableObject = OpenDocument | OpenAttachment;
 
 export interface ObjectPersistenceOptions {
-  commitState?: boolean;
+  commitState?: boolean | (() => boolean);
   preserveUpdatedAt?: boolean;
 }
 
@@ -97,14 +97,17 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
 
     if (!dependencies.isActive()) return object;
     dependencies.onPersistenceSuccess(object.objectId);
-    if (coordinated.isLatest && options.commitState !== false) {
+    const commitState = typeof options.commitState === "function"
+      ? options.commitState()
+      : options.commitState !== false;
+    if (coordinated.isLatest && commitState) {
       if (coordinated.value.kind === "attachment") {
         dependencies.upsertAttachment(coordinated.value as OpenAttachment);
       } else {
         dependencies.upsertDocument(coordinated.value as OpenDocument);
       }
     }
-    if (coordinated.isLatest) {
+    if (coordinated.isLatest && commitState) {
       dependencies.setSaveState(dependencies.canSynchronize() ? "local" : "offline");
     }
     return coordinated.value;

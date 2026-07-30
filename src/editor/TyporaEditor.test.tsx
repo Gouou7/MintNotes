@@ -73,7 +73,7 @@ describe("TyporaEditor live mode", () => {
     await act(async () => root.unmount());
   });
 
-  it("updates an attachment image without rebuilding the editor document", async () => {
+  it("updates an attachment image without rebuilding or refocusing the editor document", async () => {
     const editor = {
       destroy: vi.fn(),
       focus: vi.fn(),
@@ -109,8 +109,8 @@ describe("TyporaEditor live mode", () => {
     const image = container.querySelector("img");
     expect(image?.dataset.webmdAttachment).toBe(`webmd-attachment:${attachmentId}`);
     expect(image?.getAttribute("src")).toBe("blob:http://localhost/image");
-    expect(editor.setMarkdown).toHaveBeenCalledOnce();
-    expect(editor.setMarkdown).toHaveBeenCalledWith(`![image](blob:http://localhost/image)`);
+    expect(editor.setMarkdown).not.toHaveBeenCalled();
+    expect(editor.focus).toHaveBeenCalledOnce();
 
     await act(async () => root.unmount());
   });
