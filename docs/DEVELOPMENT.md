@@ -16,7 +16,7 @@ Install dependencies:
 pnpm install
 ```
 
-The repository treats `typora-web` 0.3.1 as an effectively frozen dependency and maintains the required live Markdown behavior in a `pnpm` patch. A normal install applies `patches/typora-web@0.3.1.patch` through the workspace configuration; do not edit installed package files directly. Update the patch through `pnpm patch` / `pnpm patch-commit` and cover parser, serializer, input-transaction, and controller changes with direct round-trip tests.
+The repository owns its live Markdown editor core under `src/editor/core/`. It was derived from the `typora-web` 0.3.1 release source; `src/editor/core/UPSTREAM.md` records the exact commit and license. The imported behavior specs and test harness live beside the core and run through the repository's Vitest command. Change the TypeScript source directly and cover parser, serializer, input-transaction, extension, decoration, and controller changes with direct round-trip and DOM transaction tests.
 
 ## Development servers
 
@@ -45,7 +45,9 @@ pnpm dev:server
 | --- | --- |
 | `src/App.tsx` | Top-level routing between authentication, device lock, and the unlocked vault. |
 | `src/components/` | Shared presentation primitives, including the standard icon wrapper. |
-| `src/editor/` | `typora-web` adapter, source/live drop handling, read-only rendering, and outline extraction. |
+| `src/editor/core/` | ProseMirror/Markdown core, canonical parser and serializer, input transactions, generic extension contract, stable controller, imported behavior specs, and provenance. |
+| `src/editor/extensions/` | Injected Callout and Math/Mermaid/WikiLink Live-mode behavior; the core does not import these modules. |
+| Other `src/editor/` modules | React Live/Source adapter, source/live drop handling, Markdown presentation codecs, read-only rendering, and outline extraction. |
 | `src/features/history.ts` and `src/components/HistoryPanel.tsx` | History payload/deduplication policy and right-panel history presentation. |
 | `src/features/session/` | Session restoration, trusted-device state, cross-tab invalidation, and locked-session commands. |
 | `src/features/vault/` | Unlocked-vault composition, typed state/controller hooks, serialized object persistence, and vault-specific presentation such as the document tree. |
@@ -58,7 +60,6 @@ pnpm dev:server
 | `src/features/vault/VaultWorkspace.tsx` and `server/routes.ts` | Integration coordinators retained while remaining history/account/document workflows are extracted. They are not extension points; touching embedded behavior requires moving it to a focused module first. |
 | Other `server/` modules | SQLite schema, history/trash policies, synchronization events, maintenance jobs, and online backup. |
 | `scripts/` | Crypto Worker integration test and API smoke test. |
-| `patches/` | Maintained `typora-web` compatibility layer for canonical Markdown live editing and public controller extensions. |
 | `deploy/` | Reverse-proxy example. |
 | `docs/` | Task-oriented documentation and its [navigation index](README.md). |
 
@@ -137,7 +138,8 @@ The most common contributor pitfalls are:
 - Preserve the only remaining revision when synchronization conflicts or deletion flows fail.
 - Use the existing cryptographic wrappers and session-derived server authorization; do not add custom primitives or request-controlled user scopes.
 - Make attachment ciphertext durable before inserting its Markdown reference, and upload chunks before the manifest and owning note.
-- Use only declared `typora-web` controller methods and options. The maintained patch owns the Callout-aware Markdown serializer/input transaction, cursor-aware Math/Mermaid/WikiLink decorations, public renderer callbacks, and the insertion, replacement, coordinate-to-offset, and Callout-marker-focus controller extensions; application code must not access `editor.view` or package internals.
+- Keep canonical Markdown parsing, serialization, authored-escape presentation, delayed blockquote input transactions, insertion/replacement, and coordinate-to-offset behavior in `src/editor/core/`. The core exposes only its stable controller plus the generic `EditorExtension` contract and must not import a Mint Notes extension.
+- Keep Callout recognition/focus behavior and cursor-aware Math/Mermaid/WikiLink decorations in `src/editor/extensions/`. Extensions register plugins and commands through `EditorExtension`; React and vault modules call only controller methods or typed extension helpers and never access a ProseMirror view.
 - Keep every live-only representation out of canonical Markdown. In particular, Callout editing must round-trip `> [!TYPE]` directly and must not emit highlight/backtick sentinels.
 - Multiline `$$` math may use the reserved `mint-math` code-block language only inside the mounted Live editor. Canonicalize it before application `onChange`; it must never reach React document state, IndexedDB, history, synchronization, exports, or the server.
 - The Live serializer must not synthesize backslash escapes for punctuation in plain text, block starts, table cells, link titles, or image titles. Any backslash in canonical Markdown must be user-authored in Live or Source mode, not created by Live serialization. The parser preserves such explicit escapes across reloads, while Live presentation hides the backslash and renders the escaped symbol literally.

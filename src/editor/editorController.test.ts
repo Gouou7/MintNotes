@@ -1,16 +1,53 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createEditor } from "typora-web";
+import { createEditor, type EditorOptions } from "./core/lib";
+import { createCalloutExtension, focusCalloutMarker } from "./extensions/callout";
+import {
+  createRichSyntaxExtension,
+  type RichSyntaxOptions,
+} from "./extensions/richSyntax";
+
+function createMintEditor(
+  host: HTMLElement,
+  options: EditorOptions & { richSyntax?: RichSyntaxOptions } = {},
+) {
+  const { richSyntax, ...editorOptions } = options;
+  return createEditor(host, {
+    ...editorOptions,
+    extensions: [
+      createCalloutExtension(),
+      createRichSyntaxExtension(richSyntax),
+    ],
+  });
+}
 
 afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe("typora-web public controller", () => {
+describe("Mint editor core public controller", () => {
+  it("loads Mint-specific presentation only through explicit extensions", () => {
+    const bareHost = document.createElement("div");
+    document.body.append(bareHost);
+    const markdown = "> [!NOTE]\n>\n> Body";
+    const bareEditor = createEditor(bareHost, { initialContent: markdown });
+
+    expect(bareHost.querySelector("blockquote")).not.toBeNull();
+    expect(bareHost.querySelector("blockquote.live-callout")).toBeNull();
+    bareEditor.destroy();
+
+    const extendedHost = document.createElement("div");
+    document.body.append(extendedHost);
+    const extendedEditor = createMintEditor(extendedHost, { initialContent: markdown });
+
+    expect(extendedHost.querySelector("blockquote.live-callout")).not.toBeNull();
+    extendedEditor.destroy();
+  });
+
   it("waits until Enter to turn a line-leading greater-than sign into a blockquote", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
-    const editor = createEditor(host, { onChange: (markdown) => changes.push(markdown) });
+    const editor = createMintEditor(host, { onChange: (markdown) => changes.push(markdown) });
 
     const editable = host.querySelector<HTMLElement>(".ProseMirror");
     const paragraph = editable?.querySelector("p");
@@ -50,7 +87,7 @@ describe("typora-web public controller", () => {
   it("never synthesizes backslash escapes for Markdown punctuation", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const editor = createEditor(host);
+    const editor = createMintEditor(host);
 
     editor.replaceMarkdown("plain # - + * _ [ ] < > \\ `");
     expect(editor.getMarkdown()).toBe("plain # - + * _ [ ] < > \\ `");
@@ -84,7 +121,7 @@ describe("typora-web public controller", () => {
   it("preserves user-authored escapes while rendering the escaped symbol as text", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const editor = createEditor(host);
+    const editor = createMintEditor(host);
 
     for (const symbol of "\\!\"#$%&'()*+,./:;<=>?@[]^_`{|}~-") {
       const escaped = `\\${symbol}`;
@@ -101,7 +138,7 @@ describe("typora-web public controller", () => {
   it("round-trips complete and partially edited callout markers without private syntax", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const editor = createEditor(host, {
+    const editor = createMintEditor(host, {
       initialContent: "> [!WARNING]\n>\n> Body"
     });
 
@@ -124,7 +161,7 @@ describe("typora-web public controller", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const markdown = "Before\n\n> [!NOTE]\n>\n> Body";
-    const editor = createEditor(host, { initialContent: markdown });
+    const editor = createMintEditor(host, { initialContent: markdown });
 
     expect(host.querySelector("blockquote.live-callout")).not.toBeNull();
     expect(host.querySelector("blockquote > p.live-callout-marker > .live-callout-marker-hidden")?.textContent).toBe("[!NOTE]");
@@ -144,13 +181,13 @@ describe("typora-web public controller", () => {
       "> >",
       "> > Details"
     ].join("\n");
-    const editor = createEditor(host, {
+    const editor = createMintEditor(host, {
       initialContent: markdown,
       onChange: (next) => changes.push(next)
     });
     const serialized = editor.getMarkdown();
 
-    expect(editor.focusCalloutMarker(0, 8)).toBe(true);
+    expect(focusCalloutMarker(editor, 0, 8)).toBe(true);
     const outerMarker = host.querySelector<HTMLParagraphElement>("blockquote > p.live-callout-marker");
     expect(outerMarker?.classList.contains("is-live-callout-marker-editing")).toBe(true);
     expect(outerMarker?.dataset.calloutPrefix).toBe("> ");
@@ -158,7 +195,7 @@ describe("typora-web public controller", () => {
     expect(editor.getMarkdown()).toBe(serialized);
     expect(changes).toEqual([]);
 
-    expect(editor.focusCalloutMarker(1, 999)).toBe(true);
+    expect(focusCalloutMarker(editor, 1, 999)).toBe(true);
     const nestedMarker = host.querySelector<HTMLParagraphElement>("blockquote blockquote > p.live-callout-marker");
     expect(nestedMarker?.classList.contains("is-live-callout-marker-editing")).toBe(true);
     expect(nestedMarker?.dataset.calloutPrefix).toBe("> > ");
@@ -166,8 +203,8 @@ describe("typora-web public controller", () => {
     expect(editor.getMarkdown()).toBe(serialized);
     expect(changes).toEqual([]);
 
-    expect(editor.focusCalloutMarker(-1)).toBe(false);
-    expect(editor.focusCalloutMarker(2)).toBe(false);
+    expect(focusCalloutMarker(editor, -1)).toBe(false);
+    expect(focusCalloutMarker(editor, 2)).toBe(false);
     editor.destroy();
   });
 
@@ -175,7 +212,7 @@ describe("typora-web public controller", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
-    const editor = createEditor(host, {
+    const editor = createMintEditor(host, {
       onChange: (markdown) => changes.push(markdown)
     });
 
@@ -191,7 +228,7 @@ describe("typora-web public controller", () => {
   it("keeps a trailing title space and custom title visible while the marker is edited", async () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const editor = createEditor(host, { initialContent: "> [!TIP]" });
+    const editor = createMintEditor(host, { initialContent: "> [!TIP]" });
     const editable = host.querySelector<HTMLElement>(".ProseMirror");
     const markerParagraph = host.querySelector<HTMLParagraphElement>("blockquote > p");
     if (!editable || !markerParagraph) throw new Error("Missing callout marker");
@@ -236,7 +273,7 @@ describe("typora-web public controller", () => {
   it("undoes an incomplete marker and then restores its empty callout body", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const editor = createEditor(host, {
+    const editor = createMintEditor(host, {
       initialContent: "> [!CAUTION]\n>\n> \u2060"
     });
 
@@ -285,9 +322,9 @@ describe("typora-web public controller", () => {
       "  A --> B",
       "```"
     ].join("\n");
-    const editor = createEditor(host, {
+    const editor = createMintEditor(host, {
       initialContent: markdown,
-      liveSyntax: {
+      richSyntax: {
         renderMath: (container, source) => { container.textContent = `inline:${source}`; },
         renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
         renderMermaid: (container, source) => { container.textContent = `diagram:${source}`; },

@@ -1,11 +1,20 @@
 import { act, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createEditor, type TyporaWebEditor } from "typora-web";
+import { createEditor, type Editor as EditorController } from "./core/lib";
+import { createCalloutExtension, focusCalloutMarker } from "./extensions/callout";
+import { createRichSyntaxExtension } from "./extensions/richSyntax";
 import { I18nProvider } from "../i18n";
-import { TyporaEditor, type TyporaEditorHandle } from "./TyporaEditor";
+import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
 
-vi.mock("typora-web", () => ({ createEditor: vi.fn() }));
+vi.mock("./core/lib", () => ({ createEditor: vi.fn() }));
+vi.mock("./extensions/callout", () => ({
+  createCalloutExtension: vi.fn(() => ({ id: "mint-callout", createPlugins: () => [] })),
+  focusCalloutMarker: vi.fn(() => true)
+}));
+vi.mock("./extensions/richSyntax", () => ({
+  createRichSyntaxExtension: vi.fn(() => ({ id: "mint-rich-syntax", createPlugins: () => [] }))
+}));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const attachmentId = "11111111-1111-4111-8111-111111111111";
@@ -43,32 +52,32 @@ function transferEvent(
   return event;
 }
 
-describe("TyporaEditor live mode", () => {
+describe("MarkdownEditor live mode", () => {
   it("exposes focus and shows a non-persistent hint for an empty note", async () => {
     localStorage.setItem("webmd-notes-language", "en");
     const editor = {
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     vi.mocked(createEditor).mockReturnValue(editor);
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    const ref = createRef<TyporaEditorHandle>();
+    const ref = createRef<MarkdownEditorHandle>();
     const render = (markdown: string) => (
       <I18nProvider>
-        <TyporaEditor ref={ref} markdown={markdown} mode="live" emptyHint="Start writing…" onChange={vi.fn()} />
+        <MarkdownEditor ref={ref} markdown={markdown} mode="live" emptyHint="Start writing…" onChange={vi.fn()} />
       </I18nProvider>
     );
 
     await act(async () => root.render(render("")));
-    expect(container.querySelector(".typora-host.is-empty")?.getAttribute("data-empty-hint")).toBe("Start writing…");
+    expect(container.querySelector(".markdown-editor-host.is-empty")?.getAttribute("data-empty-hint")).toBe("Start writing…");
     act(() => ref.current?.focus());
     expect(editor.focus).toHaveBeenCalledTimes(2);
 
     await act(async () => root.render(render("Body")));
-    expect(container.querySelector(".typora-host.is-empty")).toBeNull();
+    expect(container.querySelector(".markdown-editor-host.is-empty")).toBeNull();
 
     await act(async () => root.unmount());
   });
@@ -83,7 +92,7 @@ describe("TyporaEditor live mode", () => {
       isSourceMode: vi.fn(),
       setMarkdown: vi.fn(),
       toggleSource: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     vi.mocked(createEditor).mockImplementation((host) => {
       const image = document.createElement("img");
       image.setAttribute("src", `webmd-attachment:${attachmentId}`);
@@ -95,7 +104,7 @@ describe("TyporaEditor live mode", () => {
     document.body.append(container);
     const root = createRoot(container);
     const render = (attachmentUrls: Map<string, string>) => (
-      <TyporaEditor
+      <MarkdownEditor
         markdown={`![image](webmd-attachment:${attachmentId})`}
         mode="live"
         attachmentUrls={attachmentUrls}
@@ -120,7 +129,7 @@ describe("TyporaEditor live mode", () => {
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     let editorChange: ((markdown: string) => void) | undefined;
     vi.mocked(createEditor).mockImplementation((_host, options) => {
       editorChange = options?.onChange;
@@ -133,7 +142,7 @@ describe("TyporaEditor live mode", () => {
     const root = createRoot(container);
 
     await act(async () => root.render(
-      <TyporaEditor
+      <MarkdownEditor
         markdown={`![image](webmd-attachment:${attachmentId})`}
         mode="live"
         attachmentUrls={new Map([[attachmentId, blobUrl]])}
@@ -158,14 +167,14 @@ describe("TyporaEditor live mode", () => {
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     vi.mocked(createEditor).mockReturnValue(editor);
     const blobUrl = "blob:http://localhost/inserted-image";
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
     const render = (markdown: string) => (
-      <TyporaEditor
+      <MarkdownEditor
         markdown={markdown}
         mode="live"
         attachmentUrls={new Map([[attachmentId, blobUrl]])}
@@ -189,7 +198,7 @@ describe("TyporaEditor live mode", () => {
       getMarkdownOffsetAtPoint: vi.fn(() => 7),
       insertMarkdown: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     vi.mocked(createEditor).mockReturnValue(editor);
     const onImageInsert = vi.fn(async () => `\n![image](webmd-attachment:${attachmentId})\n`);
     const image = new File(["image"], "image.png", { type: "image/png" });
@@ -198,14 +207,14 @@ describe("TyporaEditor live mode", () => {
     const root = createRoot(container);
 
     await act(async () => root.render(
-      <TyporaEditor
+      <MarkdownEditor
         markdown="Before after"
         mode="live"
         onChange={vi.fn()}
         onImageInsert={onImageInsert}
       />
     ));
-    const host = container.querySelector<HTMLElement>(".typora-host");
+    const host = container.querySelector<HTMLElement>(".markdown-editor-host");
     if (!host) throw new Error("Missing Live editor host");
 
     await act(async () => {
@@ -237,7 +246,7 @@ describe("TyporaEditor live mode", () => {
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     let editorChange: ((markdown: string) => void) | undefined;
     vi.mocked(createEditor).mockImplementation((_host, options) => {
       editorChange = options?.onChange;
@@ -250,7 +259,7 @@ describe("TyporaEditor live mode", () => {
     const root = createRoot(container);
 
     await act(async () => root.render(
-      <I18nProvider><TyporaEditor
+      <I18nProvider><MarkdownEditor
         markdown={markdown}
         mode="live"
         onChange={onChange}
@@ -271,7 +280,7 @@ describe("TyporaEditor live mode", () => {
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     let editorChange: ((markdown: string) => void) | undefined;
     vi.mocked(createEditor).mockImplementation((_host, options) => {
       editorChange = options?.onChange;
@@ -282,7 +291,7 @@ describe("TyporaEditor live mode", () => {
     document.body.append(container);
     const root = createRoot(container);
     const render = (markdown: string) => (
-      <TyporaEditor markdown={markdown} mode="live" onChange={onChange} />
+      <MarkdownEditor markdown={markdown} mode="live" onChange={onChange} />
     );
 
     await act(async () => root.render(render("> [!NOTE]\n> Body")));
@@ -304,7 +313,7 @@ describe("TyporaEditor live mode", () => {
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     let editorChange: ((markdown: string) => void) | undefined;
     vi.mocked(createEditor).mockImplementation((_host, options) => {
       editorChange = options?.onChange;
@@ -318,14 +327,20 @@ describe("TyporaEditor live mode", () => {
     const root = createRoot(container);
 
     await act(async () => root.render(
-      <TyporaEditor markdown={markdown} mode="live" onChange={onChange} onWikiLink={onWikiLink} />
+      <MarkdownEditor markdown={markdown} mode="live" onChange={onChange} onWikiLink={onWikiLink} />
     ));
 
     const options = vi.mocked(createEditor).mock.calls[0]?.[1];
+    const richSyntax = vi.mocked(createRichSyntaxExtension).mock.calls[0]?.[0];
     expect(options?.initialContent).toBe("```mint-math\nE = mc^2\n```\n\n[[Guide]]");
-    expect(options?.liveSyntax?.renderMath).toBeTypeOf("function");
-    expect(options?.liveSyntax?.renderMermaid).toBeTypeOf("function");
-    act(() => options?.liveSyntax?.onWikiLink?.("Guide"));
+    expect(options?.extensions?.map((extension) => extension.id)).toEqual([
+      "mint-callout",
+      "mint-rich-syntax"
+    ]);
+    expect(createCalloutExtension).toHaveBeenCalledOnce();
+    expect(richSyntax?.renderMath).toBeTypeOf("function");
+    expect(richSyntax?.renderMermaid).toBeTypeOf("function");
+    act(() => richSyntax?.onWikiLink?.("Guide"));
     expect(onWikiLink).toHaveBeenCalledWith("Guide");
 
     act(() => editorChange?.("```mint-math\nE = ma\n```\n\n[[Guide]]"));
@@ -338,9 +353,8 @@ describe("TyporaEditor live mode", () => {
     const editor = {
       destroy: vi.fn(),
       focus: vi.fn(),
-      focusCalloutMarker: vi.fn(() => true),
       setMarkdown: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     let height = 80;
     let markerParagraph: HTMLParagraphElement | null = null;
     let bodyParagraph: HTMLParagraphElement | null = null;
@@ -372,7 +386,7 @@ describe("TyporaEditor live mode", () => {
     const root = createRoot(container);
 
     await act(async () => root.render(
-      <TyporaEditor markdown={"> [!NOTE]\n> Body"} mode="live" onChange={vi.fn()} />
+      <MarkdownEditor markdown={"> [!NOTE]\n> Body"} mode="live" onChange={vi.fn()} />
     ));
     await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
     expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("50px");
@@ -401,21 +415,21 @@ describe("TyporaEditor live mode", () => {
       clientX: 100,
       clientY: 10
     })));
-    expect(editor.focusCalloutMarker).toHaveBeenLastCalledWith(0, 11);
+    expect(focusCalloutMarker).toHaveBeenLastCalledWith(editor, 0, 11);
 
     act(() => icon.dispatchEvent(new PointerEvent("pointerdown", {
       bubbles: true,
       button: 0,
       cancelable: true
     })));
-    expect(editor.focusCalloutMarker).toHaveBeenLastCalledWith(0, "[!NOTE] Custom title".length);
+    expect(focusCalloutMarker).toHaveBeenLastCalledWith(editor, 0, "[!NOTE] Custom title".length);
 
     act(() => overlay.dispatchEvent(new PointerEvent("pointerdown", {
       bubbles: true,
       button: 0,
       cancelable: true
     })));
-    expect(editor.focusCalloutMarker).toHaveBeenLastCalledWith(0, "[!NOTE] Custom title".length);
+    expect(focusCalloutMarker).toHaveBeenLastCalledWith(editor, 0, "[!NOTE] Custom title".length);
     Reflect.deleteProperty(document, "caretPositionFromPoint");
 
     height = 140;
@@ -451,7 +465,7 @@ describe("TyporaEditor live mode", () => {
       insertMarkdown: vi.fn(),
       replaceMarkdown: vi.fn((markdown: string) => editorChange?.(markdown)),
       setMarkdown: vi.fn()
-    } as unknown as TyporaWebEditor;
+    } as unknown as EditorController;
     let bodyParagraph: HTMLParagraphElement | null = null;
     vi.mocked(createEditor).mockImplementation((host, options) => {
       editorChange = options?.onChange;
@@ -470,7 +484,7 @@ describe("TyporaEditor live mode", () => {
     const root = createRoot(container);
 
     await act(async () => root.render(
-      <TyporaEditor
+      <MarkdownEditor
         markdown={"Before\n\n> [!NOTE]\n> \n\nAfter"}
         mode="live"
         onChange={onChange}
@@ -505,7 +519,7 @@ describe("TyporaEditor live mode", () => {
   });
 });
 
-describe("TyporaEditor source mode", () => {
+describe("MarkdownEditor source mode", () => {
   it("inserts a dragged image at the captured source selection", async () => {
     let finishInsertion: ((insertion: string) => void) | undefined;
     const onImageInsert = vi.fn(() => new Promise<string>((resolve) => {
@@ -519,7 +533,7 @@ describe("TyporaEditor source mode", () => {
 
     await act(async () => root.render(
       <I18nProvider>
-        <TyporaEditor
+        <MarkdownEditor
           markdown="Before selected after"
           mode="source"
           onChange={onChange}
@@ -557,7 +571,7 @@ describe("TyporaEditor source mode", () => {
 
     await act(async () => root.render(
       <I18nProvider>
-        <TyporaEditor
+        <MarkdownEditor
           markdown="Before after"
           mode="source"
           onChange={onChange}

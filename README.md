@@ -19,7 +19,7 @@ If you find a bug or have a feature suggestion, please submit an issue—or ask 
 
 ## Technology
 
-The browser application uses React, TypeScript, Vite, `typora-web`, Web Crypto, and Dexie/IndexedDB.
+The browser application uses React, TypeScript, Vite, an in-repository ProseMirror editor core derived from `typora-web`, Web Crypto, and Dexie/IndexedDB.
 
 The server uses Fastify and SQLite.
 
@@ -74,7 +74,7 @@ See the [documentation index](docs/README.md) to choose a guide by task.
 
 Thanks to the following open-source projects:
 
-- Markdown editor: [typora-web](https://github.com/Yuyz0112/typora-web)
+- Editor core origin: [typora-web](https://github.com/Yuyz0112/typora-web)
 - Math renderer: [KaTeX](https://katex.org/)
 - Diagram renderer: [Mermaid](https://mermaid.js.org/)
 - Icon library: [Lucide React](https://lucide.dev/)

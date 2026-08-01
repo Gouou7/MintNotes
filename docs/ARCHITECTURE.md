@@ -11,7 +11,7 @@ Mint Notes optimizes for a small deployment footprint, responsive editing under 
 ```text
 Browser / installed PWA
   - React responsive shell
-  - typora-web editor adapter and reversible Math/Mermaid/WikiLink presentation codecs
+  - in-repository ProseMirror editor core with injected Callout and Math/Mermaid/WikiLink extensions
   - crypto worker
   - encrypted IndexedDB
   - durable synchronization outbox
@@ -120,6 +120,6 @@ Plaintext Markdown exports are built entirely in the browser. ZIP exports retain
 
 ## Markdown presentation
 
-Math, Mermaid, WikiLink, and Callout appearance rendering is browser-only presentation over canonical Markdown. The maintained `typora-web` patch exposes renderer callbacks and cursor-aware decorations without exposing its private editor view to application code. Multiline display math temporarily uses a reserved `mint-math` fenced block only inside the mounted Live editor and is converted back before `onChange` reaches application state, encryption, IndexedDB, history, synchronization, or export. Reading mode parses the canonical syntax directly.
+Math, Mermaid, WikiLink, and Callout appearance rendering is browser-only presentation over canonical Markdown. The ProseMirror/Markdown core owns canonical parsing, serialization, authored-escape presentation, input transactions, and a generic extension contract. Sibling modules under `src/editor/extensions/` inject Callout plugins/commands and cursor-aware Math/Mermaid/WikiLink decorations; the core never imports them. React uses the stable controller and typed extension helpers, so its private ProseMirror view does not cross the editor boundary. Multiline display math temporarily uses a reserved `mint-math` fenced block only inside the mounted Live editor and is converted back before `onChange` reaches application state, encryption, IndexedDB, history, synchronization, or export. Reading mode parses the canonical syntax directly.
 
 Mermaid is loaded lazily, runs with strict security settings, and produces a sanitized SVG displayed through a short-lived Blob URL; no diagram source or rendering output is sent to the server. WikiLink lookup uses only the decrypted in-memory document tree and routes to an existing note or heading without a server-side plaintext lookup. Callout colors and icons are derived from their canonical marker text, including the optional Mint Notes `{color=... icon=...}` title suffix; incomplete markers remain ordinary portable blockquotes.

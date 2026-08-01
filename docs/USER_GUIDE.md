@@ -280,7 +280,7 @@ The **Recovery key** controls in **Settings > Security** verify the current mast
 
 On smaller screens, Settings keeps its title and a single-row, horizontally scrollable tab bar above the independently scrolling section content. Each tab keeps its full label and icon without shrinking when a section contains more content.
 
-The **About** section introduces Mint Notes as an AI-developed toy project focused on lightweight deployment, secure storage, simple use, responsive PWA layouts, end-to-end encryption, remote self-hosting, and familiar Markdown editing. It also shows the current application version and credits `typora-web` as the Markdown editor and Lucide React as the interface icon library.
+The **About** section introduces Mint Notes as an AI-developed toy project focused on lightweight deployment, secure storage, simple use, responsive PWA layouts, end-to-end encryption, remote self-hosting, and familiar Markdown editing. It also shows the current application version and credits `typora-web` as the origin of the in-repository editor core and Lucide React as the interface icon library.
 
 Administrators manage activation codes and accounts under **Administrator settings > User management**, which separates **Add user** from **Existing users** so other administrator settings can be added independently. Disabling is reversible. Permanent deletion requires the administrator's master password and the exact target username, cannot target the current or last administrator, and removes that user's server database records and encrypted content without touching other users. Independent backups and ciphertext already cached in a user's browser are outside this remote deletion.
 

@@ -177,21 +177,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .live-editor-document, .readonly-markdown { width: min(900px, calc(100% - 48px)); min-height: 100%; margin: 0 auto; padding: 46px 24px 120px; color: var(--text); }
 .live-editor-document { position: relative; display: flex; flex-direction: column; }
-.typora-host { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.typora-host > .typora-web-wrap, .typora-host .typora-web-editor-host { display: flex; flex: 1; flex-direction: column; }
-.typora-host.is-empty::before { content: attr(data-empty-hint); position: absolute; z-index: 2; top: 0; left: 0; padding-left: 10px; border-left: 2px solid var(--accent); color: var(--muted); font-size: calc(15px + var(--font-adjust)); line-height: 1.7; pointer-events: none; }
-.typora-host.is-empty:focus-within::before { display: none; }
+.markdown-editor-host { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.markdown-editor-host > .typora-web-wrap, .markdown-editor-host .typora-web-editor-host { display: flex; flex: 1; flex-direction: column; }
+.markdown-editor-host.is-empty::before { content: attr(data-empty-hint); position: absolute; z-index: 2; top: 0; left: 0; padding-left: 10px; border-left: 2px solid var(--accent); color: var(--muted); font-size: calc(15px + var(--font-adjust)); line-height: 1.7; pointer-events: none; }
+.markdown-editor-host.is-empty:focus-within::before { display: none; }
 .source-editor { display: block; width: min(900px, calc(100% - 48px)); height: 100%; min-height: 0; margin: 0 auto; padding: 46px 24px 120px; border: 0; resize: none; outline: 0; overflow: auto; color: var(--text); caret-color: var(--text-strong); background: transparent; font: 15px/1.75 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; tab-size: 2; }
 .source-editor { font-size: calc(15px + var(--font-adjust)); }
 .source-editor:focus-visible { outline: none; }
 .source-editor:focus::placeholder { color: transparent; }
-.typora-host > .ProseMirror, .typora-host .ProseMirror { flex: 1; min-height: 100%; outline: none; color: var(--text); font-size: calc(16px + var(--font-adjust)); }
-.typora-host .ProseMirror h1, .typora-host .ProseMirror h2, .typora-host .ProseMirror h3, .typora-host .ProseMirror h4, .typora-host .ProseMirror h5 { color: var(--text-strong); }
-.typora-host .ProseMirror h6, .typora-host .ProseMirror blockquote { color: var(--muted); }
-.typora-host .ProseMirror code, .readonly-markdown code { background: var(--surface-input); color: var(--text); }
-.typora-host .ProseMirror pre, .readonly-markdown pre { background: #242422; color: #f2f2ef; }
-.typora-host .ProseMirror th { background: var(--surface-raised); }
-.typora-host .ProseMirror img, .readonly-markdown img { max-width: 100%; border-radius: 8px; }
+.markdown-editor-host > .ProseMirror, .markdown-editor-host .ProseMirror { flex: 1; min-height: 100%; outline: none; color: var(--text); font-size: calc(16px + var(--font-adjust)); }
+.markdown-editor-host .ProseMirror h1, .markdown-editor-host .ProseMirror h2, .markdown-editor-host .ProseMirror h3, .markdown-editor-host .ProseMirror h4, .markdown-editor-host .ProseMirror h5 { color: var(--text-strong); }
+.markdown-editor-host .ProseMirror h6, .markdown-editor-host .ProseMirror blockquote { color: var(--muted); }
+.markdown-editor-host .ProseMirror code, .readonly-markdown code { background: var(--surface-input); color: var(--text); }
+.markdown-editor-host .ProseMirror pre, .readonly-markdown pre { background: #242422; color: #f2f2ef; }
+.markdown-editor-host .ProseMirror th { background: var(--surface-raised); }
+.markdown-editor-host .ProseMirror img, .readonly-markdown img { max-width: 100%; border-radius: 8px; }
 .readonly-markdown { font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; font-size: calc(17px + var(--font-adjust)); line-height: 1.75; overflow-wrap: anywhere; }
 .readonly-markdown h1, .readonly-markdown h2, .readonly-markdown h3 { color: var(--text-strong); line-height: 1.3; margin-top: 1.7em; }
 .readonly-markdown h1:first-child { margin-top: 0; }
@@ -282,21 +282,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .callout-content > :last-child { margin-bottom: 0; }
 .markdown-callout > .callout-content:empty { margin-top: 0; }
 
-.typora-host { position: relative; z-index: 1; }
-.typora-host blockquote.live-callout { position: relative; margin: 0 0 1em; padding: 50px 17px 15px; border: 1px solid transparent; border-radius: 10px; color: var(--text); }
-.typora-host blockquote.live-callout > :first-child { margin-top: 0; }
-.typora-host blockquote.live-callout > :last-child { margin-bottom: 0; }
-.typora-host blockquote.live-callout > p.live-callout-marker { position: absolute; z-index: 3; top: 13px; right: 17px; left: 17px; min-height: 24px; margin: 0; color: var(--callout-color); }
-.typora-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing { overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; }
-.typora-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing::-webkit-scrollbar { display: none; }
-.typora-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing::before { content: attr(data-callout-prefix); user-select: none; }
-.typora-host .live-callout-marker-hidden { visibility: hidden; }
-.typora-host .live-markdown-escape-hidden { font-size: 0; line-height: 0; color: transparent; }
-.typora-host .live-inline-math-source, .typora-host .live-wikilink-source { font-size: 0; line-height: 0; color: transparent; }
+.markdown-editor-host { position: relative; z-index: 1; }
+.markdown-editor-host blockquote.live-callout { position: relative; margin: 0 0 1em; padding: 50px 17px 15px; border: 1px solid transparent; border-radius: 10px; color: var(--text); }
+.markdown-editor-host blockquote.live-callout > :first-child { margin-top: 0; }
+.markdown-editor-host blockquote.live-callout > :last-child { margin-bottom: 0; }
+.markdown-editor-host blockquote.live-callout > p.live-callout-marker { position: absolute; z-index: 3; top: 13px; right: 17px; left: 17px; min-height: 24px; margin: 0; color: var(--callout-color); }
+.markdown-editor-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing { overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; }
+.markdown-editor-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing::-webkit-scrollbar { display: none; }
+.markdown-editor-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing::before { content: attr(data-callout-prefix); user-select: none; }
+.markdown-editor-host .live-callout-marker-hidden { visibility: hidden; }
+.markdown-editor-host .live-markdown-escape-hidden { font-size: 0; line-height: 0; color: transparent; }
+.markdown-editor-host .live-inline-math-source, .markdown-editor-host .live-wikilink-source { font-size: 0; line-height: 0; color: transparent; }
 .live-inline-math-widget { display: inline-block; max-width: 100%; padding: 0 .08em; vertical-align: middle; pointer-events: none; }
 .live-math-block-widget, .live-mermaid-widget { display: block; width: 100%; margin: 1.15em 0; cursor: text; }
-.typora-host .live-math-block-source.is-live-syntax-rendered,
-.typora-host .live-mermaid-source.is-live-syntax-rendered { display: none; }
+.markdown-editor-host .live-math-block-source.is-live-syntax-rendered,
+.markdown-editor-host .live-mermaid-source.is-live-syntax-rendered { display: none; }
 .live-math-block-widget { overflow-x: auto; padding: 14px 18px; border-radius: 8px; background: var(--surface-input); text-align: center; }
 .live-mermaid-widget, .mermaid-diagram { padding: 16px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); }
 .live-mermaid-widget img, .mermaid-diagram img { display: block; max-width: 100%; height: auto; margin: 0 auto; }

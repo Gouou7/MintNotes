@@ -246,7 +246,7 @@ function materializeCalloutLines(markdown: string): string {
     }
 
     output.push(`${quote.prefix}${canonicalMarker(marker, Boolean(legacyMaterialized))}`);
-    // A quoted blank line makes typora-web parse the marker and body as separate
+    // A quoted blank line makes the live editor parse the marker and body as separate
     // paragraphs, so deleting the body cannot move the selection into the marker.
     output.push(blankQuoteLine(quote.prefix));
     pendingBody = { depth: quote.depth, prefix: quote.prefix };

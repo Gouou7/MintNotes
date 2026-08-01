@@ -266,7 +266,7 @@ const messages = {
     "zh-TW": "Mint Notes 是一款使用 AI 開發的玩具級專案。目標是提供輕量部署、安全儲存、簡單使用的筆記體驗。本專案支援 PWA 自適應版面配置，採用端對端加密，你可以安全地將筆記服務部署在遠端伺服器，並使用你熟悉的 Markdown 語法進行筆記編輯。"
   },
   "settings.acknowledgements": { en: "Acknowledgements", "zh-CN": "致谢", "zh-TW": "致謝" },
-  "settings.markdownEditor": { en: "Markdown editor", "zh-CN": "Markdown 编辑器", "zh-TW": "Markdown 編輯器" },
+  "settings.editorCoreOrigin": { en: "Editor core origin", "zh-CN": "编辑器核心来源", "zh-TW": "編輯器核心來源" },
   "settings.iconLibrary": { en: "Icon library", "zh-CN": "图标包", "zh-TW": "圖示套件" },
 
   "notice.loadDevicesFailed": { en: "Unable to load device sessions", "zh-CN": "无法加载设备会话", "zh-TW": "無法載入裝置工作階段" },

@@ -4,7 +4,7 @@
 
 Mint Notes is a lightweight, self-hosted, multi-user Markdown notes PWA. It uses a local-first write path and browser-side end-to-end encryption so input and durable local saves do not wait for the network and the server stores only opaque encrypted note, folder, and attachment data.
 
-The browser application uses React, TypeScript, Vite, `typora-web`, Web Crypto, and Dexie/IndexedDB. The server uses Fastify and SQLite and is delivered as one non-root Docker service without Redis, MongoDB, object storage, or a separate search service.
+The browser application uses React, TypeScript, Vite, an in-repository ProseMirror-based editor core derived from `typora-web`, Web Crypto, and Dexie/IndexedDB. The server uses Fastify and SQLite and is delivered as one non-root Docker service without Redis, MongoDB, object storage, or a separate search service.
 
 ## Project invariants
 
@@ -49,7 +49,8 @@ When documents disagree, use this evidence order: implementation code, automated
 
 - `src/App.tsx`: top-level session-state routing only. It selects authentication, lock, and unlocked-vault surfaces and must not contain vault persistence, synchronization, document, or attachment algorithms.
 - `src/components/`: shared presentation primitives, including the standard Lucide icon wrapper.
-- `src/editor/`: the `typora-web` adapter, source/live image-drop handling, read-only Markdown rendering, and outline extraction.
+- `src/editor/core/`: the in-repository ProseMirror/Markdown core, canonical parser and serializer, input transactions, generic extension contract, and stable controller. `UPSTREAM.md` records the imported source provenance.
+- `src/editor/extensions/`: Mint Notes-owned Callout and Math/Mermaid/WikiLink Live-mode extensions injected through the core extension contract. Other modules under `src/editor/` own the React adapter, source/live image-drop handling, read-only Markdown rendering, and outline extraction.
 - `src/crypto/`: browser-only Argon2id/HMAC key derivation, key envelopes, authenticated object encryption, and attachment-chunk encryption. Do not move plaintext cryptographic work to the server.
 - `src/storage/`: Dexie schema for encrypted IndexedDB objects, attachment chunks, per-user preferences/cursors, and durable outboxes.
 - `src/features/vault/`: unlocked-vault composition, typed controllers, in-memory indexes, object-write serialization, and vault-specific views. Keep persistence, attachment-copy, synchronization, history, and document commands in their owning modules rather than adding them to `VaultApp.tsx` or a view component.
@@ -57,7 +58,6 @@ When documents disagree, use this evidence order: implementation code, automated
 - `server/index.ts` and `server/app.ts`: process startup and application composition only. Authentication/session behavior, domain routes, repositories, and maintenance jobs belong in their modules under `server/`.
 - `server/`: Fastify domain routes and services, session-derived authorization, opaque encrypted-object storage, SQLite revisions/changes, attachment chunks, account activation, and static PWA delivery.
 - `scripts/`: built crypto Worker integration and API smoke tests.
-- `patches/`: the project-maintained `typora-web` compatibility layer for public controller methods and canonical Markdown live-editing behavior.
 - `deploy/`: production reverse-proxy example.
 - `docs/`: task-oriented user, development, architecture, security, deployment, and backup documentation, with navigation in `docs/README.md`.
 
@@ -101,8 +101,8 @@ When changing a responsibility currently coordinated by `src/App.tsx`, `src/feat
 
 ## Editor and PWA constraints
 
-- Treat `typora-web` 0.3.1 as an effectively frozen dependency. Maintain required live Markdown parsing, serialization, input transactions, and public controller extensions in `patches/typora-web@0.3.1.patch`, with direct round-trip regression tests.
-- Application code must use only the declared `typora-web` controller API and must not import package internals or access the unstable `editor.view`. Changes inside the maintained patch must preserve canonical Markdown and must never expose private display syntax in saved notes.
+- Treat `src/editor/core/` as a Mint Notes-owned core derived from `typora-web` 0.3.1. Change its TypeScript source directly, retain `UPSTREAM.md` and `LICENSE.typora-web`, and cover parser, serializer, input-transaction, and controller changes with direct round-trip regression tests.
+- `src/editor/core/` must not import Mint Notes editor extensions. Extension modules may use ProseMirror only through the declared `EditorExtension` lifecycle; React views and other application modules use the controller and typed extension helpers and must never receive an editor view. Core and extension changes must preserve canonical Markdown and must never expose private display syntax in saved notes.
 - Markdown remains canonical across live, source, and read-only modes; switching modes must not silently rewrite content.
 - Decrypted attachment Blob URLs exist only in memory and must be revoked when the note changes or the vault locks.
 - PWA updates require the existing user confirmation path so a new bundle is not activated in the middle of an unsaved editing transition.

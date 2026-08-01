@@ -10,9 +10,14 @@ import {
   useRef,
   useState
 } from "react";
-import { createEditor, type TyporaWebEditor } from "typora-web";
-import "typora-web/widgets.css";
-import "typora-web/theme-typora.css";
+import { createEditor, type Editor as EditorController } from "./core/lib";
+import "./core/styles/widgets.css";
+import "./core/styles/theme-typora.css";
+import {
+  createCalloutExtension,
+  focusCalloutMarker as focusCalloutMarkerInEditor,
+} from "./extensions/callout";
+import { createRichSyntaxExtension } from "./extensions/richSyntax";
 import { materializeAttachmentUrls } from "../features/attachmentFormat";
 import { useI18n } from "../i18n";
 import { CalloutHeader } from "./Callout";
@@ -41,16 +46,16 @@ interface Props {
   emptyHint?: string;
 }
 
-export interface TyporaEditorHandle {
+export interface MarkdownEditorHandle {
   focus: () => void;
 }
 
-export const TyporaEditor = forwardRef<TyporaEditorHandle, Props>(function TyporaEditor(props, ref) {
+export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function MarkdownEditor(props, ref) {
   if (props.mode === "source") return <SourceEditor {...props} ref={ref} />;
   return <LiveEditor {...props} ref={ref} />;
 });
 
-const SourceEditor = forwardRef<TyporaEditorHandle, Props>(function SourceEditor({ markdown, onChange, onImageInsert }, ref) {
+const SourceEditor = forwardRef<MarkdownEditorHandle, Props>(function SourceEditor({ markdown, onChange, onImageInsert }, ref) {
   const { t } = useI18n();
   const textarea = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(ref, () => ({ focus: () => textarea.current?.focus() }), []);
@@ -94,11 +99,11 @@ const SourceEditor = forwardRef<TyporaEditorHandle, Props>(function SourceEditor
   );
 });
 
-const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageInsert, onWikiLink, emptyHint }, ref) {
+const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageInsert, onWikiLink, emptyHint }, ref) {
   const frontmatter = parseFrontmatter(markdown);
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<TyporaWebEditor | null>(null);
+  const editorRef = useRef<EditorController | null>(null);
   const changeRef = useRef(onChange);
   const attachmentUrlHistoryRef = useRef(new Map<string, string>());
   const frontmatterRef = useRef(frontmatter);
@@ -116,12 +121,15 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
     if (!hostRef.current) return;
     const editor = createEditor(hostRef.current, {
       initialContent: renderedMarkdownRef.current,
-      liveSyntax: {
-        renderMath: (container, source) => renderMathInto(container, source),
-        renderMathBlock: (container, source) => renderMathInto(container, source, true),
-        renderMermaid: renderMermaidInto,
-        onWikiLink: (target) => wikiLinkRef.current?.(target)
-      },
+      extensions: [
+        createCalloutExtension(),
+        createRichSyntaxExtension({
+          renderMath: (container, source) => renderMathInto(container, source),
+          renderMathBlock: (container, source) => renderMathInto(container, source, true),
+          renderMermaid: renderMermaidInto,
+          onWikiLink: (target) => wikiLinkRef.current?.(target)
+        })
+      ],
       onChange: (next) => {
         const canonicalizedLiveBody = canonicalizeCalloutsFromLive(canonicalizeMathBlocksFromLive(next));
         let canonicalBody = canonicalizedLiveBody;
@@ -130,7 +138,7 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
         }
         const canonical = replaceFrontmatterBody(frontmatterRef.current, canonicalBody);
         const previousMarkdown = editorMarkdownRef.current;
-        // Track the reversible live representation rather than typora-web's
+        // Track the reversible live representation rather than the core
         // serializer output, which omits a trailing empty callout paragraph.
         renderedMarkdownRef.current = materializeLiveSyntax(canonicalizedLiveBody);
         if (canonical === previousMarkdown) return;
@@ -150,7 +158,7 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
     if (!editorRef.current) return;
     // Attachment Blob URLs are presentation state. The image observer below
     // updates them in place; feeding them through setMarkdown would rebuild
-    // typora-web's internal ProseMirror view and discard the active selection.
+    // the core's internal ProseMirror view and discard the active selection.
     if (markdown === editorMarkdownRef.current) return;
     const renderedMarkdown = materializeLiveMarkdown(frontmatter.body, attachmentUrls);
     editorMarkdownRef.current = markdown;
@@ -262,7 +270,7 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
     if (editorRef.current === editor) editor.insertMarkdown(insertion);
   };
 
-  const focusCalloutMarker = (
+  const focusCalloutMarkerFromOverlay = (
     event: ReactPointerEvent<HTMLDivElement>,
     overlay: LiveCalloutOverlay
   ) => {
@@ -279,7 +287,7 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
       const titleOffset = textOffsetAtPoint(target, event.clientX, event.clientY);
       markerOffset = Math.min(titleRange.end, titleRange.start + titleOffset);
     }
-    editorRef.current.focusCalloutMarker(overlay.calloutIndex, markerOffset);
+    focusCalloutMarkerInEditor(editorRef.current, overlay.calloutIndex, markerOffset);
   };
 
   const editEmptyCalloutMarker = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -340,7 +348,7 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
       {frontmatter.status !== "absent" && <FrontmatterProperties markdown={markdown} editable onChange={changeProperties} />}
       <div
         ref={hostRef}
-        className={`typora-host${emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? " is-empty" : ""}`}
+        className={`markdown-editor-host${emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? " is-empty" : ""}`}
         data-empty-hint={emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? emptyHint : undefined}
         onKeyDownCapture={editEmptyCalloutMarker}
         onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
@@ -355,7 +363,7 @@ const LiveEditor = forwardRef<TyporaEditorHandle, Props>(function LiveEditor({ m
             style={{ ...overlay.style, height: 50 }}
             role="note"
             aria-label={overlay.title}
-            onPointerDown={(event) => focusCalloutMarker(event, overlay)}
+            onPointerDown={(event) => focusCalloutMarkerFromOverlay(event, overlay)}
           >
             <CalloutHeader kind={overlay.kind} title={overlay.title} icon={overlay.icon} />
           </div>

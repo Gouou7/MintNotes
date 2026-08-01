@@ -38,7 +38,7 @@ increases:
 - IndexedDB/Dexie versions under `src/storage/`;
 - object, history, attachment, key-envelope, or encryption versions;
 - workspace, import/export, or portable payload schema versions;
-- the `typora-web` dependency version or its patch filename;
+- the imported editor-core provenance or its direct ProseMirror/Markdown dependencies;
 - `docker-compose.yml` or the `/data` layout.
 
 Those values describe compatibility or data formats and require their own

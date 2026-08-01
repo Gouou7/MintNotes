@@ -36,7 +36,7 @@ import {
 } from "../../crypto/deviceUnlock";
 import { buildOutline } from "../../editor/outline";
 import { ReadOnlyMarkdown } from "../../editor/ReadOnlyMarkdown";
-import { TyporaEditor, type TyporaEditorHandle } from "../../editor/TyporaEditor";
+import { MarkdownEditor, type MarkdownEditorHandle } from "../../editor/MarkdownEditor";
 import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/wikilinks";
 import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
 import { AttachmentCloneService } from "../attachmentClone";
@@ -269,7 +269,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const documentTree = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const editorArea = useRef<HTMLDivElement>(null);
-  const editorSurface = useRef<TyporaEditorHandle>(null);
+  const editorSurface = useRef<MarkdownEditorHandle>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const pendingTitleFocus = useRef<string | null>(null);
   const pendingTitleSave = useRef<Promise<boolean>>(Promise.resolve(true));
@@ -2515,7 +2515,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
             ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
             : displayedMode === "readonly"
             ? <ReadOnlyMarkdown markdown={activeDocument.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : <TyporaEditor ref={editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} onChange={(markdown) => {
+            : <MarkdownEditor ref={editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} onChange={(markdown) => {
               const latest = documentIndexRef.current.get(activeDocument.objectId);
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });

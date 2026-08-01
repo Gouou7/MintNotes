@@ -18,7 +18,7 @@ Mint Notes 是一款使用 AI 开发的玩具级项目。目标是提供轻量�
 
 ## 技术栈
 
-浏览器应用使用 React、TypeScript、Vite、`typora-web`、Web Crypto 和 Dexie／IndexedDB。
+浏览器应用使用 React、TypeScript、Vite、由 `typora-web` 衍生并内置维护的 ProseMirror 编辑器核心、Web Crypto 和 Dexie／IndexedDB。
 
 服务器使用 Fastify 和 SQLite。
 
@@ -73,7 +73,7 @@ docker compose ps
 
 感谢以下开源项目:
 
-- Markdown 编辑器：[typora-web](https://github.com/Yuyz0112/typora-web)
+- 编辑器核心来源：[typora-web](https://github.com/Yuyz0112/typora-web)
 - 数学公式渲染：[KaTeX](https://katex.org/)
 - 图表渲染：[Mermaid](https://mermaid.js.org/)
 - 图标包：[Lucide React](https://lucide.dev/)

@@ -190,7 +190,7 @@ describe("SettingsPanel", () => {
     expect(container.querySelector(".about-feedback")).toBeNull();
     expect(container.textContent).not.toContain("如果你发现 Bug 或者有功能建议");
     expect(container.textContent).toContain("致谢");
-    expect(container.querySelector(".about-credits")?.textContent).toContain("typora-webMarkdown 编辑器");
+    expect(container.querySelector(".about-credits")?.textContent).toContain("typora-web编辑器核心来源");
     expect(container.querySelector(".about-credits")?.textContent).toContain("Lucide React图标包");
     expect(container.querySelector(".about-list")).toBeNull();
     expect(container.querySelector("a[href='https://github.com/Yuyz0112/typora-web']")).toBeTruthy();

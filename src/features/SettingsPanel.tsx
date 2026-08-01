@@ -403,7 +403,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
             <h3>{t("settings.acknowledgements")}</h3>
             <p className="settings-help">{t("settings.aboutHelp")}</p>
             <ul className="about-credits">
-              <li><a href="https://github.com/Yuyz0112/typora-web" target="_blank" rel="noreferrer">typora-web</a><span>{t("settings.markdownEditor")}</span></li>
+              <li><a href="https://github.com/Yuyz0112/typora-web" target="_blank" rel="noreferrer">typora-web</a><span>{t("settings.editorCoreOrigin")}</span></li>
               <li><a href="https://lucide.dev" target="_blank" rel="noreferrer">Lucide React</a><span>{t("settings.iconLibrary")}</span></li>
             </ul>
           </div>}
