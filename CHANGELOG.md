@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Moved the Live Markdown editor into the Mint Notes codebase as a project-owned core, preserving canonical Markdown compatibility while loading Callouts, math, Mermaid, and WikiLinks through maintained extensions.
 - Decoupled new vault-key envelopes from usernames so accounts can be renamed without changing passwords or encrypted note data, while legacy accounts migrate automatically on their first username change.
+- Changed device PIN setup, replacement, and removal to request the master password and new PIN in an action-specific confirmation dialog instead of keeping credential fields on the Security settings page.
+- Grouped master-password changes and recovery-key resets under two account-credential actions whose verification fields open only after the user selects an operation.
 
 ### Security
 

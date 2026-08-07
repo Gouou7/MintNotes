@@ -18,6 +18,8 @@ import { downloadRecoveryKey } from "./recoveryKey";
 import { APP_VERSION } from "../version";
 
 type Tab = "general" | "history" | "trash" | "security" | "data" | "about" | "users";
+type PinDialogMode = "save" | "remove";
+type AccountCredentialDialogMode = "password" | "recovery";
 
 interface PendingUsernameRecoveryReset {
   binding: VaultEnvelopeBinding;
@@ -97,10 +99,12 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
   const [trashRetentionDays, setTrashRetentionDays] = useState<number | null>(30);
   const [pinPassword, setPinPassword] = useState("");
   const [newPin, setNewPin] = useState("");
+  const [pinDialogMode, setPinDialogMode] = useState<PinDialogMode | null>(null);
   const [autoLock, setAutoLock] = useState(credential?.autoLockMinutes ?? 0);
   const [restoringTrashId, setRestoringTrashId] = useState("");
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [newRecoveryKey, setNewRecoveryKey] = useState("");
+  const [accountCredentialDialogMode, setAccountCredentialDialogMode] = useState<AccountCredentialDialogMode | null>(null);
   const [logoutConfirming, setLogoutConfirming] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
@@ -336,6 +340,20 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
     finally { await cryptoClient.discardPendingLogin(); }
   };
 
+  const openPinDialog = (mode: PinDialogMode) => {
+    if (!requireServerSession()) return;
+    setPinPassword("");
+    setNewPin("");
+    setPinDialogMode(mode);
+  };
+
+  const closePinDialog = () => {
+    setPinDialogMode(null);
+    setPinPassword("");
+    setNewPin("");
+    void cryptoClient.discardPendingLogin().catch(() => undefined);
+  };
+
   const savePin = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -343,25 +361,23 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
       await verifyMasterPassword();
       await setDevicePin(user.id, endpoint.id, newPin);
       onCredentialChange(await getDeviceUnlock(user.id, endpoint.id) ?? null);
-      setPinPassword("");
-      setNewPin("");
+      closePinDialog();
       onNotify(t("notice.pinSaved"), "info");
     } catch (value) {
       onNotify(translateError(value, t, "notice.pinSaveFailed"), "warning");
     } finally { setBusy(false); }
   };
 
-  const removePin = async () => {
+  const removePin = async (event: FormEvent) => {
+    event.preventDefault();
     setBusy(true);
     try {
-      if (!pinPassword) throw new Error(t("notice.enterPasswordBeforeRemovePin"));
       await verifyMasterPassword();
       await setAutoLockMinutes(user.id, endpoint.id, 0);
       await removeDevicePin(user.id, endpoint.id);
       onCredentialChange(await getDeviceUnlock(user.id, endpoint.id) ?? null);
       setAutoLock(0);
-      setPinPassword("");
-      setNewPin("");
+      closePinDialog();
       onNotify(t("notice.pinRemoved"), "info");
     } catch (value) { onNotify(translateError(value, t, "notice.pinRemoveFailed"), "warning"); }
     finally { setBusy(false); }
@@ -385,6 +401,26 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
     } finally { setBusy(false); }
   };
 
+  const openAccountCredentialDialog = (mode: AccountCredentialDialogMode) => {
+    if (!requireServerSession()) return;
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setRecoveryPassword("");
+    setNewRecoveryKey("");
+    setAccountCredentialDialogMode(mode);
+  };
+
+  const closeAccountCredentialDialog = () => {
+    setAccountCredentialDialogMode(null);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setRecoveryPassword("");
+    setNewRecoveryKey("");
+    void cryptoClient.discardPendingLogin().catch(() => undefined);
+  };
+
   const changePassword = async (event: FormEvent) => {
     event.preventDefault();
     if (!requireServerSession()) return;
@@ -396,7 +432,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
       const current = await cryptoClient.prepareLogin(currentPassword, parameters.kdfSalt, parameters.kdfParams);
       const next = await cryptoClient.rewrapPassword(parameters.envelopeBinding, newPassword);
       await api("/api/auth/password", { method: "POST", body: JSON.stringify({ currentAuthSecret: current.authSecret, newAuthSecret: next.authSecret, newKdfSalt: next.kdfSalt, newKdfParams: next.kdfParams, newWrappedVaultKey: next.wrappedVaultKey, newWrappedVaultNonce: next.wrappedVaultNonce }) });
-      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      closeAccountCredentialDialog();
       onNotify(t("notice.passwordChanged"), "info");
       await loadDeviceSessions();
     } catch (value) { onNotify(translateError(value, t, "notice.passwordChangeFailed"), "warning"); }
@@ -503,17 +539,15 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
           </div>}
 
           {tab === "security" && <div className="settings-section">
-            <h3>{t("settings.setPin")}</h3><p className="settings-help">{t("settings.pinHelp")}</p>
-            <form className="compact-form" onSubmit={savePin}><label>{t("auth.masterPassword")}<input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" required /></label><label>{hasDevicePin(credential) ? t("settings.newPin") : t("settings.setPin")}<input type="password" minLength={4} value={newPin} onChange={(event) => setNewPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" placeholder={t("settings.pinMin")} required /></label><div className="settings-actions"><button type="submit" className="primary compact" disabled={busy || !serverSessionVerified}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</button>{hasDevicePin(credential) && <button type="button" disabled={busy || !serverSessionVerified} onClick={() => void removePin()}>{t("settings.removePin")}</button>}</div></form>
+            <h3>{t("settings.devicePin")}</h3><p className="settings-help">{t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}</p>
+            <div className="settings-actions"><button type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</button>{hasDevicePin(credential) && <button type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</button>}</div>
             <h3>{t("settings.autoLock")}</h3><p className="settings-help">{t("settings.autoLockHelp")}</p>
             <label className="settings-control-row"><span>{t("settings.autoLockAfter")}</span><select disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select></label>
             <h3>{t("settings.loginDevices")}</h3><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
             {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
             {deviceEndpoints && <>{!deviceEndpoints.canRevokeOthers && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row ${device.current ? "current" : ""}`} key={device.id}><span className="session-device-icon"><AppIcon icon={Laptop} /></span><span className="session-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && device.active && <button className="session-revoke" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={LogOut} size={15} />{t("settings.signOut")}</button>}</article>)}</div></>}
-            <h3>{t("settings.changePassword")}</h3><p className="settings-help">{t("settings.changePasswordHelp")}</p>
-            <form className="compact-form" onSubmit={changePassword}><label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" required /></label><label>{t("auth.newMasterPassword")}<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" required /></label><label>{t("auth.confirmNewPassword")}<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" required /></label><button type="submit" className="primary compact" disabled={busy || !serverSessionVerified}>{t("settings.changePassword")}</button></form>
-            <h3>{t("auth.recoveryKey")}</h3><p className="settings-help">{t("settings.recoveryHelp")}</p>
-            {!newRecoveryKey ? <form className="settings-control-row" onSubmit={resetRecoveryKey}><label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={recoveryPassword} onChange={(event) => setRecoveryPassword(event.target.value)} required /></label><button className="compact" disabled={busy || !serverSessionVerified}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecovery")}</button></form> : <div className="recovery-result"><strong>{t("settings.recoveryShownOnce")}</strong><textarea readOnly rows={3} value={newRecoveryKey} /><div className="settings-actions"><button onClick={() => void navigator.clipboard.writeText(newRecoveryKey)}>{t("common.copy")}</button><button onClick={() => downloadRecoveryKey(user.username, newRecoveryKey)}><AppIcon icon={Download} size={15} />{t("common.download")}</button><button className="primary" onClick={() => setNewRecoveryKey("")}>{t("settings.savedRecovery")}</button></div></div>}
+            <h3>{t("settings.accountCredentials")}</h3><p className="settings-help">{t("settings.accountCredentialsHelp")}</p>
+            <div className="settings-actions"><button type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</button><button type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecovery")}</button></div>
           </div>}
 
           {tab === "data" && <div className="settings-section"><h3>{t("settings.portableData")}</h3><p className="settings-help">{t("settings.portableHelp")}</p><input ref={fileInput} type="file" accept=".md,.markdown,.txt,.zip" multiple hidden onChange={(event) => { void importSelected(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><button disabled={busy} onClick={() => fileInput.current?.click()}>{t("settings.import")}</button><button disabled={busy} onClick={() => void onExport()}>{t("settings.export")}</button></div></div>}
@@ -548,6 +582,15 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
           <div className="recovery-result"><textarea readOnly rows={3} value={pendingUsernameRecoveryReset.recoveryCode} /><div className="settings-actions"><button type="button" onClick={() => void navigator.clipboard.writeText(pendingUsernameRecoveryReset.recoveryCode)}>{t("common.copy")}</button><button type="button" onClick={() => downloadRecoveryKey(normalizedUsername(), pendingUsernameRecoveryReset.recoveryCode)}><AppIcon icon={Download} size={15} />{t("common.download")}</button></div><label className="recovery-confirm"><input type="checkbox" checked={usernameRecoveryConfirmed} onChange={(event) => setUsernameRecoveryConfirmed(event.target.checked)} /><span>{t("auth.recovery.confirm")}</span></label></div>
           <div className="settings-actions"><button type="button" disabled={busy} onClick={closeUsernameDialog}>{t("common.cancel")}</button><button type="button" className="primary" disabled={busy || !usernameRecoveryConfirmed} onClick={() => void saveUsernameWithRecoveryReset()}>{t("settings.finishUsernameChange")}</button></div>
         </>}
+      </div>}
+      {pinDialogMode && <div className="danger-confirm pin-change-dialog settings-section" role="dialog" aria-modal="true" aria-label={t(pinDialogMode === "save" ? (hasDevicePin(credential) ? "settings.changePin" : "settings.setPin") : "settings.removePin")}>
+        <header><h3>{t(pinDialogMode === "save" ? (hasDevicePin(credential) ? "settings.changePin" : "settings.setPin") : "settings.removePin")}</h3><button type="button" onClick={closePinDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button></header>
+        <p>{t(pinDialogMode === "save" ? "settings.pinVerificationHelp" : "settings.removePinHelp")}</p>
+        {pinDialogMode === "save" ? <form className="compact-form" onSubmit={savePin}><label>{t("auth.masterPassword")}<input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" autoFocus required /></label><label>{t("settings.newPin")}<input type="password" minLength={4} value={newPin} onChange={(event) => setNewPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" placeholder={t("settings.pinMin")} required /></label><div className="settings-actions"><button type="button" disabled={busy} onClick={closePinDialog}>{t("common.cancel")}</button><button type="submit" className="primary" disabled={busy}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</button></div></form> : <form className="compact-form" onSubmit={removePin}><label>{t("auth.masterPassword")}<input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} autoFocus required /></label><div className="settings-actions"><button type="button" disabled={busy} onClick={closePinDialog}>{t("common.cancel")}</button><button type="submit" className="danger danger-solid" disabled={busy}>{t("settings.removePin")}</button></div></form>}
+      </div>}
+      {accountCredentialDialogMode && <div className="danger-confirm account-credential-dialog settings-section" role="dialog" aria-modal="true" aria-label={t(accountCredentialDialogMode === "password" ? "settings.changePassword" : "settings.resetRecovery")}>
+        <header><h3>{t(accountCredentialDialogMode === "password" ? "settings.changePassword" : "settings.resetRecovery")}</h3>{!newRecoveryKey && <button type="button" onClick={closeAccountCredentialDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button>}</header>
+        {accountCredentialDialogMode === "password" ? <><p>{t("settings.changePasswordHelp")}</p><form className="compact-form" onSubmit={changePassword}><label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" autoFocus required /></label><label>{t("auth.newMasterPassword")}<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" required /></label><label>{t("auth.confirmNewPassword")}<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" required /></label><div className="settings-actions"><button type="button" disabled={busy} onClick={closeAccountCredentialDialog}>{t("common.cancel")}</button><button type="submit" className="primary" disabled={busy}>{t("settings.changePassword")}</button></div></form></> : !newRecoveryKey ? <><p>{t("settings.recoveryHelp")}</p><form className="compact-form" onSubmit={resetRecoveryKey}><label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={recoveryPassword} onChange={(event) => setRecoveryPassword(event.target.value)} autoFocus required /></label><div className="settings-actions"><button type="button" disabled={busy} onClick={closeAccountCredentialDialog}>{t("common.cancel")}</button><button type="submit" className="primary" disabled={busy}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecovery")}</button></div></form></> : <><p>{t("settings.recoveryHelp")}</p><div className="recovery-result"><strong>{t("settings.recoveryShownOnce")}</strong><textarea readOnly rows={3} value={newRecoveryKey} /><div className="settings-actions"><button type="button" onClick={() => void navigator.clipboard.writeText(newRecoveryKey)}>{t("common.copy")}</button><button type="button" onClick={() => downloadRecoveryKey(user.username, newRecoveryKey)}><AppIcon icon={Download} size={15} />{t("common.download")}</button><button type="button" className="primary" onClick={closeAccountCredentialDialog}>{t("settings.savedRecovery")}</button></div></div></>}
       </div>}
       {logoutConfirming && <div className="danger-confirm logout-confirm settings-section" role="dialog" aria-modal="true" aria-label={t("settings.logoutTitle")}><header><h3>{t("settings.logoutTitle")}</h3><button type="button" onClick={() => setLogoutConfirming(false)} aria-label={t("common.close")}><AppIcon icon={X} /></button></header><p>{t("settings.logoutWarning")}</p><div className="settings-actions"><button type="button" onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</button><button type="button" className="danger danger-solid" onClick={() => void onLogout()}><AppIcon icon={LogOut} size={15} />{t("app.logout")}</button></div></div>}
     </section>

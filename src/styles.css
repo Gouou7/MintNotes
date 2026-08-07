@@ -516,8 +516,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .danger-confirm > header h3 { margin: 0; color: var(--danger); }
 .danger-confirm > header button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; background: transparent; }
 .danger-confirm > p { color: var(--muted); font-size: calc(13px + var(--font-adjust)); line-height: 1.55; }
-.username-change-dialog { border-color: var(--border); }
-.username-change-dialog > header h3 { color: var(--text); }
+.username-change-dialog, .pin-change-dialog, .account-credential-dialog { border-color: var(--border); }
+.username-change-dialog > header h3, .pin-change-dialog > header h3, .account-credential-dialog > header h3 { color: var(--text); }
 .recovery-result { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
 .recovery-result textarea { width: 100%; padding: 10px; resize: none; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 

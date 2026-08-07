@@ -214,11 +214,27 @@ const messages = {
   "settings.restoreItem": { en: "Restore {title}", "zh-CN": "恢复 {title}", "zh-TW": "復原 {title}" },
   "settings.permanentDelete": { en: "Permanently delete", "zh-CN": "永久删除", "zh-TW": "永久刪除" },
   "settings.permanentDeleteItem": { en: "Permanently delete {title}", "zh-CN": "永久删除 {title}", "zh-TW": "永久刪除 {title}" },
+  "settings.devicePin": { en: "Device PIN", "zh-CN": "本机 PIN", "zh-TW": "本機 PIN" },
   "settings.setPin": { en: "Set PIN", "zh-CN": "设置 PIN", "zh-TW": "設定 PIN" },
   "settings.pinHelp": {
     en: "After you set a PIN, it will be required each time the app starts. The PIN applies only to this device.",
     "zh-CN": "设置 PIN 之后，每次启动将要求输入 PIN；PIN 只应用于当前设备。",
     "zh-TW": "設定 PIN 之後，每次啟動將要求輸入 PIN；PIN 只套用於目前裝置。"
+  },
+  "settings.pinConfiguredHelp": {
+    en: "A PIN is configured for this device. Change or remove it only when needed.",
+    "zh-CN": "当前设备已设置 PIN；需要时可更改或移除。",
+    "zh-TW": "目前裝置已設定 PIN；需要時可變更或移除。"
+  },
+  "settings.pinVerificationHelp": {
+    en: "Enter the current master password and the new PIN to continue.",
+    "zh-CN": "请输入当前主密码和新 PIN 后继续。",
+    "zh-TW": "請輸入目前主密碼和新 PIN 後繼續。"
+  },
+  "settings.removePinHelp": {
+    en: "Enter the current master password to remove this device's PIN. Automatic locking will also be disabled.",
+    "zh-CN": "请输入当前主密码以移除本机 PIN；自动锁定也会同时关闭。",
+    "zh-TW": "請輸入目前主密碼以移除本機 PIN；自動鎖定也會同時關閉。"
   },
   "settings.newPin": { en: "New PIN", "zh-CN": "新 PIN", "zh-TW": "新 PIN" },
   "settings.pinMin": { en: "At least 4 characters", "zh-CN": "至少 4 个字符", "zh-TW": "至少 4 個字元" },
@@ -254,6 +270,12 @@ const messages = {
   "settings.deviceSignedOut": { en: "Signed out", "zh-CN": "已登出", "zh-TW": "已登出" },
   "settings.deviceExpired": { en: "Expired", "zh-CN": "已过期", "zh-TW": "已過期" },
   "settings.signOut": { en: "Sign out", "zh-CN": "登出", "zh-TW": "登出" },
+  "settings.accountCredentials": { en: "Account credentials", "zh-CN": "账户凭据", "zh-TW": "帳戶憑證" },
+  "settings.accountCredentialsHelp": {
+    en: "Change the master password or replace the recovery key only when needed. Verification fields open after you choose an action.",
+    "zh-CN": "需要时可修改主密码或重置恢复密钥；选择操作后才会显示验证输入框。",
+    "zh-TW": "需要時可變更主密碼或重設復原金鑰；選擇操作後才會顯示驗證輸入框。"
+  },
   "settings.changePassword": { en: "Change master password", "zh-CN": "修改主密码", "zh-TW": "變更主密碼" },
   "settings.changePasswordHelp": {
     en: "After changing the master password, other devices must log in again. The recovery key is unaffected.",
@@ -312,7 +334,6 @@ const messages = {
   "notice.deviceSignOutFailed": { en: "Unable to sign out device", "zh-CN": "登出设备失败", "zh-TW": "登出裝置失敗" },
   "notice.pinSaved": { en: "PIN saved for this device", "zh-CN": "当前设备 PIN 已保存", "zh-TW": "目前裝置的 PIN 已儲存" },
   "notice.pinSaveFailed": { en: "Unable to save PIN", "zh-CN": "无法保存 PIN", "zh-TW": "無法儲存 PIN" },
-  "notice.enterPasswordBeforeRemovePin": { en: "Enter the master password before removing the PIN", "zh-CN": "请输入主密码后再移除 PIN", "zh-TW": "請輸入主密碼後再移除 PIN" },
   "notice.pinRemoved": { en: "PIN removed from this device and automatic locking disabled", "zh-CN": "当前设备 PIN 已移除，自动锁定已关闭", "zh-TW": "目前裝置的 PIN 已移除，自動鎖定已關閉" },
   "notice.pinRemoveFailed": { en: "Unable to remove PIN", "zh-CN": "无法移除 PIN", "zh-TW": "無法移除 PIN" },
   "notice.setPinFirst": { en: "Set a device PIN above before enabling automatic locking", "zh-CN": "请先在上方设置本机 PIN，再开启自动锁定", "zh-TW": "請先在上方設定本機 PIN，再開啟自動鎖定" },

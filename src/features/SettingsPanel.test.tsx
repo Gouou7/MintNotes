@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api";
 import { cryptoClient } from "../crypto/client";
-import { setAutoLockMinutes } from "../crypto/deviceUnlock";
+import { getDeviceUnlock, removeDevicePin, setAutoLockMinutes, setDevicePin } from "../crypto/deviceUnlock";
 import { I18nProvider } from "../i18n";
 import type { HistorySettings, OpenDocument, UiPreferences, User } from "../types";
 import { APP_VERSION } from "../version";
@@ -75,13 +75,13 @@ function mockApi() {
   });
 }
 
-async function renderSettings(user: User = admin, onNotify = vi.fn(), onPreferences = vi.fn(), onLogout = vi.fn(), onUsername = vi.fn()) {
+async function renderSettings(user: User = admin, onNotify = vi.fn(), onPreferences = vi.fn(), onLogout = vi.fn(), onUsername = vi.fn(), credential: Parameters<typeof SettingsPanel>[0]["credential"] = null) {
   localStorage.setItem("webmd-notes-language", "zh-CN");
   mockApi();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container); roots.push(root);
-  await act(async () => root.render(<I18nProvider><SettingsPanel user={user} endpoint={{ id: "endpoint", remembered: false }} credential={null} serverSessionVerified onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={vi.fn()} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={vi.fn()} onUsername={onUsername} avatarUrl={null} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
+  await act(async () => root.render(<I18nProvider><SettingsPanel user={user} endpoint={{ id: "endpoint", remembered: false }} credential={credential} serverSessionVerified onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={vi.fn()} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={vi.fn()} onUsername={onUsername} avatarUrl={null} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
   await act(async () => { await Promise.resolve(); });
   return container;
 }
@@ -240,17 +240,22 @@ describe("SettingsPanel", () => {
     await act(async () => button(container, "安全").click());
     expect(container.textContent).toContain("查看已登录的设备，并可登出不再使用的设备。");
     const headings = [...container.querySelectorAll(".settings-section h3")].map((entry) => entry.textContent?.trim());
-    expect(headings.slice(0, 4)).toEqual(["设置 PIN", "自动锁定", "登录设备", "修改主密码"]);
+    expect(headings.slice(0, 4)).toEqual(["本机 PIN", "自动锁定", "登录设备", "账户凭据"]);
     expect(button(container, "设置 PIN")).toBeTruthy();
-    const pinInput = container.querySelector("input[placeholder='至少 4 个字符']") as HTMLInputElement;
+    expect(container.querySelector("input[placeholder='至少 4 个字符']")).toBeNull();
+    await act(async () => button(container, "设置 PIN").click());
+    const dialog = container.querySelector(".pin-change-dialog")!;
+    const pinInput = dialog.querySelector("input[placeholder='至少 4 个字符']") as HTMLInputElement;
     expect(pinInput.minLength).toBe(4);
     expect(pinInput.pattern).toBe("");
     expect(pinInput.inputMode).toBe("");
     expect(pinInput.getAttribute("enterkeyhint")).toBe("done");
-    const pinSubmit = button(container, "设置 PIN");
+    const pinSubmit = [...dialog.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === "设置 PIN")!;
     const requestSubmit = vi.spyOn(pinInput.form!, "requestSubmit").mockImplementation(() => undefined);
     await act(async () => pinInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
     expect(requestSubmit).toHaveBeenCalledWith(pinSubmit);
+    await act(async () => (dialog.querySelector("button[aria-label='关闭']") as HTMLButtonElement).click());
+    expect(container.querySelector(".pin-change-dialog")).toBeNull();
     const autoLockSelect = container.querySelector(".settings-section select") as HTMLSelectElement;
     await act(async () => { autoLockSelect.value = "5"; autoLockSelect.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(vi.mocked(setAutoLockMinutes)).not.toHaveBeenCalled();
@@ -260,6 +265,116 @@ describe("SettingsPanel", () => {
     expect(container.textContent).not.toContain("保存自动锁定设置");
     expect(container.textContent).toContain("设置 PIN 之后，每次启动将要求输入 PIN；PIN 只应用于当前设备。");
     expect(container.textContent).toContain("重置恢复密钥");
+  });
+
+  it("opens action-specific dialogs to set, change, and remove the device PIN", async () => {
+    const setValue = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (String(path).startsWith("/api/auth/parameters/")) return {
+        kdfSalt: "salt",
+        kdfParams: { algorithm: "argon2id", opsLimit: 3, memLimit: 64, version: 1 },
+        recoveryWrappedVaultKey: "recovery",
+        recoveryWrappedVaultNonce: "nonce",
+        envelopeBinding: { version: 2, context: "abcdefghijklmnopqrstuv" }
+      } as never;
+      return {} as never;
+    });
+    vi.mocked(cryptoClient.prepareLogin).mockResolvedValue({ authSecret: "auth-secret" });
+    vi.mocked(cryptoClient.discardPendingLogin).mockResolvedValue({ discarded: true });
+    vi.mocked(getDeviceUnlock).mockResolvedValue(undefined);
+
+    const unconfigured = await renderSettings();
+    await act(async () => button(unconfigured, "安全").click());
+    await act(async () => button(unconfigured, "设置 PIN").click());
+    let dialog = unconfigured.querySelector(".pin-change-dialog")!;
+    let inputs = [...dialog.querySelectorAll("input")] as HTMLInputElement[];
+    expect(inputs).toHaveLength(2);
+    await act(async () => { setValue(inputs[0]!, "master-password"); setValue(inputs[1]!, "new-pin"); });
+    await act(async () => dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(setDevicePin).toHaveBeenCalledWith("admin-id", "endpoint", "new-pin");
+    expect(unconfigured.querySelector(".pin-change-dialog")).toBeNull();
+
+    const configured = await renderSettings(admin, vi.fn(), vi.fn(), vi.fn(), vi.fn(), { version: 3, protection: "pin", autoLockMinutes: 5 } as never);
+    await act(async () => button(configured, "安全").click());
+    expect(configured.querySelector("input[placeholder='至少 4 个字符']")).toBeNull();
+    await act(async () => button(configured, "更改 PIN").click());
+    dialog = configured.querySelector(".pin-change-dialog")!;
+    expect(dialog.querySelectorAll("input")).toHaveLength(2);
+    await act(async () => (dialog.querySelector("button[aria-label='关闭']") as HTMLButtonElement).click());
+    await act(async () => button(configured, "移除 PIN").click());
+    dialog = configured.querySelector(".pin-change-dialog")!;
+    inputs = [...dialog.querySelectorAll("input")] as HTMLInputElement[];
+    expect(inputs).toHaveLength(1);
+    await act(async () => setValue(inputs[0]!, "master-password"));
+    await act(async () => dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(setAutoLockMinutes).toHaveBeenCalledWith("admin-id", "endpoint", 0);
+    expect(removeDevicePin).toHaveBeenCalledWith("admin-id", "endpoint");
+  });
+
+  it("opens separate dialogs for master-password changes and recovery-key resets", async () => {
+    const setValue = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const container = await renderSettings();
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (String(path).startsWith("/api/auth/parameters/")) return {
+        kdfSalt: "salt",
+        kdfParams: { algorithm: "argon2id", opsLimit: 3, memLimit: 64, version: 1 },
+        recoveryWrappedVaultKey: "recovery",
+        recoveryWrappedVaultNonce: "nonce",
+        envelopeBinding: { version: 2, context: "abcdefghijklmnopqrstuv" }
+      } as never;
+      if (path === "/api/account/endpoints") return { canRevokeOthers: true, revokeEligibleAt: deletedAt, endpoints: [] } as never;
+      return {} as never;
+    });
+    vi.mocked(cryptoClient.prepareLogin).mockResolvedValue({ authSecret: "current-auth" });
+    vi.mocked(cryptoClient.discardPendingLogin).mockResolvedValue({ discarded: true });
+    vi.mocked(cryptoClient.rewrapPassword).mockResolvedValue({
+      authSecret: "new-auth",
+      kdfSalt: "new-salt",
+      kdfParams: { algorithm: "argon2id", opsLimit: 3, memLimit: 64, version: 1 },
+      wrappedVaultKey: "new-wrapped",
+      wrappedVaultNonce: "new-nonce"
+    });
+    vi.mocked(cryptoClient.rotateRecoveryKey).mockResolvedValue({
+      recoveryAuthSecret: "new-recovery-auth",
+      recoveryWrappedVaultKey: "new-recovery-wrapped",
+      recoveryWrappedVaultNonce: "new-recovery-nonce",
+      recoveryCode: "new-recovery-code"
+    });
+
+    await act(async () => button(container, "安全").click());
+    expect(container.querySelector(".account-credential-dialog")).toBeNull();
+    expect(container.querySelector("input[type='password']")).toBeNull();
+
+    await act(async () => button(container, "修改主密码").click());
+    let dialog = container.querySelector(".account-credential-dialog")!;
+    let inputs = [...dialog.querySelectorAll("input")] as HTMLInputElement[];
+    expect(inputs).toHaveLength(3);
+    await act(async () => {
+      setValue(inputs[0]!, "current-password");
+      setValue(inputs[1]!, "replacement-password");
+      setValue(inputs[2]!, "replacement-password");
+    });
+    await act(async () => { dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await Promise.resolve(); });
+    expect(api).toHaveBeenCalledWith("/api/auth/password", expect.objectContaining({ method: "POST" }));
+    expect(container.querySelector(".account-credential-dialog")).toBeNull();
+
+    await act(async () => button(container, "重置恢复密钥").click());
+    dialog = container.querySelector(".account-credential-dialog")!;
+    inputs = [...dialog.querySelectorAll("input")] as HTMLInputElement[];
+    expect(inputs).toHaveLength(1);
+    await act(async () => setValue(inputs[0]!, "current-password"));
+    await act(async () => { dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await Promise.resolve(); });
+    expect(api).toHaveBeenCalledWith("/api/account/recovery-key", expect.objectContaining({ method: "POST" }));
+    expect(dialog.querySelector("textarea")?.textContent).toBe("new-recovery-code");
+    expect(dialog.querySelector("button[aria-label='关闭']")).toBeNull();
+    await act(async () => button(container, "我已保存").click());
+    expect(container.querySelector(".account-credential-dialog")).toBeNull();
   });
 
   it("uses an accessible sliding switch for automatic note history", async () => {
