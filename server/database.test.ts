@@ -42,6 +42,10 @@ describe("database isolation", () => {
       { username: "bravo", role: "user" }
     ]);
     expect(db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'").get()).toEqual({ count: 1 });
+    expect(db.prepare("SELECT envelope_version, envelope_context FROM users WHERE id = ?").get("user-a")).toEqual({
+      envelope_version: 1,
+      envelope_context: null
+    });
     db.close();
   });
 

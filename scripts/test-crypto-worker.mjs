@@ -81,7 +81,7 @@ if (login.authSecret !== registration.authSecret) {
   throw new Error("Authentication derivation changed across fresh workers");
 }
 await loginWorker.call("unlockVault", {
-  username,
+  envelopeBinding: registration.envelopeBinding,
   wrappedVaultKey: registration.wrappedVaultKey,
   wrappedVaultNonce: registration.wrappedVaultNonce
 });
@@ -101,6 +101,19 @@ const pinProtected = await loginWorker.call("wrapVaultForDeviceWithPin", {
   deviceKey,
   pin: "246810",
   salt: pinSalt
+});
+await loginWorker.call("prepareLogin", {
+  password,
+  kdfSalt: registration.kdfSalt,
+  kdfParams: registration.kdfParams
+});
+const renamedEnvelopeBinding = { version: 2, context: "rename_context_1234567890" };
+const renamedPasswordEnvelope = await loginWorker.call("rewrapPasswordEnvelope", {
+  envelopeBinding: renamedEnvelopeBinding
+});
+const renamedEnvelopes = await loginWorker.call("rewrapVaultEnvelopes", {
+  envelopeBinding: renamedEnvelopeBinding,
+  recoveryCode: registration.recoveryCode
 });
 await loginWorker.worker.terminate();
 
@@ -191,9 +204,42 @@ if (JSON.stringify(pinDeviceDecrypted) !== JSON.stringify(document)) {
   throw new Error("PIN-protected device unlock changed the encrypted document");
 }
 
+const renamedPasswordWorker = createCryptoWorker();
+const renamedLogin = await renamedPasswordWorker.call("prepareLogin", {
+  password,
+  kdfSalt: registration.kdfSalt,
+  kdfParams: registration.kdfParams
+});
+if (renamedLogin.authSecret !== registration.authSecret) throw new Error("Username migration changed password authentication");
+await renamedPasswordWorker.call("unlockVault", {
+  envelopeBinding: renamedEnvelopeBinding,
+  wrappedVaultKey: renamedPasswordEnvelope.wrappedVaultKey,
+  wrappedVaultNonce: renamedPasswordEnvelope.wrappedVaultNonce
+});
+const renamedPasswordDocument = await renamedPasswordWorker.call("decryptObject", {
+  userId,
+  objectId,
+  objectType: "note",
+  revision: 1,
+  ciphertext: encrypted.ciphertext,
+  nonce: encrypted.nonce
+});
+await renamedPasswordWorker.worker.terminate();
+if (JSON.stringify(renamedPasswordDocument) !== JSON.stringify(document)) throw new Error("Username migration changed password-unlocked data");
+
+const renamedRecoveryWorker = createCryptoWorker();
+const renamedRecovery = await renamedRecoveryWorker.call("unlockRecovery", {
+  envelopeBinding: renamedEnvelopeBinding,
+  recoveryCode: registration.recoveryCode,
+  wrappedVaultKey: renamedEnvelopes.recoveryWrappedVaultKey,
+  wrappedVaultNonce: renamedEnvelopes.recoveryWrappedVaultNonce
+});
+await renamedRecoveryWorker.worker.terminate();
+if (renamedRecovery.recoveryAuthSecret !== registration.recoveryAuthSecret) throw new Error("Username migration changed the recovery key");
+
 const recoveryWorker = createCryptoWorker();
 const recovery = await recoveryWorker.call("unlockRecovery", {
-  username,
+  envelopeBinding: registration.envelopeBinding,
   recoveryCode: registration.recoveryCode,
   wrappedVaultKey: registration.recoveryWrappedVaultKey,
   wrappedVaultNonce: registration.recoveryWrappedVaultNonce
@@ -307,12 +353,12 @@ for (const tampered of [
   }
   if (!rejected) throw new Error(`History AAD accepted tampered ${Object.keys(tampered)[0]}`);
 }
-const rotatedRecovery = await recoveryWorker.call("rotateRecoveryKey", { username });
+const rotatedRecovery = await recoveryWorker.call("rotateRecoveryKey", { envelopeBinding: registration.envelopeBinding });
 await recoveryWorker.worker.terminate();
 
 const rotatedRecoveryWorker = createCryptoWorker();
 const rotatedUnlock = await rotatedRecoveryWorker.call("unlockRecovery", {
-  username,
+  envelopeBinding: registration.envelopeBinding,
   recoveryCode: rotatedRecovery.recoveryCode,
   wrappedVaultKey: rotatedRecovery.recoveryWrappedVaultKey,
   wrappedVaultNonce: rotatedRecovery.recoveryWrappedVaultNonce
@@ -324,7 +370,7 @@ const oldRecoveryWorker = createCryptoWorker();
 let oldRecoveryRejected = false;
 try {
   await oldRecoveryWorker.call("unlockRecovery", {
-    username,
+    envelopeBinding: registration.envelopeBinding,
     recoveryCode: registration.recoveryCode,
     wrappedVaultKey: rotatedRecovery.recoveryWrappedVaultKey,
     wrappedVaultNonce: rotatedRecovery.recoveryWrappedVaultNonce
@@ -356,6 +402,9 @@ console.log(JSON.stringify({
   pinEncryptedDeviceCredential: true,
   wrongPinRejected: true,
   tamperedDeviceCredentialRejected: true,
+  usernameEnvelopeMigration: true,
+  passwordEnvelopeRewrapForRecoveryReset: true,
+  recoveryKeyPreservedAcrossUsernameChange: true,
   encryptedDocumentRoundTrip: true,
   encryptedAttachmentRoundTrip: true,
   uniqueAttachmentNonces: true,

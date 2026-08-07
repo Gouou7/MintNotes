@@ -39,6 +39,19 @@ export interface KdfParams {
   version: number;
 }
 
+export interface VaultEnvelopeBinding {
+  version: 1 | 2;
+  context: string;
+}
+
+export interface AuthParameters {
+  kdfSalt: string;
+  kdfParams: KdfParams;
+  recoveryWrappedVaultKey: string;
+  recoveryWrappedVaultNonce: string;
+  envelopeBinding: VaultEnvelopeBinding;
+}
+
 export interface VaultDocument {
   kind: "note" | "folder";
   title: string;

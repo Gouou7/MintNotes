@@ -112,8 +112,16 @@ async function openBinary(ciphertext: ArrayBuffer, nonce: string, key: Uint8Arra
   ));
 }
 
-function envelopeAad(username: string): string {
-  return `webmd:vault-envelope:v1:${username.toLowerCase()}`;
+function envelopeAad(payload: { envelopeBinding?: { version?: unknown; context?: unknown }; username?: unknown }): string {
+  const binding = payload.envelopeBinding;
+  if (binding?.version === 2 && typeof binding.context === "string" && /^[A-Za-z0-9_-]{20,64}$/.test(binding.context)) {
+    return `webmd:vault-envelope:v2:${binding.context}`;
+  }
+  if (binding?.version === 1 && typeof binding.context === "string") {
+    return `webmd:vault-envelope:v1:${binding.context.toLowerCase()}`;
+  }
+  if (typeof payload.username === "string") return `webmd:vault-envelope:v1:${payload.username.toLowerCase()}`;
+  throw new Error("Invalid vault envelope binding");
 }
 
 function objectAad(userId: string, objectId: string, objectType: string, revision: number): string {
@@ -186,12 +194,13 @@ async function handle(operation: string, payload: any): Promise<any> {
         const wrapKey = await deriveSubkey(root, "webmd-vault-wrapping-v1");
         stage = "vault-envelope";
         vaultKey = randomBytes(32);
-        const wrapped = await seal(vaultKey, wrapKey, envelopeAad(payload.username));
+        const envelopeBinding = { version: 2 as const, context: b64(randomBytes(16)) };
+        const wrapped = await seal(vaultKey, wrapKey, envelopeAad({ envelopeBinding }));
         stage = "recovery-envelope";
         const recoveryKey = randomBytes(32);
         const recoveryAuthSecret = b64(await deriveSubkey(recoveryKey, "webmd-recovery-auth-v1"));
         const recoveryWrapKey = await deriveSubkey(recoveryKey, "webmd-recovery-wrap-v1");
-        const recoveryWrapped = await seal(vaultKey, recoveryWrapKey, envelopeAad(payload.username));
+        const recoveryWrapped = await seal(vaultKey, recoveryWrapKey, envelopeAad({ envelopeBinding }));
         stage = "encoding";
         const result = {
           authSecret,
@@ -202,7 +211,8 @@ async function handle(operation: string, payload: any): Promise<any> {
           recoveryAuthSecret,
           recoveryWrappedVaultKey: recoveryWrapped.ciphertext,
           recoveryWrappedVaultNonce: recoveryWrapped.nonce,
-          recoveryCode: b64(recoveryKey)
+          recoveryCode: b64(recoveryKey),
+          envelopeBinding
         };
         root.fill(0);
         wrapKey.fill(0);
@@ -228,7 +238,7 @@ async function handle(operation: string, payload: any): Promise<any> {
     }
     case "unlockVault": {
       if (!pendingWrapKey) throw new Error("Login derivation is missing");
-      vaultKey = await open(payload.wrappedVaultKey, payload.wrappedVaultNonce, pendingWrapKey, envelopeAad(payload.username));
+      vaultKey = await open(payload.wrappedVaultKey, payload.wrappedVaultNonce, pendingWrapKey, envelopeAad(payload));
       pendingWrapKey.fill(0);
       pendingWrapKey = null;
       return { unlocked: true };
@@ -237,7 +247,7 @@ async function handle(operation: string, payload: any): Promise<any> {
       const recoveryKey = fromB64(payload.recoveryCode.trim());
       const recoveryAuthSecret = b64(await deriveSubkey(recoveryKey, "webmd-recovery-auth-v1"));
       const recoveryWrapKey = await deriveSubkey(recoveryKey, "webmd-recovery-wrap-v1");
-      vaultKey = await open(payload.wrappedVaultKey, payload.wrappedVaultNonce, recoveryWrapKey, envelopeAad(payload.username));
+      vaultKey = await open(payload.wrappedVaultKey, payload.wrappedVaultNonce, recoveryWrapKey, envelopeAad(payload));
       recoveryWrapKey.fill(0);
       return { recoveryAuthSecret };
     }
@@ -251,7 +261,7 @@ async function handle(operation: string, payload: any): Promise<any> {
       const root = await deriveRoot(payload.password, kdfSalt, DEFAULT_KDF);
       const authSecret = b64(await deriveSubkey(root, "webmd-authentication-v1"));
       const wrapKey = await deriveSubkey(root, "webmd-vault-wrapping-v1");
-      const wrapped = await seal(vaultKey, wrapKey, envelopeAad(payload.username));
+      const wrapped = await seal(vaultKey, wrapKey, envelopeAad(payload));
       root.fill(0);
       wrapKey.fill(0);
       return {
@@ -267,7 +277,7 @@ async function handle(operation: string, payload: any): Promise<any> {
       const recoveryKey = randomBytes(32);
       const recoveryAuthSecret = b64(await deriveSubkey(recoveryKey, "webmd-recovery-auth-v1"));
       const recoveryWrapKey = await deriveSubkey(recoveryKey, "webmd-recovery-wrap-v1");
-      const wrapped = await seal(vaultKey, recoveryWrapKey, envelopeAad(payload.username));
+      const wrapped = await seal(vaultKey, recoveryWrapKey, envelopeAad(payload));
       const result = {
         recoveryAuthSecret,
         recoveryWrappedVaultKey: wrapped.ciphertext,
@@ -277,6 +287,31 @@ async function handle(operation: string, payload: any): Promise<any> {
       recoveryKey.fill(0);
       recoveryWrapKey.fill(0);
       return result;
+    }
+    case "rewrapPasswordEnvelope": {
+      if (!vaultKey || !pendingWrapKey) throw new Error("Vault unlock and password verification are required");
+      const wrapped = await seal(vaultKey, pendingWrapKey, envelopeAad(payload));
+      return { wrappedVaultKey: wrapped.ciphertext, wrappedVaultNonce: wrapped.nonce };
+    }
+    case "rewrapVaultEnvelopes": {
+      if (!vaultKey || !pendingWrapKey) throw new Error("Vault unlock and password verification are required");
+      const recoveryKey = fromB64(payload.recoveryCode.trim());
+      const recoveryAuthSecret = b64(await deriveSubkey(recoveryKey, "webmd-recovery-auth-v1"));
+      const recoveryWrapKey = await deriveSubkey(recoveryKey, "webmd-recovery-wrap-v1");
+      try {
+        const passwordWrapped = await seal(vaultKey, pendingWrapKey, envelopeAad(payload));
+        const recoveryWrapped = await seal(vaultKey, recoveryWrapKey, envelopeAad(payload));
+        return {
+          wrappedVaultKey: passwordWrapped.ciphertext,
+          wrappedVaultNonce: passwordWrapped.nonce,
+          recoveryAuthSecret,
+          recoveryWrappedVaultKey: recoveryWrapped.ciphertext,
+          recoveryWrappedVaultNonce: recoveryWrapped.nonce
+        };
+      } finally {
+        recoveryKey.fill(0);
+        recoveryWrapKey.fill(0);
+      }
     }
     case "encryptProfileAvatar": {
       if (!vaultKey) throw new Error("Vault is locked");

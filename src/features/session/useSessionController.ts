@@ -297,6 +297,19 @@ export function useSessionController() {
     }
   };
 
+  const updateUsername = (username: string) => {
+    const nextSession = session
+      ? { ...session, user: { ...session.user, username } }
+      : null;
+    setUser((current) => current ? { ...current, username } : current);
+    setSession(nextSession);
+    if (serverSessionVerified && nextSession) {
+      void updateVerifiedDeviceSession(nextSession.user, nextSession.endpoint)
+        .then((next) => { if (next) setCredential(next); })
+        .catch(() => undefined);
+    }
+  };
+
   const handleVaultLocked = (logout: boolean) => {
     if (!user || !session) return;
     setUser(null);
@@ -322,6 +335,7 @@ export function useSessionController() {
     handleTrustExhausted,
     unlockStoredSession,
     updateDisplayName,
+    updateUsername,
     handleVaultLocked,
     setCredential
   };

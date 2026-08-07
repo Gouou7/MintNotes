@@ -5,6 +5,7 @@ import type {
   NoteHistoryPayload,
   ObjectType,
   VaultAttachment,
+  VaultEnvelopeBinding,
   VaultObject
 } from "../types";
 
@@ -18,6 +19,7 @@ export interface RegistrationCrypto {
   recoveryWrappedVaultKey: string;
   recoveryWrappedVaultNonce: string;
   recoveryCode: string;
+  envelopeBinding: VaultEnvelopeBinding;
 }
 
 export interface EncryptedProfileAvatar {
@@ -26,14 +28,32 @@ export interface EncryptedProfileAvatar {
   encryptionVersion: 1;
 }
 
+export function createVaultEnvelopeBinding(): VaultEnvelopeBinding {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return {
+    version: 2,
+    context: btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")
+  };
+}
+
 export interface CryptoClient {
   createRegistration(username: string, password: string): Promise<RegistrationCrypto>;
   prepareLogin(password: string, kdfSalt: string, kdfParams: KdfParams): Promise<{ authSecret: string }>;
   discardPendingLogin(): Promise<unknown>;
-  unlockVault(username: string, wrappedVaultKey: string, wrappedVaultNonce: string): Promise<unknown>;
-  unlockRecovery(username: string, recoveryCode: string, wrappedVaultKey: string, wrappedVaultNonce: string): Promise<{ recoveryAuthSecret: string }>;
-  rewrapPassword(username: string, password: string): Promise<Omit<RegistrationCrypto, "recoveryAuthSecret" | "recoveryWrappedVaultKey" | "recoveryWrappedVaultNonce" | "recoveryCode">>;
-  rotateRecoveryKey(username: string): Promise<Pick<RegistrationCrypto, "recoveryAuthSecret" | "recoveryWrappedVaultKey" | "recoveryWrappedVaultNonce" | "recoveryCode">>;
+  unlockVault(binding: VaultEnvelopeBinding, wrappedVaultKey: string, wrappedVaultNonce: string): Promise<unknown>;
+  unlockRecovery(binding: VaultEnvelopeBinding, recoveryCode: string, wrappedVaultKey: string, wrappedVaultNonce: string): Promise<{ recoveryAuthSecret: string }>;
+  rewrapPassword(binding: VaultEnvelopeBinding, password: string): Promise<Omit<RegistrationCrypto, "recoveryAuthSecret" | "recoveryWrappedVaultKey" | "recoveryWrappedVaultNonce" | "recoveryCode" | "envelopeBinding">>;
+  rotateRecoveryKey(binding: VaultEnvelopeBinding): Promise<Pick<RegistrationCrypto, "recoveryAuthSecret" | "recoveryWrappedVaultKey" | "recoveryWrappedVaultNonce" | "recoveryCode">>;
+  rewrapPasswordEnvelope(binding: VaultEnvelopeBinding): Promise<{ wrappedVaultKey: string; wrappedVaultNonce: string }>;
+  rewrapVaultEnvelopes(binding: VaultEnvelopeBinding, recoveryCode: string): Promise<{
+    wrappedVaultKey: string;
+    wrappedVaultNonce: string;
+    recoveryAuthSecret: string;
+    recoveryWrappedVaultKey: string;
+    recoveryWrappedVaultNonce: string;
+  }>;
   encryptProfileAvatar(userId: string, mime: string, data: ArrayBuffer): Promise<EncryptedProfileAvatar>;
   decryptProfileAvatar(userId: string, avatar: EncryptedProfileAvatar): Promise<{ mime: string; data: ArrayBuffer }>;
   wrapVaultForDevice(userId: string, deviceKey: CryptoKey): Promise<{ ciphertext: string; nonce: string; version: 1 }>;
@@ -76,10 +96,12 @@ export function createCryptoClient(): CryptoClient {
     createRegistration: (username, password) => call("createRegistration", { username, password }),
     prepareLogin: (password, kdfSalt, kdfParams) => call("prepareLogin", { password, kdfSalt, kdfParams }),
     discardPendingLogin: () => call("discardPendingLogin"),
-    unlockVault: (username, wrappedVaultKey, wrappedVaultNonce) => call("unlockVault", { username, wrappedVaultKey, wrappedVaultNonce }),
-    unlockRecovery: (username, recoveryCode, wrappedVaultKey, wrappedVaultNonce) => call("unlockRecovery", { username, recoveryCode, wrappedVaultKey, wrappedVaultNonce }),
-    rewrapPassword: (username, password) => call("rewrapPassword", { username, password }),
-    rotateRecoveryKey: (username) => call("rotateRecoveryKey", { username }),
+    unlockVault: (binding, wrappedVaultKey, wrappedVaultNonce) => call("unlockVault", { envelopeBinding: binding, wrappedVaultKey, wrappedVaultNonce }),
+    unlockRecovery: (binding, recoveryCode, wrappedVaultKey, wrappedVaultNonce) => call("unlockRecovery", { envelopeBinding: binding, recoveryCode, wrappedVaultKey, wrappedVaultNonce }),
+    rewrapPassword: (binding, password) => call("rewrapPassword", { envelopeBinding: binding, password }),
+    rotateRecoveryKey: (binding) => call("rotateRecoveryKey", { envelopeBinding: binding }),
+    rewrapPasswordEnvelope: (binding) => call("rewrapPasswordEnvelope", { envelopeBinding: binding }),
+    rewrapVaultEnvelopes: (binding, recoveryCode) => call("rewrapVaultEnvelopes", { envelopeBinding: binding, recoveryCode }),
     encryptProfileAvatar: (userId, mime, data) => call("encryptProfileAvatar", { userId, mime, data }, [data]),
     decryptProfileAvatar: (userId, avatar) => call("decryptProfileAvatar", { userId, ...avatar }),
     wrapVaultForDevice: (userId, deviceKey) => call("wrapVaultForDevice", { userId, deviceKey }),

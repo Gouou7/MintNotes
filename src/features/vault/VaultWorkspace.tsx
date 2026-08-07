@@ -182,13 +182,14 @@ function synchronizationFailure(error: unknown, t: Translate): SyncFailure {
     : { kind: "unreachable" };
 }
 
-export function VaultWorkspace({ user, endpoint, credential, serverSessionVerified, onCredentialChange, onDisplayNameChange, onLocked }: {
+export function VaultWorkspace({ user, endpoint, credential, serverSessionVerified, onCredentialChange, onDisplayNameChange, onUsernameChange, onLocked }: {
   user: User;
   endpoint: AuthEndpoint;
   credential: DeviceUnlockCredential | null;
   serverSessionVerified: boolean;
   onCredentialChange: (credential: DeviceUnlockCredential | null) => void;
   onDisplayNameChange: (displayName: string) => void;
+  onUsernameChange: (username: string) => void;
   onLocked: (logout: boolean) => void;
 }) {
   const { languagePreference, setLanguagePreference, t } = useI18n();
@@ -2570,7 +2571,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
       {(treeOpen || outlineOpen) && <button className="drawer-scrim" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} aria-label={t("app.closeSidebars")} />}
       {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onToggleLock={toggleNoteLock} onMove={moveDocuments} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
-      {settingsOpen && <SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} />}
+      {settingsOpen && <SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} />}
       {message && <Toast notice={message} onDismiss={() => setMessage(null)} />}
     </div>
   );

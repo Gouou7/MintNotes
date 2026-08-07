@@ -83,6 +83,11 @@ app.addHook("onRequest", async (request, reply) => {
 const secretField = z.string().min(20).max(1024);
 const envelopeField = z.string().min(16).max(2_000_000);
 const usernameField = z.string().trim().toLowerCase().regex(/^[a-z0-9][a-z0-9._-]{2,47}$/);
+const envelopeContextField = z.string().regex(/^[A-Za-z0-9_-]{20,64}$/);
+const envelopeBindingFields = {
+  envelopeVersion: z.union([z.literal(1), z.literal(2)]).default(1),
+  envelopeContext: envelopeContextField.optional()
+};
 
 const registerSchema = z.object({
   username: usernameField,
@@ -94,8 +99,13 @@ const registerSchema = z.object({
   wrappedVaultNonce: z.string().min(16).max(200),
   recoveryAuthSecret: secretField,
   recoveryWrappedVaultKey: envelopeField,
-  recoveryWrappedVaultNonce: z.string().min(16).max(200)
+  recoveryWrappedVaultNonce: z.string().min(16).max(200),
+  ...envelopeBindingFields
 });
+
+function hasValidEnvelopeBinding(value: { envelopeVersion: 1 | 2; envelopeContext?: string }): boolean {
+  return value.envelopeVersion === 1 || Boolean(value.envelopeContext);
+}
 
 app.get("/api/health", async () => ({ ok: true }));
 
@@ -116,12 +126,14 @@ function insertUser(body: z.infer<typeof registerSchema>, role: "admin" | "user"
     INSERT INTO users (
       id, username, display_name, role, auth_salt, auth_hash, kdf_salt, kdf_params,
       wrapped_vault_key, wrapped_vault_nonce, recovery_auth_salt, recovery_auth_hash,
-      recovery_wrapped_vault_key, recovery_wrapped_vault_nonce, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      recovery_wrapped_vault_key, recovery_wrapped_vault_nonce, envelope_version,
+      envelope_context, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, body.username, body.displayName, role, auth.salt, auth.hash,
     body.kdfSalt, JSON.stringify(body.kdfParams), body.wrappedVaultKey, body.wrappedVaultNonce,
-    recovery.salt, recovery.hash, body.recoveryWrappedVaultKey, body.recoveryWrappedVaultNonce, now
+    recovery.salt, recovery.hash, body.recoveryWrappedVaultKey, body.recoveryWrappedVaultNonce,
+    body.envelopeVersion, body.envelopeVersion === 2 ? body.envelopeContext : null, now
   );
   return { id, now };
 }
@@ -133,6 +145,7 @@ app.post(
     const parsed = registerSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid registration data" });
     const body = parsed.data;
+    if (!hasValidEnvelopeBinding(body)) return reply.code(400).send({ error: "Invalid registration data" });
     let registration: { id: string; role: "admin" | "user" };
     try {
       const result = runRegistrationTransaction(db, config.allowRegistration, (role) => {
@@ -161,6 +174,7 @@ app.post(
     const parsed = registerSchema.extend({ activationCode: z.string().min(20).max(300) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid account activation" });
     const body = parsed.data;
+    if (!hasValidEnvelopeBinding(body)) return reply.code(400).send({ error: "Invalid account activation" });
     const setup = db.prepare(`
       SELECT id, username, display_name FROM account_setups
       WHERE username = ? COLLATE NOCASE AND code_hash = ? AND expires_at > ?
@@ -185,15 +199,20 @@ app.get("/api/auth/parameters/:username", async (request, reply) => {
   const parsed = usernameField.safeParse((request.params as { username: string }).username);
   if (!parsed.success) return reply.code(404).send({ error: "Account not found" });
   const row = db.prepare(`
-    SELECT kdf_salt, kdf_params, recovery_wrapped_vault_key, recovery_wrapped_vault_nonce
+      SELECT username, kdf_salt, kdf_params, recovery_wrapped_vault_key, recovery_wrapped_vault_nonce,
+        envelope_version, envelope_context
     FROM users WHERE username = ? COLLATE NOCASE AND disabled = 0
-  `).get(parsed.data) as { kdf_salt: string; kdf_params: string; recovery_wrapped_vault_key: string; recovery_wrapped_vault_nonce: string } | undefined;
+  `).get(parsed.data) as { username: string; kdf_salt: string; kdf_params: string; recovery_wrapped_vault_key: string; recovery_wrapped_vault_nonce: string; envelope_version: 1 | 2; envelope_context: string | null } | undefined;
   if (!row) return reply.code(404).send({ error: "Account not found" });
   return {
     kdfSalt: row.kdf_salt,
     kdfParams: JSON.parse(row.kdf_params),
     recoveryWrappedVaultKey: row.recovery_wrapped_vault_key,
-    recoveryWrappedVaultNonce: row.recovery_wrapped_vault_nonce
+    recoveryWrappedVaultNonce: row.recovery_wrapped_vault_nonce,
+    envelopeBinding: {
+      version: row.envelope_version,
+      context: row.envelope_version === 2 && row.envelope_context ? row.envelope_context : row.username
+    }
   };
 });
 
@@ -357,6 +376,85 @@ app.post("/api/account/recovery-key", { preHandler: authenticate }, async (reque
   );
   return { ok: true };
 });
+
+const usernameChangeSchema = z.object({
+  username: usernameField,
+  currentAuthSecret: secretField,
+  currentRecoveryAuthSecret: secretField.optional(),
+  replacementRecoveryAuthSecret: secretField.optional(),
+  envelopeVersion: z.literal(2),
+  envelopeContext: envelopeContextField,
+  wrappedVaultKey: envelopeField,
+  wrappedVaultNonce: z.string().min(16).max(200),
+  recoveryWrappedVaultKey: envelopeField,
+  recoveryWrappedVaultNonce: z.string().min(16).max(200)
+});
+
+app.patch(
+  "/api/account/username",
+  { preHandler: authenticate, config: { rateLimit: { max: 5, timeWindow: "30 minutes" } } },
+  async (request, reply) => {
+    const parsed = usernameChangeSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid username change" });
+    const user = request.sessionUser as SessionUser;
+    const body = parsed.data;
+    if (Boolean(body.currentRecoveryAuthSecret) === Boolean(body.replacementRecoveryAuthSecret)) {
+      return reply.code(400).send({ error: "Invalid username change" });
+    }
+    const row = db.prepare(`
+      SELECT auth_salt, auth_hash, recovery_auth_salt, recovery_auth_hash,
+        envelope_version, envelope_context
+      FROM users WHERE id = ? AND disabled = 0
+    `).get(user.id) as { auth_salt: string; auth_hash: string; recovery_auth_salt: string; recovery_auth_hash: string; envelope_version: 1 | 2; envelope_context: string | null } | undefined;
+    if (!row || !verifyOpaqueSecret(body.currentAuthSecret, row.auth_salt, row.auth_hash)) {
+      return reply.code(401).send({ error: "Current password is incorrect" });
+    }
+    if (body.currentRecoveryAuthSecret && !verifyOpaqueSecret(body.currentRecoveryAuthSecret, row.recovery_auth_salt, row.recovery_auth_hash)) {
+      return reply.code(401).send({ error: "Recovery key is incorrect" });
+    }
+    if (row.envelope_version === 2 && row.envelope_context !== body.envelopeContext) {
+      return reply.code(400).send({ error: "Invalid username change" });
+    }
+    if (body.username === user.username) return reply.code(409).send({ error: "Username is unchanged" });
+
+    const rawToken = request.cookies[sessionCookie];
+    const currentTokenHash = rawToken ? hashToken(rawToken) : "";
+    const replacementRecovery = body.replacementRecoveryAuthSecret
+      ? hashOpaqueSecret(body.replacementRecoveryAuthSecret)
+      : { salt: row.recovery_auth_salt, hash: row.recovery_auth_hash };
+    try {
+      db.transaction(() => {
+        if (
+          db.prepare("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE AND id <> ?").get(body.username, user.id)
+          || db.prepare("SELECT 1 FROM account_setups WHERE username = ? COLLATE NOCASE").get(body.username)
+        ) throw new Error("USERNAME_UNAVAILABLE");
+        db.prepare(`
+          UPDATE users SET username = ?, envelope_version = ?, envelope_context = ?,
+            wrapped_vault_key = ?, wrapped_vault_nonce = ?, recovery_wrapped_vault_key = ?,
+            recovery_wrapped_vault_nonce = ?, recovery_auth_salt = ?, recovery_auth_hash = ?
+          WHERE id = ?
+        `).run(
+          body.username, body.envelopeVersion, body.envelopeContext,
+          body.wrappedVaultKey, body.wrappedVaultNonce,
+          body.recoveryWrappedVaultKey, body.recoveryWrappedVaultNonce,
+          replacementRecovery.salt, replacementRecovery.hash, user.id
+        );
+        const now = new Date().toISOString();
+        db.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND token_hash <> ? AND revoked_at IS NULL")
+          .run(now, user.id, currentTokenHash);
+        db.prepare("UPDATE trusted_endpoints SET remembered = 0, revoked_at = ? WHERE user_id = ? AND endpoint_id <> ? AND revoked_at IS NULL")
+          .run(now, user.id, request.sessionContext!.endpointId);
+      })();
+    } catch (error) {
+      if (error instanceof Error && (error.message === "USERNAME_UNAVAILABLE" || error.message.includes("UNIQUE constraint failed: users.username"))) {
+        return reply.code(409).send({ error: "Username is unavailable" });
+      }
+      throw error;
+    }
+    syncEvents.closeUser(user.id, request.sessionContext!.id);
+    return { user: { ...user, username: body.username } };
+  }
+);
 
 app.patch("/api/account/profile", { preHandler: authenticate }, async (request, reply) => {
   const parsed = z.object({ displayName: z.string().trim().min(1).max(80) }).safeParse(request.body);

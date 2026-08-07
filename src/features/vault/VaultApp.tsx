@@ -9,6 +9,7 @@ export interface VaultAppProps {
   serverSessionVerified: boolean;
   onCredentialChange: (credential: DeviceUnlockCredential | null) => void;
   onDisplayNameChange: (displayName: string) => void;
+  onUsernameChange: (username: string) => void;
   onLocked: (logout: boolean) => void;
 }
 

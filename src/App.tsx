@@ -31,6 +31,7 @@ export default function App() {
     serverSessionVerified={session.serverSessionVerified}
     onCredentialChange={session.setCredential}
     onDisplayNameChange={session.updateDisplayName}
+    onUsernameChange={session.updateUsername}
     onLocked={session.handleVaultLocked}
   />;
 }

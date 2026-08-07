@@ -6,9 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added username changes in Settings. The confirmation dialog accepts the current password and recovery key, or can generate a replacement recovery key when the existing key is unavailable.
+
 ### Changed
 
 - Moved the Live Markdown editor into the Mint Notes codebase as a project-owned core, preserving canonical Markdown compatibility while loading Callouts, math, Mermaid, and WikiLinks through maintained extensions.
+- Decoupled new vault-key envelopes from usernames so accounts can be renamed without changing passwords or encrypted note data, while legacy accounts migrate automatically on their first username change.
+
+### Security
+
+- Username changes now atomically update the login name and encrypted vault envelopes, revoke other sessions and remembered endpoints, and require either the current recovery key or explicit confirmation of a newly generated replacement key.
 
 ## [0.9.0] - 2026-07-30
 

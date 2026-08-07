@@ -148,7 +148,8 @@ describe("AuthScreen account entry points", () => {
       recoveryAuthSecret: "recovery-auth",
       recoveryWrappedVaultKey: "recovery-wrapped",
       recoveryWrappedVaultNonce: "recovery-nonce",
-      recoveryCode: "recovery-code"
+      recoveryCode: "recovery-code",
+      envelopeBinding: { version: 2, context: "abcdefghijklmnopqrstuv" }
     });
     vi.mocked(api).mockResolvedValueOnce({
       user: { id: "user-id", username: "audit-user", displayName: "Audit user", role: "admin" },

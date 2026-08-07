@@ -4,11 +4,11 @@ import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { LanguageSelect } from "../components/LanguageSelect";
 import type { ToastTone } from "../components/Toast";
-import { cryptoClient, type EncryptedProfileAvatar } from "../crypto/client";
+import { createVaultEnvelopeBinding, cryptoClient, type EncryptedProfileAvatar } from "../crypto/client";
 import { getDeviceUnlock, hasDevicePin, removeDevicePin, setAutoLockMinutes, setDevicePin } from "../crypto/deviceUnlock";
 import { translateError, useI18n } from "../i18n";
 import type { DeviceUnlockCredential } from "../storage/database";
-import type { AuthEndpoint, HistorySettings, KdfParams, OpenDocument, TrustedEndpointsResponse, UiPreferences, User } from "../types";
+import type { AuthEndpoint, AuthParameters, HistorySettings, OpenDocument, TrustedEndpointsResponse, UiPreferences, User, VaultEnvelopeBinding } from "../types";
 import { compareDocuments } from "./tree";
 import { submitFormOnEnter } from "./formKeyboard";
 import { AdminPanel } from "./AdminPanel";
@@ -18,6 +18,14 @@ import { downloadRecoveryKey } from "./recoveryKey";
 import { APP_VERSION } from "../version";
 
 type Tab = "general" | "history" | "trash" | "security" | "data" | "about" | "users";
+
+interface PendingUsernameRecoveryReset {
+  binding: VaultEnvelopeBinding;
+  recoveryAuthSecret: string;
+  recoveryWrappedVaultKey: string;
+  recoveryWrappedVaultNonce: string;
+  recoveryCode: string;
+}
 
 interface Props {
   user: User;
@@ -32,6 +40,7 @@ interface Props {
   onImport: (files: File[]) => Promise<void>;
   onExport: () => Promise<void>;
   onDisplayName: (displayName: string) => void;
+  onUsername: (username: string) => void;
   avatarUrl: string | null;
   onAvatarChange: (avatar: { mime: string; data: ArrayBuffer } | null) => void;
   trashItems: OpenDocument[];
@@ -68,7 +77,7 @@ function TrashBranch({ item, items, sortMode, root, restoring, purging, onRestor
   </div>;
 }
 
-export function SettingsPanel({ user, endpoint, credential, serverSessionVerified, onCredentialChange, preferences, onPreferences, onClose, onLogout, onImport, onExport, onDisplayName, avatarUrl, onAvatarChange, trashItems, purging, onRestoreTrash, onPurgeTrash, onClearTrash, historySettings, onHistorySettings, onRefreshHistorySettings, onClearHistory, onNotify }: Props) {
+export function SettingsPanel({ user, endpoint, credential, serverSessionVerified, onCredentialChange, preferences, onPreferences, onClose, onLogout, onImport, onExport, onDisplayName, onUsername, avatarUrl, onAvatarChange, trashItems, purging, onRestoreTrash, onPurgeTrash, onClearHistory, onClearTrash, historySettings, onHistorySettings, onRefreshHistorySettings, onNotify }: Props) {
   const { formatDateTime, setLanguagePreference, t } = useI18n();
   const [tab, setTab] = useState<Tab>("general");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -76,6 +85,12 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [displayName, setDisplayName] = useState(user.displayName);
+  const [username, setUsername] = useState(user.username);
+  const [usernamePassword, setUsernamePassword] = useState("");
+  const [usernameRecoveryKey, setUsernameRecoveryKey] = useState("");
+  const [usernameDialogOpen, setUsernameDialogOpen] = useState(false);
+  const [pendingUsernameRecoveryReset, setPendingUsernameRecoveryReset] = useState<PendingUsernameRecoveryReset | null>(null);
+  const [usernameRecoveryConfirmed, setUsernameRecoveryConfirmed] = useState(false);
   const [deviceEndpoints, setDeviceEndpoints] = useState<TrustedEndpointsResponse | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [revokingSessionId, setRevokingSessionId] = useState("");
@@ -164,6 +179,113 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
     finally { setBusy(false); }
   };
 
+  const normalizedUsername = () => username.trim().toLowerCase();
+
+  const beginUsernameChange = (event: FormEvent) => {
+    event.preventDefault();
+    if (!requireServerSession()) return;
+    if (normalizedUsername() === user.username) return onNotify(t("notice.usernameUnchanged"), "warning");
+    setUsernamePassword("");
+    setUsernameRecoveryKey("");
+    setPendingUsernameRecoveryReset(null);
+    setUsernameRecoveryConfirmed(false);
+    setUsernameDialogOpen(true);
+  };
+
+  const closeUsernameDialog = () => {
+    setUsernameDialogOpen(false);
+    setUsernamePassword("");
+    setUsernameRecoveryKey("");
+    setPendingUsernameRecoveryReset(null);
+    setUsernameRecoveryConfirmed(false);
+    void cryptoClient.discardPendingLogin().catch(() => undefined);
+  };
+
+  const commitUsernameChange = async (body: Record<string, unknown>) => {
+    const result = await api<{ user: User }>("/api/account/username", {
+      method: "PATCH",
+      body: JSON.stringify({ username: normalizedUsername(), ...body })
+    });
+    setUsername(result.user.username);
+    onUsername(result.user.username);
+    closeUsernameDialog();
+  };
+
+  const saveUsername = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
+      const current = await cryptoClient.prepareLogin(usernamePassword, parameters.kdfSalt, parameters.kdfParams);
+      const binding = parameters.envelopeBinding.version === 2
+        ? parameters.envelopeBinding
+        : createVaultEnvelopeBinding();
+      const wrapped = await cryptoClient.rewrapVaultEnvelopes(binding, usernameRecoveryKey);
+      await commitUsernameChange({
+        currentAuthSecret: current.authSecret,
+        currentRecoveryAuthSecret: wrapped.recoveryAuthSecret,
+        envelopeVersion: binding.version,
+        envelopeContext: binding.context,
+        wrappedVaultKey: wrapped.wrappedVaultKey,
+        wrappedVaultNonce: wrapped.wrappedVaultNonce,
+        recoveryWrappedVaultKey: wrapped.recoveryWrappedVaultKey,
+        recoveryWrappedVaultNonce: wrapped.recoveryWrappedVaultNonce
+      });
+      onNotify(t("notice.usernameUpdated"), "info");
+    } catch (value) {
+      onNotify(translateError(value, t, "notice.usernameFailed"), "warning");
+    } finally {
+      await cryptoClient.discardPendingLogin().catch(() => undefined);
+      setBusy(false);
+    }
+  };
+
+  const prepareUsernameRecoveryReset = async () => {
+    setBusy(true);
+    try {
+      const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
+      const current = await cryptoClient.prepareLogin(usernamePassword, parameters.kdfSalt, parameters.kdfParams);
+      await api("/api/auth/reauth", { method: "POST", body: JSON.stringify({ authSecret: current.authSecret }) });
+      const binding = parameters.envelopeBinding.version === 2
+        ? parameters.envelopeBinding
+        : createVaultEnvelopeBinding();
+      const recovery = await cryptoClient.rotateRecoveryKey(binding);
+      setPendingUsernameRecoveryReset({ binding, ...recovery });
+      setUsernameRecoveryConfirmed(false);
+    } catch (value) {
+      onNotify(translateError(value, t, "notice.recoveryResetFailed"), "warning");
+    } finally {
+      await cryptoClient.discardPendingLogin().catch(() => undefined);
+      setBusy(false);
+    }
+  };
+
+  const saveUsernameWithRecoveryReset = async () => {
+    const pending = pendingUsernameRecoveryReset;
+    if (!pending || !usernameRecoveryConfirmed) return;
+    setBusy(true);
+    try {
+      const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
+      const current = await cryptoClient.prepareLogin(usernamePassword, parameters.kdfSalt, parameters.kdfParams);
+      const passwordWrapped = await cryptoClient.rewrapPasswordEnvelope(pending.binding);
+      await commitUsernameChange({
+        currentAuthSecret: current.authSecret,
+        replacementRecoveryAuthSecret: pending.recoveryAuthSecret,
+        envelopeVersion: pending.binding.version,
+        envelopeContext: pending.binding.context,
+        ...passwordWrapped,
+        recoveryWrappedVaultKey: pending.recoveryWrappedVaultKey,
+        recoveryWrappedVaultNonce: pending.recoveryWrappedVaultNonce
+      });
+      onNotify(t("notice.usernameRecoveryReset"), "info");
+    } catch (value) {
+      onNotify(translateError(value, t, "notice.usernameFailed"), "warning");
+    } finally {
+      await cryptoClient.discardPendingLogin().catch(() => undefined);
+      setBusy(false);
+    }
+  };
+
   const uploadAvatar = async (files: FileList | null) => {
     const file = files?.[0];
     if (!file) return;
@@ -204,7 +326,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
 
   const masterPasswordSecret = async (password: string) => {
     if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
-    const parameters = await api<{ kdfSalt: string; kdfParams: KdfParams }>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
+    const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
     return cryptoClient.prepareLogin(password, parameters.kdfSalt, parameters.kdfParams);
   };
 
@@ -270,9 +392,9 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
     if (newPassword !== confirmPassword) return onNotify(t("auth.newPasswordMismatch"), "warning");
     setBusy(true);
     try {
-      const parameters = await api<{ kdfSalt: string; kdfParams: KdfParams }>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
+      const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
       const current = await cryptoClient.prepareLogin(currentPassword, parameters.kdfSalt, parameters.kdfParams);
-      const next = await cryptoClient.rewrapPassword(user.username, newPassword);
+      const next = await cryptoClient.rewrapPassword(parameters.envelopeBinding, newPassword);
       await api("/api/auth/password", { method: "POST", body: JSON.stringify({ currentAuthSecret: current.authSecret, newAuthSecret: next.authSecret, newKdfSalt: next.kdfSalt, newKdfParams: next.kdfParams, newWrappedVaultKey: next.wrappedVaultKey, newWrappedVaultNonce: next.wrappedVaultNonce }) });
       setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
       onNotify(t("notice.passwordChanged"), "info");
@@ -287,7 +409,8 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
     setBusy(true);
     try {
       const current = await masterPasswordSecret(recoveryPassword);
-      const recovery = await cryptoClient.rotateRecoveryKey(user.username);
+      const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
+      const recovery = await cryptoClient.rotateRecoveryKey(parameters.envelopeBinding);
       await api("/api/account/recovery-key", { method: "POST", body: JSON.stringify({ currentAuthSecret: current.authSecret, recoveryAuthSecret: recovery.recoveryAuthSecret, recoveryWrappedVaultKey: recovery.recoveryWrappedVaultKey, recoveryWrappedVaultNonce: recovery.recoveryWrappedVaultNonce }) });
       setRecoveryPassword("");
       setNewRecoveryKey(recovery.recoveryCode);
@@ -336,6 +459,8 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
             <h3>{t("settings.profile")}</h3>
             <div className="profile-avatar-row"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={28} />}</span><strong>{t("settings.avatar")}</strong><input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => { void uploadAvatar(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><button disabled={busy || !serverSessionVerified} onClick={() => avatarInput.current?.click()}><AppIcon icon={Upload} size={15} />{avatarUrl ? t("common.replace") : t("common.upload")}</button>{avatarUrl && <button disabled={busy || !serverSessionVerified} onClick={() => void removeAvatar()}>{t("common.remove")}</button>}</div></div>
             <form className="settings-control-row" onSubmit={saveDisplayName}><label>{t("auth.displayName")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label><button className="primary compact" disabled={busy || !serverSessionVerified}>{t("common.save")}</button></form>
+            <h3>{t("settings.changeUsername")}</h3><p className="settings-help">{t("settings.changeUsernameHelp")}</p>
+            <form className="settings-control-row" onSubmit={beginUsernameChange}><label>{t("settings.newUsername")}<input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" autoComplete="username" required /></label><button className="primary compact" disabled={busy || !serverSessionVerified}>{t("settings.changeUsername")}</button></form>
             <h3>{t("settings.appearance")}</h3>
             <label className="settings-control-row"><span>{t("language.label")}</span><LanguageSelect value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} /></label>
             <label className="settings-control-row"><span>{t("settings.theme")}</span><select value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select></label>
@@ -413,6 +538,17 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
           </div>
         </div>
       </div>
+      {usernameDialogOpen && <div className="danger-confirm username-change-dialog settings-section" role="dialog" aria-modal="true" aria-label={t("settings.changeUsername")}>
+        <header><h3>{pendingUsernameRecoveryReset ? t("settings.saveReplacementRecovery") : t("settings.verifyUsernameChange")}</h3><button type="button" onClick={closeUsernameDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button></header>
+        {!pendingUsernameRecoveryReset ? <>
+          <p>{t("settings.usernameVerificationHelp")}</p>
+          <form className="compact-form" onSubmit={saveUsername}><label>{t("auth.currentPassword")}<input type="password" value={usernamePassword} onChange={(event) => setUsernamePassword(event.target.value)} autoComplete="current-password" autoFocus required /></label><label>{t("auth.recoveryKey")}<input type="password" value={usernameRecoveryKey} onChange={(event) => setUsernameRecoveryKey(event.target.value)} autoComplete="off" required /></label><div className="settings-actions"><button type="button" disabled={busy || !usernamePassword} onClick={() => void prepareUsernameRecoveryReset()}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecoveryAndContinue")}</button><button className="primary" disabled={busy}>{t("settings.confirmUsernameChange")}</button></div></form>
+        </> : <>
+          <p>{t("settings.replacementRecoveryHelp")}</p>
+          <div className="recovery-result"><textarea readOnly rows={3} value={pendingUsernameRecoveryReset.recoveryCode} /><div className="settings-actions"><button type="button" onClick={() => void navigator.clipboard.writeText(pendingUsernameRecoveryReset.recoveryCode)}>{t("common.copy")}</button><button type="button" onClick={() => downloadRecoveryKey(normalizedUsername(), pendingUsernameRecoveryReset.recoveryCode)}><AppIcon icon={Download} size={15} />{t("common.download")}</button></div><label className="recovery-confirm"><input type="checkbox" checked={usernameRecoveryConfirmed} onChange={(event) => setUsernameRecoveryConfirmed(event.target.checked)} /><span>{t("auth.recovery.confirm")}</span></label></div>
+          <div className="settings-actions"><button type="button" disabled={busy} onClick={closeUsernameDialog}>{t("common.cancel")}</button><button type="button" className="primary" disabled={busy || !usernameRecoveryConfirmed} onClick={() => void saveUsernameWithRecoveryReset()}>{t("settings.finishUsernameChange")}</button></div>
+        </>}
+      </div>}
       {logoutConfirming && <div className="danger-confirm logout-confirm settings-section" role="dialog" aria-modal="true" aria-label={t("settings.logoutTitle")}><header><h3>{t("settings.logoutTitle")}</h3><button type="button" onClick={() => setLogoutConfirming(false)} aria-label={t("common.close")}><AppIcon icon={X} /></button></header><p>{t("settings.logoutWarning")}</p><div className="settings-actions"><button type="button" onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</button><button type="button" className="danger danger-solid" onClick={() => void onLogout()}><AppIcon icon={LogOut} size={15} />{t("app.logout")}</button></div></div>}
     </section>
   </div>;

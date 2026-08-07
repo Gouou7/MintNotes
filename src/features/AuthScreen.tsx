@@ -7,7 +7,7 @@ import { cryptoClient, type RegistrationCrypto } from "../crypto/client";
 import { translateError, useI18n } from "../i18n";
 import { submitFormOnEnter } from "./formKeyboard";
 import { downloadRecoveryKey } from "./recoveryKey";
-import type { AuthEndpoint, KdfParams, User } from "../types";
+import type { AuthEndpoint, AuthParameters, User } from "../types";
 
 interface Props {
   onUnlocked: (user: User, endpoint: AuthEndpoint) => Promise<void>;
@@ -15,13 +15,6 @@ interface Props {
 }
 
 type Mode = "login" | "register" | "activate" | "recover";
-
-interface ParametersResponse {
-  kdfSalt: string;
-  kdfParams: KdfParams;
-  recoveryWrappedVaultKey: string;
-  recoveryWrappedVaultNonce: string;
-}
 
 interface AuthConfig {
   allowRegistration: boolean;
@@ -77,13 +70,13 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
   };
 
   const login = async () => {
-    const parameters = await api<ParametersResponse>(`/api/auth/parameters/${encodeURIComponent(username.trim().toLowerCase())}`);
+    const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(username.trim().toLowerCase())}`);
     const derived = await cryptoClient.prepareLogin(password, parameters.kdfSalt, parameters.kdfParams);
     const result = await api<{ user: User; endpoint: AuthEndpoint; wrappedVaultKey: string; wrappedVaultNonce: string }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, authSecret: derived.authSecret, rememberDevice })
     });
-    await cryptoClient.unlockVault(username, result.wrappedVaultKey, result.wrappedVaultNonce);
+    await cryptoClient.unlockVault(parameters.envelopeBinding, result.wrappedVaultKey, result.wrappedVaultNonce);
     await onUnlocked(result.user, result.endpoint);
   };
 
@@ -98,6 +91,8 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
         username: normalizedUsername,
         displayName,
         ...encrypted,
+        envelopeVersion: encrypted.envelopeBinding.version,
+        envelopeContext: encrypted.envelopeBinding.context,
         recoveryCode: undefined
       })
     });
@@ -116,6 +111,8 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
         displayName: "activation",
         activationCode,
         ...encrypted,
+        envelopeVersion: encrypted.envelopeBinding.version,
+        envelopeContext: encrypted.envelopeBinding.context,
         recoveryCode: undefined
       })
     });
@@ -126,14 +123,14 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
     if (password.length < 10) throw new Error(t("auth.newPasswordMin"));
     if (password !== confirmPassword) throw new Error(t("auth.newPasswordMismatch"));
     const normalizedUsername = username.trim().toLowerCase();
-    const parameters = await api<ParametersResponse>(`/api/auth/parameters/${encodeURIComponent(normalizedUsername)}`);
+    const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(normalizedUsername)}`);
     const recovery = await cryptoClient.unlockRecovery(
-      normalizedUsername,
+      parameters.envelopeBinding,
       recoveryCode,
       parameters.recoveryWrappedVaultKey,
       parameters.recoveryWrappedVaultNonce
     );
-    const next = await cryptoClient.rewrapPassword(normalizedUsername, password);
+    const next = await cryptoClient.rewrapPassword(parameters.envelopeBinding, password);
     await api("/api/auth/recover", {
       method: "POST",
       body: JSON.stringify({

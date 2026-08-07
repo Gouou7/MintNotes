@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api";
+import { cryptoClient } from "../crypto/client";
 import { setAutoLockMinutes } from "../crypto/deviceUnlock";
 import { I18nProvider } from "../i18n";
 import type { HistorySettings, OpenDocument, UiPreferences, User } from "../types";
@@ -9,7 +10,10 @@ import { APP_VERSION } from "../version";
 import { SettingsPanel } from "./SettingsPanel";
 
 vi.mock("../api", () => ({ api: vi.fn() }));
-vi.mock("../crypto/client", () => ({ cryptoClient: { prepareLogin: vi.fn(), discardPendingLogin: vi.fn(), rotateRecoveryKey: vi.fn(), encryptProfileAvatar: vi.fn(), decryptProfileAvatar: vi.fn(), rewrapPassword: vi.fn() } }));
+vi.mock("../crypto/client", () => ({
+  createVaultEnvelopeBinding: vi.fn(() => ({ version: 2, context: "abcdefghijklmnopqrstuv" })),
+  cryptoClient: { prepareLogin: vi.fn(), discardPendingLogin: vi.fn(), rotateRecoveryKey: vi.fn(), rewrapPasswordEnvelope: vi.fn(), rewrapVaultEnvelopes: vi.fn(), encryptProfileAvatar: vi.fn(), decryptProfileAvatar: vi.fn(), rewrapPassword: vi.fn() }
+}));
 vi.mock("../crypto/deviceUnlock", () => ({
   getDeviceUnlock: vi.fn(),
   hasDevicePin: (credential: { version?: number; protection?: string; pinVerifier?: string } | null) => Boolean(
@@ -71,13 +75,13 @@ function mockApi() {
   });
 }
 
-async function renderSettings(user: User = admin, onNotify = vi.fn(), onPreferences = vi.fn(), onLogout = vi.fn()) {
+async function renderSettings(user: User = admin, onNotify = vi.fn(), onPreferences = vi.fn(), onLogout = vi.fn(), onUsername = vi.fn()) {
   localStorage.setItem("webmd-notes-language", "zh-CN");
   mockApi();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container); roots.push(root);
-  await act(async () => root.render(<I18nProvider><SettingsPanel user={user} endpoint={{ id: "endpoint", remembered: false }} credential={null} serverSessionVerified onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={vi.fn()} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={vi.fn()} avatarUrl={null} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
+  await act(async () => root.render(<I18nProvider><SettingsPanel user={user} endpoint={{ id: "endpoint", remembered: false }} credential={null} serverSessionVerified onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={vi.fn()} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={vi.fn()} onUsername={onUsername} avatarUrl={null} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
   await act(async () => { await Promise.resolve(); });
   return container;
 }
@@ -115,6 +119,105 @@ describe("SettingsPanel", () => {
     expect(onPreferences).toHaveBeenCalledWith(expect.objectContaining({ language: "zh-TW" }));
     expect(container.textContent).toContain("個人資料");
     expect(localStorage.getItem("webmd-notes-language")).toBe("zh-TW");
+  });
+
+  it("changes the username only after rewrapping both vault envelopes", async () => {
+    const onUsername = vi.fn();
+    const onNotify = vi.fn();
+    const container = await renderSettings(admin, onNotify, vi.fn(), vi.fn(), onUsername);
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (String(path).startsWith("/api/auth/parameters/")) return {
+        kdfSalt: "salt",
+        kdfParams: { algorithm: "argon2id", opsLimit: 3, memLimit: 64, version: 1 },
+        recoveryWrappedVaultKey: "recovery",
+        recoveryWrappedVaultNonce: "nonce",
+        envelopeBinding: { version: 1, context: "admin" }
+      } as never;
+      if (path === "/api/account/username") return { user: { ...admin, username: "renamed-admin" } } as never;
+      return {} as never;
+    });
+    vi.mocked(cryptoClient.prepareLogin).mockResolvedValue({ authSecret: "auth-secret" });
+    vi.mocked(cryptoClient.discardPendingLogin).mockResolvedValue({ discarded: true });
+    vi.mocked(cryptoClient.rewrapVaultEnvelopes).mockResolvedValue({
+      wrappedVaultKey: "wrapped",
+      wrappedVaultNonce: "wrapped-nonce",
+      recoveryAuthSecret: "recovery-auth",
+      recoveryWrappedVaultKey: "recovery-wrapped",
+      recoveryWrappedVaultNonce: "recovery-nonce"
+    });
+    const form = [...container.querySelectorAll("form")].find((entry) => entry.textContent?.includes("新用户名"))!;
+    const setValue = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    expect(container.querySelector(".username-change-dialog")).toBeNull();
+    expect(form.querySelectorAll("input")).toHaveLength(1);
+    await act(async () => setValue(form.querySelector("input")!, "renamed-admin"));
+    await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    const dialog = container.querySelector(".username-change-dialog")!;
+    const dialogInputs = [...dialog.querySelectorAll("input")] as HTMLInputElement[];
+    expect(dialogInputs).toHaveLength(2);
+    await act(async () => {
+      setValue(dialogInputs[0]!, "current-password");
+      setValue(dialogInputs[1]!, "current-recovery-key");
+    });
+    await act(async () => dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(cryptoClient.rewrapVaultEnvelopes).toHaveBeenCalledWith(
+      { version: 2, context: "abcdefghijklmnopqrstuv" },
+      "current-recovery-key"
+    );
+    expect(api).toHaveBeenCalledWith("/api/account/username", expect.objectContaining({ method: "PATCH" }));
+    expect(onUsername).toHaveBeenCalledWith("renamed-admin");
+    expect(onNotify).toHaveBeenCalledWith("用户名已更新，其他设备需要重新登录", "info");
+  });
+
+  it("resets a missing recovery key before committing the username change", async () => {
+    const onUsername = vi.fn();
+    const onNotify = vi.fn();
+    const container = await renderSettings(admin, onNotify, vi.fn(), vi.fn(), onUsername);
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (String(path).startsWith("/api/auth/parameters/")) return {
+        kdfSalt: "salt",
+        kdfParams: { algorithm: "argon2id", opsLimit: 3, memLimit: 64, version: 1 },
+        recoveryWrappedVaultKey: "recovery",
+        recoveryWrappedVaultNonce: "nonce",
+        envelopeBinding: { version: 1, context: "admin" }
+      } as never;
+      if (path === "/api/account/username") return { user: { ...admin, username: "renamed-admin" } } as never;
+      return {} as never;
+    });
+    vi.mocked(cryptoClient.prepareLogin).mockResolvedValue({ authSecret: "auth-secret" });
+    vi.mocked(cryptoClient.discardPendingLogin).mockResolvedValue({ discarded: true });
+    vi.mocked(cryptoClient.rotateRecoveryKey).mockResolvedValue({
+      recoveryAuthSecret: "replacement-recovery-auth",
+      recoveryWrappedVaultKey: "replacement-recovery-wrapped",
+      recoveryWrappedVaultNonce: "replacement-recovery-nonce",
+      recoveryCode: "replacement-recovery-code"
+    });
+    vi.mocked(cryptoClient.rewrapPasswordEnvelope).mockResolvedValue({ wrappedVaultKey: "wrapped", wrappedVaultNonce: "wrapped-nonce" });
+    const setValue = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const usernameForm = [...container.querySelectorAll("form")].find((entry) => entry.textContent?.includes("新用户名"))!;
+    await act(async () => setValue(usernameForm.querySelector("input")!, "renamed-admin"));
+    await act(async () => usernameForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    const dialog = container.querySelector(".username-change-dialog")!;
+    await act(async () => setValue(dialog.querySelector("input[type='password']")!, "current-password"));
+    await act(async () => button(container, "重置恢复密钥并继续").click());
+    await act(async () => { await Promise.resolve(); });
+    expect(container.querySelector(".username-change-dialog textarea")?.textContent).toBe("replacement-recovery-code");
+    const confirm = container.querySelector(".username-change-dialog input[type='checkbox']") as HTMLInputElement;
+    await act(async () => confirm.click());
+    await act(async () => button(container, "完成用户名修改").click());
+    await act(async () => { await Promise.resolve(); });
+    const usernameCall = vi.mocked(api).mock.calls.find(([path]) => path === "/api/account/username")!;
+    expect(JSON.parse(String(usernameCall[1]?.body))).toMatchObject({
+      username: "renamed-admin",
+      replacementRecoveryAuthSecret: "replacement-recovery-auth"
+    });
+    expect(onUsername).toHaveBeenCalledWith("renamed-admin");
+    expect(onNotify).toHaveBeenCalledWith("用户名和恢复密钥已更新，其他设备需要重新登录", "info");
   });
 
   it("shows deleted content as a hierarchy and auto-saves retention", async () => {

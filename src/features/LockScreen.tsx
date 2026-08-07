@@ -7,7 +7,7 @@ import { hasDevicePin, markEndpointRevocationPending, unlockDeviceWithPin } from
 import { translateError, useI18n } from "../i18n";
 import { submitFormOnEnter } from "./formKeyboard";
 import type { DeviceUnlockCredential } from "../storage/database";
-import type { AuthEndpoint, KdfParams, User } from "../types";
+import type { AuthEndpoint, AuthParameters, User } from "../types";
 
 interface Props {
   user: User;
@@ -53,13 +53,13 @@ export function LockScreen({ user, endpoint, credential, serverSessionVerified, 
     setBusy(true);
     setError("");
     try {
-      const parameters = await api<{ kdfSalt: string; kdfParams: KdfParams }>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
+      const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
       const derived = await cryptoClient.prepareLogin(password, parameters.kdfSalt, parameters.kdfParams);
       const wrapped = await api<{ wrappedVaultKey: string; wrappedVaultNonce: string }>("/api/auth/reauth", {
         method: "POST",
         body: JSON.stringify({ authSecret: derived.authSecret })
       });
-      await cryptoClient.unlockVault(user.username, wrapped.wrappedVaultKey, wrapped.wrappedVaultNonce);
+      await cryptoClient.unlockVault(parameters.envelopeBinding, wrapped.wrappedVaultKey, wrapped.wrappedVaultNonce);
       await onUnlocked(true);
     } catch (value) {
       setError(translateError(value, t, "lock.invalidPassword"));

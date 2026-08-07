@@ -60,6 +60,8 @@ export function openDatabase(dataDirectory: string): AppDatabase {
       recovery_auth_hash TEXT NOT NULL,
       recovery_wrapped_vault_key TEXT NOT NULL,
       recovery_wrapped_vault_nonce TEXT NOT NULL,
+      envelope_version INTEGER NOT NULL DEFAULT 1 CHECK (envelope_version IN (1, 2)),
+      envelope_context TEXT,
       trash_retention_days INTEGER DEFAULT 30 CHECK (trash_retention_days IS NULL OR trash_retention_days BETWEEN 1 AND 3650),
       history_enabled INTEGER NOT NULL DEFAULT 1 CHECK (history_enabled IN (0, 1)),
       history_interval_minutes INTEGER NOT NULL DEFAULT 10 CHECK (history_interval_minutes IN (5, 10, 30, 60)),
@@ -251,6 +253,8 @@ export function openDatabase(dataDirectory: string): AppDatabase {
   if (!userColumns.has("history_interval_minutes")) db.exec("ALTER TABLE users ADD COLUMN history_interval_minutes INTEGER NOT NULL DEFAULT 10");
   if (!userColumns.has("history_retention_days")) db.exec("ALTER TABLE users ADD COLUMN history_retention_days INTEGER DEFAULT 90");
   if (!userColumns.has("history_cleared_before")) db.exec("ALTER TABLE users ADD COLUMN history_cleared_before TEXT");
+  if (!userColumns.has("envelope_version")) db.exec("ALTER TABLE users ADD COLUMN envelope_version INTEGER NOT NULL DEFAULT 1");
+  if (!userColumns.has("envelope_context")) db.exec("ALTER TABLE users ADD COLUMN envelope_context TEXT");
   db.exec(`
     CREATE TABLE IF NOT EXISTS note_history (
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

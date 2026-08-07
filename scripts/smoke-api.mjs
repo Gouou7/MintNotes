@@ -416,6 +416,40 @@ try {
       newWrappedVaultNonce: "y".repeat(24)
     })
   });
+  const usernameChange = await fetch(`${baseUrl}/api/account/username`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
+    body: JSON.stringify({
+      username: "alpha-renamed",
+      currentAuthSecret: "alpha-client-derived-secret-000099",
+      replacementRecoveryAuthSecret: "alpha-username-recovery-secret-0001",
+      envelopeVersion: 2,
+      envelopeContext: "smoke_context_1234567890",
+      wrappedVaultKey: "U".repeat(32),
+      wrappedVaultNonce: "V".repeat(24),
+      recoveryWrappedVaultKey: "W".repeat(32),
+      recoveryWrappedVaultNonce: "X".repeat(24)
+    })
+  });
+  const renamedLogin = await login("alpha-renamed", "alpha-client-derived-secret-000099", "Mint Notes renamed smoke browser");
+  const recoveryAfterUsernameChangeBody = {
+    username: "alpha-renamed",
+    newAuthSecret: "alpha-recovered-client-secret-0001",
+    newKdfSalt: "u".repeat(24),
+    newKdfParams: { algorithm: "argon2id", opsLimit: 3, memLimit: 67108864, version: 1 },
+    newWrappedVaultKey: "Y".repeat(32),
+    newWrappedVaultNonce: "Z".repeat(24)
+  };
+  const oldRecoveryAfterUsernameChange = await fetch(`${baseUrl}/api/auth/recover`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...recoveryAfterUsernameChangeBody, recoveryAuthSecret: "alpha-rotated-recovery-secret-0001" })
+  });
+  const recoveryAfterUsernameChange = await fetch(`${baseUrl}/api/auth/recover`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...recoveryAfterUsernameChangeBody, recoveryAuthSecret: "alpha-username-recovery-secret-0001" })
+  });
   const result = {
     health: true,
     alphaRole: alpha.body.user.role,
@@ -426,6 +460,11 @@ try {
       && syncA.changes[0].ciphertext !== syncB.changes[0].ciphertext,
     attachmentIsolated: chunkA === "alpha-encrypted-chunk" && chunkB === "bravo-encrypted-chunk",
     passwordChanged: passwordChange.ok,
+    usernameChanged: usernameChange.ok
+      && renamedLogin.body.user.username === "alpha-renamed"
+      && renamedLogin.body.wrappedVaultKey === "U".repeat(32)
+      && oldRecoveryAfterUsernameChange.status === 401
+      && recoveryAfterUsernameChange.ok,
     activationWorked: setupResponse.ok && activationResponse.ok,
     encryptedAvatarIsolated: avatarUpdate.ok && alphaAvatarResponse.ok && bravoAvatarResponse.ok && alphaAvatar.avatar?.ciphertext === avatarEnvelope.ciphertext && bravoAvatar.avatar === null,
     recoveryKeyResetProtected: recoveryKeyReset.ok && wrongRecoveryKeyReset.status === 401,
@@ -471,7 +510,7 @@ try {
   verificationDb.close();
   result.userDeletionCascaded = deletedUserRows === 0 && deletedObjectRows === 0 && bravoRows === 1;
   result.noteHistoryPurgedWithNote = purgeHistoryResponse.ok && purgedHistoryRows === 0;
-  if (!result.isolated || !result.attachmentIsolated || !result.passwordChanged || !result.activationWorked || !result.encryptedAvatarIsolated || !result.recoveryKeyResetProtected || !result.userDeletionProtected || !result.userDeletionCascaded || !result.purgePropagated || !result.trashRetentionUpdated || !result.noteHistoryWorked || !result.noteHistoryClearBarrierWorked || !result.noteHistorySettingsWorked || !result.noteHistoryPurgedWithNote || !result.endpointIdentityStable || !result.endpointHistoryTracked || !result.rememberedCookiePersistent || !result.earlySessionRevokeRejected || !result.endpointRevocationIsolated || !result.matureSessionRevokeWorked || !result.batchSyncWorked || !result.sseReceiverNotified || !result.sseSourceSuppressed || !result.sseCrossUserIsolated || !result.compactPullWorked || result.alphaRole !== "admin" || result.bravoRole !== "user") {
+  if (!result.isolated || !result.attachmentIsolated || !result.passwordChanged || !result.usernameChanged || !result.activationWorked || !result.encryptedAvatarIsolated || !result.recoveryKeyResetProtected || !result.userDeletionProtected || !result.userDeletionCascaded || !result.purgePropagated || !result.trashRetentionUpdated || !result.noteHistoryWorked || !result.noteHistoryClearBarrierWorked || !result.noteHistorySettingsWorked || !result.noteHistoryPurgedWithNote || !result.endpointIdentityStable || !result.endpointHistoryTracked || !result.rememberedCookiePersistent || !result.earlySessionRevokeRejected || !result.endpointRevocationIsolated || !result.matureSessionRevokeWorked || !result.batchSyncWorked || !result.sseReceiverNotified || !result.sseSourceSuppressed || !result.sseCrossUserIsolated || !result.compactPullWorked || result.alphaRole !== "admin" || result.bravoRole !== "user") {
     throw new Error(`Smoke assertions failed: ${JSON.stringify(result)}`);
   }
   console.log(JSON.stringify(result, null, 2));
