@@ -177,7 +177,7 @@ export function registerSyncRoutes(
         objects: z.array(z.object({
           objectId: z.string().uuid(),
           baseRevision: z.number().int().positive()
-        })).min(1).max(1000)
+        })).min(1).max(20_000)
       }).safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ error: "Invalid purge request" });
       const scope = authenticatedScope(request);
@@ -200,6 +200,9 @@ export function registerSyncRoutes(
       } catch (error) {
         if (error instanceof Error && error.message === "PURGE_CONFLICT") {
           return reply.code(409).send({ error: "Purge conflict" });
+        }
+        if (error instanceof Error && error.message === "PROTECTED_HISTORY") {
+          return reply.code(409).send({ error: "Protected history blocks purge", code: "PROTECTED_HISTORY" });
         }
         throw error;
       }

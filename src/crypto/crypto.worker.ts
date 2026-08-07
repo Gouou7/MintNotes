@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { argon2id } from "hash-wasm";
-import type { EncryptedAttachmentChunk, KdfParams, NoteHistoryPayload, VaultAttachment, VaultObject } from "../types";
+import type { EncryptedAttachmentChunk, KdfParams, NoteHistoryMetadataPayload, NoteHistoryPayload, VaultAttachment, VaultObject } from "../types";
 
 type RequestMessage = { id: number; operation: string; payload?: any };
 
@@ -146,6 +146,10 @@ function profileAvatarAad(userId: string): string {
 
 function historyAad(userId: string, noteId: string, historyId: string, capturedAt: string, captureKind: string): string {
   return `webmd:${userId}:${noteId}:note-history:${historyId}:schema:v1:${capturedAt}:${captureKind}:encryption:v${ENCRYPTION_VERSION}`;
+}
+
+function historyMetadataAad(userId: string, noteId: string, historyId: string, capturedAt: string): string {
+  return `webmd:${userId}:${noteId}:note-history-metadata:${historyId}:schema:v1:${capturedAt}:encryption:v${ENCRYPTION_VERSION}`;
 }
 
 function validateDeviceKey(key: CryptoKey, usage: "encrypt" | "decrypt") {
@@ -428,6 +432,28 @@ async function handle(operation: string, payload: any): Promise<any> {
         historyAad(payload.userId, payload.noteId, payload.historyId, payload.capturedAt, payload.captureKind)
       );
       return JSON.parse(new TextDecoder().decode(bytes)) as NoteHistoryPayload;
+    }
+    case "encryptHistoryMetadata": {
+      if (!vaultKey) throw new Error("Vault is locked");
+      const bytes = new TextEncoder().encode(JSON.stringify(payload.metadata));
+      return {
+        ...await seal(
+          bytes,
+          vaultKey,
+          historyMetadataAad(payload.userId, payload.noteId, payload.historyId, payload.capturedAt)
+        ),
+        encryptionVersion: ENCRYPTION_VERSION
+      };
+    }
+    case "decryptHistoryMetadata": {
+      if (!vaultKey) throw new Error("Vault is locked");
+      const bytes = await open(
+        payload.ciphertext,
+        payload.nonce,
+        vaultKey,
+        historyMetadataAad(payload.userId, payload.noteId, payload.historyId, payload.capturedAt)
+      );
+      return JSON.parse(new TextDecoder().decode(bytes)) as NoteHistoryMetadataPayload;
     }
     case "createAttachment": {
       if (!vaultKey) throw new Error("Vault is locked");

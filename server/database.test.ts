@@ -5,7 +5,7 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { openDatabase, runRegistrationTransaction, type RegistrationRole } from "./database";
 import { cleanupUserHistory } from "./history";
-import { purgeExpiredTrash } from "./trash";
+import { purgeExpiredTrash, purgeTargets } from "./trash";
 
 const temporaryDirectories: string[] = [];
 
@@ -97,6 +97,8 @@ describe("database isolation", () => {
     add("manual-a", "2026-07-10T09:00:00.000Z", "manual");
     add("manual-b", "2026-07-10T10:00:00.000Z", "restore-safety");
     add("expired", "2026-03-01T00:00:00.000Z", "manual");
+    add("protected-expired", "2026-03-01T01:00:00.000Z", "manual");
+    db.prepare("UPDATE note_history SET is_protected = 1 WHERE history_id = ?").run("protected-expired");
 
     expect(cleanupUserHistory(db, "user-a", "2026-07-24T12:00:00.000Z")).toBe(3);
     expect((db.prepare("SELECT history_id FROM note_history ORDER BY history_id").all() as Array<{ history_id: string }>).map((row) => row.history_id)).toEqual([
@@ -104,10 +106,122 @@ describe("database isolation", () => {
       "hour-new",
       "manual-a",
       "manual-b",
+      "protected-expired",
       "recent-a",
       "recent-b"
     ]);
     db.close();
+  });
+
+  it("blocks manual and automatic purge for protected notes and referenced attachments", () => {
+    const directory = mkdtempSync(join(tmpdir(), "webmd-protected-history-purge-test-"));
+    temporaryDirectories.push(directory);
+    const db = openDatabase(directory);
+    insertUser(db, "user-a", "alpha");
+    db.prepare("UPDATE users SET trash_retention_days = 1 WHERE id = ?").run("user-a");
+    const old = "2026-01-01T00:00:00.000Z";
+    const insertObject = db.prepare(`
+      INSERT INTO objects (user_id, object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted, updated_at)
+      VALUES ('user-a', ?, ?, 'ciphertext', 'nonce', 1, 1, 1, ?)
+    `);
+    insertObject.run("protected-note", "note", old);
+    insertObject.run("protected-attachment", "attachment", old);
+    insertObject.run("unprotected-note", "note", old);
+    db.prepare(`
+      INSERT INTO note_history (
+        user_id, note_id, history_id, captured_at, capture_kind, ciphertext, nonce,
+        encryption_version, is_protected, byte_size, idempotency_key, created_at
+      ) VALUES ('user-a', 'protected-note', 'history-a', ?, 'manual', 'ciphertext', 'nonce', 1, 1, 10, 'idem-history-a', ?)
+    `).run(old, old);
+    db.prepare(`
+      INSERT INTO protected_history_attachments (user_id, note_id, history_id, attachment_id)
+      VALUES ('user-a', 'protected-note', 'history-a', 'protected-attachment')
+    `).run();
+    db.prepare(`
+      INSERT INTO note_history (
+        user_id, note_id, history_id, captured_at, capture_kind, ciphertext, nonce,
+        encryption_version, is_protected, byte_size, idempotency_key, created_at
+      ) VALUES ('user-a', 'protected-note', 'history-b', ?, 'manual', 'ciphertext-b', 'nonce-b', 1, 1, 12, 'idem-history-b', ?)
+    `).run(old, old);
+    db.prepare(`
+      INSERT INTO protected_history_attachments (user_id, note_id, history_id, attachment_id)
+      VALUES ('user-a', 'protected-note', 'history-b', 'protected-attachment')
+    `).run();
+
+    expect(() => purgeTargets(db, "user-a", [{ objectId: "protected-note", baseRevision: 1 }]))
+      .toThrow("PROTECTED_HISTORY");
+    expect(() => purgeTargets(db, "user-a", [
+      { objectId: "unprotected-note", baseRevision: 1 },
+      { objectId: "protected-note", baseRevision: 1 }
+    ])).toThrow("PROTECTED_HISTORY");
+    expect(db.prepare("SELECT 1 FROM objects WHERE object_id = 'unprotected-note'").get()).toBeTruthy();
+    expect(() => purgeTargets(db, "user-a", [{ objectId: "protected-attachment", baseRevision: 1 }]))
+      .toThrow("PROTECTED_HISTORY");
+    expect(purgeExpiredTrash(db, "2026-02-01T00:00:00.000Z")).toBe(1);
+    expect(db.prepare("SELECT 1 FROM objects WHERE object_id = 'protected-note'").get()).toBeTruthy();
+    expect(db.prepare("SELECT 1 FROM objects WHERE object_id = 'protected-attachment'").get()).toBeTruthy();
+
+    db.prepare("UPDATE note_history SET is_protected = 0 WHERE history_id = 'history-a'").run();
+    db.prepare("DELETE FROM protected_history_attachments WHERE history_id = 'history-a'").run();
+    expect(() => purgeTargets(db, "user-a", [{ objectId: "protected-attachment", baseRevision: 1 }]))
+      .toThrow("PROTECTED_HISTORY");
+    expect(purgeExpiredTrash(db, "2026-02-01T00:00:00.000Z")).toBe(0);
+
+    db.prepare("UPDATE note_history SET is_protected = 0 WHERE history_id = 'history-b'").run();
+    db.prepare("DELETE FROM protected_history_attachments WHERE history_id = 'history-b'").run();
+    expect(purgeExpiredTrash(db, "2026-02-01T00:00:00.000Z")).toBe(2);
+    db.close();
+  });
+
+  it("additively upgrades supported history rows to encrypted metadata and protection", () => {
+    const directory = mkdtempSync(join(tmpdir(), "webmd-history-migration-test-"));
+    temporaryDirectories.push(directory);
+    const initial = openDatabase(directory);
+    insertUser(initial, "user-a", "alpha");
+    initial.exec(`
+      DROP TABLE protected_history_attachments;
+      ALTER TABLE note_history RENAME TO note_history_new;
+      CREATE TABLE note_history (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        note_id TEXT NOT NULL,
+        history_id TEXT NOT NULL,
+        captured_at TEXT NOT NULL,
+        capture_kind TEXT NOT NULL,
+        ciphertext TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        encryption_version INTEGER NOT NULL,
+        byte_size INTEGER NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, note_id, history_id),
+        UNIQUE (user_id, idempotency_key)
+      );
+      INSERT INTO note_history (
+        user_id, note_id, history_id, captured_at, capture_kind, ciphertext, nonce,
+        encryption_version, byte_size, idempotency_key, created_at
+      ) VALUES (
+        'user-a', 'note-a', 'history-a', '2026-01-01T00:00:00.000Z', 'manual',
+        'opaque-history', 'nonce', 1, 14, 'idem-history-a', '2026-01-01T00:00:00.000Z'
+      );
+      DROP TABLE note_history_new;
+    `);
+    initial.close();
+
+    const upgraded = openDatabase(directory);
+    expect(upgraded.prepare(`
+      SELECT ciphertext, metadata_ciphertext, metadata_nonce, metadata_encryption_version, is_protected
+      FROM note_history WHERE user_id = 'user-a' AND history_id = 'history-a'
+    `).get()).toEqual({
+      ciphertext: "opaque-history",
+      metadata_ciphertext: null,
+      metadata_nonce: null,
+      metadata_encryption_version: null,
+      is_protected: 0
+    });
+    expect(upgraded.prepare(`
+      SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'protected_history_attachments'
+    `).get()).toEqual({ name: "protected_history_attachments" });
+    upgraded.close();
   });
 
   it("adds trusted-endpoint metadata and revokes ambiguous legacy sessions", () => {

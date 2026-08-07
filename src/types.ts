@@ -142,17 +142,31 @@ export interface NoteHistoryPayload {
   sourceUpdatedAt: string;
 }
 
-export interface HistoryListItem {
+export interface NoteHistoryMetadataPayload {
+  schemaVersion: 1;
+  name: string | null;
+  attachmentIds: string[];
+}
+
+export interface EncryptedHistoryMetadata {
+  metadataCiphertext: string;
+  metadataNonce: string;
+  metadataEncryptionVersion: 1;
+}
+
+export interface HistoryListItem extends Partial<EncryptedHistoryMetadata> {
   historyId: string;
   noteId: string;
   capturedAt: string;
   captureKind: HistoryCaptureKind;
+  name: string;
+  protected: boolean;
   byteSize: number;
   pending: boolean;
   serverCreatedAt?: string;
 }
 
-export interface EncryptedHistorySnapshot extends HistoryListItem {
+export interface EncryptedHistorySnapshot extends Omit<HistoryListItem, "name">, Partial<EncryptedHistoryMetadata> {
   ciphertext: string;
   nonce: string;
   encryptionVersion: 1;

@@ -19,7 +19,9 @@ describe("deleteLocalUserData", () => {
     const deleteChunkOutbox = vi.fn().mockResolvedValue(undefined);
     const deleteRevocations = vi.fn().mockResolvedValue(undefined);
     const deleteHistory = vi.fn().mockResolvedValue(undefined);
+    const deleteHistoryIndex = vi.fn().mockResolvedValue(undefined);
     const deleteHistoryOutbox = vi.fn().mockResolvedValue(undefined);
+    const deleteHistoryMetadataOutbox = vi.fn().mockResolvedValue(undefined);
     const tableScenarios = [
       [localDb.objects, deleteObjects],
       [localDb.outbox, deleteOutbox],
@@ -27,7 +29,9 @@ describe("deleteLocalUserData", () => {
       [localDb.attachmentOutbox, deleteChunkOutbox],
       [localDb.pendingEndpointRevocations, deleteRevocations],
       [localDb.historySnapshots, deleteHistory],
-      [localDb.historyOutbox, deleteHistoryOutbox]
+      [localDb.historyIndex, deleteHistoryIndex],
+      [localDb.historyOutbox, deleteHistoryOutbox],
+      [localDb.historyMetadataOutbox, deleteHistoryMetadataOutbox]
     ] as const;
     const equalsSpies: ReturnType<typeof vi.fn>[] = [];
 

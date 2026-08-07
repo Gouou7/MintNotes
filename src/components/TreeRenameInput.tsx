@@ -6,9 +6,10 @@ interface Props {
   label: string;
   onCommit: (value: string) => void;
   onCancel: () => void;
+  className?: string;
 }
 
-export function TreeRenameInput({ initialValue, label, onCommit, onCancel }: Props) {
+export function TreeRenameInput({ initialValue, label, onCommit, onCancel, className = "tree-rename-input" }: Props) {
   const [value, setValue] = useState(initialValue);
   const input = useRef<HTMLInputElement>(null);
   const cancelled = useRef(false);
@@ -17,7 +18,7 @@ export function TreeRenameInput({ initialValue, label, onCommit, onCancel }: Pro
 
   return <input
     ref={input}
-    className="tree-rename-input"
+    className={className}
     value={value}
     onChange={(event) => setValue(event.target.value)}
     onPointerDown={(event) => event.stopPropagation()}

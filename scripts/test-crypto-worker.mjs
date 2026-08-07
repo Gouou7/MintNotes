@@ -329,6 +329,69 @@ const decryptedHistory = await recoveryWorker.call("decryptHistory", {
   ciphertext: encryptedHistory.ciphertext,
   nonce: encryptedHistory.nonce
 });
+const historyMetadata = { schemaVersion: 1, name: "2026/7/24 20:00", attachmentIds: document.attachmentIds };
+const encryptedHistoryMetadata = await recoveryWorker.call("encryptHistoryMetadata", {
+  userId,
+  noteId: objectId,
+  historyId,
+  capturedAt,
+  metadata: historyMetadata
+});
+const repeatedHistoryMetadata = await recoveryWorker.call("encryptHistoryMetadata", {
+  userId,
+  noteId: objectId,
+  historyId,
+  capturedAt,
+  metadata: historyMetadata
+});
+if (encryptedHistoryMetadata.nonce === repeatedHistoryMetadata.nonce) {
+  throw new Error("Encrypted history metadata reused a nonce");
+}
+const decryptedHistoryMetadata = await recoveryWorker.call("decryptHistoryMetadata", {
+  userId,
+  noteId: objectId,
+  historyId,
+  capturedAt,
+  ciphertext: encryptedHistoryMetadata.ciphertext,
+  nonce: encryptedHistoryMetadata.nonce
+});
+for (const tampered of [
+  { userId: "99999999-9999-4999-8999-999999999999" },
+  { noteId: "88888888-8888-4888-8888-888888888888" },
+  { historyId: "77777777-7777-4777-8777-777777777777" },
+  { capturedAt: "2026-07-24T12:01:00.000Z" }
+]) {
+  let rejected = false;
+  try {
+    await recoveryWorker.call("decryptHistoryMetadata", {
+      userId,
+      noteId: objectId,
+      historyId,
+      capturedAt,
+      ciphertext: encryptedHistoryMetadata.ciphertext,
+      nonce: encryptedHistoryMetadata.nonce,
+      ...tampered
+    });
+  } catch {
+    rejected = true;
+  }
+  if (!rejected) throw new Error(`History metadata AAD accepted tampered ${Object.keys(tampered)[0]}`);
+}
+let tamperedHistoryMetadataRejected = false;
+try {
+  const firstMetadataCharacter = encryptedHistoryMetadata.ciphertext[0];
+  await recoveryWorker.call("decryptHistoryMetadata", {
+    userId,
+    noteId: objectId,
+    historyId,
+    capturedAt,
+    ciphertext: `${firstMetadataCharacter === "A" ? "B" : "A"}${encryptedHistoryMetadata.ciphertext.slice(1)}`,
+    nonce: encryptedHistoryMetadata.nonce
+  });
+} catch {
+  tamperedHistoryMetadataRejected = true;
+}
+if (!tamperedHistoryMetadataRejected) throw new Error("Tampered history metadata ciphertext was accepted");
 for (const tampered of [
   { userId: "99999999-9999-4999-8999-999999999999" },
   { noteId: "88888888-8888-4888-8888-888888888888" },
@@ -393,6 +456,9 @@ if (new TextDecoder().decode(decryptedAttachment) !== "encrypted attachment roun
 if (JSON.stringify(decryptedHistory) !== JSON.stringify(historyPayload)) {
   throw new Error("Encrypted note history did not round-trip");
 }
+if (JSON.stringify(decryptedHistoryMetadata) !== JSON.stringify(historyMetadata)) {
+  throw new Error("Encrypted history metadata did not round-trip");
+}
 
 console.log(JSON.stringify({
   authenticationAcrossWorkers: true,
@@ -412,6 +478,10 @@ console.log(JSON.stringify({
   encryptedProfileAvatarRoundTrip: true,
   tamperedProfileAvatarRejected: true,
   encryptedHistoryRoundTrip: true,
+  encryptedHistoryMetadataRoundTrip: true,
+  uniqueHistoryMetadataNonces: true,
+  tamperedHistoryMetadataBindingRejected: true,
+  tamperedHistoryMetadataRejected: true,
   tamperedHistoryBindingRejected: true,
   rotatedRecoveryKeyWorks: true,
   oldRecoveryKeyRejected: true

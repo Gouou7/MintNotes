@@ -82,18 +82,18 @@ async function login(username, authSecret, userAgent, existingCookies = {}, reme
   return { cookie, cookies, body: await response.json(), setCookies: response.headers.getSetCookie() };
 }
 
-async function putObject(account, objectId, ciphertext) {
+async function putObject(account, objectId, ciphertext, objectType = "note", deleted = false) {
   const response = await fetch(`${baseUrl}/api/objects/${objectId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Cookie: account.cookie },
     body: JSON.stringify({
-      objectType: "note",
+      objectType,
       ciphertext,
       nonce: "z".repeat(24),
       encryptionVersion: 1,
       baseRevision: 0,
       idempotencyKey: crypto.randomUUID(),
-      deleted: false
+      deleted
     })
   });
   if (!response.ok) throw new Error(`Object write failed: ${await response.text()}`);
@@ -218,10 +218,52 @@ try {
   const historyList = await historyListResponse.json();
   const bravoHistoryList = await crossUserHistoryList.json();
   const historyRead = await fetch(`${baseUrl}/api/notes/${objectId}/history/${historyId}`, { headers: { Cookie: alpha.cookie } });
+  const protectedHistoryId = crypto.randomUUID();
+  const protectedEnvelope = {
+    ...historyEnvelope,
+    metadataCiphertext: "encrypted-history-metadata-".repeat(4),
+    metadataNonce: "m".repeat(24),
+    metadataEncryptionVersion: 1,
+    protected: true,
+    attachmentIds: [attachmentId],
+    idempotencyKey: crypto.randomUUID()
+  };
+  const protectedHistoryWrite = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
+    body: JSON.stringify(protectedEnvelope)
+  });
+  const protectedHistoryRename = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
+    body: JSON.stringify({
+      metadataCiphertext: "renamed-encrypted-history-metadata-".repeat(4),
+      metadataNonce: "n".repeat(24),
+      metadataEncryptionVersion: 1
+    })
+  });
+  const protectedHistoryRenameResult = await protectedHistoryRename.json();
+  const protectedHistoryListResult = await fetch(`${baseUrl}/api/notes/${objectId}/history`, {
+    headers: { Cookie: alpha.cookie }
+  }).then((response) => response.json());
+  const protectedHistoryReadResult = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+    headers: { Cookie: alpha.cookie }
+  }).then((response) => response.json());
+  const crossUserProtectedHistoryUpdate = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: bravo.cookie },
+    body: JSON.stringify({ protected: false })
+  });
+  const protectedHistoryDelete = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+    method: "DELETE",
+    headers: { Cookie: alpha.cookie }
+  });
   const historyClear = await fetch(`${baseUrl}/api/notes/${objectId}/history`, {
     method: "DELETE",
     headers: { Cookie: alpha.cookie }
   });
+  const historyClearResult = await historyClear.json();
+  const protectedHistoryAfterClear = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, { headers: { Cookie: alpha.cookie } });
   const clearedHistoryReplay = await fetch(`${baseUrl}/api/notes/${objectId}/history/${crypto.randomUUID()}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
@@ -265,6 +307,23 @@ try {
     waitForChangedEvent(sourceEvents, 400),
     waitForChangedEvent(bravoEvents, 400)
   ]);
+  await putObject(alpha, attachmentId, "alpha-encrypted-attachment-manifest", "attachment", true);
+  const protectedAttachmentPurge = await fetch(`${baseUrl}/api/objects/purge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
+    body: JSON.stringify({ objects: [{ objectId: attachmentId, baseRevision: 1 }] })
+  });
+  const unprotectAttachmentHistory = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
+    body: JSON.stringify({ protected: false })
+  });
+  const attachmentPurgeAfterUnprotect = await fetch(`${baseUrl}/api/objects/purge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
+    body: JSON.stringify({ objects: [{ objectId: attachmentId, baseRevision: 1 }] })
+  });
+  const attachmentChunkAfterPurge = await fetch(`${baseUrl}/api/attachments/${attachmentId}/chunks/0`, { headers: { Cookie: alpha.cookie } });
   const idempotentBatchResponse = await fetch(`${baseUrl}/api/objects/batch`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
@@ -388,8 +447,23 @@ try {
     body: JSON.stringify({
       ...historyEnvelope,
       capturedAt: new Date().toISOString(),
+      metadataCiphertext: "purge-protected-metadata-".repeat(4),
+      metadataNonce: "p".repeat(24),
+      metadataEncryptionVersion: 1,
+      protected: true,
+      attachmentIds: [],
       idempotencyKey: crypto.randomUUID()
     })
+  });
+  const protectedPurgeResponse = await fetch(`${baseUrl}/api/objects/purge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
+    body: JSON.stringify({ objects: [{ objectId: purgeId, baseRevision: 1 }] })
+  });
+  const purgeHistoryUnprotect = await fetch(`${baseUrl}/api/notes/${purgeId}/history/${purgeHistoryId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
+    body: JSON.stringify({ protected: false })
   });
   const purgeResponse = await fetch(`${baseUrl}/api/objects/purge`, {
     method: "POST",
@@ -479,6 +553,19 @@ try {
       && bravoHistoryList.items.length === 0
       && crossUserHistoryRead.status === 404,
     noteHistoryClearBarrierWorked: historyClear.ok && clearedHistoryReplay.status === 409,
+    protectedHistoryWorked: protectedHistoryWrite.ok
+      && protectedHistoryRenameResult.protected === true
+      && crossUserProtectedHistoryUpdate.status === 404
+      && protectedHistoryDelete.status === 409
+      && historyClearResult.preserved === 1
+      && protectedHistoryAfterClear.ok
+      && !protectedHistoryListResult.items.some((item) => "name" in item)
+      && !("name" in protectedHistoryReadResult),
+    protectedAttachmentRetentionWorked: protectedAttachmentPurge.status === 409
+      && unprotectAttachmentHistory.ok
+      && attachmentPurgeAfterUnprotect.ok
+      && attachmentChunkAfterPurge.status === 404,
+    protectedHistoryBlockedPurge: protectedPurgeResponse.status === 409 && purgeHistoryUnprotect.ok,
     noteHistorySettingsWorked: historySettingsUpdate.ok
       && historySettings.intervalMinutes === 30
       && historySettings.retentionDays === 180
@@ -510,7 +597,7 @@ try {
   verificationDb.close();
   result.userDeletionCascaded = deletedUserRows === 0 && deletedObjectRows === 0 && bravoRows === 1;
   result.noteHistoryPurgedWithNote = purgeHistoryResponse.ok && purgedHistoryRows === 0;
-  if (!result.isolated || !result.attachmentIsolated || !result.passwordChanged || !result.usernameChanged || !result.activationWorked || !result.encryptedAvatarIsolated || !result.recoveryKeyResetProtected || !result.userDeletionProtected || !result.userDeletionCascaded || !result.purgePropagated || !result.trashRetentionUpdated || !result.noteHistoryWorked || !result.noteHistoryClearBarrierWorked || !result.noteHistorySettingsWorked || !result.noteHistoryPurgedWithNote || !result.endpointIdentityStable || !result.endpointHistoryTracked || !result.rememberedCookiePersistent || !result.earlySessionRevokeRejected || !result.endpointRevocationIsolated || !result.matureSessionRevokeWorked || !result.batchSyncWorked || !result.sseReceiverNotified || !result.sseSourceSuppressed || !result.sseCrossUserIsolated || !result.compactPullWorked || result.alphaRole !== "admin" || result.bravoRole !== "user") {
+  if (!result.isolated || !result.attachmentIsolated || !result.passwordChanged || !result.usernameChanged || !result.activationWorked || !result.encryptedAvatarIsolated || !result.recoveryKeyResetProtected || !result.userDeletionProtected || !result.userDeletionCascaded || !result.purgePropagated || !result.trashRetentionUpdated || !result.noteHistoryWorked || !result.noteHistoryClearBarrierWorked || !result.protectedHistoryWorked || !result.protectedAttachmentRetentionWorked || !result.protectedHistoryBlockedPurge || !result.noteHistorySettingsWorked || !result.noteHistoryPurgedWithNote || !result.endpointIdentityStable || !result.endpointHistoryTracked || !result.rememberedCookiePersistent || !result.earlySessionRevokeRejected || !result.endpointRevocationIsolated || !result.matureSessionRevokeWorked || !result.batchSyncWorked || !result.sseReceiverNotified || !result.sseSourceSuppressed || !result.sseCrossUserIsolated || !result.compactPullWorked || result.alphaRole !== "admin" || result.bravoRole !== "user") {
     throw new Error(`Smoke assertions failed: ${JSON.stringify(result)}`);
   }
   console.log(JSON.stringify(result, null, 2));

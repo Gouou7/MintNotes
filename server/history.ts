@@ -7,6 +7,7 @@ const AUTOMATIC_KINDS = new Set<HistoryCaptureKind>(["baseline", "interval", "id
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface HistoryRow {
+  note_id: string;
   history_id: string;
   captured_at: string;
   capture_kind: HistoryCaptureKind;
@@ -40,28 +41,19 @@ export function cleanupUserHistory(
     const expired = db.prepare(`
       SELECT history_id
       FROM note_history
-      WHERE user_id = ? AND captured_at <= ?
+      WHERE user_id = ? AND is_protected = 0 AND captured_at <= ?
     `).all(userId, cutoff) as Array<{ history_id: string }>;
     for (const row of expired) removeIds.add(row.history_id);
   }
 
   const automatic = db.prepare(`
-    SELECT history_id, captured_at, capture_kind
+    SELECT note_id, history_id, captured_at, capture_kind
     FROM note_history
-    WHERE user_id = ? AND captured_at < ?
+    WHERE user_id = ? AND is_protected = 0 AND captured_at < ?
       AND capture_kind IN ('baseline', 'interval', 'idle')
     ORDER BY note_id ASC, captured_at DESC, history_id DESC
   `).all(userId, new Date(nowMs - DAY_MS).toISOString()) as HistoryRow[];
   const buckets = new Set<string>();
-  const noteByHistory = new Map<string, string>();
-  const noteRows = db.prepare(`
-    SELECT history_id, note_id
-    FROM note_history
-    WHERE user_id = ? AND captured_at < ?
-      AND capture_kind IN ('baseline', 'interval', 'idle')
-  `).all(userId, new Date(nowMs - DAY_MS).toISOString()) as Array<{ history_id: string; note_id: string }>;
-  for (const row of noteRows) noteByHistory.set(row.history_id, row.note_id);
-
   for (const row of automatic) {
     if (removeIds.has(row.history_id) || !AUTOMATIC_KINDS.has(row.capture_kind)) continue;
     const capturedMs = new Date(row.captured_at).getTime();
@@ -71,13 +63,13 @@ export function cleanupUserHistory(
     }
     const ageMs = nowMs - capturedMs;
     const bucketTime = ageMs < 7 * DAY_MS ? row.captured_at.slice(0, 13) : row.captured_at.slice(0, 10);
-    const bucket = `${noteByHistory.get(row.history_id) ?? ""}:${bucketTime}`;
+    const bucket = `${row.note_id}:${bucketTime}`;
     if (buckets.has(bucket)) removeIds.add(row.history_id);
     else buckets.add(bucket);
   }
 
   if (!removeIds.size) return 0;
-  const remove = db.prepare("DELETE FROM note_history WHERE user_id = ? AND history_id = ?");
+  const remove = db.prepare("DELETE FROM note_history WHERE user_id = ? AND history_id = ? AND is_protected = 0");
   return db.transaction(() => {
     let deleted = 0;
     for (const historyId of removeIds) deleted += remove.run(userId, historyId).changes;

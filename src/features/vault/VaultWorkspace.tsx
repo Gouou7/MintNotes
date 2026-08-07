@@ -57,11 +57,14 @@ import { derivedNoteLockState, effectiveEditorMode, isLockedNote } from "../note
 import { formatNoteTime } from "../noteTime";
 import {
   DEFAULT_HISTORY_SETTINGS,
+  canDeleteHistory,
   historyContentChanged,
   historyContentSignature,
   localHistoryListItem,
+  manualHistorySnapshotOptions,
   makeHistoryPayload,
   mergeHistoryItems,
+  normalizeHistoryName,
   shouldCaptureHistoryBaseline
 } from "../history";
 import { focusAndSelectName } from "../focusName";
@@ -96,7 +99,6 @@ import {
   preferencesKey,
   type LocalEncryptedObject,
   type LocalHistorySnapshot,
-  type HistoryOutboxEntry,
   type OutboxEntry,
   type DeviceUnlockCredential
 } from "../../storage/database";
@@ -127,10 +129,10 @@ import {
 } from "./useSyncStatus";
 import { useVaultModel } from "./useVaultModel";
 import { attachmentGraphSignature, useAttachmentUrls } from "./useAttachmentUrls";
+import { VaultHistoryController, type HistoryIndexEnvelope } from "./historyController";
 
 type EditorMode = WorkspaceEditorMode;
 type CreateDocumentOptions = { focusName?: boolean; activate?: boolean };
-
 const DEFAULT_PREFERENCES: UiPreferences = {
   ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
   theme: "system",
@@ -192,7 +194,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   onUsernameChange: (username: string) => void;
   onLocked: (logout: boolean) => void;
 }) {
-  const { languagePreference, setLanguagePreference, t } = useI18n();
+  const { formatDateTime, languagePreference, setLanguagePreference, t } = useI18n();
   const [displayName, setDisplayName] = useState(user.displayName);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const avatarUrlRef = useRef<string | null>(null);
@@ -246,6 +248,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyPreview, setHistoryPreview] = useState<{ item: HistoryListItem; payload: NoteHistoryPayload } | null>(null);
+  const [renamingHistoryId, setRenamingHistoryId] = useState<string | null>(null);
   const historyLastSignature = useRef(new Map<string, string>());
   const historyLastCapturedAt = useRef(new Map<string, number>());
   const historyQuotaPaused = useRef(false);
@@ -256,6 +259,11 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const saveDeadlines = useRef(new Map<string, number>());
   const logoutStarted = useRef(false);
   const generation = useRef(0);
+  const historyController = useMemo(() => new VaultHistoryController({
+    userId: user.id,
+    nextGeneration: () => Date.now() * 1000 + ++generation.current,
+    isActive: () => !logoutStarted.current
+  }), [user.id]);
   const syncClientId = useRef(crypto.randomUUID());
   const syncCoordinator = useRef<SyncCoordinator | null>(null);
   const executeSyncRef = useRef<(intent: SyncIntent) => Promise<void>>(async () => undefined);
@@ -338,16 +346,20 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (historySession.current) historySession.current.active = false;
   }, [historySettings.enabled]);
 
-  const localHistoryForNote = async (noteId: string): Promise<LocalHistorySnapshot[]> => {
-    const rows = await localDb.historySnapshots.where("[userId+noteId]").equals([user.id, noteId]).toArray();
-    return rows.sort((left, right) => (
-      right.capturedAt.localeCompare(left.capturedAt) || right.historyId.localeCompare(left.historyId)
-    ));
-  };
-
+  const localHistoryForNote = (noteId: string) => historyController.localForNote(noteId);
+  const localHistoryIndexesForNote = (noteId: string) => historyController.localIndexesForNote(noteId);
+  const metadataForSnapshot = (snapshot: LocalHistorySnapshot, payload?: NoteHistoryPayload) => (
+    historyController.metadataForSnapshot(snapshot, payload)
+  );
+  const localHistoryListItems = (
+    snapshots: LocalHistorySnapshot[],
+    indexes = [] as Awaited<ReturnType<typeof localHistoryIndexesForNote>>
+  ) => historyController.localListItems(snapshots, indexes);
+  const remoteHistoryListItems = (items: HistoryIndexEnvelope[]) => historyController.remoteListItems(items);
   const saveHistorySnapshot = async (
     document: OpenDocument,
-    captureKind: HistoryCaptureKind
+    captureKind: HistoryCaptureKind,
+    options: { force?: boolean; name?: string | null; protected?: boolean } = {}
   ): Promise<LocalHistorySnapshot | null> => {
     if (logoutStarted.current || document.kind !== "note" || document.deleted) return null;
     const capturedAt = new Date().toISOString();
@@ -378,43 +390,15 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         }
       }
     }
-    if (latestSignature === signature) return null;
+    if (!options.force && latestSignature === signature) return null;
 
-    const historyId = crypto.randomUUID();
-    const encrypted = await cryptoClient.encryptHistory(
-      user.id,
-      document.objectId,
-      historyId,
-      capturedAt,
+    const created = await historyController.createSnapshot(
+      { ...document, attachmentIds: payload.attachmentIds },
       captureKind,
-      payload
+      { capturedAt, name: options.name, protected: options.protected }
     );
-    const key = historyKey(user.id, document.objectId, historyId);
-    const nextGeneration = Date.now() * 1000 + ++generation.current;
-    const snapshot: LocalHistorySnapshot = {
-      key,
-      userId: user.id,
-      noteId: document.objectId,
-      historyId,
-      capturedAt,
-      captureKind,
-      ciphertext: encrypted.ciphertext,
-      nonce: encrypted.nonce,
-      encryptionVersion: encrypted.encryptionVersion,
-      byteSize: encrypted.ciphertext.length,
-      pending: true
-    };
-    const outbox: HistoryOutboxEntry = {
-      ...snapshot,
-      idempotencyKey: crypto.randomUUID(),
-      generation: nextGeneration
-    };
-    await localDb.transaction("rw", localDb.historySnapshots, localDb.historyOutbox, async () => {
-      if (logoutStarted.current) return;
-      await localDb.historySnapshots.put(snapshot);
-      await localDb.historyOutbox.put(outbox);
-    });
-    if (logoutStarted.current) return null;
+    if (!created) return null;
+    const { metadata, snapshot } = created;
     historyLastSignature.current.set(document.objectId, signature);
     historyLastCapturedAt.current.set(document.objectId, new Date(capturedAt).getTime());
     setHistorySettings((current) => {
@@ -427,7 +411,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       return next;
     });
     if (activeIdRef.current === document.objectId) {
-      setHistoryItems((current) => mergeHistoryItems([localHistoryListItem(snapshot)], current));
+      setHistoryItems((current) => mergeHistoryItems([localHistoryListItem(snapshot, metadata.name ?? "")], current));
     }
     requestPush("editor");
     return snapshot;
@@ -436,8 +420,11 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const loadHistory = async (noteId: string, cursor: string | null = null, append = false) => {
     setHistoryLoading(true);
     try {
-      const local = await localHistoryForNote(noteId);
-      const localItems = local.map(localHistoryListItem);
+      const [local, localIndexes] = await Promise.all([
+        localHistoryForNote(noteId),
+        localHistoryIndexesForNote(noteId)
+      ]);
+      const localItems = await localHistoryListItems(local, localIndexes);
       if (!navigator.onLine || !serverSessionVerified) {
         setHistoryItems((current) => append ? mergeHistoryItems(current, localItems) : localItems);
         setHistoryCursor(null);
@@ -447,30 +434,44 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       const query = new URLSearchParams({ limit: "50" });
       if (cursor) query.set("cursor", cursor);
       const response = await api<{
-        items: HistoryListItem[];
+        items: HistoryIndexEnvelope[];
         nextCursor: string | null;
         clearedBefore: string | null;
       }>(`/api/notes/${noteId}/history?${query}`);
       if (response.clearedBefore) {
-        const stale = local.filter((item) => item.capturedAt <= response.clearedBefore!);
-        if (stale.length) {
-          await localDb.transaction("rw", localDb.historySnapshots, localDb.historyOutbox, async () => {
-            await localDb.historySnapshots.bulkDelete(stale.map((item) => item.key));
-            await localDb.historyOutbox.bulkDelete(stale.map((item) => item.key));
+        const staleKeys = new Set([
+          ...local.filter((item) => !item.protected && item.capturedAt <= response.clearedBefore!).map((item) => item.key),
+          ...localIndexes.filter((item) => !item.protected && item.capturedAt <= response.clearedBefore!).map((item) => item.key)
+        ]);
+        if (staleKeys.size) {
+          await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
+            const keys = [...staleKeys];
+            await localDb.historySnapshots.bulkDelete(keys);
+            await localDb.historyIndex.bulkDelete(keys);
+            await localDb.historyOutbox.bulkDelete(keys);
+            await localDb.historyMetadataOutbox.bulkDelete(keys);
           });
         }
       }
-      const pending = localItems.filter((item) => item.pending && (!response.clearedBefore || item.capturedAt > response.clearedBefore));
+      const pending = localItems.filter((item) => item.pending && (
+        item.protected || !response.clearedBefore || item.capturedAt > response.clearedBefore
+      ));
+      await historyController.cacheRemoteItems(response.items);
+      const remoteItems = await remoteHistoryListItems(response.items);
       setHistoryItems((current) => append
-        ? mergeHistoryItems(current, response.items, pending)
-        : mergeHistoryItems(response.items, pending));
+        ? mergeHistoryItems(current, remoteItems, pending)
+        : mergeHistoryItems(remoteItems, pending));
       setHistoryCursor(response.nextCursor);
       setHistoryHasMore(Boolean(response.nextCursor));
-      const newest = mergeHistoryItems(response.items, pending)[0];
+      const newest = mergeHistoryItems(remoteItems, pending)[0];
       if (newest) historyLastCapturedAt.current.set(noteId, new Date(newest.capturedAt).getTime());
     } catch (error) {
-      const local = await localHistoryForNote(noteId);
-      setHistoryItems((current) => append ? mergeHistoryItems(current, local.map(localHistoryListItem)) : local.map(localHistoryListItem));
+      const [local, localIndexes] = await Promise.all([
+        localHistoryForNote(noteId),
+        localHistoryIndexesForNote(noteId)
+      ]);
+      const localItems = await localHistoryListItems(local, localIndexes);
+      setHistoryItems((current) => append ? mergeHistoryItems(current, localItems) : localItems);
       setHistoryCursor(null);
       setHistoryHasMore(false);
       if (!(error instanceof ApiError && error.status === 404)) {
@@ -481,16 +482,16 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     }
   };
 
+  const ensureHistorySnapshot = async (item: HistoryListItem): Promise<LocalHistorySnapshot> => {
+    return historyController.ensureSnapshot(item, async () => {
+      if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
+      return api<EncryptedHistorySnapshot>(`/api/notes/${item.noteId}/history/${item.historyId}`);
+    });
+  };
+
   const selectHistorySnapshot = async (item: HistoryListItem) => {
     try {
-      const key = historyKey(user.id, item.noteId, item.historyId);
-      let snapshot = await localDb.historySnapshots.get(key);
-      if (!snapshot) {
-        if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
-        const remote = await api<EncryptedHistorySnapshot>(`/api/notes/${item.noteId}/history/${item.historyId}`);
-        snapshot = { ...remote, key, userId: user.id };
-        await localDb.historySnapshots.put(snapshot);
-      }
+      const snapshot = await ensureHistorySnapshot(item);
       const payload = await cryptoClient.decryptHistory(
         user.id,
         snapshot.noteId,
@@ -785,14 +786,18 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       localDb.attachmentChunks,
       localDb.attachmentOutbox,
       localDb.historySnapshots,
-      localDb.historyOutbox
+      localDb.historyIndex,
+      localDb.historyOutbox,
+      localDb.historyMetadataOutbox
     ], async () => {
       await localDb.objects.delete(localKey(user.id, objectId));
       await localDb.outbox.delete(localKey(user.id, objectId));
       await localDb.attachmentChunks.where("[userId+attachmentId]").equals([user.id, objectId]).delete();
       await localDb.attachmentOutbox.where("[userId+attachmentId]").equals([user.id, objectId]).delete();
       await localDb.historySnapshots.where("[userId+noteId]").equals([user.id, objectId]).delete();
+      await localDb.historyIndex.where("[userId+noteId]").equals([user.id, objectId]).delete();
       await localDb.historyOutbox.where("[userId+noteId]").equals([user.id, objectId]).delete();
+      await localDb.historyMetadataOutbox.where("[userId+noteId]").equals([user.id, objectId]).delete();
     });
     if (!commitState) return;
     replaceDocuments((all) => all.filter((entry) => entry.objectId !== objectId));
@@ -1013,7 +1018,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     for (const entry of entries) {
       if (logoutStarted.current) return pushed;
       try {
-        await api(`/api/notes/${entry.noteId}/history/${entry.historyId}`, {
+        const metadata = await metadataForSnapshot(entry);
+        const response = await api<{ protected: boolean }>(`/api/notes/${entry.noteId}/history/${entry.historyId}`, {
           method: "POST",
           body: JSON.stringify({
             capturedAt: entry.capturedAt,
@@ -1021,23 +1027,32 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
             ciphertext: entry.ciphertext,
             nonce: entry.nonce,
             encryptionVersion: entry.encryptionVersion,
+            metadataCiphertext: entry.metadataCiphertext,
+            metadataNonce: entry.metadataNonce,
+            metadataEncryptionVersion: entry.metadataEncryptionVersion,
+            protected: entry.protected,
+            attachmentIds: entry.protected ? metadata.attachmentIds : [],
             idempotencyKey: entry.idempotencyKey
           })
         });
+        if (entry.protected && !response.protected) throw new Error("History protection was not acknowledged");
         const current = await localDb.historyOutbox.get(entry.key);
         if (!current || current.generation === entry.generation) {
           await localDb.historyOutbox.delete(entry.key);
-          await localDb.historySnapshots.update(entry.key, { pending: false });
+          const metadataPending = await localDb.historyMetadataOutbox.get(entry.key);
+          await localDb.historySnapshots.update(entry.key, { pending: Boolean(metadataPending) });
+          await localDb.historyIndex.update(entry.key, { pending: Boolean(metadataPending) });
           setHistoryItems((items) => items.map((item) => (
-            item.historyId === entry.historyId ? { ...item, pending: false } : item
+            item.historyId === entry.historyId ? { ...item, pending: Boolean(metadataPending) } : item
           )));
         }
         pushed = true;
         historyQuotaPaused.current = false;
       } catch (error) {
         if (error instanceof ApiError && error.status === 409) {
-          await localDb.transaction("rw", localDb.historySnapshots, localDb.historyOutbox, async () => {
+          await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, async () => {
             await localDb.historySnapshots.delete(entry.key);
+            await localDb.historyIndex.delete(entry.key);
             await localDb.historyOutbox.delete(entry.key);
           });
           setHistoryItems((items) => items.filter((item) => item.historyId !== entry.historyId));
@@ -1049,6 +1064,82 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
           break;
         }
         if (error instanceof ApiError && error.status === 404) break;
+        throw error;
+      }
+    }
+    return pushed;
+  };
+
+  const pushHistoryMetadataPending = async (): Promise<boolean> => {
+    const entries = await localDb.historyMetadataOutbox.where("userId").equals(user.id).sortBy("generation");
+    let pushed = false;
+    for (const entry of entries) {
+      if (logoutStarted.current) return pushed;
+      const snapshot = await localDb.historySnapshots.get(entry.key);
+      const index = await localDb.historyIndex.get(entry.key);
+      const record = snapshot ?? index;
+      if (!record) {
+        await localDb.historyMetadataOutbox.delete(entry.key);
+        continue;
+      }
+      try {
+        const metadata = await cryptoClient.decryptHistoryMetadata(
+          user.id,
+          entry.noteId,
+          entry.historyId,
+          entry.capturedAt,
+          entry.metadataCiphertext,
+          entry.metadataNonce
+        );
+        const response = await api<{ protected: boolean; byteSize: number }>(
+          `/api/notes/${entry.noteId}/history/${entry.historyId}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              metadataCiphertext: entry.metadataCiphertext,
+              metadataNonce: entry.metadataNonce,
+              metadataEncryptionVersion: entry.metadataEncryptionVersion,
+              ...(entry.protected === undefined ? {} : {
+                protected: entry.protected,
+                attachmentIds: entry.protected ? metadata.attachmentIds : []
+              })
+            })
+          }
+        );
+        if (entry.protected === true && !response.protected) throw new Error("History protection was not acknowledged");
+        const current = await localDb.historyMetadataOutbox.get(entry.key);
+        if (current?.generation === entry.generation) {
+          await localDb.historyMetadataOutbox.delete(entry.key);
+          const createPending = await localDb.historyOutbox.get(entry.key);
+          if (snapshot) await localDb.historySnapshots.update(entry.key, { pending: Boolean(createPending), byteSize: response.byteSize });
+          await localDb.historyIndex.update(entry.key, { pending: Boolean(createPending), byteSize: response.byteSize });
+          setHistoryItems((items) => items.map((item) => item.historyId === entry.historyId
+            ? { ...item, pending: Boolean(createPending), byteSize: response.byteSize }
+            : item));
+        }
+        pushed = true;
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && record.protected && snapshot) {
+          const nextGeneration = Date.now() * 1000 + ++generation.current;
+          await localDb.historyOutbox.put({
+            ...snapshot,
+            pending: true,
+            idempotencyKey: crypto.randomUUID(),
+            generation: nextGeneration
+          });
+          requestPush("editor");
+          break;
+        }
+        if (error instanceof ApiError && error.status === 404 && record.protected) break;
+        if (error instanceof ApiError && error.status === 404) {
+          await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyMetadataOutbox, async () => {
+            await localDb.historySnapshots.delete(entry.key);
+            await localDb.historyIndex.delete(entry.key);
+            await localDb.historyMetadataOutbox.delete(entry.key);
+          });
+          setHistoryItems((items) => items.filter((item) => item.historyId !== entry.historyId));
+          continue;
+        }
         throw error;
       }
     }
@@ -1085,7 +1176,11 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     const purgeEntries = currentEntries.filter((entry) => entry.operation === "purge");
     if (purgeEntries.length) await localDb.outbox.bulkDelete(purgeEntries.map((entry) => entry.key));
     const entries = currentEntries.filter((entry) => entry.operation === "upsert");
-    if (!entries.length) return (await pushHistoryPending()) || chunkEntries.length > 0;
+    if (!entries.length) {
+      const historyPushed = await pushHistoryPending();
+      const metadataPushed = await pushHistoryMetadataPending();
+      return historyPushed || metadataPushed || chunkEntries.length > 0;
+    }
 
     const packed = packBySerializedSize(
       entries,
@@ -1162,6 +1257,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       requestPull(0);
     }
     await pushHistoryPending();
+    await pushHistoryMetadataPending();
     return true;
   };
 
@@ -1575,6 +1671,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     setHistoryItems([]);
     setHistoryCursor(null);
     setHistoryHasMore(false);
+    setRenamingHistoryId(null);
     historySession.current = null;
     clearHistorySessionTimers();
     if (activeDocument && preferences.rightPanelTab === "history") void loadHistory(activeDocument.objectId);
@@ -1849,15 +1946,12 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       if (targets.some((entry) => entry.dirty || entry.serverRevision < 1)) {
         return showMessage(t("notice.purgeWaitSync"));
       }
-      for (let index = 0; index < targets.length; index += 1000) {
-        const batch = targets.slice(index, index + 1000);
-        await api("/api/objects/purge", {
-          method: "POST",
-          headers: { "X-WebMD-Sync-Client": syncClientId.current },
-          body: JSON.stringify({ objects: batch.map((entry) => ({ objectId: entry.objectId, baseRevision: entry.serverRevision })) })
-        });
-        for (const entry of batch) await removePurgedLocal(entry.objectId);
-      }
+      await api("/api/objects/purge", {
+        method: "POST",
+        headers: { "X-WebMD-Sync-Client": syncClientId.current },
+        body: JSON.stringify({ objects: targets.map((entry) => ({ objectId: entry.objectId, baseRevision: entry.serverRevision })) })
+      });
+      for (const entry of targets) await removePurgedLocal(entry.objectId);
       showMessage(t("notice.purgeComplete"), "info");
       requestPush("structural");
     } catch (error) {
@@ -1979,22 +2073,91 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     try {
       await flushDocument(activeDocument.objectId);
       const current = documentIndexRef.current.get(activeDocument.objectId);
-      const saved = current ? await saveHistorySnapshot(current, "manual") : null;
+      const saved = current ? await saveHistorySnapshot(
+        current,
+        "manual",
+        manualHistorySnapshotOptions(new Date(), formatDateTime)
+      ) : null;
+      if (saved) setRenamingHistoryId(saved.historyId);
       showMessage(saved ? t("notice.historySaved") : t("notice.historyUnchanged"), "info");
     } catch (error) {
       showMessage(translateError(error, t, "notice.historySaveFailed"), "critical");
     }
   };
 
+  const updateHistoryMetadata = async (
+    item: HistoryListItem,
+    change: { name?: string; protected?: boolean }
+  ): Promise<boolean> => {
+    try {
+      const key = historyKey(user.id, item.noteId, item.historyId);
+      let snapshot = await localDb.historySnapshots.get(key) ?? null;
+      const metadataRecord = snapshot ?? await localDb.historyIndex.get(key) ?? item;
+      let currentMetadata = await historyController.decryptMetadata(metadataRecord);
+      if (!currentMetadata) {
+        snapshot = await ensureHistorySnapshot(item);
+        currentMetadata = await metadataForSnapshot(snapshot);
+      }
+      const name = change.name === undefined ? currentMetadata.name : normalizeHistoryName(change.name);
+      if (change.name !== undefined && name === null) {
+        showMessage(t("notice.historyNameRequired"));
+        return false;
+      }
+      const updated = await historyController.queueMetadataUpdate(item, snapshot, currentMetadata, {
+        name,
+        protected: change.protected
+      });
+      const { metadata, item: nextItem } = updated;
+      const sizeDelta = nextItem.byteSize - item.byteSize;
+      if (sizeDelta) {
+        setHistorySettings((current) => {
+          const next = { ...current, usedBytes: Math.max(0, current.usedBytes + sizeDelta) };
+          historySettingsRef.current = next;
+          return next;
+        });
+      }
+      setHistoryItems((items) => items.map((entry) => entry.historyId === item.historyId ? nextItem : entry));
+      setHistoryPreview((current) => current?.item.historyId === item.historyId
+        ? { ...current, item: nextItem }
+        : current);
+      if (change.protected) {
+        const missing = metadata.attachmentIds.filter((attachmentId) => {
+          const attachment = attachmentIndexRef.current.get(attachmentId);
+          return !attachment || attachment.deleted;
+        });
+        if (missing.length) showMessage(t("notice.historyProtectedMissingAttachments", { count: missing.length }));
+      }
+      requestPush("structural");
+      return true;
+    } catch (error) {
+      showMessage(translateError(error, t, "notice.historyUpdateFailed"), "critical");
+      return false;
+    }
+  };
+
+  const renameHistorySnapshot = async (item: HistoryListItem, name: string) => {
+    const updated = await updateHistoryMetadata(item, { name });
+    if (updated) setRenamingHistoryId((current) => current === item.historyId ? null : current);
+    return updated;
+  };
+
+  const toggleHistoryProtection = async (item: HistoryListItem) => {
+    const updated = await updateHistoryMetadata(item, { protected: !item.protected });
+    if (updated) showMessage(item.protected ? t("notice.historyUnprotected") : t("notice.historyProtected"), "info");
+  };
+
   const deleteHistorySnapshot = async (item: HistoryListItem) => {
+    if (!canDeleteHistory(item)) return showMessage(t("notice.historyProtectedDeleteBlocked"));
     if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.deleteConfirm", { date: formatNoteTime(item.capturedAt) }))) return;
     try {
       await api(`/api/notes/${item.noteId}/history/${item.historyId}`, { method: "DELETE" });
       const key = historyKey(user.id, item.noteId, item.historyId);
-      await localDb.transaction("rw", localDb.historySnapshots, localDb.historyOutbox, async () => {
+      await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
         await localDb.historySnapshots.delete(key);
+        await localDb.historyIndex.delete(key);
         await localDb.historyOutbox.delete(key);
+        await localDb.historyMetadataOutbox.delete(key);
       });
       setHistoryItems((current) => current.filter((entry) => entry.historyId !== item.historyId));
       if (historyPreview?.item.historyId === item.historyId) setHistoryPreview(null);
@@ -2010,15 +2173,30 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.clearNoteConfirm", { title: activeDocument.title }))) return;
     try {
+      await synchronize();
+      const protectionPending = (await localDb.historyMetadataOutbox
+        .where("[userId+noteId]").equals([user.id, activeDocument.objectId]).toArray())
+        .some((entry) => entry.protected !== undefined);
+      if (protectionPending) return showMessage(t("notice.historyProtectionSyncRequired"));
       await api(`/api/notes/${activeDocument.objectId}/history`, { method: "DELETE" });
-      await localDb.transaction("rw", localDb.historySnapshots, localDb.historyOutbox, async () => {
-        await localDb.historySnapshots.where("[userId+noteId]").equals([user.id, activeDocument.objectId]).delete();
-        await localDb.historyOutbox.where("[userId+noteId]").equals([user.id, activeDocument.objectId]).delete();
+      await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
+        const [snapshots, indexes] = await Promise.all([
+          localDb.historySnapshots.where("[userId+noteId]").equals([user.id, activeDocument.objectId]).toArray(),
+          localDb.historyIndex.where("[userId+noteId]").equals([user.id, activeDocument.objectId]).toArray()
+        ]);
+        const removeKeys = [...new Set([
+          ...snapshots.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key),
+          ...indexes.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key)
+        ])];
+        await localDb.historySnapshots.bulkDelete(removeKeys);
+        await localDb.historyIndex.bulkDelete(removeKeys);
+        await localDb.historyOutbox.bulkDelete(removeKeys);
+        await localDb.historyMetadataOutbox.bulkDelete(removeKeys);
       });
       historyLastCapturedAt.current.delete(activeDocument.objectId);
       historyLastSignature.current.delete(activeDocument.objectId);
-      setHistoryItems([]);
-      setHistoryPreview(null);
+      setHistoryItems((items) => items.filter((item) => item.protected));
+      setHistoryPreview((current) => current?.item.protected ? current : null);
       await refreshHistorySettings().catch(() => undefined);
       showMessage(t("notice.historyCleared"), "info");
     } catch (error) {
@@ -2030,15 +2208,29 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.clearAllConfirm"))) return;
     try {
+      await synchronize();
+      const protectionPending = (await localDb.historyMetadataOutbox.where("userId").equals(user.id).toArray())
+        .some((entry) => entry.protected !== undefined);
+      if (protectionPending) return showMessage(t("notice.historyProtectionSyncRequired"));
       await api("/api/account/note-history", { method: "DELETE" });
-      await localDb.transaction("rw", localDb.historySnapshots, localDb.historyOutbox, async () => {
-        await localDb.historySnapshots.where("userId").equals(user.id).delete();
-        await localDb.historyOutbox.where("userId").equals(user.id).delete();
+      await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
+        const [snapshots, indexes] = await Promise.all([
+          localDb.historySnapshots.where("userId").equals(user.id).toArray(),
+          localDb.historyIndex.where("userId").equals(user.id).toArray()
+        ]);
+        const removeKeys = [...new Set([
+          ...snapshots.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key),
+          ...indexes.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key)
+        ])];
+        await localDb.historySnapshots.bulkDelete(removeKeys);
+        await localDb.historyIndex.bulkDelete(removeKeys);
+        await localDb.historyOutbox.bulkDelete(removeKeys);
+        await localDb.historyMetadataOutbox.bulkDelete(removeKeys);
       });
       historyLastCapturedAt.current.clear();
       historyLastSignature.current.clear();
-      setHistoryItems([]);
-      setHistoryPreview(null);
+      setHistoryItems((items) => items.filter((item) => item.protected));
+      setHistoryPreview((current) => current?.item.protected ? current : null);
       await refreshHistorySettings();
       showMessage(t("notice.historyAllCleared"), "info");
     } catch (error) {
@@ -2508,7 +2700,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
             <button onClick={() => setHistoryPreview(null)}>{t("history.exitPreview")}</button>
             <button onClick={() => void restoreHistoryAsCopy()}><AppIcon icon={Copy} size={14} />{t("history.restoreCopy")}</button>
             <button className="primary" disabled={activeDocumentLocked} onClick={() => void restoreHistoryAsCurrent()} title={activeDocumentLocked ? t("app.unlockToEdit") : undefined}><AppIcon icon={RotateCcw} size={14} />{t("history.restoreCurrent")}</button>
-            <button className="danger" onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} size={14} /></button>
+            <button className="danger" disabled={!canDeleteHistory(historyPreview.item)} onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={historyPreview.item.protected ? t("history.protectedDeleteHint") : t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} size={14} /></button>
           </div>
         </div>}
         <div className="editor-area" ref={editorArea}>
@@ -2562,6 +2754,11 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
                 disabled={!activeDocument}
                 onSelect={(item) => void selectHistorySnapshot(item)}
                 onSave={() => void saveCurrentHistory()}
+                renamingId={renamingHistoryId}
+                onBeginRename={(item) => setRenamingHistoryId(item.historyId)}
+                onRename={(item, name) => { void renameHistorySnapshot(item, name); }}
+                onRenameCancel={() => setRenamingHistoryId(null)}
+                onToggleProtection={(item) => { void toggleHistoryProtection(item); }}
                 onDelete={(item) => void deleteHistorySnapshot(item)}
                 onClear={() => void clearCurrentHistory()}
                 onLoadMore={() => activeDocument && void loadHistory(activeDocument.objectId, historyCursor, true)}

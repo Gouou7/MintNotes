@@ -90,12 +90,13 @@ export function syncStatusDetailText(status: SyncStatusState, t: Translate): str
 }
 
 export async function countPendingSyncEntries(userId: string): Promise<number> {
-  const [objects, attachments, history] = await Promise.all([
+  const [objects, attachments, history, historyMetadata] = await Promise.all([
     localDb.outbox.where("userId").equals(userId).count(),
     localDb.attachmentOutbox.where("userId").equals(userId).count(),
-    localDb.historyOutbox.where("userId").equals(userId).count()
+    localDb.historyOutbox.where("userId").equals(userId).count(),
+    localDb.historyMetadataOutbox.where("userId").equals(userId).count()
   ]);
-  return objects + attachments + history;
+  return objects + attachments + history + historyMetadata;
 }
 
 export function settledSyncPhase(online: boolean, pendingCount: number): "offline" | "local" | "synced" {

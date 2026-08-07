@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { OpenDocument } from "../types";
 import {
+  canDeleteHistory,
   historyContentChanged,
   historyContentSignature,
+  manualHistorySnapshotOptions,
   makeHistoryPayload,
   mergeHistoryItems,
+  normalizeHistoryName,
   shouldCaptureHistoryBaseline
 } from "./history";
 
@@ -44,15 +47,36 @@ describe("note history policy", () => {
     expect(shouldCaptureHistoryBaseline(now - 10 * 60_000, now, 10)).toBe(true);
   });
 
-  it("merges pending and server history without duplicates", () => {
+  it("forces manual snapshots with a local time name and protection", () => {
+    const now = new Date("2026-08-08T12:34:56.000Z");
+    expect(manualHistorySnapshotOptions(now, () => "2026/8/8 20:34")).toEqual({
+      force: true,
+      name: "2026/8/8 20:34",
+      protected: true
+    });
+  });
+
+  it("trims history names and rejects blank names", () => {
+    expect(normalizeHistoryName("  Release  ")).toBe("Release");
+    expect(normalizeHistoryName("   ")).toBeNull();
+  });
+
+  it("allows deletion only after history protection is removed", () => {
+    expect(canDeleteHistory({ protected: true })).toBe(false);
+    expect(canDeleteHistory({ protected: false })).toBe(true);
+  });
+
+  it("merges history without duplicates and keeps the latest collection", () => {
     const pending = {
       historyId: "history-a",
       noteId: "note-a",
       capturedAt: "2026-07-24T10:00:00.000Z",
       captureKind: "manual" as const,
+      name: "Manual version",
+      protected: true,
       byteSize: 10,
       pending: true
     };
-    expect(mergeHistoryItems([pending], [{ ...pending, pending: false }])).toEqual([{ ...pending, pending: false }]);
+    expect(mergeHistoryItems([{ ...pending, pending: false }], [pending])).toEqual([pending]);
   });
 });

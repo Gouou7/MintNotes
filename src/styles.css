@@ -115,7 +115,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .tree-main { min-width: 0; flex: 1; height: 36px; display: grid; grid-template-columns: 14px 20px minmax(0, 1fr) auto; gap: 5px; align-items: center; text-align: left; border: 0; background: transparent; cursor: pointer; color: inherit; }
 .tree-main > span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-document-icon { position: relative; width: 20px; height: 20px; display: inline-grid; place-items: center; overflow: visible; }
-.tree-lock-badge { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; display: grid; place-items: center; border: 1px solid var(--surface); border-radius: 50%; color: var(--accent-on); background: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.22); }
+.protection-badge { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; display: grid; place-items: center; border: 1px solid var(--surface); border-radius: 50%; color: var(--accent-on); background: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.22); }
 .tree-main-renaming { cursor: default; }
 .tree-rename-input { min-width: 0; width: 100%; padding: 4px 6px; border: 1px solid var(--accent); border-radius: 5px; outline: 0; color: var(--text-strong); background: var(--surface-raised); box-shadow: 0 0 0 2px var(--accent-soft); font: inherit; }
 .tree-main i { width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #dda43d; }
@@ -350,9 +350,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .history-select strong, .history-select small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-select strong { color: inherit; font-size: 11px; }
 .history-select small { color: var(--muted); font-size: 10px; }
-.history-row-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--accent-text); background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface)); }
-.history-delete { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; opacity: 0; border: 0; border-radius: 7px; color: var(--danger); background: transparent; cursor: pointer; }
-.history-row:hover .history-delete, .history-delete:focus-visible { opacity: 1; }
+.history-row-icon { position: relative; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--accent-text); background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface)); }
+.history-actions { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; opacity: 0; border: 0; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; }
+.history-row:hover .history-actions, .history-actions:focus-visible { opacity: 1; }
+.history-renaming { grid-template-columns: auto minmax(0, 1fr); }
+.history-rename-input { min-width: 0; width: 100%; padding: 5px 6px; border: 1px solid var(--accent); border-radius: 5px; outline: 0; color: var(--text-strong); background: var(--surface-raised); box-shadow: 0 0 0 2px var(--accent-soft); font: inherit; }
+.history-context-menu { z-index: 170; }
+@media (hover: none), (pointer: coarse) {
+  .history-actions { opacity: 1; }
+}
 .history-loading { margin: 16px 0; color: var(--muted); text-align: center; font-size: 12px; }
 .history-more { width: 100%; min-height: 34px; border: 1px solid var(--border); border-radius: 7px; color: var(--muted); background: var(--surface-raised); cursor: pointer; }
 .history-preview-banner { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 14px; border-bottom: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--accent-soft); }
@@ -361,6 +367,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .history-preview-banner > div { display: flex; align-items: center; gap: 6px; }
 .history-preview-banner button { min-height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); cursor: pointer; font-size: 11px; }
 .history-preview-banner button.danger { width: 32px; justify-content: center; padding: 0; color: var(--danger); }
+.history-preview-banner button:disabled { cursor: not-allowed; opacity: .45; }
 .mobile-outline-close, .mobile-tree-close { display: none; }
 .drawer-scrim { display: none; }
 

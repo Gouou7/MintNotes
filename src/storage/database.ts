@@ -106,6 +106,10 @@ export interface LocalHistorySnapshot {
   ciphertext: string;
   nonce: string;
   encryptionVersion: 1;
+  metadataCiphertext?: string;
+  metadataNonce?: string;
+  metadataEncryptionVersion?: 1;
+  protected: boolean;
   byteSize: number;
   pending: boolean;
   serverCreatedAt?: string;
@@ -113,6 +117,35 @@ export interface LocalHistorySnapshot {
 
 export interface HistoryOutboxEntry extends LocalHistorySnapshot {
   idempotencyKey: string;
+  generation: number;
+}
+
+export interface LocalHistoryIndex {
+  key: string;
+  userId: string;
+  noteId: string;
+  historyId: string;
+  capturedAt: string;
+  captureKind: HistoryCaptureKind;
+  metadataCiphertext?: string;
+  metadataNonce?: string;
+  metadataEncryptionVersion?: 1;
+  protected: boolean;
+  byteSize: number;
+  pending: boolean;
+  serverCreatedAt?: string;
+}
+
+export interface HistoryMetadataOutboxEntry {
+  key: string;
+  userId: string;
+  noteId: string;
+  historyId: string;
+  capturedAt: string;
+  metadataCiphertext: string;
+  metadataNonce: string;
+  metadataEncryptionVersion: 1;
+  protected?: boolean;
   generation: number;
 }
 
@@ -125,7 +158,9 @@ class NotesDatabase extends Dexie {
   deviceCredentials!: EntityTable<DeviceUnlockCredential, "userId">;
   pendingEndpointRevocations!: EntityTable<PendingEndpointRevocation, "endpointId">;
   historySnapshots!: EntityTable<LocalHistorySnapshot, "key">;
+  historyIndex!: EntityTable<LocalHistoryIndex, "key">;
   historyOutbox!: EntityTable<HistoryOutboxEntry, "key">;
+  historyMetadataOutbox!: EntityTable<HistoryMetadataOutboxEntry, "key">;
 
   constructor() {
     // v2 intentionally uses a new database name. The application never
@@ -174,6 +209,44 @@ class NotesDatabase extends Dexie {
       historySnapshots: "key, userId, [userId+noteId], [userId+noteId+capturedAt], historyId",
       historyOutbox: "key, userId, [userId+noteId], generation"
     });
+    this.version(6).stores({
+      objects: "key, userId, [userId+objectId], updatedAt",
+      outbox: "key, userId, [userId+objectId], generation",
+      attachmentChunks: "key, userId, [userId+attachmentId], [userId+attachmentId+chunkIndex]",
+      attachmentOutbox: "key, userId, [userId+attachmentId], generation",
+      meta: "key",
+      deviceCredentials: "userId, endpointId",
+      pendingEndpointRevocations: "endpointId, userId",
+      historySnapshots: "key, userId, [userId+noteId], [userId+noteId+capturedAt], historyId",
+      historyIndex: "key, userId, [userId+noteId], [userId+noteId+capturedAt], historyId",
+      historyOutbox: "key, userId, [userId+noteId], generation",
+      historyMetadataOutbox: "key, userId, [userId+noteId], generation"
+    }).upgrade(async (transaction) => {
+      await transaction.table("historySnapshots").toCollection().modify((entry) => {
+        if (typeof entry.protected !== "boolean") entry.protected = false;
+      });
+      await transaction.table("historyOutbox").toCollection().modify((entry) => {
+        if (typeof entry.protected !== "boolean") entry.protected = false;
+      });
+      const snapshots = await transaction.table("historySnapshots").toArray() as LocalHistorySnapshot[];
+      if (snapshots.length) {
+        await transaction.table("historyIndex").bulkPut(snapshots.map((entry) => ({
+          key: entry.key,
+          userId: entry.userId,
+          noteId: entry.noteId,
+          historyId: entry.historyId,
+          capturedAt: entry.capturedAt,
+          captureKind: entry.captureKind,
+          metadataCiphertext: entry.metadataCiphertext,
+          metadataNonce: entry.metadataNonce,
+          metadataEncryptionVersion: entry.metadataEncryptionVersion,
+          protected: entry.protected,
+          byteSize: entry.byteSize,
+          pending: entry.pending,
+          serverCreatedAt: entry.serverCreatedAt
+        })));
+      }
+    });
   }
 }
 
@@ -219,7 +292,9 @@ export async function deleteLocalUserData(userId: string): Promise<void> {
       localDb.deviceCredentials,
       localDb.pendingEndpointRevocations,
       localDb.historySnapshots,
-      localDb.historyOutbox
+      localDb.historyIndex,
+      localDb.historyOutbox,
+      localDb.historyMetadataOutbox
     ],
     async () => {
       await localDb.objects.where("userId").equals(userId).delete();
@@ -235,7 +310,9 @@ export async function deleteLocalUserData(userId: string): Promise<void> {
       await localDb.deviceCredentials.delete(userId);
       await localDb.pendingEndpointRevocations.where("userId").equals(userId).delete();
       await localDb.historySnapshots.where("userId").equals(userId).delete();
+      await localDb.historyIndex.where("userId").equals(userId).delete();
       await localDb.historyOutbox.where("userId").equals(userId).delete();
+      await localDb.historyMetadataOutbox.where("userId").equals(userId).delete();
     }
   );
 }

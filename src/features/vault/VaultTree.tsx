@@ -1,6 +1,7 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Ellipsis, FileText, Folder, LockKeyhole } from "lucide-react";
+import { ChevronDown, ChevronRight, Ellipsis, FileText, Folder } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
+import { ProtectionBadge } from "../../components/ProtectionBadge";
 import { TreeRenameInput } from "../../components/TreeRenameInput";
 import { useI18n } from "../../i18n";
 import type { OpenDocument } from "../../types";
@@ -40,7 +41,7 @@ export function TreeDocumentIcon({ document }: { document: OpenDocument }) {
   const locked = isLockedNote(document);
   return <span className={`tree-document-icon ${locked ? "locked" : ""}`}>
     <AppIcon icon={document.kind === "folder" ? Folder : FileText} size={17} />
-    {locked && <span className="tree-lock-badge" title={t("app.noteLockedBadge")}><AppIcon icon={LockKeyhole} size={8} /><span className="sr-only">{t("app.noteLockedBadge")}</span></span>}
+    {locked && <ProtectionBadge label={t("app.noteLockedBadge")} />}
   </span>;
 }
 

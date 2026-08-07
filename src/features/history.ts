@@ -1,10 +1,11 @@
 import type {
   HistoryListItem,
   HistorySettings,
+  NoteHistoryMetadataPayload,
   NoteHistoryPayload,
   OpenDocument
 } from "../types";
-import type { LocalHistorySnapshot } from "../storage/database";
+import type { LocalHistoryIndex, LocalHistorySnapshot } from "../storage/database";
 
 export const DEFAULT_HISTORY_SETTINGS: HistorySettings = {
   enabled: true,
@@ -28,6 +29,31 @@ export function makeHistoryPayload(document: OpenDocument, capturedAt: string): 
   };
 }
 
+export function makeHistoryMetadata(payload: NoteHistoryPayload, name: string | null): NoteHistoryMetadataPayload {
+  return {
+    schemaVersion: 1,
+    name,
+    attachmentIds: [...new Set(payload.attachmentIds)]
+  };
+}
+
+export function manualHistorySnapshotOptions(now: Date, formatDateTime: (value: Date) => string) {
+  return {
+    force: true as const,
+    name: formatDateTime(now),
+    protected: true as const
+  };
+}
+
+export function normalizeHistoryName(value: string): string | null {
+  const name = value.trim();
+  return name || null;
+}
+
+export function canDeleteHistory(item: Pick<HistoryListItem, "protected">): boolean {
+  return !item.protected;
+}
+
 export function historyContentSignature(payload: NoteHistoryPayload): string {
   return JSON.stringify({
     title: payload.title,
@@ -48,12 +74,14 @@ export function shouldCaptureHistoryBaseline(lastCapturedAt: number | undefined,
   return now - (lastCapturedAt ?? 0) >= intervalMinutes * 60_000;
 }
 
-export function localHistoryListItem(snapshot: LocalHistorySnapshot): HistoryListItem {
+export function localHistoryListItem(snapshot: LocalHistorySnapshot | LocalHistoryIndex, name = ""): HistoryListItem {
   return {
     historyId: snapshot.historyId,
     noteId: snapshot.noteId,
     capturedAt: snapshot.capturedAt,
     captureKind: snapshot.captureKind,
+    name,
+    protected: snapshot.protected,
     byteSize: snapshot.byteSize,
     pending: snapshot.pending,
     serverCreatedAt: snapshot.serverCreatedAt
@@ -64,8 +92,7 @@ export function mergeHistoryItems(...collections: HistoryListItem[][]): HistoryL
   const merged = new Map<string, HistoryListItem>();
   for (const collection of collections) {
     for (const item of collection) {
-      const current = merged.get(item.historyId);
-      merged.set(item.historyId, current?.pending && !item.pending ? item : current ?? item);
+      merged.set(item.historyId, item);
     }
   }
   return [...merged.values()].sort((left, right) => (

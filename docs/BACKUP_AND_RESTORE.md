@@ -2,7 +2,7 @@
 
 [Documentation index](README.md)
 
-Server backups protect account records, key envelopes, trash/history-retention settings, encrypted profile avatars, trusted-endpoint and session history, encrypted objects, synchronization revisions, encrypted note history, clear markers, synchronization changes, activation records, and encrypted attachment chunks. They do not contain note, historical-note, avatar, or attachment plaintext, but they remain sensitive because they expose account, endpoint, IP, activity, history timing/type, and ciphertext-size metadata plus material for offline password guessing.
+Server backups protect account records, key envelopes, trash/history-retention settings, encrypted profile avatars, trusted-endpoint and session history, encrypted objects, synchronization revisions, encrypted note-history snapshots and names, history protection bits and random attachment-reference relationships, clear markers, synchronization changes, activation records, and encrypted attachment chunks. They do not contain note, history-name, historical-note, avatar, or attachment plaintext, but they remain sensitive because they expose account, endpoint, IP, activity, history timing/type/protection, random-ID relationships, and ciphertext-size metadata plus material for offline password guessing.
 
 A backup strategy needs both layers:
 
@@ -58,7 +58,9 @@ Always test restoration on a separate deployment first. A restore is successful 
 9. Confirm administrators can still create activation codes and inspect account storage without seeing note plaintext.
 10. Open **Settings > Security** and confirm trusted-endpoint history is readable; revoke a designated test endpoint that satisfies the 24-hour rule and verify all of its sessions stop working.
 11. Confirm an encrypted profile avatar decrypts after restore, then perform administrator deletion only on a disposable test user and verify another user's data remains available.
-12. Open a representative note's **History** panel, decrypt a historical preview, restore it as a copy, and confirm the original note and its history remain intact.
+12. Open a representative note's **History** panel, confirm a custom history name decrypts, protect a snapshot that references an attachment, and verify single deletion, history clearing, and permanent note/attachment purge preserve it. Then unprotect it, restore it as a copy, and confirm the original note and remaining history stay intact.
+
+History protection is live-database retention state, not an immutable backup policy. Restoring an older backup returns protection bits, metadata ciphertext, references, notes, and attachments to the exact state captured by that backup; changes made afterward are not recoverable from it. Deleting an account, deleting the deployment volume, or discarding backup generations remains outside the protection mechanism.
 
 If the restored service reports an unsupported or legacy schema, do not force the database open or edit `PRAGMA user_version`. Return to the compatible application build or restore through portable Markdown exports as described in the [deployment guide](DEPLOYMENT.md).
 

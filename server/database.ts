@@ -166,6 +166,10 @@ export function openDatabase(dataDirectory: string): AppDatabase {
       ciphertext TEXT NOT NULL,
       nonce TEXT NOT NULL,
       encryption_version INTEGER NOT NULL,
+      metadata_ciphertext TEXT,
+      metadata_nonce TEXT,
+      metadata_encryption_version INTEGER,
+      is_protected INTEGER NOT NULL DEFAULT 0 CHECK (is_protected IN (0, 1)),
       byte_size INTEGER NOT NULL,
       idempotency_key TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -174,6 +178,18 @@ export function openDatabase(dataDirectory: string): AppDatabase {
     );
     CREATE INDEX IF NOT EXISTS note_history_user_note_time ON note_history(user_id, note_id, captured_at DESC, history_id DESC);
     CREATE INDEX IF NOT EXISTS note_history_user_time ON note_history(user_id, captured_at DESC);
+
+    CREATE TABLE IF NOT EXISTS protected_history_attachments (
+      user_id TEXT NOT NULL,
+      note_id TEXT NOT NULL,
+      history_id TEXT NOT NULL,
+      attachment_id TEXT NOT NULL,
+      PRIMARY KEY (user_id, note_id, history_id, attachment_id),
+      FOREIGN KEY (user_id, note_id, history_id)
+        REFERENCES note_history(user_id, note_id, history_id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS protected_history_attachment_lookup
+      ON protected_history_attachments(user_id, attachment_id);
 
     CREATE TABLE IF NOT EXISTS note_history_clear_markers (
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -265,6 +281,10 @@ export function openDatabase(dataDirectory: string): AppDatabase {
       ciphertext TEXT NOT NULL,
       nonce TEXT NOT NULL,
       encryption_version INTEGER NOT NULL,
+      metadata_ciphertext TEXT,
+      metadata_nonce TEXT,
+      metadata_encryption_version INTEGER,
+      is_protected INTEGER NOT NULL DEFAULT 0 CHECK (is_protected IN (0, 1)),
       byte_size INTEGER NOT NULL,
       idempotency_key TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -279,6 +299,26 @@ export function openDatabase(dataDirectory: string): AppDatabase {
       cleared_before TEXT NOT NULL,
       PRIMARY KEY (user_id, note_id)
     );
+  `);
+  const historyColumns = new Set(
+    (db.prepare("PRAGMA table_info(note_history)").all() as Array<{ name: string }>).map((column) => column.name)
+  );
+  if (!historyColumns.has("metadata_ciphertext")) db.exec("ALTER TABLE note_history ADD COLUMN metadata_ciphertext TEXT");
+  if (!historyColumns.has("metadata_nonce")) db.exec("ALTER TABLE note_history ADD COLUMN metadata_nonce TEXT");
+  if (!historyColumns.has("metadata_encryption_version")) db.exec("ALTER TABLE note_history ADD COLUMN metadata_encryption_version INTEGER");
+  if (!historyColumns.has("is_protected")) db.exec("ALTER TABLE note_history ADD COLUMN is_protected INTEGER NOT NULL DEFAULT 0 CHECK (is_protected IN (0, 1))");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS protected_history_attachments (
+      user_id TEXT NOT NULL,
+      note_id TEXT NOT NULL,
+      history_id TEXT NOT NULL,
+      attachment_id TEXT NOT NULL,
+      PRIMARY KEY (user_id, note_id, history_id, attachment_id),
+      FOREIGN KEY (user_id, note_id, history_id)
+        REFERENCES note_history(user_id, note_id, history_id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS protected_history_attachment_lookup
+      ON protected_history_attachments(user_id, attachment_id);
   `);
   return db;
 }

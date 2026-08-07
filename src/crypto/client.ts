@@ -2,6 +2,7 @@ import type {
   EncryptedAttachmentChunk,
   HistoryCaptureKind,
   KdfParams,
+  NoteHistoryMetadataPayload,
   NoteHistoryPayload,
   ObjectType,
   VaultAttachment,
@@ -65,6 +66,8 @@ export interface CryptoClient {
   decryptObject(userId: string, objectId: string, objectType: ObjectType, revision: number, ciphertext: string, nonce: string): Promise<VaultObject>;
   encryptHistory(userId: string, noteId: string, historyId: string, capturedAt: string, captureKind: HistoryCaptureKind, payload: NoteHistoryPayload): Promise<{ ciphertext: string; nonce: string; encryptionVersion: 1 }>;
   decryptHistory(userId: string, noteId: string, historyId: string, capturedAt: string, captureKind: HistoryCaptureKind, ciphertext: string, nonce: string): Promise<NoteHistoryPayload>;
+  encryptHistoryMetadata(userId: string, noteId: string, historyId: string, capturedAt: string, payload: NoteHistoryMetadataPayload): Promise<{ ciphertext: string; nonce: string; encryptionVersion: 1 }>;
+  decryptHistoryMetadata(userId: string, noteId: string, historyId: string, capturedAt: string, ciphertext: string, nonce: string): Promise<NoteHistoryMetadataPayload>;
   createAttachment(input: { userId: string; attachmentId: string; ownerNoteId: string; originalName: string; mime: VaultAttachment["mime"]; data: ArrayBuffer; chunkSize: number }): Promise<{ metadata: VaultAttachment; chunks: EncryptedAttachmentChunk[] }>;
   decryptAttachment(userId: string, attachmentId: string, metadata: VaultAttachment, chunks: EncryptedAttachmentChunk[]): Promise<ArrayBuffer>;
   lock(): Promise<unknown>;
@@ -113,6 +116,8 @@ export function createCryptoClient(): CryptoClient {
     decryptObject: (userId, objectId, objectType, revision, ciphertext, nonce) => call("decryptObject", { userId, objectId, objectType, revision, ciphertext, nonce }),
     encryptHistory: (userId, noteId, historyId, capturedAt, captureKind, payload) => call("encryptHistory", { userId, noteId, historyId, capturedAt, captureKind, document: payload }),
     decryptHistory: (userId, noteId, historyId, capturedAt, captureKind, ciphertext, nonce) => call("decryptHistory", { userId, noteId, historyId, capturedAt, captureKind, ciphertext, nonce }),
+    encryptHistoryMetadata: (userId, noteId, historyId, capturedAt, metadata) => call("encryptHistoryMetadata", { userId, noteId, historyId, capturedAt, metadata }),
+    decryptHistoryMetadata: (userId, noteId, historyId, capturedAt, ciphertext, nonce) => call("decryptHistoryMetadata", { userId, noteId, historyId, capturedAt, ciphertext, nonce }),
     createAttachment: (input) => call("createAttachment", input, [input.data]),
     decryptAttachment: (userId, attachmentId, metadata, chunks) => call("decryptAttachment", { userId, attachmentId, metadata, chunks }),
     lock: () => call("lock"),

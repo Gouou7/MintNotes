@@ -8,10 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added end-to-end encrypted custom names and independent protection controls for every note-history snapshot, with inline renaming, a shared protection badge, and a compact three-action menu.
 - Added username changes in Settings. The confirmation dialog accepts the current password and recovery key, or can generate a replacement recovery key when the existing key is unavailable.
 
 ### Changed
 
+- Changed manual history saves to always create a complete snapshot, even when content is unchanged, using a selected local date-time name and protection by default; automatic history remains deduplicated and unprotected by default.
+- Moved client and server history behavior into dedicated typed modules, with durable offline metadata updates and additive compatibility for existing encrypted history records.
 - Moved the Live Markdown editor into the Mint Notes codebase as a project-owned core, preserving canonical Markdown compatibility while loading Callouts, math, Mermaid, and WikiLinks through maintained extensions.
 - Decoupled new vault-key envelopes from usernames so accounts can be renamed without changing passwords or encrypted note data, while legacy accounts migrate automatically on their first username change.
 - Changed device PIN setup, replacement, and removal to request the master password and new PIN in an action-specific confirmation dialog instead of keeping credential fields on the Security settings page.
@@ -19,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
+- Protected history is excluded from individual deletion, bulk clearing, retention cleanup, and thinning, and prevents physical cleanup of its owning note and referenced attachments until protection is removed; custom names remain encrypted while the server sees only the protection state and random attachment references.
 - Username changes now atomically update the login name and encrypted vault envelopes, revoke other sessions and remembered endpoints, and require either the current recovery key or explicit confirmation of a newly generated replacement key.
 
 ## [0.9.0] - 2026-07-30
