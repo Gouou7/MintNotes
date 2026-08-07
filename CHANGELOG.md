@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-08
+
 ### Added
 
 - Added end-to-end encrypted custom names and independent protection controls for every note-history snapshot, with inline renaming, a shared protection badge, and a compact three-action menu.
