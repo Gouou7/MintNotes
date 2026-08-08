@@ -12,7 +12,6 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY patches ./patches
 RUN set -eu; \
   status=0; \
   pnpm install --frozen-lockfile || status=$?; \
@@ -32,7 +31,6 @@ RUN apt-get update \
   && corepack enable
 ENV NODE_ENV=production
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY patches ./patches
 RUN set -eu; \
   status=0; \
   pnpm install --frozen-lockfile --prod || status=$?; \
