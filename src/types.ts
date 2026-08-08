@@ -185,7 +185,6 @@ export interface HistorySettings {
 
 export type SortMode = "alphabetical" | "created" | "updated" | "manual";
 export type ThemePreference = "system" | "light" | "dark";
-export type FontSizePreference = "small" | "standard" | "large";
 export type LanguagePreference = "system" | "en" | "zh-CN" | "zh-TW";
 export type WorkspaceEditorMode = "live" | "source" | "readonly";
 
@@ -195,7 +194,7 @@ export interface UiPreferences {
   openNoteIds: string[];
   editorMode: WorkspaceEditorMode;
   theme: ThemePreference;
-  fontSize: FontSizePreference;
+  fontSize: number;
   language: LanguagePreference;
   sortMode: SortMode;
   treeCollapsed: boolean;

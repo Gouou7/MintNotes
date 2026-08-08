@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Reworked General settings to show a compact account summary and move avatar, name, and username changes into a responsive **Edit profile** dialog with explicit, independent actions.
+- Replaced the small, standard, and large text-size presets with a 12–24 pixel font-size input, immediate local preview and saving, a 14-pixel default restore action, and automatic migration of existing size preferences.
 - Added immediate removal of signed-out or expired login-device records and automatic server cleanup after 30 days.
 
 ### Fixed

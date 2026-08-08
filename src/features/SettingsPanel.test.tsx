@@ -32,7 +32,7 @@ const preferences: UiPreferences = {
   openNoteIds: [],
   editorMode: "live",
   theme: "system",
-  fontSize: "standard",
+  fontSize: 14,
   language: "zh-CN",
   sortMode: "alphabetical",
   treeCollapsed: false,
@@ -105,7 +105,7 @@ describe("SettingsPanel", () => {
     expect(container.querySelector(".profile-summary")?.textContent).toContain("Administrator@admin");
     expect(container.querySelector(".settings-section > h3")?.textContent).toBe("外观");
     expect(container.textContent).not.toContain("上传头像");
-    expect(container.querySelector(".settings-content input:not([type='file'])")).toBeNull();
+    expect(container.querySelectorAll(".settings-content input:not([type='file'])")).toHaveLength(1);
     await act(async () => button(container, "编辑资料").click());
     expect(container.querySelectorAll(".profile-edit-dialog form input")).toHaveLength(2);
     expect(container.querySelectorAll(".profile-edit-dialog > .compact-form")).toHaveLength(2);
@@ -116,10 +116,31 @@ describe("SettingsPanel", () => {
     expect(button(container, "修改用户名").classList).toContain("profile-action-button");
     expect((button(container, "修改用户名") as HTMLButtonElement).disabled).toBe(true);
     expect(button(container, "关闭").classList).toContain("profile-action-button");
-    expect(container.textContent).toContain("文字大小");
+    expect(container.textContent).toContain("字体大小");
     expect(container.textContent).toContain("语言");
     expect(container.textContent).not.toContain("文件排序");
     expect(container.textContent).not.toContain("恢复两侧栏");
+  });
+
+  it("accepts a pixel font size and restores the current default", async () => {
+    const onPreferences = vi.fn();
+    const container = await renderSettings(admin, vi.fn(), onPreferences);
+    const input = container.querySelector("input[aria-label='字体大小（像素）']") as HTMLInputElement;
+    expect(input.closest(".font-size-controls")?.querySelector(".font-size-reset")).not.toBeNull();
+    expect(input.value).toBe("14");
+    expect((button(container, "恢复默认大小") as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "18");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(onPreferences).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 18 }));
+
+    const customPreferences = vi.mocked(onPreferences).mock.calls.at(-1)![0];
+    const customContainer = await renderSettings(admin, vi.fn(), onPreferences);
+    await act(async () => roots.at(-1)!.render(<I18nProvider><SettingsPanel user={admin} endpoint={{ id: "endpoint", remembered: false }} credential={null} serverSessionVerified onCredentialChange={vi.fn()} preferences={customPreferences} onPreferences={onPreferences} onClose={vi.fn()} onLogout={vi.fn()} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={vi.fn()} onUsername={vi.fn()} avatarUrl={null} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={vi.fn()} /></I18nProvider>));
+    await act(async () => button(customContainer, "恢复默认大小").click());
+    expect(onPreferences).toHaveBeenLastCalledWith(expect.objectContaining({ fontSize: 14 }));
   });
 
   it("keeps explicit avatar actions inside the profile editor", async () => {

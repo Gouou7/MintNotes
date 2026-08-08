@@ -195,10 +195,9 @@ const messages = {
   "settings.themeSystem": { en: "Follow system", "zh-CN": "跟随系统", "zh-TW": "跟隨系統" },
   "settings.themeLight": { en: "Light", "zh-CN": "浅色", "zh-TW": "淺色" },
   "settings.themeDark": { en: "Dark", "zh-CN": "深色", "zh-TW": "深色" },
-  "settings.fontSize": { en: "Text size", "zh-CN": "文字大小", "zh-TW": "文字大小" },
-  "settings.fontSmall": { en: "Small", "zh-CN": "小", "zh-TW": "小" },
-  "settings.fontStandard": { en: "Standard", "zh-CN": "标准", "zh-TW": "標準" },
-  "settings.fontLarge": { en: "Large", "zh-CN": "大", "zh-TW": "大" },
+  "settings.fontSize": { en: "Font size", "zh-CN": "字体大小", "zh-TW": "字體大小" },
+  "settings.fontSizePixels": { en: "Font size in pixels", "zh-CN": "字体大小（像素）", "zh-TW": "字體大小（像素）" },
+  "settings.restoreDefaultFontSize": { en: "Restore default", "zh-CN": "恢复默认大小", "zh-TW": "恢復預設大小" },
   "settings.trashHelp": {
     en: "Items in trash are automatically deleted after the selected retention period.",
     "zh-CN": "回收站的内容会在到达设置的自动删除时间后自动删除。",

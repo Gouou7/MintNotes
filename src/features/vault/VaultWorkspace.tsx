@@ -130,13 +130,14 @@ import {
 import { useVaultModel } from "./useVaultModel";
 import { attachmentGraphSignature, useAttachmentUrls } from "./useAttachmentUrls";
 import { VaultHistoryController, type HistoryIndexEnvelope } from "./historyController";
+import { DEFAULT_FONT_SIZE, normalizeFontSize } from "../appearance";
 
 type EditorMode = WorkspaceEditorMode;
 type CreateDocumentOptions = { focusName?: boolean; activate?: boolean };
 const DEFAULT_PREFERENCES: UiPreferences = {
   ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
   theme: "system",
-  fontSize: "standard",
+  fontSize: DEFAULT_FONT_SIZE,
   language: "system",
   sortMode: "alphabetical",
   treeCollapsed: false,
@@ -1431,6 +1432,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
           ...DEFAULT_PREFERENCES,
           ...storedUiPreferences,
           ...deviceWorkspace,
+          fontSize: normalizeFontSize(storedUiPreferences.fontSize),
           language: isLanguagePreference(storedUiPreferences.language) ? storedUiPreferences.language : languagePreference
         };
         await localDb.transaction("rw", localDb.objects, localDb.outbox, localDb.meta, async () => {
@@ -2614,14 +2616,15 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     : [];
   const layoutStyle = {
     "--tree-width": `${preferences.treeWidth}px`,
-    "--outline-width": `${preferences.outlineWidth}px`
+    "--outline-width": `${preferences.outlineWidth}px`,
+    "--font-adjust": `${preferences.fontSize - DEFAULT_FONT_SIZE}px`
   } as CSSProperties;
   const statusLabel = syncStatus.failedLocalObjectIds.size
     ? null
     : visibleSyncStatusText(syncStatus.visible, t);
   const statusDetail = syncStatusDetailText(syncStatus, t);
   return (
-    <div className={`app-shell font-${preferences.fontSize} ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
+    <div className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
       <aside className="tree-pane">
         <header className="side-header"><img className="brand-small" src="/icon.svg" alt="" aria-hidden="true" /><strong>Mint Notes</strong><button className="tree-pane-collapse" onClick={() => setPreferences({ ...preferences, treeCollapsed: true })} title={t("app.collapseDirectory")} aria-label={t("app.collapseDirectory")}><AppIcon icon={PanelLeftClose} /></button><button onClick={() => setTreeOpen(false)} className="mobile-tree-close" aria-label={t("app.closeDirectory")}><AppIcon icon={PanelLeftClose} /></button></header>
         {pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>

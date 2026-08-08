@@ -16,6 +16,7 @@ import { prepareProfileAvatar } from "./profileAvatar";
 import { formatHistoryBytes } from "./history";
 import { downloadRecoveryKey } from "./recoveryKey";
 import { APP_VERSION } from "../version";
+import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE } from "./appearance";
 
 type Tab = "general" | "history" | "trash" | "security" | "data" | "about" | "users";
 type PinDialogMode = "save" | "remove";
@@ -107,8 +108,23 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
   const [newRecoveryKey, setNewRecoveryKey] = useState("");
   const [accountCredentialDialogMode, setAccountCredentialDialogMode] = useState<AccountCredentialDialogMode | null>(null);
   const [logoutConfirming, setLogoutConfirming] = useState(false);
+  const [fontSizeInput, setFontSizeInput] = useState(String(preferences.fontSize));
   const fileInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
+  useEffect(() => setFontSizeInput(String(preferences.fontSize)), [preferences.fontSize]);
+
+  const updateFontSizeInput = (value: string) => {
+    setFontSizeInput(value);
+    const fontSize = Number(value);
+    if (Number.isInteger(fontSize) && fontSize >= MIN_FONT_SIZE && fontSize <= MAX_FONT_SIZE) {
+      onPreferences({ ...preferences, fontSize });
+    }
+  };
+
+  const restoreDefaultFontSize = () => {
+    setFontSizeInput(String(DEFAULT_FONT_SIZE));
+    onPreferences({ ...preferences, fontSize: DEFAULT_FONT_SIZE });
+  };
   const requireServerSession = () => {
     if (serverSessionVerified) return true;
     onNotify(t("notice.onlineSessionRequired"), "warning");
@@ -524,7 +540,16 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
             <h3>{t("settings.appearance")}</h3>
             <label className="settings-control-row"><span>{t("language.label")}</span><LanguageSelect value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} /></label>
             <label className="settings-control-row"><span>{t("settings.theme")}</span><select value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select></label>
-            <label className="settings-control-row"><span>{t("settings.fontSize")}</span><select value={preferences.fontSize} onChange={(event) => onPreferences({ ...preferences, fontSize: event.target.value as UiPreferences["fontSize"] })}><option value="small">{t("settings.fontSmall")}</option><option value="standard">{t("settings.fontStandard")}</option><option value="large">{t("settings.fontLarge")}</option></select></label>
+            <div className="settings-control-row font-size-setting">
+              <span>{t("settings.fontSize")}</span>
+              <div className="font-size-controls">
+                <label className="font-size-input">
+                  <input type="number" min={MIN_FONT_SIZE} max={MAX_FONT_SIZE} step="1" inputMode="numeric" aria-label={t("settings.fontSizePixels")} value={fontSizeInput} onChange={(event) => updateFontSizeInput(event.target.value)} onBlur={() => setFontSizeInput(String(preferences.fontSize))} />
+                  <span aria-hidden="true">px</span>
+                </label>
+                <button type="button" className="font-size-reset" disabled={preferences.fontSize === DEFAULT_FONT_SIZE} onClick={restoreDefaultFontSize}><AppIcon icon={RotateCcw} size={15} />{t("settings.restoreDefaultFontSize")}</button>
+              </div>
+            </div>
           </div>}
 
           {tab === "trash" && <div className="settings-section trash-settings">
