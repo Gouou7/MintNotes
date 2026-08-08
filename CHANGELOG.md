@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Reworked General settings to show a compact account summary and move avatar, name, and username changes into a responsive **Edit profile** dialog with explicit, independent actions.
+- Added immediate removal of signed-out or expired login-device records and automatic server cleanup after 30 days.
+
+### Fixed
+
+- Fixed disabled profile actions showing a busy cursor instead of the expected unavailable-action cursor.
+
 ## [0.10.1] - 2026-08-08
 
 ### Fixed

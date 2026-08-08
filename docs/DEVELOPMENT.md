@@ -56,7 +56,7 @@ pnpm dev:server
 | `src/storage/` | Dexie schema for encrypted IndexedDB objects, chunks, preferences, cursors, and durable outboxes. |
 | `src/features/` | Authentication, settings, administration, file-tree and device-local workspace-state utilities, legacy workspace migration, synchronization coordination and batching, attachments, import/export, and text statistics. |
 | `server/index.ts` and `server/app.ts` | Process startup and dependency composition; neither file owns route or SQL behavior. |
-| `server/auth/`, `server/admin/`, `server/attachments/`, `server/history/`, and `server/sync/` | Session-derived guards, domain routes, validation, and repositories. User-owned operations receive authenticated scope rather than a request-supplied user ID. |
+| `server/auth/`, `server/account/`, `server/admin/`, `server/attachments/`, `server/history/`, and `server/sync/` | Session-derived guards, account endpoint lifecycle, domain routes, validation, and repositories. User-owned operations receive authenticated scope rather than a request-supplied user ID. |
 | `src/features/vault/VaultWorkspace.tsx` and `server/routes.ts` | Integration coordinators retained while remaining account/document workflows are extracted. History persistence and routes are already delegated to focused modules. They are not extension points. |
 | Other `server/` modules | SQLite schema, history/trash policies, synchronization events, maintenance jobs, and online backup. |
 | `scripts/` | Crypto Worker integration test and API smoke test. |

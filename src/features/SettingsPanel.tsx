@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { ArrowLeftRight, Download, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, RotateCcw, Settings2, Shield, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
+import { ArrowLeftRight, Download, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, RotateCcw, Settings2, Shield, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { LanguageSelect } from "../components/LanguageSelect";
@@ -88,6 +88,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
   const [busy, setBusy] = useState(false);
   const [displayName, setDisplayName] = useState(user.displayName);
   const [username, setUsername] = useState(user.username);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [usernamePassword, setUsernamePassword] = useState("");
   const [usernameRecoveryKey, setUsernameRecoveryKey] = useState("");
   const [usernameDialogOpen, setUsernameDialogOpen] = useState(false);
@@ -170,9 +171,23 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
     }
   };
 
+  const openProfileDialog = () => {
+    if (!requireServerSession()) return;
+    setDisplayName(user.displayName);
+    setUsername(user.username);
+    setProfileDialogOpen(true);
+  };
+
+  const closeProfileDialog = () => {
+    setProfileDialogOpen(false);
+    setDisplayName(user.displayName);
+    setUsername(user.username);
+  };
+
   const saveDisplayName = async (event: FormEvent) => {
     event.preventDefault();
     if (!requireServerSession()) return;
+    if (displayName === user.displayName) return;
     setBusy(true);
     try {
       const result = await api<{ user: User }>("/api/account/profile", { method: "PATCH", body: JSON.stringify({ displayName }) });
@@ -188,7 +203,8 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
   const beginUsernameChange = (event: FormEvent) => {
     event.preventDefault();
     if (!requireServerSession()) return;
-    if (normalizedUsername() === user.username) return onNotify(t("notice.usernameUnchanged"), "warning");
+    if (normalizedUsername() === user.username) return;
+    setProfileDialogOpen(false);
     setUsernamePassword("");
     setUsernameRecoveryKey("");
     setPendingUsernameRecoveryReset(null);
@@ -325,6 +341,18 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
       onNotify(t("notice.deviceSignedOut", { device: deviceName }), "info");
       await loadDeviceSessions();
     } catch (value) { onNotify(translateError(value, t, "notice.deviceSignOutFailed"), "warning"); }
+    finally { setRevokingSessionId(""); }
+  };
+
+  const removeDeviceEndpoint = async (endpointId: string, deviceName: string) => {
+    if (!requireServerSession()) return;
+    if (!window.confirm(t("notice.removeDeviceConfirm", { device: deviceName }))) return;
+    setRevokingSessionId(endpointId);
+    try {
+      await api(`/api/account/endpoints/${endpointId}`, { method: "DELETE" });
+      onNotify(t("notice.deviceRemoved", { device: deviceName }), "info");
+      await loadDeviceSessions();
+    } catch (value) { onNotify(translateError(value, t, "notice.deviceRemoveFailed"), "warning"); }
     finally { setRevokingSessionId(""); }
   };
 
@@ -492,11 +520,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
         </nav>
         <div className="settings-content">
           {tab === "general" && <div className="settings-section">
-            <h3>{t("settings.profile")}</h3>
-            <div className="profile-avatar-row"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={28} />}</span><strong>{t("settings.avatar")}</strong><input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => { void uploadAvatar(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><button disabled={busy || !serverSessionVerified} onClick={() => avatarInput.current?.click()}><AppIcon icon={Upload} size={15} />{avatarUrl ? t("common.replace") : t("common.upload")}</button>{avatarUrl && <button disabled={busy || !serverSessionVerified} onClick={() => void removeAvatar()}>{t("common.remove")}</button>}</div></div>
-            <form className="settings-control-row" onSubmit={saveDisplayName}><label>{t("auth.displayName")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label><button className="primary compact" disabled={busy || !serverSessionVerified}>{t("common.save")}</button></form>
-            <h3>{t("settings.changeUsername")}</h3><p className="settings-help">{t("settings.changeUsernameHelp")}</p>
-            <form className="settings-control-row" onSubmit={beginUsernameChange}><label>{t("settings.newUsername")}<input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" autoComplete="username" required /></label><button className="primary compact" disabled={busy || !serverSessionVerified}>{t("settings.changeUsername")}</button></form>
+            <div className="profile-summary"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={30} />}</span><span className="profile-identity"><strong>{user.displayName}</strong><small>@{user.username}</small></span><button className="primary" disabled={busy || !serverSessionVerified} onClick={openProfileDialog}><AppIcon icon={Pencil} size={15} />{t("settings.editProfile")}</button></div>
             <h3>{t("settings.appearance")}</h3>
             <label className="settings-control-row"><span>{t("language.label")}</span><LanguageSelect value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} /></label>
             <label className="settings-control-row"><span>{t("settings.theme")}</span><select value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select></label>
@@ -545,7 +569,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
             <label className="settings-control-row"><span>{t("settings.autoLockAfter")}</span><select disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select></label>
             <h3>{t("settings.loginDevices")}</h3><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
             {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
-            {deviceEndpoints && <>{!deviceEndpoints.canRevokeOthers && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row ${device.current ? "current" : ""}`} key={device.id}><span className="session-device-icon"><AppIcon icon={Laptop} /></span><span className="session-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && device.active && <button className="session-revoke" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={LogOut} size={15} />{t("settings.signOut")}</button>}</article>)}</div></>}
+            {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && device.active) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row ${device.current ? "current" : ""}`} key={device.id}><span className="session-device-icon"><AppIcon icon={Laptop} /></span><span className="session-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && (device.active ? <button className="session-revoke" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={LogOut} size={15} />{t("settings.signOut")}</button> : <button className="session-revoke" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={Trash2} size={15} />{t("common.remove")}</button>)}</article>)}</div></>}
             <h3>{t("settings.accountCredentials")}</h3><p className="settings-help">{t("settings.accountCredentialsHelp")}</p>
             <div className="settings-actions"><button type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</button><button type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecovery")}</button></div>
           </div>}
@@ -572,6 +596,14 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
           </div>
         </div>
       </div>
+      {profileDialogOpen && <div className="danger-confirm profile-edit-dialog settings-section" role="dialog" aria-modal="true" aria-label={t("settings.editProfile")}>
+        <header><h3>{t("settings.editProfile")}</h3><button type="button" onClick={closeProfileDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button></header>
+        <div className="profile-avatar-editor"><strong>{t("settings.avatar")}</strong><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={44} />}</span><input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => { void uploadAvatar(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><button type="button" className="profile-action-button" disabled={busy || !serverSessionVerified} onClick={() => avatarInput.current?.click()}><AppIcon icon={Upload} size={16} />{t(avatarUrl ? "settings.changeAvatar" : "settings.uploadAvatar")}</button>{avatarUrl && <button type="button" className="danger profile-action-button" disabled={busy || !serverSessionVerified} onClick={() => void removeAvatar()}><AppIcon icon={Trash2} size={16} />{t("settings.removeAvatar")}</button>}</div></div>
+        <form className="compact-form profile-field-form" onSubmit={saveDisplayName}><label>{t("settings.name")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoFocus required /></label><button className="primary profile-action-button" disabled={busy || displayName === user.displayName}>{t("settings.changeDisplayName")}</button></form>
+        <form className="compact-form profile-field-form" onSubmit={beginUsernameChange}><label>{t("auth.username")}<input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" autoComplete="username" required /></label><p className="settings-help">{t("settings.changeUsernameHelp")}</p><button className="primary profile-action-button" disabled={busy || normalizedUsername() === user.username}>{t("settings.changeUsername")}</button></form>
+        <div className="settings-actions profile-dialog-footer"><button type="button" className="profile-action-button" disabled={busy} onClick={closeProfileDialog}>{t("common.close")}</button></div>
+      </div>}
+
       {usernameDialogOpen && <div className="danger-confirm username-change-dialog settings-section" role="dialog" aria-modal="true" aria-label={t("settings.changeUsername")}>
         <header><h3>{pendingUsernameRecoveryReset ? t("settings.saveReplacementRecovery") : t("settings.verifyUsernameChange")}</h3><button type="button" onClick={closeUsernameDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button></header>
         {!pendingUsernameRecoveryReset ? <>

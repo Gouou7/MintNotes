@@ -29,6 +29,7 @@ export interface TrustedEndpoint {
 export interface TrustedEndpointsResponse {
   canRevokeOthers: boolean;
   revokeEligibleAt: string;
+  inactiveRetentionDays: number;
   endpoints: TrustedEndpoint[];
 }
 

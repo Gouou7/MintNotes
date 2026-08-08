@@ -387,7 +387,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .auth-card label.remember-device input { width: 16px; height: 16px; padding: 0; accent-color: var(--accent); }
 .auth-card button { min-height: 40px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); cursor: pointer; }
 button.primary, .auth-card button.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-on); font-weight: 700; }
-.auth-card button:disabled, button:disabled { opacity: .6; cursor: wait; }
+.auth-card button:disabled, button:disabled { opacity: .6; cursor: not-allowed; }
 .auth-actions { display: flex; justify-content: center; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
 .auth-actions button { border: 0; background: transparent; color: var(--accent-text); font-size: 13px; }
 .auth-config-error { margin: 14px 0 0; color: var(--danger); font-size: 12px; line-height: 1.5; text-align: center; }
@@ -446,11 +446,25 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-control-row > button { align-self: end; }
 .compact-form { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .compact-form > button { justify-self: start; }
-.profile-avatar-row { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.profile-summary { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 2px 0 18px; border-bottom: 1px solid var(--border); }
+.profile-summary .profile-avatar { width: 64px; height: 64px; }
+.profile-summary > button { min-height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 13px; }
 .profile-avatar { width: 52px; height: 52px; display: grid; place-items: center; overflow: hidden; flex: 0 0 52px; border-radius: 50%; color: var(--accent-text); background: var(--accent-soft); }
 .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.profile-avatar-row > div:not(.settings-actions) { min-width: 0; display: grid; gap: 3px; }
-.profile-avatar-row small { color: var(--muted); font-size: calc(12px + var(--font-adjust)); }
+.profile-identity { min-width: 0; display: grid; gap: 3px; }
+.profile-identity strong, .profile-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-identity small { color: var(--muted); font-size: calc(12px + var(--font-adjust)); }
+.profile-avatar-editor { min-width: 0; display: grid; grid-template-columns: 1fr; gap: 18px; padding: 20px 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.profile-avatar-editor > strong { color: var(--text-strong); font-size: calc(14px + var(--font-adjust)); }
+.profile-avatar-editor .profile-avatar { width: 112px; height: 112px; justify-self: center; }
+.profile-avatar-editor .settings-actions { justify-content: center; }
+.profile-field-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px 14px; padding: 18px 20px; border-radius: 12px; }
+.profile-field-form > label { min-width: 0; display: grid; gap: 8px; color: var(--text-strong); font-weight: 650; }
+.profile-field-form > label input { height: 42px; padding-block: 0; font-weight: 400; }
+.profile-field-form > .settings-help { grid-column: 1 / -1; }
+.profile-field-form > button { grid-column: 2; grid-row: 1; }
+.profile-action-button { width: fit-content; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 13px; border-radius: 8px; white-space: nowrap; }
+.profile-dialog-footer { padding-top: 1px; }
 .session-gate { margin: 0; padding: 9px 11px; border-radius: 8px; color: var(--warning-text); background: var(--warning-bg); font-size: 12px; line-height: 1.45; }
 .session-list { display: grid; gap: 8px; }
 .session-row { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
@@ -523,8 +537,11 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .danger-confirm > header h3 { margin: 0; color: var(--danger); }
 .danger-confirm > header button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; background: transparent; }
 .danger-confirm > p { color: var(--muted); font-size: calc(13px + var(--font-adjust)); line-height: 1.55; }
-.username-change-dialog, .pin-change-dialog, .account-credential-dialog { border-color: var(--border); }
-.username-change-dialog > header h3, .pin-change-dialog > header h3, .account-credential-dialog > header h3 { color: var(--text); }
+.profile-edit-dialog, .username-change-dialog, .pin-change-dialog, .account-credential-dialog { border-color: var(--border); }
+.profile-edit-dialog > header h3, .username-change-dialog > header h3, .pin-change-dialog > header h3, .account-credential-dialog > header h3 { color: var(--text); }
+.profile-edit-dialog { width: min(680px, calc(100vw - 32px)); gap: 18px; padding: 24px; border-radius: 16px; }
+.profile-edit-dialog > header { min-height: 38px; }
+.profile-edit-dialog > header h3 { font-size: calc(20px + var(--font-adjust)); }
 .recovery-result { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
 .recovery-result textarea { width: 100%; padding: 10px; resize: none; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 
@@ -595,8 +612,13 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .settings-switch { justify-self: start; }
   .settings-control-row > label { grid-column: 1; }
   .settings-control-row > button { justify-self: start; }
-  .profile-avatar-row { grid-template-columns: auto minmax(0, 1fr); }
-  .profile-avatar-row .settings-actions { grid-column: 1 / -1; }
+  .profile-summary { grid-template-columns: auto minmax(0, 1fr); }
+  .profile-summary > button { grid-column: 1 / -1; justify-self: start; }
+  .profile-field-form { grid-template-columns: 1fr; }
+  .profile-field-form > button { width: 100%; grid-column: 1; grid-row: auto; }
+  .profile-avatar-editor .settings-actions { display: grid; grid-template-columns: 1fr; }
+  .profile-avatar-editor .profile-action-button, .profile-dialog-footer .profile-action-button { width: 100%; }
+  .profile-edit-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 18px; }
   .session-row { grid-template-columns: auto minmax(0, 1fr); }
   .session-revoke { grid-column: 2; justify-self: start; }
   .trash-row { grid-template-columns: auto minmax(0, 1fr); }

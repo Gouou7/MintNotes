@@ -160,6 +160,9 @@ const messages = {
     "zh-TW": "登出會刪除此瀏覽器中目前帳戶的全部本機資料，包括尚未同步的筆記、附件和變更；未同步資料將無法復原。已同步到伺服器的資料不會被刪除。"
   },
   "settings.profile": { en: "Profile", "zh-CN": "个人资料", "zh-TW": "個人資料" },
+  "settings.editProfile": { en: "Edit profile", "zh-CN": "编辑资料", "zh-TW": "編輯資料" },
+  "settings.name": { en: "Name", "zh-CN": "名称", "zh-TW": "名稱" },
+  "settings.changeDisplayName": { en: "Change name", "zh-CN": "修改名称", "zh-TW": "變更名稱" },
   "settings.changeUsername": { en: "Change username", "zh-CN": "修改用户名", "zh-TW": "變更使用者名稱" },
   "settings.newUsername": { en: "New username", "zh-CN": "新用户名", "zh-TW": "新使用者名稱" },
   "settings.changeUsernameHelp": {
@@ -184,6 +187,9 @@ const messages = {
   "settings.finishUsernameChange": { en: "Finish username change", "zh-CN": "完成用户名修改", "zh-TW": "完成使用者名稱變更" },
   "settings.avatar": { en: "Avatar", "zh-CN": "头像", "zh-TW": "頭像" },
   "settings.currentAvatar": { en: "Current avatar", "zh-CN": "当前头像", "zh-TW": "目前頭像" },
+  "settings.uploadAvatar": { en: "Upload avatar", "zh-CN": "上传头像", "zh-TW": "上傳頭像" },
+  "settings.changeAvatar": { en: "Change avatar", "zh-CN": "更换头像", "zh-TW": "更換頭像" },
+  "settings.removeAvatar": { en: "Remove avatar", "zh-CN": "移除头像", "zh-TW": "移除頭像" },
   "settings.appearance": { en: "Appearance", "zh-CN": "外观", "zh-TW": "外觀" },
   "settings.theme": { en: "Theme", "zh-CN": "主题", "zh-TW": "主題" },
   "settings.themeSystem": { en: "Follow system", "zh-CN": "跟随系统", "zh-TW": "跟隨系統" },
@@ -252,9 +258,14 @@ const messages = {
   "settings.minute": { en: "1 minute", "zh-CN": "1 分钟", "zh-TW": "1 分鐘" },
   "settings.loginDevices": { en: "Login devices", "zh-CN": "登录设备", "zh-TW": "登入裝置" },
   "settings.loginDevicesHelp": {
-    en: "Review signed-in devices and sign out devices you no longer use. A new device must be signed in for 24 hours before it can sign out other devices.",
-    "zh-CN": "查看已登录的设备，并可登出不再使用的设备。为保护账户安全，新设备登录 24 小时后才能登出其他设备。",
-    "zh-TW": "查看已登入的裝置，並可登出不再使用的裝置。為保護帳戶安全，新裝置登入 24 小時後才能登出其他裝置。"
+    en: "Review signed-in devices, sign out devices you no longer use, and remove inactive records. A new device must be signed in for 24 hours before it can sign out other active devices.",
+    "zh-CN": "查看已登录的设备、登出不再使用的设备，并可移除失效记录。为保护账户安全，新设备登录 24 小时后才能登出其他有效设备。",
+    "zh-TW": "查看已登入的裝置、登出不再使用的裝置，並可移除失效記錄。為保護帳戶安全，新裝置登入 24 小時後才能登出其他有效裝置。"
+  },
+  "settings.inactiveDeviceRetention": {
+    en: "Signed-out and expired device records are automatically removed after {count} days. You can remove them immediately below.",
+    "zh-CN": "已登出和已过期的设备记录会在 {count} 天后自动删除，也可在下方立即移除。",
+    "zh-TW": "已登出和已過期的裝置記錄會在 {count} 天後自動刪除，也可在下方立即移除。"
   },
   "settings.loadingDevices": { en: "Loading login devices…", "zh-CN": "正在加载登录设备…", "zh-TW": "正在載入登入裝置…" },
   "settings.revokeAfter": { en: "Other devices can be signed out after {date}.", "zh-CN": "可在 {date} 后登出其他设备。", "zh-TW": "可在 {date} 後登出其他裝置。" },
@@ -319,8 +330,8 @@ const messages = {
   "notice.trashDeleteAfter": { en: "Trash items will be automatically deleted after {count} days", "zh-CN": "回收站内容将在 {count} 天后自动删除", "zh-TW": "垃圾桶內容將在 {count} 天後自動刪除" },
   "notice.settingRestored": { en: "{message}. The previous setting was restored.", "zh-CN": "{message}，已恢复原设置", "zh-TW": "{message}，已復原原設定" },
   "notice.saveTrashFailed": { en: "Unable to save trash settings. The previous setting was restored.", "zh-CN": "无法保存回收站设置，已恢复原设置", "zh-TW": "無法儲存垃圾桶設定，已復原原設定" },
-  "notice.displayNameUpdated": { en: "Display name updated", "zh-CN": "显示名称已更新", "zh-TW": "顯示名稱已更新" },
-  "notice.displayNameFailed": { en: "Unable to update display name", "zh-CN": "无法更新显示名称", "zh-TW": "無法更新顯示名稱" },
+  "notice.displayNameUpdated": { en: "Name updated", "zh-CN": "名称已更新", "zh-TW": "名稱已更新" },
+  "notice.displayNameFailed": { en: "Unable to update name", "zh-CN": "无法更新名称", "zh-TW": "無法更新名稱" },
   "notice.usernameUpdated": { en: "Username updated; other devices must log in again", "zh-CN": "用户名已更新，其他设备需要重新登录", "zh-TW": "使用者名稱已更新，其他裝置需要重新登入" },
   "notice.usernameRecoveryReset": { en: "Username and recovery key updated; other devices must log in again", "zh-CN": "用户名和恢复密钥已更新，其他设备需要重新登录", "zh-TW": "使用者名稱和復原金鑰已更新，其他裝置需要重新登入" },
   "notice.usernameFailed": { en: "Unable to update username", "zh-CN": "无法更新用户名", "zh-TW": "無法更新使用者名稱" },
@@ -332,6 +343,9 @@ const messages = {
   "notice.signOutDeviceConfirm": { en: "Sign out {device}? It will need to log in again on its next request.", "zh-CN": "确定登出 {device}？该设备下次请求时将需要重新登录。", "zh-TW": "確定登出 {device}？該裝置下次請求時將需要重新登入。" },
   "notice.deviceSignedOut": { en: "{device} signed out", "zh-CN": "{device} 已登出", "zh-TW": "{device} 已登出" },
   "notice.deviceSignOutFailed": { en: "Unable to sign out device", "zh-CN": "登出设备失败", "zh-TW": "登出裝置失敗" },
+  "notice.removeDeviceConfirm": { en: "Remove the inactive record for {device}?", "zh-CN": "确定立即移除 {device} 的失效记录？", "zh-TW": "確定立即移除 {device} 的失效記錄？" },
+  "notice.deviceRemoved": { en: "{device} removed", "zh-CN": "已移除 {device}", "zh-TW": "已移除 {device}" },
+  "notice.deviceRemoveFailed": { en: "Unable to remove device record", "zh-CN": "移除设备记录失败", "zh-TW": "移除裝置記錄失敗" },
   "notice.pinSaved": { en: "PIN saved for this device", "zh-CN": "当前设备 PIN 已保存", "zh-TW": "目前裝置的 PIN 已儲存" },
   "notice.pinSaveFailed": { en: "Unable to save PIN", "zh-CN": "无法保存 PIN", "zh-TW": "無法儲存 PIN" },
   "notice.pinRemoved": { en: "PIN removed from this device and automatic locking disabled", "zh-CN": "当前设备 PIN 已移除，自动锁定已关闭", "zh-TW": "目前裝置的 PIN 已移除，自動鎖定已關閉" },

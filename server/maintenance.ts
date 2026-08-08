@@ -3,6 +3,7 @@ import type { AppDatabase } from "./database.js";
 import { cleanupAllHistory } from "./history.js";
 import { SyncEventHub } from "./syncEvents.js";
 import { purgeExpiredTrash } from "./trash.js";
+import { cleanupInactiveEndpoints } from "./account/endpoints.js";
 
 export interface MaintenanceController {
   stop: () => void;
@@ -15,6 +16,7 @@ export function startMaintenanceJobs(
 ): MaintenanceController {
   purgeExpiredTrash(db);
   cleanupAllHistory(db);
+  cleanupInactiveEndpoints(db);
   const trashCleanupTimer = setInterval(() => {
     try {
       const purged = purgeExpiredTrash(db, new Date().toISOString(), (changes) => {
@@ -41,10 +43,21 @@ export function startMaintenanceJobs(
   }, 60 * 60 * 1000);
   historyCleanupTimer.unref();
 
+  const endpointCleanupTimer = setInterval(() => {
+    try {
+      const deleted = cleanupInactiveEndpoints(db);
+      if (deleted) logger.info({ deleted }, "inactive login devices cleaned");
+    } catch (error) {
+      logger.error(error, "inactive login device cleanup failed");
+    }
+  }, 60 * 60 * 1000);
+  endpointCleanupTimer.unref();
+
   return {
     stop: () => {
       clearInterval(trashCleanupTimer);
       clearInterval(historyCleanupTimer);
+      clearInterval(endpointCleanupTimer);
     }
   };
 }
