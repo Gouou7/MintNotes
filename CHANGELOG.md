@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-09
+
 ### Changed
 
 - Reworked General settings to show a compact account summary and move avatar, name, and username changes into a responsive **Edit profile** dialog with explicit, independent actions.
