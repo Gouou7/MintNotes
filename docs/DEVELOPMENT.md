@@ -63,7 +63,7 @@ pnpm dev:server
 | `deploy/` | Reverse-proxy example. |
 | `docs/` | Task-oriented documentation and its [navigation index](README.md). |
 
-Read [`AGENTS.md`](../AGENTS.md), [Architecture](ARCHITECTURE.md), and the [Security model](SECURITY.md) before changing authentication, encryption, persistence, synchronization, service-worker behavior, or database schemas.
+Read [`AGENTS.md`](../AGENTS.md) before changing system behavior. Follow its routing table to the relevant architecture, editor, security, deployment, or recovery guide instead of treating every document as required background.
 
 ## Module boundaries
 
@@ -126,25 +126,25 @@ Read [`AGENTS.md`](../AGENTS.md) before changing system behavior. It contains th
 | Change area | Canonical references |
 | --- | --- |
 | Local-first persistence, synchronization, browser/server storage, or attachments | [Architecture](ARCHITECTURE.md) |
+| Canonical Markdown, parsing, serialization, Live rendering, source coordinates, or editor extensions | [Editor architecture](EDITOR_ARCHITECTURE.md) |
 | Authentication, encryption, AAD, account isolation, CSP, or metadata exposure | [Security model](SECURITY.md) |
 | Schema compatibility, production configuration, or upgrades | [Production deployment](DEPLOYMENT.md) |
 | Application releases or Docker image publishing | [Docker image release](DOCKER_IMAGE_RELEASE.md) |
 | Online backup, retention, or restoration | [Backup and restore](BACKUP_AND_RESTORE.md) |
 | User-visible editor, history, import/export, trash, settings, or PWA behavior | [User guide](USER_GUIDE.md) |
 
-The most common contributor pitfalls are:
+### Data durability and synchronization
 
 - Keep the keystroke path independent of network latency: editor state, browser encryption, atomic IndexedDB object/outbox storage, then background synchronization.
 - Preserve the only remaining revision when synchronization conflicts or deletion flows fail.
-- Use the existing cryptographic wrappers and session-derived server authorization; do not add custom primitives or request-controlled user scopes.
 - Make attachment ciphertext durable before inserting its Markdown reference, and upload chunks before the manifest and owning note.
-- Keep canonical Markdown parsing, serialization, authored-escape presentation, delayed blockquote input transactions, insertion/replacement, and coordinate-to-offset behavior in `src/editor/core/`. The core exposes only its stable controller plus the generic `EditorExtension` contract and must not import a Mint Notes extension.
-- Treat Live rendering as a presentation layer over the canonical source model. Keep authored delimiters in stable editable positions and reveal, hide, or style them with decorations and node views; do not replace a source-backed node with a rendered-body-only variant when the selection changes. Native selection and deletion must traverse the source, and a delimiter edit that changes block structure must immediately reparse the complete canonical document while preserving all later authored delimiters.
-- Keep Callout recognition/focus behavior and cursor-aware Math/Mermaid/WikiLink decorations in `src/editor/extensions/`. Extensions register plugins and commands through `EditorExtension`; React and vault modules call only controller methods or typed extension helpers and never access a ProseMirror view.
-- Keep every live-only representation out of canonical Markdown. In particular, Callout editing must round-trip `> [!TYPE]` directly and must not emit highlight/backtick sentinels.
-- Multiline `$$` math may use the reserved `mint-math` code-block language only inside the mounted Live editor. Canonicalize it before application `onChange`; it must never reach React document state, IndexedDB, history, synchronization, exports, or the server.
-- The Live serializer must not synthesize backslash escapes for punctuation in plain text, block starts, table cells, link titles, or image titles. Any backslash in canonical Markdown must be user-authored in Live or Source mode, not created by Live serialization. The parser preserves such explicit escapes across reloads, while Live presentation hides the backslash and renders the escaped symbol literally.
-- A line-leading `>` remains plain text until Enter confirms that line; only that completed paragraph is then converted to a blockquote. An explicitly escaped `\>` never triggers the conversion.
-- Treat Markdown as the canonical portable format. Editor mode changes, frontmatter presentation, and read-only rendering must not silently rewrite it.
 - Do not make synchronization correctness depend on Service Worker background execution or SSE delivery.
+
+### Editor changes
+
+The canonical Markdown source is the sole editable document model. Live rendering is presentation only, and violating source-backed positions or authored delimiters is a release blocker. The complete rules—including source-coordinate editing, allowed temporary representations, ownership boundaries, and mandatory regressions—live in [Editor architecture](EDITOR_ARCHITECTURE.md); do not reproduce partial variants of those rules in feature documentation.
+
+### Security and platform boundaries
+
+- Use the existing cryptographic wrappers and session-derived server authorization; do not add custom primitives or request-controlled user scopes.
 - Review the security model and Content Security Policy before adding remote assets, analytics, raw HTML, or executable embeds.

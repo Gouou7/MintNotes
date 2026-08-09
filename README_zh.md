@@ -67,7 +67,7 @@ docker compose ps
 
 - **使用 Mint Notes：**[用户指南](docs/USER_GUIDE.md)
 - **运维 Mint Notes：**[生产部署](docs/DEPLOYMENT.md)与[备份和恢复](docs/BACKUP_AND_RESTORE.md)
-- **参与开发：**[开发指南](docs/DEVELOPMENT.md)；架构与安全资料可从文档索引进入
+- **参与开发：**[开发指南](docs/DEVELOPMENT.md)、[编辑器架构](docs/EDITOR_ARCHITECTURE.md)，以及文档索引中的系统架构与安全资料
 
 ## 致谢
 

@@ -14,7 +14,7 @@ Preserve these invariants in every change:
 - The server must not receive plaintext titles, Markdown, tags, folder names, folder structure, outlines, attachment names, MIME types, attachment bytes, or encryption keys.
 - Every server query for user-owned objects, revisions, changes, and attachment chunks must bind `user_id` from the authenticated session, never from request input.
 - Conflicts and deletions must not silently destroy the only remaining revision.
-- Markdown is the canonical portable note format.
+- Canonical Markdown source is the sole editable document model and portable note format. Rendered structures are views only and must never become authoritative document state.
 - Attachment ciphertext must be durable in IndexedDB before its Markdown reference is inserted and before upload is attempted.
 - Service Worker features may improve availability but must not be required for synchronization correctness.
 
@@ -28,6 +28,7 @@ Use `docs/README.md` as the human-facing documentation index. For implementation
 | Account setup, editor modes, file-tree actions, attachments, synchronization states, import/export, trash, or PWA usage | `docs/USER_GUIDE.md` | `docs/USER_GUIDE.md` and the matching README feature/limitation if externally significant. |
 | Contributor setup, project layout, verification commands, or implementation boundaries | `docs/DEVELOPMENT.md` | `docs/DEVELOPMENT.md` and this file when the long-term maintenance route changes. |
 | Runtime topology, local-first write path, synchronization, IndexedDB/SQLite responsibilities, or attachment flow | `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE.md`; also review `docs/SECURITY.md` for boundary changes. |
+| Canonical Markdown, parser/serializer behavior, Live rendering, source coordinates, cursor/deletion semantics, or editor extensions | `docs/EDITOR_ARCHITECTURE.md` | `docs/EDITOR_ARCHITECTURE.md`; update `docs/USER_GUIDE.md` only when user-visible behavior changes. |
 | Threat model, key hierarchy, AAD, metadata exposure, cookies, CSP, or account isolation | `docs/SECURITY.md` | `docs/SECURITY.md`; security claims must match executable code and tests. |
 | Docker, environment variables, reverse proxy, account bootstrap, production checks, or schema upgrade | `docs/DEPLOYMENT.md` | `docs/DEPLOYMENT.md`, `.env.example`, and `docker-compose.yml`; review README quick start when required. |
 | Online backup, retention, restore drills, WAL behavior, or disaster recovery | `docs/BACKUP_AND_RESTORE.md` | `docs/BACKUP_AND_RESTORE.md`; schema/storage changes also require deployment and architecture review. |
@@ -40,6 +41,7 @@ When documents disagree, use this evidence order: implementation code, automated
 ## Change-impact routing
 
 - Before changing encryption, authentication, persistence, synchronization, database schemas, attachment ownership, purge behavior, or service-worker lifecycle, read `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, and the relevant sections of `docs/DEVELOPMENT.md`.
+- Before changing parser, serializer, editor transactions, decorations, node views, cursor mapping, deletion behavior, or mode switching, read `docs/EDITOR_ARCHITECTURE.md`. Treat its non-negotiable invariant as a release gate.
 - Changes to a public API route, environment variable, deployment command, data directory, or port require a documentation synchronization check across `.env.example`, `docker-compose.yml`, `README.md`, and `docs/DEPLOYMENT.md` according to actual impact.
 - Changes to portable import/export formats require `docs/USER_GUIDE.md`, `docs/ARCHITECTURE.md`, backup guidance, and compatibility notes to be checked together.
 - Changes to user-visible behavior require the user guide to be updated in the same change. Internal algorithms that do not alter behavior belong in architecture or development documentation, not README.
@@ -59,7 +61,7 @@ When documents disagree, use this evidence order: implementation code, automated
 - `server/`: Fastify domain routes and services, session-derived authorization, opaque encrypted-object storage, SQLite revisions/changes, attachment chunks, account activation, and static PWA delivery.
 - `scripts/`: built crypto Worker integration and API smoke tests.
 - `deploy/`: production reverse-proxy example.
-- `docs/`: task-oriented user, development, architecture, security, deployment, and backup documentation, with navigation in `docs/README.md`.
+- `docs/`: task-oriented product, engineering, operations, and release documentation, with navigation and ownership boundaries in `docs/README.md`.
 
 When changing a responsibility currently coordinated by `src/App.tsx`, `src/features/vault/VaultApp.tsx`, `server/index.ts`, or `server/app.ts`, do not add domain logic to those entrypoints. Extend the existing owning module, or first extract a cohesive typed controller/service/repository with focused tests. Do not create a new catch-all orchestration file as a substitute; see `docs/DEVELOPMENT.md` for dependency direction and routing.
 
@@ -101,10 +103,10 @@ When changing a responsibility currently coordinated by `src/App.tsx`, `src/feat
 
 ## Editor and PWA constraints
 
+- **Release-blocking editor invariant:** Live mode must treat the canonical Markdown source as its editable document model. Rendering may hide or style authored syntax through decorations or node views, but entering or leaving a rendered structure must not swap in rendered-only content or change source-backed document positions. Cursor movement, selection, Backspace, and Delete operate the authored source; structure-changing edits reparse canonical Markdown immediately and must not synthesize, delete, or relocate a user's delimiters.
 - Treat `src/editor/core/` as a Mint Notes-owned core derived from `typora-web` 0.3.1. Change its TypeScript source directly, retain `UPSTREAM.md` and `LICENSE.typora-web`, and cover parser, serializer, input-transaction, and controller changes with direct round-trip regression tests.
 - `src/editor/core/` must not import Mint Notes editor extensions. Extension modules may use ProseMirror only through the declared `EditorExtension` lifecycle; React views and other application modules use the controller and typed extension helpers and must never receive an editor view. Core and extension changes must preserve canonical Markdown and must never expose private display syntax in saved notes.
-- Live mode must treat the canonical Markdown source as its editable document model. Rendering may hide or style authored syntax through decorations or node views, but entering or leaving a rendered structure must not swap in rendered-only content or change source-backed document positions. Cursor movement, selection, Backspace, and Delete operate the authored source; structure-changing edits reparse canonical Markdown immediately and must not synthesize, delete, or relocate a user's delimiters.
-- Markdown remains canonical across live, source, and read-only modes; switching modes must not silently rewrite content.
+- Follow `docs/EDITOR_ARCHITECTURE.md` for the canonical data flow, source-coordinate rules, presentation-only representations, module ownership, and required regressions. Do not restate partial editor invariants in feature-specific documentation.
 - Decrypted attachment Blob URLs exist only in memory and must be revoked when the note changes or the vault locks.
 - PWA updates require the existing user confirmation path so a new bundle is not activated in the middle of an unsaved editing transition.
 - Interface symbols use explicit named imports from `lucide-react` and render through `src/components/AppIcon.tsx`. Do not use namespace/dynamic icon lookup, icon fonts, CDN assets, Emoji, or text glyphs as substitutes for application controls.

@@ -68,7 +68,7 @@ See the [documentation index](docs/README.md) to choose a guide by task.
 
 - **Using Mint Notes:** [User guide](docs/USER_GUIDE.md)
 - **Operating Mint Notes:** [Production deployment](docs/DEPLOYMENT.md) and [backup and restore](docs/BACKUP_AND_RESTORE.md)
-- **Contributing:** [Development guide](docs/DEVELOPMENT.md), with architecture and security references linked from the documentation index
+- **Contributing:** [Development guide](docs/DEVELOPMENT.md), [editor architecture](docs/EDITOR_ARCHITECTURE.md), and the architecture and security references linked from the documentation index
 
 ## Acknowledgements
 
