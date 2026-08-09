@@ -6,18 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-10
+
 ### Changed
 
-- Changed Live-mode horizontal rules so clicking anywhere on the rendered row or moving the caret into it reveals the original `---`, `***`, or `___` Markdown source for reliable deletion, editing, and line insertion.
-- Changed Live-mode fenced code blocks to an Obsidian-style interaction: inactive blocks hide their fences and show a language label, while clicking or moving the caret into a block reveals editable fences in reserved top and bottom space without changing the block height. Arrow navigation now enters through the nearest fence and visits each source line and the opposite fence before leaving. Manually removed closing fences remain removed after reopening, and Enter at the end of a valid closing fence exits to a new paragraph. Code blocks use a rounded dark surface without a contrasting border.
+- Reworked horizontal rules in Live mode so clicking the rendered rule or moving the caret into it reveals the original `---`, `***`, or `___` delimiter. The revealed source can be edited or deleted directly; pressing Enter at its start, middle, or end inserts a line before it, splits it, or creates a paragraph after it.
+- Reworked fenced code blocks in Live mode to keep their complete Markdown source directly editable. Inactive blocks hide the opening and closing fences and show the language in the upper-right; focusing a block reveals both fences in reserved rows without changing its height.
+- Improved fenced-code keyboard navigation so the caret enters through the nearest fence, moves through every source line in order, and reaches the opposite fence before leaving the block. Pressing Enter at the end of a valid closing fence now creates a paragraph below it.
+- Refined Live-mode code blocks with a rounded dark surface and no contrasting border.
+
+### Fixed
+
+- Fixed structural fence edits in Live mode so adding, removing, or invalidating a closing fence immediately reparses the remaining Markdown without generating, deleting, or relocating other authored fences. Incomplete closing fences are preserved exactly after saving and reopening.
 
 ## [0.11.0] - 2026-08-09
 
+### Added
+
+- Added an option to remove signed-out or expired login-device records immediately. The server now removes records that remain inactive for 30 days automatically.
+
 ### Changed
 
-- Reworked General settings to show a compact account summary and move avatar, name, and username changes into a responsive **Edit profile** dialog with explicit, independent actions.
-- Replaced the small, standard, and large text-size presets with a 12–24 pixel font-size input, immediate local preview and saving, a 14-pixel default restore action, and automatic migration of existing size preferences.
-- Added immediate removal of signed-out or expired login-device records and automatic server cleanup after 30 days.
+- Simplified General settings with a compact profile summary. Avatar, display-name, and username changes now open in a responsive **Edit profile** dialog, with a separate action for each change.
+- Replaced the small, standard, and large text-size presets with a 12–24 pixel input. Changes are previewed and saved immediately, **Restore default** returns to 14 pixels, and existing preferences migrate automatically.
 
 ### Fixed
 
