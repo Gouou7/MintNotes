@@ -178,6 +178,12 @@ export const hr: FeatureSpec = {
         : null;
       if (!paragraph || !match || state.selection.$from.before() !== pos) return false;
 
+      // Only Enter after the complete delimiter commits the revealed source
+      // back to an HR and opens a paragraph below it. At the start or in the
+      // middle, Enter must retain normal text editing semantics so the source
+      // moves down or splits exactly at the caret.
+      if (state.selection.$from.parentOffset !== paragraph.content.size) return false;
+
       if (dispatch) {
         const markup = match[1]!;
         const rule = createHrNode(schema, markup);
