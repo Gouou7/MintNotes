@@ -2,6 +2,7 @@ import type { Schema } from "prosemirror-model";
 import { Plugin, TextSelection } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 
+import { fencedCodeBody } from "../core/fenced-code-source";
 import type { EditorExtension } from "../core/lib";
 
 export interface RichSyntaxOptions {
@@ -146,14 +147,15 @@ function richSyntaxDecorationPlugin(schema: Schema, options: RichSyntaxOptions):
             const to = position + node.nodeSize - 1;
             const editing = selection.from >= from && selection.to <= to;
             const kind = language === "mermaid" ? "mermaid" : "math-block";
+            const body = fencedCodeBody(node);
             decorations.push(Decoration.node(position, position + node.nodeSize, {
               class: `live-${kind}-source${editing ? " is-live-syntax-editing" : " is-live-syntax-rendered"}`,
             }));
             if (!editing) decorations.push(liveSyntaxWidget(
               position,
               `live-${kind}-widget`,
-              (container) => renderer(container, node.textContent),
-              `${language}:${position}:${node.textContent}`,
+              (container) => renderer(container, body),
+              `${language}:${position}:${body}`,
               true,
             ));
             return false;

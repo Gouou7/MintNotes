@@ -8,94 +8,72 @@ import {
 } from "prosemirror-view";
 
 import { leaveLineDraft } from "../block-draft";
+import {
+  fencedCodeStructureSignature,
+  parseFencedCodeSource,
+} from "../fenced-code-source";
 import type { FeatureSpec } from "./_types";
 
-// Fenced code blocks have two Live-mode representations:
-//
-//   rendered: code_block(lang, sourceEditing=false) contains only the body.
-//   source:   code_block(lang, sourceEditing=true) contains the complete
-//             Markdown source, including both fences.
-//
-// Keeping the active source in the document makes every character a real
-// ProseMirror position. The caret can therefore move through the opening
-// fence, body, and closing fence using the browser's normal editing behavior.
-// The serializer writes active source verbatim, so React still receives
-// canonical Markdown rather than a private Live-mode representation.
+// A fenced code node always contains its complete Markdown source, including
+// the opening fence and the closing fence when one exists. Live mode changes
+// only presentation state: sourceEditing reveals the fence characters, while
+// the stable view hides them with decorations. Source positions never change
+// merely because the caret enters or leaves the block.
 
 const FENCE_RE = /^```(\w*)$/;
-const COMPLETE_FENCE_RE = /^```([^\n]*)\n([\s\S]*)\n```$/;
-const OPENING_FENCE_LINE_RE = /^```([^\n`]*)$/;
-const CLOSING_FENCE_LINE_RE = /^ {0,3}```[\t ]*$/;
 
 type SourceTarget =
   | { edge: "open" | "close" }
   | { bodyOffset: number };
 
-function textContent(schema: Schema, value: string) {
-  return value.length > 0 ? schema.text(value) : null;
-}
-
-function sourceFor(node: PMNode): string {
-  return `\`\`\`${String(node.attrs.lang ?? "")}\n${node.textContent}\n\`\`\``;
-}
-
 function parseCompleteSource(source: string): { lang: string; body: string } | null {
-  const match = COMPLETE_FENCE_RE.exec(source);
-  if (!match) return null;
-  return { lang: match[1] ?? "", body: match[2] ?? "" };
+  const parsed = parseFencedCodeSource(source);
+  if (!parsed || parsed.closingFrom === null) return null;
+  return { lang: parsed.lang, body: parsed.body };
 }
 
 function isSourceEditing(node: PMNode): boolean {
   return node.type.name === "code_block" && node.attrs.sourceEditing === true;
 }
 
-function isTypedClosingFence(
-  oldNode: PMNode,
-  newNode: PMNode,
-  oldOffset: number,
-  newOffset: number,
-): boolean {
-  if (!isSourceEditing(oldNode) || !isSourceEditing(newNode)) return false;
-  if (newOffset <= oldOffset) return false;
+function fenceStructureChanged(oldNode: PMNode, newNode: PMNode): boolean {
+  return oldNode.textContent !== newNode.textContent
+    && fencedCodeStructureSignature(oldNode.textContent)
+      !== fencedCodeStructureSignature(newNode.textContent);
+}
 
-  const oldSource = oldNode.textContent;
-  const source = newNode.textContent;
-  const inserted = source.slice(oldOffset, newOffset);
-  if (
-    inserted.length === 0
-    || source.slice(0, oldOffset) !== oldSource.slice(0, oldOffset)
-    || source.slice(newOffset) !== oldSource.slice(oldOffset)
-  ) return false;
+function selectionMarkdownOffset(
+  state: EditorView["state"],
+  serializeMarkdown: (doc: PMNode) => string,
+): number {
+  try {
+    return serializeMarkdown(state.doc.cut(0, state.selection.head)).length;
+  } catch {
+    return serializeMarkdown(state.doc).length;
+  }
+}
 
-  const openingEnd = source.indexOf("\n");
-  if (openingEnd < 0) return false;
-  const opening = OPENING_FENCE_LINE_RE.exec(source.slice(0, openingEnd));
-  if (!opening) return false;
-
-  const lineStart = source.lastIndexOf("\n", Math.max(0, newOffset - 1)) + 1;
-  const nextBreak = source.indexOf("\n", newOffset);
-  const lineEnd = nextBreak < 0 ? source.length : nextBreak;
-  if (
-    lineStart <= openingEnd
-    || newOffset !== lineEnd
-    || !CLOSING_FENCE_LINE_RE.test(source.slice(lineStart, lineEnd))
-  ) return false;
-
-  // A complete block already has a final fence. The new fence may close the
-  // block earlier, but the old final fence remains authored Markdown and must
-  // be reparsed in place instead of being silently removed.
-  const hadClosingFence = parseCompleteSource(oldSource) !== null;
-  const oldClosingStart = hadClosingFence ? source.lastIndexOf("\n") + 1 : null;
-  return oldClosingStart === null || lineStart < oldClosingStart;
+function markdownOffsetToDocumentPosition(
+  markdown: string,
+  offset: number,
+  parseMarkdown: (markdown: string) => PMNode,
+): number {
+  try {
+    return parseMarkdown(markdown.slice(0, Math.max(0, offset))).content.size;
+  } catch {
+    return 0;
+  }
 }
 
 function sourceOffset(node: PMNode, target: SourceTarget): number {
-  const source = sourceFor(node);
+  const source = node.textContent;
+  const parsed = parseFencedCodeSource(source);
   if ("edge" in target) {
     return target.edge === "open" ? 0 : source.length;
   }
-  const prefixLength = 3 + String(node.attrs.lang ?? "").length + 1;
-  return Math.min(prefixLength + Math.max(0, target.bodyOffset), source.length - 4);
+  const bodyFrom = parsed?.bodyFrom ?? 0;
+  const bodyTo = parsed?.bodyTo ?? source.length;
+  return Math.min(bodyFrom + Math.max(0, target.bodyOffset), bodyTo);
 }
 
 function activateSource(view: EditorView, pos: number, target: SourceTarget): boolean {
@@ -113,14 +91,9 @@ function activateSource(view: EditorView, pos: number, target: SourceTarget): bo
     return true;
   }
 
-  const source = sourceFor(node);
-  const activeNode = node.type.create(
-    { ...node.attrs, sourceEditing: true },
-    textContent(view.state.schema, source),
-  );
   const offset = sourceOffset(node, target);
   const tr = view.state.tr
-    .replaceWith(pos, pos + node.nodeSize, activeNode)
+    .setNodeMarkup(pos, undefined, { ...node.attrs, sourceEditing: true })
     .setMeta("addToHistory", false);
   tr.setSelection(TextSelection.create(tr.doc, pos + 1 + offset));
   view.dispatch(tr);
@@ -147,11 +120,12 @@ function pointerSourceTarget(
   }
 
   const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
-  const bodyOffset = coords
-    ? coords.pos - nodePos - 1
-    : 0;
+  const parsed = parseFencedCodeSource(node.textContent);
+  const bodyFrom = parsed?.bodyFrom ?? 0;
+  const bodySize = parsed ? parsed.bodyTo - parsed.bodyFrom : node.content.size;
+  const bodyOffset = coords ? coords.pos - nodePos - 1 - bodyFrom : 0;
   return {
-    bodyOffset: Math.min(Math.max(0, bodyOffset), node.content.size),
+    bodyOffset: Math.min(Math.max(0, bodyOffset), bodySize),
   };
 }
 
@@ -206,19 +180,32 @@ function commentPattern(lang: string): RegExp {
   return /^\s*(?:\/\/|\/\*)/;
 }
 
-function codeCommentDecorations(state: EditorView["state"]): DecorationSet | null {
+function fencedCodeDecorations(state: EditorView["state"]): DecorationSet | null {
   const decorations: Decoration[] = [];
   state.doc.descendants((node, pos) => {
     if (node.type.name !== "code_block") return;
     const source = node.textContent;
-    const parsed = isSourceEditing(node) ? parseCompleteSource(source) : null;
-    const lang = parsed?.lang ?? String(node.attrs.lang ?? "");
+    const parsed = parseFencedCodeSource(source);
+    if (!parsed) return;
+    const fenceClass = isSourceEditing(node) ? "syntax-hint" : "syntax-hidden";
+    decorations.push(Decoration.inline(
+      pos + 1 + parsed.openingFrom,
+      pos + 1 + parsed.openingTo,
+      { class: fenceClass },
+    ));
+    if (parsed.closingFrom !== null && parsed.closingTo !== null) {
+      decorations.push(Decoration.inline(
+        pos + 1 + parsed.closingFrom,
+        pos + 1 + parsed.closingTo,
+        { class: fenceClass },
+      ));
+    }
+
+    const lang = parsed.lang || String(node.attrs.lang ?? "");
     const pattern = commentPattern(lang);
-    let offset = 0;
-    for (const line of source.split("\n")) {
-      const isFenceLine = isSourceEditing(node)
-        && (offset === 0 || offset + line.length === source.length);
-      if (!isFenceLine && pattern.test(line) && line.length > 0) {
+    let offset = parsed.bodyFrom;
+    for (const line of parsed.body.split("\n")) {
+      if (pattern.test(line) && line.length > 0) {
         decorations.push(
           Decoration.inline(pos + 1 + offset, pos + 1 + offset + line.length, {
             class: "cb-code-comment",
@@ -276,10 +263,9 @@ class CodeBlockView implements NodeView {
       return;
     }
 
-    // The rendered node and the source node have different document
-    // positions. Handle the pointer before ProseMirror performs its native
-    // selection update so the rendered caret never flashes at an intermediate
-    // position and the click coordinates are mapped exactly once.
+    // Handle the pointer before ProseMirror performs its native selection
+    // update so hidden fence decorations do not produce an intermediate
+    // painted caret and the stable source coordinates are mapped exactly once.
     event.preventDefault();
     event.stopPropagation();
     activateSource(
@@ -291,7 +277,8 @@ class CodeBlockView implements NodeView {
 
   private applyNode(node: PMNode): void {
     this.node = node;
-    const lang = String(node.attrs.lang ?? "");
+    const lang = parseFencedCodeSource(node.textContent)?.lang
+      || String(node.attrs.lang ?? "");
     const editing = isSourceEditing(node);
     if (lang) this.dom.setAttribute("data-lang", lang);
     else this.dom.removeAttribute("data-lang");
@@ -465,111 +452,100 @@ function fencedCodeSourcePlugin(
         && oldState.selection.empty
         && newState.selection.empty
       ) {
-        const typedClosingFence = isTypedClosingFence(
-          oldCode.node,
-          newCode.node,
-          oldCode.offset,
-          newCode.offset,
-        );
-        if (typedClosingFence) {
+        if (fenceStructureChanged(oldCode.node, newCode.node)) {
           let codeOrdinal = 0;
           newState.doc.descendants((node, pos) => {
             if (node.type.name === "code_block" && pos < newCode.pos) codeOrdinal++;
           });
-
-          const reparsed = parseMarkdown(serializeMarkdown(newState.doc));
-          let seenCodeBlocks = 0;
-          let closedCodeEnd: number | null = null;
-          reparsed.descendants((node, pos) => {
-            if (closedCodeEnd !== null || node.type.name !== "code_block") return;
-            if (seenCodeBlocks === codeOrdinal) closedCodeEnd = pos + node.nodeSize;
-            seenCodeBlocks++;
-          });
-
+          const markdown = serializeMarkdown(newState.doc);
+          const markdownOffset = selectionMarkdownOffset(newState, serializeMarkdown);
+          const reparsed = parseMarkdown(markdown);
           const tr = newState.tr.replaceWith(
             0,
             newState.doc.content.size,
             reparsed.content,
           );
-          if (closedCodeEnd !== null) {
-            let selection = Selection.findFrom(
-              tr.doc.resolve(closedCodeEnd),
-              1,
-              true,
-            );
-            if (!selection && closedCodeEnd === tr.doc.content.size) {
-              const paragraph = newState.schema.nodes.paragraph.createAndFill();
-              if (paragraph) {
-                tr.insert(closedCodeEnd, paragraph);
-                selection = Selection.findFrom(
-                  tr.doc.resolve(closedCodeEnd),
-                  1,
-                  true,
-                );
-              }
+          let seenCodeBlocks = 0;
+          let reparsedCode: { pos: number; node: PMNode } | null = null;
+          tr.doc.descendants((node, pos) => {
+            if (reparsedCode || node.type.name !== "code_block") return;
+            if (seenCodeBlocks === codeOrdinal) reparsedCode = { pos, node };
+            seenCodeBlocks++;
+          });
+
+          const nowClosed = parseFencedCodeSource(newCode.node.textContent)?.closingFrom
+            != null;
+          if (reparsedCode && nowClosed) {
+            const code = reparsedCode as { pos: number; node: PMNode };
+            const codeEnd = code.pos + code.node.nodeSize;
+            const outside = Selection.findFrom(tr.doc.resolve(codeEnd), 1, true);
+            if (outside) {
+              tr.setSelection(outside);
+            } else {
+              tr.setSelection(TextSelection.create(
+                tr.doc,
+                code.pos + 1 + code.node.content.size,
+              ));
+              tr.setNodeMarkup(code.pos, undefined, {
+                ...code.node.attrs,
+                sourceEditing: true,
+              });
             }
-            if (selection) tr.setSelection(selection);
+          } else if (reparsedCode) {
+            const code = reparsedCode as { pos: number; node: PMNode };
+            tr.setSelection(TextSelection.create(
+              tr.doc,
+              code.pos + 1 + Math.min(newCode.offset, code.node.content.size),
+            ));
+          } else {
+            const target = Math.min(
+              markdownOffsetToDocumentPosition(markdown, markdownOffset, parseMarkdown),
+              tr.doc.content.size,
+            );
+            tr.setSelection(Selection.near(tr.doc.resolve(target), 1));
           }
           return tr;
         }
       }
-      if (
-        newCode
-        && !isSourceEditing(newCode.node)
-        && newState.selection.empty
-        && !oldState.selection.eq(newState.selection)
-        && oldCode?.pos !== newCode.pos
-      ) {
-        const source = sourceFor(newCode.node);
-        const activeNode = newCode.node.type.create(
-          { ...newCode.node.attrs, sourceEditing: true },
-          textContent(newState.schema, source),
-        );
-        let offset: number;
-        if (oldState.doc.eq(newState.doc) && oldState.selection.from <= newCode.pos) {
-          offset = 0;
-        } else if (
-          oldState.doc.eq(newState.doc)
-          && oldState.selection.from >= newCode.pos + newCode.node.nodeSize
-        ) {
-          offset = source.length;
-        } else {
-          const prefixLength = 3 + String(newCode.node.attrs.lang ?? "").length + 1;
-          offset = prefixLength + newCode.offset;
-        }
-        const tr = newState.tr
-          .replaceWith(newCode.pos, newCode.pos + newCode.node.nodeSize, activeNode)
-          .setMeta("addToHistory", false);
-        tr.setSelection(TextSelection.create(tr.doc, newCode.pos + 1 + offset));
-        return tr;
-      }
-
-      const activePos = newCode?.pos ?? null;
-
-      const collapsible: Array<{
+      const presentationUpdates: Array<{
         pos: number;
         node: PMNode;
-        parsed: { lang: string; body: string };
+        sourceEditing: boolean;
+        lang: string;
       }> = [];
       newState.doc.descendants((node, pos) => {
-        if (!isSourceEditing(node) || pos === activePos) return;
-        const parsed = parseCompleteSource(node.textContent);
-        if (parsed) collapsible.push({ pos, node, parsed });
+        if (node.type.name !== "code_block") return;
+        const parsed = parseFencedCodeSource(node.textContent);
+        if (!parsed) return;
+        const nodeFrom = pos + 1;
+        const nodeTo = pos + node.nodeSize - 1;
+        const selected = newState.selection.from <= nodeTo
+          && newState.selection.to >= nodeFrom;
+        const sourceEditing = selected || parsed.closingFrom === null;
+        if (
+          sourceEditing !== isSourceEditing(node)
+          || parsed.lang !== String(node.attrs.lang ?? "")
+        ) presentationUpdates.push({
+          pos,
+          node,
+          sourceEditing,
+          lang: parsed.lang,
+        });
       });
-      if (collapsible.length === 0) return null;
+      if (presentationUpdates.length === 0) return null;
 
       const tr = newState.tr.setMeta("addToHistory", false);
-      for (const item of collapsible.reverse()) {
-        const rendered = item.node.type.create(
-          { ...item.node.attrs, lang: item.parsed.lang, sourceEditing: false },
-          textContent(newState.schema, item.parsed.body),
+      for (const item of presentationUpdates.reverse()) {
+        tr.setNodeMarkup(
+          item.pos,
+          undefined,
+          { ...item.node.attrs, lang: item.lang, sourceEditing: item.sourceEditing },
         );
-        tr.replaceWith(item.pos, item.pos + item.node.nodeSize, rendered);
       }
       return tr;
     },
     props: {
-      decorations: codeCommentDecorations,
+      decorations: fencedCodeDecorations,
       nodeViews: {
         code_block: (node, view, getPos) => new CodeBlockView(node, view, getPos),
       },
@@ -584,6 +560,30 @@ function fencedCodeSourcePlugin(
         );
       },
       handleKeyDown(view, event) {
+        if (
+          event.key === "Backspace"
+          && !event.shiftKey
+          && !event.metaKey
+          && !event.ctrlKey
+          && !event.altKey
+        ) {
+          const adjacent = adjacentCodeBlock(view.state, -1);
+          return adjacent
+            ? activateSource(view, adjacent.pos, { edge: "close" })
+            : false;
+        }
+        if (
+          event.key === "Delete"
+          && !event.shiftKey
+          && !event.metaKey
+          && !event.ctrlKey
+          && !event.altKey
+        ) {
+          const adjacent = adjacentCodeBlock(view.state, 1);
+          return adjacent
+            ? activateSource(view, adjacent.pos, { edge: "open" })
+            : false;
+        }
         if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(event.key)) {
           return false;
         }
@@ -644,9 +644,10 @@ function makeFencedPlugin(schema: Schema) {
     },
     draftClass: () => "fenced-code-draft",
     commit: (tr, pos, paragraph, data) => {
+      const source = `\`\`\`${data.lang}\n\n\`\`\``;
       const codeBlock = schema.nodes.code_block.create(
         { lang: data.lang, sourceEditing: false },
-        null,
+        schema.text(source),
       );
       tr.replaceWith(pos, pos + paragraph.nodeSize, codeBlock);
     },
@@ -690,12 +691,12 @@ export const fencedCode: FeatureSpec = {
         if (!parsed) return false;
         if (dispatch) {
           const pos = $from.before();
-          const rendered = $from.parent.type.create(
-            { ...$from.parent.attrs, lang: parsed.lang, sourceEditing: false },
-            textContent(schema, parsed.body),
-          );
-          const tr = state.tr.replaceWith(pos, pos + $from.parent.nodeSize, rendered);
-          const afterBlock = pos + rendered.nodeSize;
+          const tr = state.tr.setNodeMarkup(pos, undefined, {
+            ...$from.parent.attrs,
+            lang: parsed.lang,
+            sourceEditing: false,
+          });
+          const afterBlock = pos + $from.parent.nodeSize;
           const paragraph = schema.nodes.paragraph.createAndFill();
           if (paragraph) {
             tr.insert(afterBlock, paragraph);
@@ -720,24 +721,6 @@ export const fencedCode: FeatureSpec = {
         const bodyStart = pos + 1 + 3 + lang.length + 1;
         const tr = state.tr.replaceWith(pos, pos + paragraph.nodeSize, codeBlock);
         tr.setSelection(TextSelection.create(tr.doc, bodyStart));
-        dispatch(tr);
-      }
-      return true;
-    },
-
-    Backspace: (state, dispatch) => {
-      const selection = state.selection;
-      if (!selection.empty) return false;
-      const $from = selection.$from;
-      if ($from.parent.type.name !== "code_block") return false;
-      if ($from.parent.content.size > 0) return false;
-      if (dispatch) {
-        const pos = $from.before();
-        const tr = state.tr.delete(pos, pos + $from.parent.nodeSize);
-        if (tr.doc.content.size === 0) {
-          const paragraph = schema.nodes.paragraph.createAndFill();
-          if (paragraph) tr.insert(0, paragraph);
-        }
         dispatch(tr);
       }
       return true;

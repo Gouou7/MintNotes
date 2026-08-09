@@ -13,6 +13,7 @@ import {
   collectParserPostProcessors,
   collectParserTokens,
 } from "./features/index";
+import { parseFencedCodeSource } from "./fenced-code-source";
 import { schema } from "./schema";
 
 const md: MarkdownIt = new MarkdownIt("commonmark", { html: false });
@@ -212,23 +213,19 @@ function handleBlock(state: ParserState, token: Token, src: string): void {
       state.closeNode();
       return;
     case "fence": {
-      if (!sourceFenceIsClosed(token, src)) {
-        const source = sourceForToken(token, src);
-        const textNodes = source ? [schema.text(source)] : [];
-        state.push(nodes.code_block.createChecked({
-          lang: token.info.trim(),
-          sourceEditing: true,
-        }, textNodes));
-        return;
-      }
-      const content = token.content.replace(/\n$/, "");
-      const textNodes = content ? [schema.text(content)] : [];
-      state.push(nodes.code_block.createChecked({ lang: token.info.trim() }, textNodes));
+      const source = sourceForToken(token, src);
+      const textNodes = source ? [schema.text(source)] : [];
+      state.push(nodes.code_block.createChecked({
+        lang: token.info.trim(),
+        sourceEditing: !sourceFenceIsClosed(token, src)
+          || parseFencedCodeSource(source)?.closingFrom === null,
+      }, textNodes));
       return;
     }
     case "code_block": {
       const content = token.content.replace(/\n$/, "");
-      const textNodes = content ? [schema.text(content)] : [];
+      const source = `\`\`\`\n${content}\n\`\`\``;
+      const textNodes = [schema.text(source)];
       state.push(nodes.code_block.createChecked({ lang: "" }, textNodes));
       return;
     }

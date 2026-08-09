@@ -6,6 +6,7 @@ import { type Event, feedEvent } from "../specs/events";
 import { fakeView } from "../specs/sim";
 import type { FeatureSpecs } from "../specs/_types";
 import { parse } from "../parser";
+import { parseFencedCodeSource } from "../fenced-code-source";
 import { schema } from "../schema";
 import { pretty } from "../specs/pretty";
 
@@ -15,7 +16,17 @@ export type { Event } from "../specs/events";
 export function setup(md = ""): EditorState {
   const doc = md ? parse(md) : schema.nodes.doc.createAndFill()!;
   const base = createState(doc);
-  return base.apply(base.tr.setSelection(TextSelection.atEnd(doc)));
+  const last = doc.lastChild;
+  const fenced = last?.type === schema.nodes.code_block
+    ? parseFencedCodeSource(last.textContent)
+    : null;
+  const selection = fenced && fenced.closingFrom !== null
+    ? TextSelection.create(
+      doc,
+      doc.content.size - last!.nodeSize + 1 + fenced.bodyTo,
+    )
+    : TextSelection.atEnd(doc);
+  return base.apply(base.tr.setSelection(selection));
 }
 
 export function apply(state: EditorState, events: Event[]): EditorState {

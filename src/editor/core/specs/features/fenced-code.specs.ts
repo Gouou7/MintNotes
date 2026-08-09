@@ -4,8 +4,6 @@ export const fencedCodeSpecs: FeatureSpecs = {
   name: "code_block",
   renderCases: {
     pre: (_children, el) => {
-      const lang = el.getAttribute("data-lang") ?? "";
-      const sourceEditing = el.getAttribute("data-source-editing") === "1";
       const codeEl = el.querySelector("code");
       let text = "";
       if (codeEl) {
@@ -28,8 +26,7 @@ export const fencedCodeSpecs: FeatureSpecs = {
           }
         }
       }
-      if (sourceEditing) return text;
-      return `\`\`\`${lang}\n${text}\n\`\`\``;
+      return text;
     },
   },
   cases: [
@@ -184,7 +181,9 @@ export const fencedCodeSpecs: FeatureSpecs = {
       seed: "```ts\nfoo\n```",
       events: ["<Home>", "<ArrowUp>", "<ArrowDown>"],
       checkpoints: [
-        { at: 1, expect: "```ts\n|foo\n```" },
+        // Home follows the canonical source line, so it reaches the opening
+        // fence rather than a rendered-only body boundary.
+        { at: 1, expect: "|```ts\nfoo\n```" },
         { at: 2, expect: "|```ts\nfoo\n```" },
         { at: 3, expect: "```ts\n|foo\n```" },
       ],

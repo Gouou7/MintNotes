@@ -59,7 +59,7 @@ describe("parser: block nodes", () => {
     const cb = doc.child(0);
     expect(cb.type).toBe(schema.nodes.code_block);
     expect(cb.attrs.lang).toBe("ts");
-    expect(cb.textContent).toBe("const x = 1;");
+    expect(cb.textContent).toBe("```ts\nconst x = 1;\n```");
   });
 
   test("preserves an unclosed fenced block as editable source", () => {
@@ -79,7 +79,7 @@ describe("parser: block nodes", () => {
     const cb = doc.child(0);
     expect(cb.type).toBe(schema.nodes.code_block);
     expect(cb.attrs.lang).toBe("");
-    expect(cb.textContent).toBe("indented\nline2");
+    expect(cb.textContent).toBe("```\nindented\nline2\n```");
   });
 
   test("horizontal rule", () => {
@@ -193,7 +193,7 @@ describe("parser: schema safety", () => {
     // pins the schema constraint itself (code_block has `marks: ""`).
     const doc = parse("```\n**not bold**\n```");
     const cb = doc.child(0);
-    expect(cb.textContent).toBe("**not bold**");
+    expect(cb.textContent).toBe("```\n**not bold**\n```");
     expect(cb.child(0).marks.length).toBe(0);
   });
 });

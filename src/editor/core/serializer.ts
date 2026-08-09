@@ -293,26 +293,11 @@ const coreBlockHandlers: Record<string, BlockHandler> = {
   },
 
   code_block: (state, node) => {
-    if (node.attrs.sourceEditing === true) {
-      state.tick("inner");
-      state.write();
-      for (const ch of node.textContent) {
-        state.tick("inner");
-        if (ch === "\n") {
-          state.out += "\n";
-          if (state.delim) state.out += state.delim;
-        } else {
-          state.out += ch;
-        }
-        state.advance(1);
-      }
-      state.tick("inner");
-      state.closeBlock(node);
-      return;
-    }
-    const lang = String(node.attrs.lang ?? "");
-    state.write("```" + lang + "\n");
+    // code_block text is canonical fenced Markdown, not a rendered-only
+    // body. Emit it verbatim even while a user is editing an invalid opener
+    // or closer so source edits can be reparsed without synthesized fences.
     state.tick("inner");
+    state.write();
     for (const ch of node.textContent) {
       state.tick("inner");
       if (ch === "\n") {
@@ -324,7 +309,6 @@ const coreBlockHandlers: Record<string, BlockHandler> = {
       state.advance(1);
     }
     state.tick("inner");
-    state.write("\n```");
     state.closeBlock(node);
   },
 

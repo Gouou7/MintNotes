@@ -43,8 +43,8 @@ const coreNodes: Record<string, NodeSpec> = {
     defining: true,
     attrs: {
       lang: { default: "" },
-      // Transient Live-mode state. When true, textContent is the complete
-      // fenced Markdown source so every delimiter has a real caret position.
+      // Transient Live-mode presentation state only. textContent always keeps
+      // the complete fenced Markdown source regardless of this value.
       sourceEditing: { default: false },
     },
     parseDOM: [

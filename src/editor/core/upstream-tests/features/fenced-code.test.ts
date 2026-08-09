@@ -21,7 +21,7 @@ test("typing a closing fence line immediately exits the code block", () => {
   expect(view.state.doc.childCount).toBe(2);
   expect(view.state.doc.child(0).type.name).toBe("code_block");
   expect(view.state.doc.child(0).attrs.sourceEditing).toBe(false);
-  expect(view.state.doc.child(0).textContent).toBe("before");
+  expect(view.state.doc.child(0).textContent).toBe("```ts\nbefore\n```");
   expect(view.state.doc.child(1).type.name).toBe("code_block");
   expect(view.state.doc.child(1).attrs.sourceEditing).toBe(true);
   expect(view.state.doc.child(1).textContent).toBe("```");
@@ -57,7 +57,7 @@ test("typing a closing fence in the middle reparses the entire remaining documen
 
   expect(view.state.doc.childCount).toBe(3);
   expect(view.state.doc.child(0).type.name).toBe("code_block");
-  expect(view.state.doc.child(0).textContent).toBe("before");
+  expect(view.state.doc.child(0).textContent).toBe("```ts\nbefore\n```");
   expect(view.state.doc.child(1).type.name).toBe("heading");
   expect(view.state.doc.child(1).textContent).toBe("after");
   expect(view.state.doc.child(2).type.name).toBe("code_block");
@@ -93,13 +93,15 @@ test("an unclosed fence owns the rest of the document and closes while typing", 
   feedKey(view, "<Enter>");
   feedText(view, "```");
 
-  expect(view.state.doc.childCount).toBe(2);
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(false);
+  expect(view.state.doc.childCount).toBe(1);
+  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
   expect(view.state.doc.child(0).textContent).toBe(
-    "before\n# still code\n- still code",
+    "```ts\nbefore\n# still code\n- still code\n```",
   );
-  expect(view.state.doc.child(1).type.name).toBe("paragraph");
-  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(1));
+  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(0));
+  expect(serialize(view.state.doc)).toBe(
+    "```ts\nbefore\n# still code\n- still code\n```",
+  );
 });
 
 test("ArrowDown from the preceding block reveals the opening fence", () => {
@@ -148,7 +150,7 @@ test("mousedown activates source once and preserves the clicked body offset", ()
   let dispatchCount = 0;
   let view: EditorView;
   view = new EditorView(mount, {
-    state: setup("```ts\nfirst line\nsecond line\n```"),
+    state: setup("```ts\nfirst line\nsecond line\n```\n\nafter"),
     dispatchTransaction(transaction) {
       dispatchCount += 1;
       view.updateState(view.state.apply(transaction));
@@ -157,7 +159,7 @@ test("mousedown activates source once and preserves the clicked body offset", ()
 
   const bodyOffset = "first line\nsecond".length;
   Object.defineProperty(view, "posAtCoords", {
-    value: () => ({ pos: 1 + bodyOffset, inside: 0 }),
+    value: () => ({ pos: 1 + "```ts\n".length + bodyOffset, inside: 0 }),
   });
   const pre = mount.querySelector("pre")!;
   Object.defineProperty(pre, "getBoundingClientRect", {
@@ -325,7 +327,7 @@ test("active fenced source is real editable text and collapses after the caret l
   const rendered = view.state.doc.child(0);
   expect(rendered.attrs.sourceEditing).toBe(false);
   expect(rendered.attrs.lang).toBe("bash-session");
-  expect(rendered.textContent).toBe("echo hi");
+  expect(rendered.textContent).toBe("```bash-session\necho hi\n```");
   expect(serialize(view.state.doc)).toBe("```bash-session\necho hi\n```\n\nafter");
 });
 
@@ -348,7 +350,7 @@ test("a range selection inside fenced source does not collapse the code block", 
   expect(serialize(view.state.doc)).toBe("```ts\none\ntwo\n```\n\nafter");
 });
 
-test("an incomplete edited fence stays visible and serializes verbatim", () => {
+test("deleting part of a closing fence immediately reparses following Markdown", () => {
   let state = setup("```ts\nvalue\n```\n\nafter");
   const code = state.doc.child(0);
   state = state.apply(
@@ -358,13 +360,47 @@ test("an incomplete edited fence stays visible and serializes verbatim", () => {
 
   const closingTick = view.state.doc.child(0).nodeSize - 2;
   view.dispatch(view.state.tr.delete(closingTick, closingTick + 1));
-  const activeSize = view.state.doc.child(0).nodeSize;
-  view.dispatch(
-    view.state.tr.setSelection(TextSelection.create(view.state.doc, activeSize + 1)),
-  );
 
+  expect(view.state.doc.childCount).toBe(1);
   expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).textContent).toBe("```ts\nvalue\n``\n\nafter");
+  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(0));
   expect(serialize(view.state.doc)).toBe("```ts\nvalue\n``\n\nafter");
+});
+
+test("Backspace from below traverses the authored closing fence before code body", () => {
+  const view = fakeView(setup("```ts\nvalue\n```\n\nafter"));
+
+  feedKey(view, "<Home>");
+  feedKey(view, "<Backspace>");
+
+  expect(pretty(view.state)).toBe("```ts\nvalue\n```|\nafter");
+  expect(serialize(view.state.doc)).toBe("```ts\nvalue\n```\n\nafter");
+
+  feedKey(view, "<Backspace>");
+
+  expect(view.state.doc.childCount).toBe(1);
+  expect(view.state.doc.child(0).type.name).toBe("code_block");
+  expect(view.state.doc.child(0).textContent).toBe("```ts\nvalue\n``\n\nafter");
+  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(0));
+  expect(serialize(view.state.doc)).toBe("```ts\nvalue\n``\n\nafter");
+});
+
+test("Delete from above traverses the authored opening fence", () => {
+  let state = setup("before\n\n```ts\nvalue\n```");
+  state = state.apply(
+    state.tr.setSelection(
+      TextSelection.create(state.doc, state.doc.child(0).nodeSize - 1),
+    ),
+  );
+  const view = fakeView(state);
+
+  feedKey(view, "<Delete>");
+
+  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(1));
+  expect(view.state.selection.$from.parentOffset).toBe(0);
+  expect(view.state.doc.child(1).attrs.sourceEditing).toBe(true);
+  expect(serialize(view.state.doc)).toBe("before\n\n```ts\nvalue\n```");
 });
 
 test("ArrowDown leaves the closing source fence and restores rendered code", () => {
@@ -420,7 +456,7 @@ test("Enter before the opening fence inserts a paragraph above the code block", 
   expect(view.state.doc.child(0).textContent).toBe("");
   expect(view.state.doc.child(1).type.name).toBe("code_block");
   expect(view.state.doc.child(1).attrs.sourceEditing).toBe(false);
-  expect(view.state.doc.child(1).textContent).toBe("value");
+  expect(view.state.doc.child(1).textContent).toBe("```ts\nvalue\n```");
   expect(view.state.selection.$from.parent).toBe(view.state.doc.child(0));
   expect(serialize(view.state.doc)).toBe("\n```ts\nvalue\n```\n\nafter");
 });
