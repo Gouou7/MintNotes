@@ -67,6 +67,9 @@
   font-style: normal;
   user-select: none;
 }
+.ProseMirror pre.cb-source-editing .syntax-hint {
+  user-select: text;
+}
 .ProseMirror .syntax-hint-italic {
   color: #b0b0b0;
   font-style: italic;

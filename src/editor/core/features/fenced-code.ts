@@ -1,4 +1,4 @@
-import type { Node as PMNode, Schema } from "prosemirror-model";
+import type { Node as PMNode, ResolvedPos, Schema } from "prosemirror-model";
 import { Plugin, Selection, TextSelection } from "prosemirror-state";
 import {
   Decoration,
@@ -86,6 +86,50 @@ function activateSource(view: EditorView, pos: number, target: SourceTarget): bo
   return true;
 }
 
+function pointerSourceTarget(
+  view: EditorView,
+  node: PMNode,
+  nodePos: number,
+  dom: HTMLElement,
+  event: MouseEvent,
+): SourceTarget {
+  if ((event.target as HTMLElement | null)?.closest(".cb-language-label")) {
+    return { edge: "open" };
+  }
+
+  const rect = dom.getBoundingClientRect();
+  if (rect.height > 0) {
+    const edgeZone = Math.min(28, rect.height / 3);
+    if (event.clientY <= rect.top + edgeZone) return { edge: "open" };
+    if (event.clientY >= rect.bottom - edgeZone) return { edge: "close" };
+  }
+
+  const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+  const bodyOffset = coords
+    ? coords.pos - nodePos - 1
+    : 0;
+  return {
+    bodyOffset: Math.min(Math.max(0, bodyOffset), node.content.size),
+  };
+}
+
+function pointerIsAtSourceEnd(
+  view: EditorView,
+  node: PMNode,
+  nodePos: number,
+  event: MouseEvent,
+): boolean {
+  try {
+    const caret = view.coordsAtPos(nodePos + 1 + node.content.size);
+    const verticalTolerance = Math.max(3, (caret.bottom - caret.top) * 0.35);
+    return event.clientX >= Math.min(caret.left, caret.right) - 1
+      && event.clientY >= caret.top - verticalTolerance
+      && event.clientY <= caret.bottom + verticalTolerance;
+  } catch {
+    return false;
+  }
+}
+
 function displayLanguage(lang: string): string {
   const normalized = lang.trim().toLowerCase();
   const names: Record<string, string> = {
@@ -151,6 +195,7 @@ class CodeBlockView implements NodeView {
   private labelEl: HTMLElement;
   private view: EditorView;
   private getPos: () => number | undefined;
+  private node: PMNode;
 
   constructor(
     node: PMNode,
@@ -159,6 +204,7 @@ class CodeBlockView implements NodeView {
   ) {
     this.view = view;
     this.getPos = getPos;
+    this.node = node;
     const pre = document.createElement("pre");
     const code = document.createElement("code");
     const label = document.createElement("span");
@@ -171,17 +217,38 @@ class CodeBlockView implements NodeView {
     this.contentDOM = code;
     this.labelEl = label;
     this.applyNode(node);
-    label.addEventListener("mousedown", this.onLabelMouseDown);
+    pre.addEventListener("mousedown", this.onMouseDown);
   }
 
-  private onLabelMouseDown = (event: MouseEvent): void => {
+  private onMouseDown = (event: MouseEvent): void => {
+    if (event.button !== 0) return;
+    const pos = this.getPos();
+    if (pos == null) return;
+
+    if (isSourceEditing(this.node)) {
+      if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!pointerIsAtSourceEnd(this.view, this.node, pos, event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      activateSource(this.view, pos, { edge: "close" });
+      return;
+    }
+
+    // The rendered node and the source node have different document
+    // positions. Handle the pointer before ProseMirror performs its native
+    // selection update so the rendered caret never flashes at an intermediate
+    // position and the click coordinates are mapped exactly once.
     event.preventDefault();
     event.stopPropagation();
-    const pos = this.getPos();
-    if (pos != null) activateSource(this.view, pos, { edge: "open" });
+    activateSource(
+      this.view,
+      pos,
+      pointerSourceTarget(this.view, this.node, pos, this.dom, event),
+    );
   };
 
   private applyNode(node: PMNode): void {
+    this.node = node;
     const lang = String(node.attrs.lang ?? "");
     const editing = isSourceEditing(node);
     if (lang) this.dom.setAttribute("data-lang", lang);
@@ -200,7 +267,8 @@ class CodeBlockView implements NodeView {
   }
 
   stopEvent(event: Event): boolean {
-    return this.labelEl.contains(event.target as Node);
+    return this.labelEl.contains(event.target as Node)
+      || (event.type === "mousedown" && !isSourceEditing(this.node));
   }
 
   ignoreMutation(mutation: { target: Node }): boolean {
@@ -208,22 +276,17 @@ class CodeBlockView implements NodeView {
   }
 
   destroy(): void {
-    this.labelEl.removeEventListener("mousedown", this.onLabelMouseDown);
+    this.dom.removeEventListener("mousedown", this.onMouseDown);
   }
 }
 
-function adjacentCodeBlock(
+function siblingCodeBlock(
   state: EditorView["state"],
   direction: -1 | 1,
 ): { pos: number; node: PMNode } | null {
   const selection = state.selection;
   if (!selection.empty || selection.$from.depth < 1) return null;
   const $from = selection.$from;
-  const atBoundary = direction < 0
-    ? $from.parentOffset === 0
-    : $from.parentOffset === $from.parent.content.size;
-  if (!atBoundary) return null;
-
   const parentPos = $from.before();
   const $parent = state.doc.resolve(parentPos);
   const index = $parent.index();
@@ -242,24 +305,47 @@ function adjacentCodeBlock(
     : null;
 }
 
+function adjacentCodeBlock(
+  state: EditorView["state"],
+  direction: -1 | 1,
+): { pos: number; node: PMNode } | null {
+  const selection = state.selection;
+  if (!selection.empty) return null;
+  const $from = selection.$from;
+  const atBoundary = direction < 0
+    ? $from.parentOffset === 0
+    : $from.parentOffset === $from.parent.content.size;
+  return atBoundary ? siblingCodeBlock(state, direction) : null;
+}
+
+function codeBlockAtResolvedPos($pos: ResolvedPos): {
+  pos: number;
+  node: PMNode;
+  offset: number;
+} | null {
+  for (let depth = $pos.depth; depth > 0; depth--) {
+    const node = $pos.node(depth);
+    if (node.type.name === "code_block") {
+      return {
+        pos: $pos.before(depth),
+        node,
+        offset: $pos.pos - $pos.start(depth),
+      };
+    }
+  }
+  return null;
+}
+
 function codeBlockAtSelection(state: EditorView["state"]): {
   pos: number;
   node: PMNode;
   offset: number;
 } | null {
-  if (!state.selection.empty) return null;
-  const $from = state.selection.$from;
-  for (let depth = $from.depth; depth > 0; depth--) {
-    const node = $from.node(depth);
-    if (node.type.name === "code_block") {
-      return {
-        pos: $from.before(depth),
-        node,
-        offset: $from.pos - $from.start(depth),
-      };
-    }
-  }
-  return null;
+  const from = codeBlockAtResolvedPos(state.selection.$from);
+  const to = codeBlockAtResolvedPos(state.selection.$to);
+  if (!from || !to || from.pos !== to.pos) return null;
+  const head = codeBlockAtResolvedPos(state.selection.$head);
+  return head?.pos === from.pos ? head : from;
 }
 
 function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
@@ -285,7 +371,13 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
       const nextStart = currentEnd + 1;
       const nextBreak = text.indexOf("\n", nextStart);
       const nextEnd = nextBreak >= 0 ? nextBreak : text.length;
-      targetOffset = nextStart + Math.min(column, nextEnd - nextStart);
+      // The closing fence is rendered as its own syntax-hint span. A caret at
+      // the preceding text node's trailing newline is painted on the body line
+      // by Chromium, making the fence look skipped. Use the stable outer edge
+      // when entering the final source line from above.
+      targetOffset = nextEnd === text.length
+        ? nextEnd
+        : nextStart + Math.min(column, nextEnd - nextStart);
     }
   }
 
@@ -324,6 +416,7 @@ function fencedCodeSourcePlugin(): Plugin {
       if (
         newCode
         && !isSourceEditing(newCode.node)
+        && newState.selection.empty
         && !oldState.selection.eq(newState.selection)
         && oldCode?.pos !== newCode.pos
       ) {
@@ -380,29 +473,20 @@ function fencedCodeSourcePlugin(): Plugin {
       nodeViews: {
         code_block: (node, view, getPos) => new CodeBlockView(node, view, getPos),
       },
-      handleClickOn(view, pos, node, nodePos, event, direct) {
+      handleClickOn(view, _pos, node, nodePos, event, direct) {
         if (!direct || node.type.name !== "code_block" || isSourceEditing(node)) return false;
-        const target = event.target as HTMLElement | null;
-        if (target?.closest(".cb-language-label")) {
-          return activateSource(view, nodePos, { edge: "open" });
-        }
-
-        const rect = target?.closest("pre")?.getBoundingClientRect();
-        if (rect && rect.height > 0) {
-          const edgeZone = Math.min(28, rect.height / 3);
-          if (event.clientY <= rect.top + edgeZone) {
-            return activateSource(view, nodePos, { edge: "open" });
-          }
-          if (event.clientY >= rect.bottom - edgeZone) {
-            return activateSource(view, nodePos, { edge: "close" });
-          }
-        }
-        return activateSource(view, nodePos, {
-          bodyOffset: Math.min(Math.max(0, pos - nodePos - 1), node.content.size),
-        });
+        const dom = (event.target as HTMLElement | null)?.closest("pre");
+        if (!dom) return false;
+        return activateSource(
+          view,
+          nodePos,
+          pointerSourceTarget(view, node, nodePos, dom, event),
+        );
       },
       handleKeyDown(view, event) {
-        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return false;
+        if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(event.key)) {
+          return false;
+        }
         if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
         const state = view.state;
         if (!state.selection.empty) return false;
@@ -410,7 +494,10 @@ function fencedCodeSourcePlugin(): Plugin {
 
         if ($from.parent.type.name === "code_block") {
           if (isSourceEditing($from.parent)) {
-            return moveSourceVertically(view, event.key === "ArrowUp" ? -1 : 1);
+            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+              return moveSourceVertically(view, event.key === "ArrowUp" ? -1 : 1);
+            }
+            return false;
           } else {
             if (event.key === "ArrowUp" && $from.parentOffset === 0) {
               return activateSource(view, $from.before(), { edge: "open" });
@@ -421,11 +508,22 @@ function fencedCodeSourcePlugin(): Plugin {
             ) {
               return activateSource(view, $from.before(), { edge: "close" });
             }
+            return activateSource(view, $from.before(), {
+              bodyOffset: $from.parentOffset,
+            });
           }
         }
 
-        const direction = event.key === "ArrowUp" ? -1 : 1;
-        const adjacent = adjacentCodeBlock(state, direction);
+        const direction = event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : 1;
+        let adjacent = adjacentCodeBlock(state, direction);
+        if (
+          !adjacent
+          && (event.key === "ArrowUp" || event.key === "ArrowDown")
+          && $from.parent.isTextblock
+          && view.endOfTextblock(event.key === "ArrowUp" ? "up" : "down", state)
+        ) {
+          adjacent = siblingCodeBlock(state, direction);
+        }
         if (!adjacent) return false;
         return activateSource(
           view,
@@ -465,6 +563,21 @@ export const fencedCode: FeatureSpec = {
       const selection = state.selection;
       if (!selection.empty) return false;
       const $from = selection.$from;
+      if (
+        $from.parent.type.name === "code_block"
+        && isSourceEditing($from.parent)
+        && $from.parentOffset === 0
+      ) {
+        if (dispatch) {
+          const pos = $from.before();
+          const paragraph = schema.nodes.paragraph.createAndFill();
+          if (!paragraph) return false;
+          const tr = state.tr.insert(pos, paragraph);
+          tr.setSelection(TextSelection.create(tr.doc, pos + 1));
+          dispatch(tr);
+        }
+        return true;
+      }
       if (
         $from.parent.type.name === "code_block"
         && isSourceEditing($from.parent)
