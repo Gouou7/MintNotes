@@ -10,6 +10,98 @@ import { pretty, runFeatureCases, setup } from "../utils";
 
 runFeatureCases(fencedCodeSpecs);
 
+test("typing a closing fence line immediately exits the code block", () => {
+  const view = fakeView(setup());
+  feedText(view, "```ts");
+  feedKey(view, "<Enter>");
+  feedText(view, "before");
+  feedKey(view, "<Enter>");
+  feedText(view, "```");
+
+  expect(view.state.doc.childCount).toBe(2);
+  expect(view.state.doc.child(0).type.name).toBe("code_block");
+  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(false);
+  expect(view.state.doc.child(0).textContent).toBe("before");
+  expect(view.state.doc.child(1).type.name).toBe("code_block");
+  expect(view.state.doc.child(1).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(1).textContent).toBe("```");
+  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(1));
+  expect(serialize(view.state.doc)).toBe("```ts\nbefore\n```\n\n```");
+});
+
+test("typing a closing fence in the middle reparses the entire remaining document", () => {
+  let state = setup("```ts\nbefore\n\n# after\n```\n\noutside");
+  const code = state.doc.child(0);
+  const outsideStart = code.nodeSize + 1;
+  state = state.apply(
+    state.tr.setSelection(TextSelection.create(state.doc, outsideStart)),
+  );
+  const view = fakeView(state);
+  const blankBodyOffset = "before\n".length;
+  view.dispatch(
+    view.state.tr.setSelection(
+      TextSelection.create(view.state.doc, 1 + blankBodyOffset),
+    ),
+  );
+
+  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  view.dispatch(
+    view.state.tr.setSelection(
+      TextSelection.create(
+        view.state.doc,
+        1 + "```ts\n".length + blankBodyOffset,
+      ),
+    ),
+  );
+  feedText(view, "```");
+
+  expect(view.state.doc.childCount).toBe(3);
+  expect(view.state.doc.child(0).type.name).toBe("code_block");
+  expect(view.state.doc.child(0).textContent).toBe("before");
+  expect(view.state.doc.child(1).type.name).toBe("heading");
+  expect(view.state.doc.child(1).textContent).toBe("after");
+  expect(view.state.doc.child(2).type.name).toBe("code_block");
+  expect(view.state.doc.child(2).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(2).textContent).toBe("```\n\noutside");
+  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(1));
+  expect(serialize(view.state.doc)).toBe(
+    "```ts\nbefore\n```\n\n# after\n\n```\n\noutside",
+  );
+});
+
+test("three backticks inside a nonempty code line remain literal", () => {
+  const view = fakeView(setup());
+  feedText(view, "```");
+  feedKey(view, "<Enter>");
+  feedText(view, "value ```");
+
+  expect(view.state.doc.childCount).toBe(1);
+  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).textContent).toBe("```\nvalue ```\n```");
+});
+
+test("an unclosed fence owns the rest of the document and closes while typing", () => {
+  const view = fakeView(setup("```ts\nbefore\n# still code\n- still code"));
+
+  expect(view.state.doc.childCount).toBe(1);
+  expect(view.state.doc.child(0).type.name).toBe("code_block");
+  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).textContent).toBe(
+    "```ts\nbefore\n# still code\n- still code",
+  );
+
+  feedKey(view, "<Enter>");
+  feedText(view, "```");
+
+  expect(view.state.doc.childCount).toBe(2);
+  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(false);
+  expect(view.state.doc.child(0).textContent).toBe(
+    "before\n# still code\n- still code",
+  );
+  expect(view.state.doc.child(1).type.name).toBe("paragraph");
+  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(1));
+});
+
 test("ArrowDown from the preceding block reveals the opening fence", () => {
   let state = setup("before\n\n```ts\nfoo\n```");
   const beforeEnd = state.doc.child(0).nodeSize - 1;

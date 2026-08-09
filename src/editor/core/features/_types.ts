@@ -34,6 +34,11 @@ export type TokenHandler = (
   schema: Schema,
 ) => void;
 
+export type FeaturePluginContext = {
+  parseMarkdown: (markdown: string) => PMNode;
+  serializeMarkdown: (doc: PMNode) => string;
+};
+
 export type FeatureSpec = {
   name: string;
   marks?: Record<string, PMMarkSpec>;
@@ -61,7 +66,7 @@ export type FeatureSpec = {
   // Escape hatch for feature-owned PM plugins: leave-line draft watchers,
   // NodeViews (via Plugin.props.nodeViews), DOM event handlers for custom
   // UI overlays. Anything that doesn't fit inputRules / keymap / normalize.
-  plugins?: (schema: Schema) => Plugin[];
+  plugins?: (schema: Schema, context: FeaturePluginContext) => Plugin[];
   inline?: InlineFeatureSpec;
 };
 

@@ -24,6 +24,8 @@ import type { FeatureSpec } from "./_types";
 
 const FENCE_RE = /^```(\w*)$/;
 const COMPLETE_FENCE_RE = /^```([^\n]*)\n([\s\S]*)\n```$/;
+const OPENING_FENCE_LINE_RE = /^```([^\n`]*)$/;
+const CLOSING_FENCE_LINE_RE = /^ {0,3}```[\t ]*$/;
 
 type SourceTarget =
   | { edge: "open" | "close" }
@@ -45,6 +47,46 @@ function parseCompleteSource(source: string): { lang: string; body: string } | n
 
 function isSourceEditing(node: PMNode): boolean {
   return node.type.name === "code_block" && node.attrs.sourceEditing === true;
+}
+
+function isTypedClosingFence(
+  oldNode: PMNode,
+  newNode: PMNode,
+  oldOffset: number,
+  newOffset: number,
+): boolean {
+  if (!isSourceEditing(oldNode) || !isSourceEditing(newNode)) return false;
+  if (newOffset <= oldOffset) return false;
+
+  const oldSource = oldNode.textContent;
+  const source = newNode.textContent;
+  const inserted = source.slice(oldOffset, newOffset);
+  if (
+    inserted.length === 0
+    || source.slice(0, oldOffset) !== oldSource.slice(0, oldOffset)
+    || source.slice(newOffset) !== oldSource.slice(oldOffset)
+  ) return false;
+
+  const openingEnd = source.indexOf("\n");
+  if (openingEnd < 0) return false;
+  const opening = OPENING_FENCE_LINE_RE.exec(source.slice(0, openingEnd));
+  if (!opening) return false;
+
+  const lineStart = source.lastIndexOf("\n", Math.max(0, newOffset - 1)) + 1;
+  const nextBreak = source.indexOf("\n", newOffset);
+  const lineEnd = nextBreak < 0 ? source.length : nextBreak;
+  if (
+    lineStart <= openingEnd
+    || newOffset !== lineEnd
+    || !CLOSING_FENCE_LINE_RE.test(source.slice(lineStart, lineEnd))
+  ) return false;
+
+  // A complete block already has a final fence. The new fence may close the
+  // block earlier, but the old final fence remains authored Markdown and must
+  // be reparsed in place instead of being silently removed.
+  const hadClosingFence = parseCompleteSource(oldSource) !== null;
+  const oldClosingStart = hadClosingFence ? source.lastIndexOf("\n") + 1 : null;
+  return oldClosingStart === null || lineStart < oldClosingStart;
 }
 
 function sourceOffset(node: PMNode, target: SourceTarget): number {
@@ -406,13 +448,71 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
   return true;
 }
 
-function fencedCodeSourcePlugin(): Plugin {
+function fencedCodeSourcePlugin(
+  parseMarkdown: (markdown: string) => PMNode,
+  serializeMarkdown: (doc: PMNode) => string,
+): Plugin {
   return new Plugin({
     appendTransaction(transactions, oldState, newState) {
       if (!transactions.some((tr) => tr.selectionSet || tr.docChanged)) return null;
 
       const oldCode = codeBlockAtSelection(oldState);
       const newCode = codeBlockAtSelection(newState);
+      if (
+        oldCode
+        && newCode
+        && oldCode.pos === newCode.pos
+        && oldState.selection.empty
+        && newState.selection.empty
+      ) {
+        const typedClosingFence = isTypedClosingFence(
+          oldCode.node,
+          newCode.node,
+          oldCode.offset,
+          newCode.offset,
+        );
+        if (typedClosingFence) {
+          let codeOrdinal = 0;
+          newState.doc.descendants((node, pos) => {
+            if (node.type.name === "code_block" && pos < newCode.pos) codeOrdinal++;
+          });
+
+          const reparsed = parseMarkdown(serializeMarkdown(newState.doc));
+          let seenCodeBlocks = 0;
+          let closedCodeEnd: number | null = null;
+          reparsed.descendants((node, pos) => {
+            if (closedCodeEnd !== null || node.type.name !== "code_block") return;
+            if (seenCodeBlocks === codeOrdinal) closedCodeEnd = pos + node.nodeSize;
+            seenCodeBlocks++;
+          });
+
+          const tr = newState.tr.replaceWith(
+            0,
+            newState.doc.content.size,
+            reparsed.content,
+          );
+          if (closedCodeEnd !== null) {
+            let selection = Selection.findFrom(
+              tr.doc.resolve(closedCodeEnd),
+              1,
+              true,
+            );
+            if (!selection && closedCodeEnd === tr.doc.content.size) {
+              const paragraph = newState.schema.nodes.paragraph.createAndFill();
+              if (paragraph) {
+                tr.insert(closedCodeEnd, paragraph);
+                selection = Selection.findFrom(
+                  tr.doc.resolve(closedCodeEnd),
+                  1,
+                  true,
+                );
+              }
+            }
+            if (selection) tr.setSelection(selection);
+          }
+          return tr;
+        }
+      }
       if (
         newCode
         && !isSourceEditing(newCode.node)
@@ -556,7 +656,10 @@ function makeFencedPlugin(schema: Schema) {
 export const fencedCode: FeatureSpec = {
   name: "code_block",
 
-  plugins: (schema) => [makeFencedPlugin(schema).plugin, fencedCodeSourcePlugin()],
+  plugins: (schema, { parseMarkdown, serializeMarkdown }) => [
+    makeFencedPlugin(schema).plugin,
+    fencedCodeSourcePlugin(parseMarkdown, serializeMarkdown),
+  ],
 
   keymap: (schema) => ({
     Enter: (state, dispatch) => {

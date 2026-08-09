@@ -5,7 +5,11 @@ import { chainCommands } from "prosemirror-commands";
 import type { Command, Plugin } from "prosemirror-state";
 import type { Schema } from "prosemirror-model";
 
-import type { FeatureSpec, InlineFeatureSpec } from "./_types";
+import type {
+  FeaturePluginContext,
+  FeatureSpec,
+  InlineFeatureSpec,
+} from "./_types";
 import { autoPair } from "./auto-pair";
 import { autolink } from "./autolink";
 import { blockquote } from "./blockquote";
@@ -108,8 +112,11 @@ export function collectKeymaps(schema: Schema): Record<string, Command> {
     out[key] = cmds.length === 1 ? cmds[0]! : chainCommands(...cmds);
   return out;
 }
-export function collectPlugins(schema: Schema): Plugin[] {
-  return ALL_FEATURES.flatMap((f) => f.plugins?.(schema) ?? []);
+export function collectPlugins(
+  schema: Schema,
+  context: FeaturePluginContext,
+): Plugin[] {
+  return ALL_FEATURES.flatMap((f) => f.plugins?.(schema, context) ?? []);
 }
 // Inline features, priority-sorted. Consumed by inline-parse orchestration,
 // normalize (mark sync), decorations (which marks use the inline path),

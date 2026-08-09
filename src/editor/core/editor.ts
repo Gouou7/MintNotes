@@ -9,7 +9,9 @@ import { syntaxHintsPlugin } from "./decorations";
 import { collectKeymaps, collectPlugins } from "./features/index";
 import { markdownInputRules, spaceBreaksStoredMarks } from "./input-rules";
 import { normalizeInlinePlugin } from "./normalize";
+import { parse } from "./parser";
 import { schema } from "./schema";
+import { serialize } from "./serializer";
 import {
   blockquoteInputPlugin,
   manualEscapeDecorationPlugin,
@@ -62,7 +64,10 @@ export function defaultPlugins(options: {
     // Feature-contributed plugins sit after normalize (so block-draft
     // watchers see the post-normalize doc) and before syntaxHints (so any
     // extra decorations merge into PM's decoration pipeline naturally).
-    ...collectPlugins(schema),
+    ...collectPlugins(schema, {
+      parseMarkdown: parse,
+      serializeMarkdown: serialize,
+    }),
     syntaxHintsPlugin(),
     openLinkOnModClickPlugin(),
   ];
