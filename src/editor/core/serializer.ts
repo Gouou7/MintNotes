@@ -293,6 +293,23 @@ const coreBlockHandlers: Record<string, BlockHandler> = {
   },
 
   code_block: (state, node) => {
+    if (node.attrs.sourceEditing === true) {
+      state.tick("inner");
+      state.write();
+      for (const ch of node.textContent) {
+        state.tick("inner");
+        if (ch === "\n") {
+          state.out += "\n";
+          if (state.delim) state.out += state.delim;
+        } else {
+          state.out += ch;
+        }
+        state.advance(1);
+      }
+      state.tick("inner");
+      state.closeBlock(node);
+      return;
+    }
     const lang = String(node.attrs.lang ?? "");
     state.write("```" + lang + "\n");
     state.tick("inner");

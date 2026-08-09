@@ -5,7 +5,7 @@ export const fencedCodeSpecs: FeatureSpecs = {
   renderCases: {
     pre: (_children, el) => {
       const lang = el.getAttribute("data-lang") ?? "";
-      const langFocus = el.hasAttribute("data-lang-focus");
+      const sourceEditing = el.getAttribute("data-source-editing") === "1";
       const codeEl = el.querySelector("code");
       let text = "";
       if (codeEl) {
@@ -17,9 +17,7 @@ export const fencedCodeSpecs: FeatureSpecs = {
             const tag = childEl.tagName.toLowerCase();
             const list = childEl.classList;
             if (tag === "span" && list.contains("play-caret")) {
-              // Suppress the PM-level caret when the virtual cursor is
-              // in the lang input — see the data-lang-focus branch below.
-              if (!langFocus) text += "|";
+              text += "|";
             } else if (tag === "span" && list.contains("selection-marker"))
               text += childEl.textContent ?? "";
             else if (tag === "br" && list.contains("ProseMirror-trailingBreak")) {
@@ -30,8 +28,8 @@ export const fencedCodeSpecs: FeatureSpecs = {
           }
         }
       }
-      const openFence = langFocus ? `\`\`\`${lang}|` : `\`\`\`${lang}`;
-      return `${openFence}\n${text}\n\`\`\``;
+      if (sourceEditing) return text;
+      return `\`\`\`${lang}\n${text}\n\`\`\``;
     },
   },
   cases: [
@@ -136,50 +134,59 @@ export const fencedCodeSpecs: FeatureSpecs = {
     },
 
     // ──────────────────────────────────────────────────────────────
-    // 8. NodeView: ArrowDown from end of main body enters the virtual
-    //    lang input. Pretty: the `|` moves from inside <code> to after
-    //    the lang string in the opening fence.
+    // 8. ArrowDown from the main body's end reveals the closing fence.
     // ──────────────────────────────────────────────────────────────
     {
-      id: "arrow-down-enters-lang",
-      label: "main body end + ArrowDown → caret virtually in lang input",
+      id: "arrow-down-enters-closing-fence",
+      label: "main body end + ArrowDown → closing fence source",
       seed: "```ts\nfoo\n```",
       events: ["<ArrowDown>"],
       checkpoints: [
         { at: 0, expect: "```ts\nfoo|\n```" },
-        { at: 1, expect: "```ts|\nfoo\n```" },
+        { at: 1, expect: "```ts\nfoo\n```|" },
       ],
     },
 
     // ──────────────────────────────────────────────────────────────
-    // 9. ArrowUp from lang input → returns to end of main body.
+    // 9. Once source is active, the fence characters are real document text.
     // ──────────────────────────────────────────────────────────────
     {
       id: "arrow-up-back-to-main",
-      label: "lang input + ArrowUp → caret back to end of main body",
+      label: "closing fence remains a normal caret position",
       seed: "```ts\nfoo\n```",
       events: ["<ArrowDown>", "<ArrowUp>"],
       checkpoints: [
-        { at: 1, expect: "```ts|\nfoo\n```" },
+        { at: 1, expect: "```ts\nfoo\n```|" },
         { at: 2, expect: "```ts\nfoo|\n```" },
       ],
     },
 
     // ──────────────────────────────────────────────────────────────
-    // 10. Below-block ArrowUp lands in the lang input (not main body).
+    // 10. Below-block ArrowUp lands on the closing fence (not main body).
     //     Seed has a trailing paragraph below the code_block.
     // ──────────────────────────────────────────────────────────────
     {
-      id: "below-block-arrow-up-enters-lang",
-      label: "paragraph below code_block + ArrowUp → prev block's lang input",
+      id: "below-block-arrow-up-enters-closing-fence",
+      label: "paragraph below code_block + ArrowUp → closing fence source",
       seed: "```ts\nfoo\n```\n\nhello",
-      events: ["<Home>", "<ArrowUp>"],
+      events: ["<Home>", "<ArrowUp>", "<ArrowDown>"],
       checkpoints: [
         // After Home: caret at start of "hello" paragraph.
         { at: 1, expect: "```ts\nfoo\n```\n|hello" },
-        // ArrowUp from start-of-block: enters the lang input of the
-        // preceding code_block.
-        { at: 2, expect: "```ts|\nfoo\n```\nhello" },
+        // ArrowUp from start-of-block reveals the preceding close fence.
+        { at: 2, expect: "```ts\nfoo\n```|\nhello" },
+        { at: 3, expect: "```ts\nfoo\n```\n|hello" },
+      ],
+    },
+    {
+      id: "body-start-arrow-up-enters-opening-fence",
+      label: "main body start + ArrowUp → opening fence source",
+      seed: "```ts\nfoo\n```",
+      events: ["<Home>", "<ArrowUp>", "<ArrowDown>"],
+      checkpoints: [
+        { at: 1, expect: "```ts\n|foo\n```" },
+        { at: 2, expect: "|```ts\nfoo\n```" },
+        { at: 3, expect: "```ts\n|foo\n```" },
       ],
     },
   ],

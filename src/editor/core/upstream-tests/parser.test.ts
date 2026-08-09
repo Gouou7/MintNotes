@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { parse } from "../parser";
 import { schema } from "../schema";
+import { serialize } from "../serializer";
 
 describe("parser: block nodes", () => {
   test("paragraph with plain text", () => {
@@ -59,6 +60,18 @@ describe("parser: block nodes", () => {
     expect(cb.type).toBe(schema.nodes.code_block);
     expect(cb.attrs.lang).toBe("ts");
     expect(cb.textContent).toBe("const x = 1;");
+  });
+
+  test("preserves an unclosed fenced block as editable source", () => {
+    const markdown = "```ts\nconst x = 1;\n``";
+    const doc = parse(markdown);
+    const code = doc.firstChild!;
+
+    expect(code.type).toBe(schema.nodes.code_block);
+    expect(code.attrs.lang).toBe("ts");
+    expect(code.attrs.sourceEditing).toBe(true);
+    expect(code.textContent).toBe(markdown);
+    expect(serialize(doc)).toBe(markdown);
   });
 
   test("indented code block has empty lang", () => {

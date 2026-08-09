@@ -78,6 +78,8 @@ In Live mode, a line-leading `>` remains visible while you type. Press Enter to 
 
 In Live mode, click anywhere on a rendered horizontal-rule row to reveal its `---`, `***`, or `___` Markdown source with the caret at the end. Moving the caret into a horizontal rule with the arrow keys also reveals its source, placing the caret at the side from which you entered. You can then delete or edit the delimiter, or press Enter to add a line after it. Moving the caret away from an unchanged delimiter renders it as a horizontal rule again.
 
+In Live mode, a fenced code block reserves space for its opening and closing fences so its height stays unchanged when the source appears. While the caret is elsewhere, the fences are hidden and the language appears in the upper-right corner. Click anywhere in the block, or move the caret into it with the arrow keys, to reveal editable opening ```` ```lang ```` and closing ```` ``` ```` lines at the top and bottom edges. Entering from below places the caret on the closing fence; repeated ArrowUp presses then visit each code line and the opening fence before leaving the block. Entering from above follows the reverse order. Press Enter at the end of a valid closing fence to leave the block and start a paragraph below it. If you manually remove or leave a fence incomplete, Mint Notes preserves that exact Markdown after saving and reopening instead of generating a replacement fence.
+
 ### Math, diagrams, and WikiLinks
 
 Use `$...$` for inline KaTeX and `$$...$$` for display math. Display math may occupy one line or use opening and closing `$$` lines:

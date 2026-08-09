@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Changed Live-mode horizontal rules so clicking anywhere on the rendered row or moving the caret into it reveals the original `---`, `***`, or `___` Markdown source for reliable deletion, editing, and line insertion.
+- Changed Live-mode fenced code blocks to an Obsidian-style interaction: inactive blocks hide their fences and show a language label, while clicking or moving the caret into a block reveals editable fences in reserved top and bottom space without changing the block height. Arrow navigation now enters through the nearest fence and visits each source line and the opposite fence before leaving. Manually removed closing fences remain removed after reopening, and Enter at the end of a valid closing fence exits to a new paragraph. Code blocks use a rounded dark surface without a contrasting border.
 
 ## [0.11.0] - 2026-08-09
 

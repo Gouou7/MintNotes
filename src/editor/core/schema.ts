@@ -41,19 +41,28 @@ const coreNodes: Record<string, NodeSpec> = {
     marks: "",
     code: true,
     defining: true,
-    attrs: { lang: { default: "" } },
+    attrs: {
+      lang: { default: "" },
+      // Transient Live-mode state. When true, textContent is the complete
+      // fenced Markdown source so every delimiter has a real caret position.
+      sourceEditing: { default: false },
+    },
     parseDOM: [
       {
         tag: "pre",
         preserveWhitespace: "full",
-        getAttrs: (el) => ({ lang: (el as HTMLElement).getAttribute("data-lang") ?? "" }),
+        getAttrs: (el) => ({
+          lang: (el as HTMLElement).getAttribute("data-lang") ?? "",
+          sourceEditing: (el as HTMLElement).getAttribute("data-source-editing") === "1",
+        }),
       },
     ],
-    toDOM: (node) => [
-      "pre",
-      node.attrs.lang ? { "data-lang": node.attrs.lang as string } : {},
-      ["code", 0],
-    ],
+    toDOM: (node) => {
+      const attrs: Record<string, string> = {};
+      if (node.attrs.lang) attrs["data-lang"] = node.attrs.lang as string;
+      if (node.attrs.sourceEditing) attrs["data-source-editing"] = "1";
+      return ["pre", attrs, ["code", 0]];
+    },
   },
 
   horizontal_rule: {

@@ -112,6 +112,28 @@ describe("Mint editor core public controller", () => {
     lineEditor.destroy();
   });
 
+  it("reveals one editable fenced-code source without changing Markdown", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "```ts\nconst value = 1;\n```";
+    const editor = createMintEditor(host, { initialContent: markdown });
+    const label = host.querySelector<HTMLElement>(".cb-language-label");
+    const code = host.querySelector<HTMLElement>("pre code");
+    if (!label || !code) throw new Error("Missing fenced code block");
+    expect(label.textContent).toBe("TypeScript");
+
+    label.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    expect(host.querySelector("pre")?.dataset.sourceEditing).toBe("1");
+    expect(code.textContent).toBe(markdown);
+    expect(host.querySelector(".cb-language-label")?.hasAttribute("hidden")).toBe(true);
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
   it("loads Mint-specific presentation only through explicit extensions", () => {
     const bareHost = document.createElement("div");
     document.body.append(bareHost);

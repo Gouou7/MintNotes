@@ -187,7 +187,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-editor-host .ProseMirror h1, .markdown-editor-host .ProseMirror h2, .markdown-editor-host .ProseMirror h3, .markdown-editor-host .ProseMirror h4, .markdown-editor-host .ProseMirror h5 { color: var(--text-strong); }
 .markdown-editor-host .ProseMirror h6, .markdown-editor-host .ProseMirror blockquote { color: var(--muted); }
 .markdown-editor-host .ProseMirror code, .readonly-markdown code { background: var(--surface-input); color: var(--text); }
-.markdown-editor-host .ProseMirror pre, .readonly-markdown pre { background: #242422; color: #f2f2ef; }
+.markdown-editor-host .ProseMirror pre, .readonly-markdown pre { background: #242422; color: #f2f2ef; border: 0; border-radius: 8px; }
+.markdown-editor-host .ProseMirror pre { box-sizing: border-box; padding: 16px 18px; line-height: 1.55; }
+.markdown-editor-host .ProseMirror pre:not(.cb-source-editing) { padding-block: calc(16px + 1.55em); }
+.markdown-editor-host .ProseMirror pre:not(.cb-source-editing)[data-lang] { padding-right: 72px; }
+.markdown-editor-host .ProseMirror pre code { background: transparent; color: inherit; }
 .markdown-editor-host .ProseMirror th { background: var(--surface-raised); }
 .markdown-editor-host .ProseMirror img, .readonly-markdown img { max-width: 100%; border-radius: 8px; }
 .readonly-markdown { font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; font-size: calc(17px + var(--font-adjust)); line-height: 1.75; overflow-wrap: anywhere; }

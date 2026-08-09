@@ -130,7 +130,38 @@ export class ParserState {
   }
 }
 
-function handleBlock(state: ParserState, token: Token): void {
+function stripBlockquotePrefix(line: string): string {
+  let remaining = line;
+  while (/^ {0,3}>/.test(remaining)) {
+    remaining = remaining.replace(/^ {0,3}> ?/, "");
+  }
+  return remaining;
+}
+
+function fenceSourceLines(token: Token, src: string): string[] {
+  if (!token.map) return [];
+  const lines = src.split("\n").slice(token.map[0], token.map[1]);
+  const quoted = /^ {0,3}>/.test(lines[0] ?? "");
+  return quoted ? lines.map(stripBlockquotePrefix) : lines;
+}
+
+function sourceFenceIsClosed(token: Token, src: string): boolean {
+  if (!token.map || token.map[1] <= token.map[0] + 1) return false;
+  const closingLine = fenceSourceLines(token, src).at(-1)?.trim() ?? "";
+  const marker = token.markup[0];
+  if (!marker || closingLine[0] !== marker) return false;
+  let markerLength = 0;
+  while (closingLine[markerLength] === marker) markerLength++;
+  return markerLength >= token.markup.length
+    && closingLine.slice(markerLength).trim().length === 0;
+}
+
+function sourceForToken(token: Token, src: string): string {
+  if (!token.map) return token.content;
+  return fenceSourceLines(token, src).join("\n");
+}
+
+function handleBlock(state: ParserState, token: Token, src: string): void {
   const { nodes } = schema;
   switch (token.type) {
     case "paragraph_open":
@@ -181,6 +212,15 @@ function handleBlock(state: ParserState, token: Token): void {
       state.closeNode();
       return;
     case "fence": {
+      if (!sourceFenceIsClosed(token, src)) {
+        const source = sourceForToken(token, src);
+        const textNodes = source ? [schema.text(source)] : [];
+        state.push(nodes.code_block.createChecked({
+          lang: token.info.trim(),
+          sourceEditing: true,
+        }, textNodes));
+        return;
+      }
       const content = token.content.replace(/\n$/, "");
       const textNodes = content ? [schema.text(content)] : [];
       state.push(nodes.code_block.createChecked({ lang: token.info.trim() }, textNodes));
@@ -231,7 +271,7 @@ function handleInline(state: ParserState, token: Token): void {
 export function parse(src: string): PMNode {
   const tokens = md.parse(src, {});
   const state = new ParserState();
-  for (const token of tokens) handleBlock(state, token);
+  for (const token of tokens) handleBlock(state, token, src);
   let doc = state.finish();
   for (const f of collectParserPostProcessors()) doc = f(doc);
   return doc;

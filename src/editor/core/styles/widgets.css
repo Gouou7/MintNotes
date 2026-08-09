@@ -289,28 +289,23 @@
   transform: rotate(45deg);
 }
 
-/* ─── Fenced code NodeView chrome ────────────────────────────────── */
+/* ─── Fenced code Live-mode presentation ────────────────────────── */
 .ProseMirror pre { position: relative; }
-.ProseMirror pre .cb-chrome {
-  display: none;
+.ProseMirror pre .cb-language-label {
   position: absolute;
-  right: 8px;
-  bottom: 6px;
+  top: 14px;
+  right: 16px;
+  z-index: 1;
+  color: rgba(242, 242, 239, 0.68);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.82em;
+  font-weight: 500;
+  line-height: 1.2;
+  pointer-events: auto;
   user-select: none;
 }
-.ProseMirror pre.cb-active .cb-chrome { display: block; }
-.ProseMirror pre .cb-lang-input {
-  width: 80px;
-  padding: 2px 6px;
-  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
-  border: 1px solid #d0d0d0;
-  border-radius: 4px;
-  background: #fff;
-  color: #333;
-  outline: none;
-}
-.ProseMirror pre .cb-lang-input:focus { border-color: #1f1f1f; }
-.ProseMirror pre.cb-lang-focus .play-caret { display: none; }
+.ProseMirror pre .cb-language-label[hidden] { display: none; }
+.ProseMirror pre .cb-code-comment { color: #777772; }
 
 /* ─── Table layout (structural — always on; theme styles cells) ──── */
 /* Tables default to full editor width with a fixed layout so columns
