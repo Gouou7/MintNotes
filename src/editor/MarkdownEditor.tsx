@@ -48,6 +48,8 @@ interface Props {
 
 export interface MarkdownEditorHandle {
   focus: () => void;
+  getSelectionOffset: () => number;
+  setSelectionOffset: (offset: number) => void;
 }
 
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function MarkdownEditor(props, ref) {
@@ -58,7 +60,14 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
 const SourceEditor = forwardRef<MarkdownEditorHandle, Props>(function SourceEditor({ markdown, onChange, onImageInsert }, ref) {
   const { t } = useI18n();
   const textarea = useRef<HTMLTextAreaElement>(null);
-  useImperativeHandle(ref, () => ({ focus: () => textarea.current?.focus() }), []);
+  useImperativeHandle(ref, () => ({
+    focus: () => textarea.current?.focus(),
+    getSelectionOffset: () => textarea.current?.selectionStart ?? markdown.length,
+    setSelectionOffset: (offset) => {
+      const target = textarea.current;
+      if (target) target.setSelectionRange(offset, offset);
+    }
+  }), [markdown.length]);
   const insertImage = async (file: File, start: number, end: number) => {
     if (!onImageInsert) return;
     const insertion = await onImageInsert(file);
@@ -114,7 +123,11 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
   changeRef.current = onChange;
   frontmatterRef.current = frontmatter;
   wikiLinkRef.current = onWikiLink;
-  useImperativeHandle(ref, () => ({ focus: () => editorRef.current?.focus() }), []);
+  useImperativeHandle(ref, () => ({
+    focus: () => editorRef.current?.focus(),
+    getSelectionOffset: () => editorRef.current?.getSelectionOffset() ?? editorMarkdownRef.current.length,
+    setSelectionOffset: (offset) => editorRef.current?.setSelectionOffset(offset)
+  }), []);
   for (const [attachmentId, url] of attachmentUrls) attachmentUrlHistoryRef.current.set(url, attachmentId);
 
   useEffect(() => {

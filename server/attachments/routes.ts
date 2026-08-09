@@ -34,18 +34,47 @@ export function registerAttachmentRoutes(
     if (body.byteLength > 1024 * 1024 + 64) {
       return reply.code(413).send({ error: "Attachment chunk is too large" });
     }
+    if (params.data.index >= headers.data["x-webmd-total-chunks"]) {
+      return reply.code(400).send({ error: "Attachment chunk index exceeds declared total" });
+    }
     const scope = authenticatedScope(request);
     const prior = db.prepare(
-      "SELECT attachment_id, chunk_index FROM attachment_chunks WHERE user_id = ? AND idempotency_key = ?"
-    ).get(scope.userId, headers.data["x-webmd-idempotency-key"]);
-    if (prior) return { ok: true, idempotent: true };
+      `SELECT attachment_id, chunk_index, total_chunks, ciphertext, nonce, encryption_version
+       FROM attachment_chunks WHERE user_id = ? AND idempotency_key = ?`
+    ).get(scope.userId, headers.data["x-webmd-idempotency-key"]) as {
+      attachment_id: string; chunk_index: number; total_chunks: number;
+      ciphertext: Buffer; nonce: string; encryption_version: number;
+    } | undefined;
+    if (prior) {
+      const matches = prior.attachment_id === params.data.attachmentId
+        && prior.chunk_index === params.data.index
+        && prior.total_chunks === headers.data["x-webmd-total-chunks"]
+        && prior.nonce === headers.data["x-webmd-nonce"]
+        && prior.encryption_version === headers.data["x-webmd-encryption-version"]
+        && prior.ciphertext.equals(body);
+      if (!matches) return reply.code(409).send({ error: "Idempotency key payload mismatch" });
+      return { ok: true, idempotent: true };
+    }
+    const attachmentShape = db.prepare(`
+      SELECT total_chunks, encryption_version FROM attachment_chunks
+      WHERE user_id = ? AND attachment_id = ? LIMIT 1
+    `).get(scope.userId, params.data.attachmentId) as { total_chunks: number; encryption_version: number } | undefined;
+    if (attachmentShape && (
+      attachmentShape.total_chunks !== headers.data["x-webmd-total-chunks"]
+      || attachmentShape.encryption_version !== headers.data["x-webmd-encryption-version"]
+    )) {
+      return reply.code(409).send({ error: "Attachment chunk metadata mismatch" });
+    }
     const existing = db.prepare(
       "SELECT 1 FROM attachment_chunks WHERE user_id = ? AND attachment_id = ? AND chunk_index = ?"
     ).get(scope.userId, params.data.attachmentId, params.data.index);
     if (existing) return reply.code(409).send({ error: "Attachment chunk already exists" });
-    const used = Number((db.prepare(
-      "SELECT COALESCE(SUM(LENGTH(ciphertext)), 0) AS bytes FROM attachment_chunks WHERE user_id = ?"
-    ).get(scope.userId) as { bytes: number }).bytes);
+    const used = Number((db.prepare(`
+      SELECT
+        COALESCE((SELECT SUM(LENGTH(ciphertext) + LENGTH(nonce)) FROM attachment_chunks WHERE user_id = ?), 0)
+        + COALESCE((SELECT SUM(LENGTH(ciphertext) + LENGTH(nonce)) FROM object_revisions WHERE user_id = ?), 0)
+        AS bytes
+    `).get(scope.userId, scope.userId) as { bytes: number }).bytes);
     if (used + body.byteLength > config.userStorageQuotaBytes) {
       return reply.code(413).send({ error: "User storage quota exceeded" });
     }

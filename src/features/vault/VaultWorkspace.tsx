@@ -50,8 +50,7 @@ import {
   packBySerializedSize,
   type SyncIntent
 } from "../syncCoordinator";
-import { isAcknowledgedLocalEcho } from "../syncChanges";
-import { decryptAvailableLocalObjects, decryptFailureFingerprint, normalizeVaultObject, shouldCreateWelcomeNote } from "../vaultLoad";
+import { decryptAvailableLocalObjects, decryptFailureFingerprint, shouldCreateWelcomeNote } from "../vaultLoad";
 import { canMoveDocument, compareDocuments, descendantsOf, folderRevealPath, isFolderDropZone, lockedNoteInSelection, nextManualOrder, pinnedDocuments, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "../tree";
 import { derivedNoteLockState, effectiveEditorMode, isLockedNote } from "../noteLock";
 import { formatNoteTime } from "../noteTime";
@@ -111,14 +110,16 @@ import type {
   NoteHistoryPayload,
   OpenAttachment,
   OpenDocument,
-  SyncChange,
   UiPreferences,
-  User,
-  VaultObject
+  User
 } from "../../types";
 import { ContextMenu, draggedDocumentIds, TreeDocumentIcon, TreeLevel, type TreeDropTarget } from "./VaultTree";
 import { EmptyEditor, NoteToolbar } from "./NoteToolbar";
 import { useObjectPersistence } from "./useObjectPersistence";
+import { useDocumentSaveQueue } from "./useDocumentSaveQueue";
+import { hasPendingLocalObjectGraph, removePurgedLocalData } from "./localPurge";
+import { acknowledgeOutboxEntry } from "./outboxAcknowledgement";
+import { pullVaultChanges } from "./pullController";
 import {
   countPendingSyncEntries,
   settledSyncPhase,
@@ -256,8 +257,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const historyIdleTimer = useRef<number | null>(null);
   const historyPeriodicTimer = useRef<number | null>(null);
   const historySession = useRef<{ noteId: string; active: boolean } | null>(null);
-  const saveTimers = useRef(new Map<string, number>());
-  const saveDeadlines = useRef(new Map<string, number>());
   const logoutStarted = useRef(false);
   const generation = useRef(0);
   const historyController = useMemo(() => new VaultHistoryController({
@@ -280,6 +279,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const searchInput = useRef<HTMLInputElement>(null);
   const editorArea = useRef<HTMLDivElement>(null);
   const editorSurface = useRef<MarkdownEditorHandle>(null);
+  const pendingEditorSelection = useRef<number | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const pendingTitleFocus = useRef<string | null>(null);
   const pendingTitleSave = useRef<Promise<boolean>>(Promise.resolve(true));
@@ -296,9 +296,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     logoutStarted.current = false;
     return () => {
       logoutStarted.current = true;
-      for (const timer of saveTimers.current.values()) window.clearTimeout(timer);
-      saveTimers.current.clear();
-      saveDeadlines.current.clear();
       if (historyIdleTimer.current !== null) window.clearTimeout(historyIdleTimer.current);
       if (historyPeriodicTimer.current !== null) window.clearTimeout(historyPeriodicTimer.current);
       historyIdleTimer.current = null;
@@ -563,46 +560,23 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
   const persistObject = objectPersistence.persistObject;
 
+  const documentSaveQueue = useDocumentSaveQueue({
+    isActive: () => !logoutStarted.current,
+    getDocument: (objectId) => documentIndexRef.current.get(objectId),
+    upsertDocument,
+    persistDocument: async (document, isCurrent) => {
+      await persistObject(document, { commitState: isCurrent });
+    },
+    onPersisted: () => requestPush("editor")
+  });
+
   const flushDocument = async (objectId: string) => {
-    const timer = saveTimers.current.get(objectId);
-    if (timer !== undefined) {
-      window.clearTimeout(timer);
-      saveTimers.current.delete(objectId);
-      saveDeadlines.current.delete(objectId);
-      if (!logoutStarted.current) {
-        const current = documentIndexRef.current.get(objectId);
-        if (current) {
-          await persistObject(current, {
-            commitState: () => documentIndexRef.current.get(objectId) === current
-          });
-        }
-      }
-    }
+    await documentSaveQueue.flush(objectId);
     await objectPersistence.drain(objectId);
   };
 
   const queueDocument = (document: OpenDocument, delay = 500, maxWait = 5_000) => {
-    if (logoutStarted.current) return;
-    upsertDocument(document);
-    const existing = saveTimers.current.get(document.objectId);
-    if (existing !== undefined) window.clearTimeout(existing);
-    const now = Date.now();
-    const deadline = saveDeadlines.current.get(document.objectId) ?? now + maxWait;
-    saveDeadlines.current.set(document.objectId, deadline);
-    const wait = Math.max(0, Math.min(delay, deadline - now));
-    saveTimers.current.set(document.objectId, window.setTimeout(() => {
-      saveTimers.current.delete(document.objectId);
-      saveDeadlines.current.delete(document.objectId);
-      if (logoutStarted.current) return;
-      const current = documentIndexRef.current.get(document.objectId);
-      if (current) {
-        void persistObject(current, {
-          commitState: () => documentIndexRef.current.get(document.objectId) === current
-        })
-          .then(() => requestPush("editor"))
-          .catch(() => undefined);
-      }
-    }, wait));
+    documentSaveQueue.queue(document, delay, maxWait);
   };
 
   const clearHistorySessionTimers = () => {
@@ -781,25 +755,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   };
 
   const removePurgedLocal = async (objectId: string, commitState = true) => {
-    await localDb.transaction("rw", [
-      localDb.objects,
-      localDb.outbox,
-      localDb.attachmentChunks,
-      localDb.attachmentOutbox,
-      localDb.historySnapshots,
-      localDb.historyIndex,
-      localDb.historyOutbox,
-      localDb.historyMetadataOutbox
-    ], async () => {
-      await localDb.objects.delete(localKey(user.id, objectId));
-      await localDb.outbox.delete(localKey(user.id, objectId));
-      await localDb.attachmentChunks.where("[userId+attachmentId]").equals([user.id, objectId]).delete();
-      await localDb.attachmentOutbox.where("[userId+attachmentId]").equals([user.id, objectId]).delete();
-      await localDb.historySnapshots.where("[userId+noteId]").equals([user.id, objectId]).delete();
-      await localDb.historyIndex.where("[userId+noteId]").equals([user.id, objectId]).delete();
-      await localDb.historyOutbox.where("[userId+noteId]").equals([user.id, objectId]).delete();
-      await localDb.historyMetadataOutbox.where("[userId+noteId]").equals([user.id, objectId]).delete();
-    });
+    await removePurgedLocalData(user.id, objectId);
     if (!commitState) return;
     replaceDocuments((all) => all.filter((entry) => entry.objectId !== objectId));
     replaceAttachments((all) => all.filter((entry) => entry.objectId !== objectId));
@@ -813,188 +769,46 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   };
 
   const pullChanges = async () => {
-    if (logoutStarted.current) return new Set<string>();
-    let cursor = Number((await localDb.meta.get(cursorKey(user.id)))?.value ?? 0);
-    let hasMore = true;
-    const failedObjectIds = new Set<string>();
-    const pendingByKey = new Map(
-      (await localDb.outbox.where("userId").equals(user.id).toArray()).map((entry) => [entry.key, entry])
-    );
-    const documentUpserts = new Map<string, OpenDocument>();
-    const attachmentUpserts = new Map<string, OpenAttachment>();
-    const removedDocumentIds = new Set<string>();
-    const removedAttachmentIds = new Set<string>();
-    let activeConflictId: string | null = null;
-    let deferredActiveChanged = false;
-    let deferredActiveDeleted = false;
-
-    while (hasMore) {
-      if (logoutStarted.current) return failedObjectIds;
-      const result = await api<{ changes: SyncChange[]; cursor: number; hasMore: boolean }>(`/api/sync?since=${cursor}&limit=500&compact=1`);
-      if (logoutStarted.current) return failedObjectIds;
-      const localVersions = await localDb.objects.bulkGet(
-        result.changes.map((change) => localKey(user.id, change.objectId))
-      );
-      if (logoutStarted.current) return failedObjectIds;
-      const localVersionByKey = new Map(
-        localVersions.flatMap((object) => object ? [[object.key, object] as const] : [])
-      );
-      const localPuts: LocalEncryptedObject[] = [];
-      const purgedIds: string[] = [];
-      const outboxDeletes: string[] = [];
-
-      for (const change of result.changes) {
-        const key = localKey(user.id, change.objectId);
-        if (!shouldSynchronizeWorkspaceObject(change.objectId)) {
-          purgedIds.push(change.objectId);
-          pendingByKey.delete(key);
-          failedObjectIds.delete(change.objectId);
-          continue;
-        }
-        if (change.purged) {
-          purgedIds.push(change.objectId);
-          pendingByKey.delete(key);
-          if (change.objectId === activeIdRef.current) {
-            deferredActiveRemoteId.current = change.objectId;
-            deferredActiveRemote.current = null;
-            deferredActiveChanged = true;
-            deferredActiveDeleted = true;
-          } else {
-            removedDocumentIds.add(change.objectId);
-            removedAttachmentIds.add(change.objectId);
-          }
-          failedObjectIds.delete(change.objectId);
-          continue;
-        }
-        const pending = pendingByKey.get(key);
-        // Never let a remote pull replace plaintext that is still waiting for
-        // the local encryption debounce. The subsequent conditional push will
-        // preserve it or create a conflict copy if the server also changed.
-        if (saveTimers.current.has(change.objectId)) continue;
-        if (pending && change.revision > pending.baseRevision) {
-          if (pending.operation === "upsert") {
-            const wasActive = activeIdRef.current === change.objectId;
-            const conflict = await preserveConflict(pending, false, false);
-            if (conflict) {
-              documentUpserts.set(conflict.objectId, conflict);
-              if (wasActive) {
-                activeConflictId = conflict.objectId;
-                deferredActiveRemoteId.current = null;
-                deferredActiveRemote.current = null;
-              }
-            }
-          }
-          outboxDeletes.push(key);
-          pendingByKey.delete(key);
-        } else if (pending) {
-          continue;
-        }
-        // A successful push leaves its exact encrypted envelope in IndexedDB,
-        // but its change sequence is still unseen because source SSE hints are
-        // deliberately suppressed. Advance the cursor without presenting that
-        // later pull as an update from another device.
-        if (isAcknowledgedLocalEcho(localVersionByKey.get(key), change)) continue;
-        let decrypted: VaultObject;
-        try {
-          decrypted = normalizeVaultObject(await cryptoClient.decryptObject(
-            user.id,
-            change.objectId,
-            change.objectType,
-            change.revision,
-            change.ciphertext,
-            change.nonce
-          ));
-        } catch {
-          // Keep the last known-good local ciphertext and decrypted document.
-          // A later revision in the same pull may still repair this object.
-          failedObjectIds.add(change.objectId);
-          continue;
-        }
-        const localObject: LocalEncryptedObject = {
-          key,
-          userId: user.id,
-          objectId: change.objectId,
-          objectType: change.objectType,
-          ciphertext: change.ciphertext,
-          nonce: change.nonce,
-          encryptionVersion: change.encryptionVersion,
-          revision: change.revision,
-          deleted: change.deleted,
-          updatedAt: change.serverUpdatedAt
-        };
-        localPuts.push(localObject);
-        const open = { ...decrypted, objectId: change.objectId, serverRevision: change.revision, dirty: false };
-        if (decrypted.kind === "attachment") {
-          attachmentUpserts.set(change.objectId, open as OpenAttachment);
-          removedAttachmentIds.delete(change.objectId);
-        } else if (change.objectId === activeIdRef.current && activeConflictId === null) {
-          deferredActiveRemoteId.current = change.objectId;
-          deferredActiveRemote.current = open as OpenDocument;
-          deferredActiveChanged = true;
-          deferredActiveDeleted = (open as OpenDocument).deleted;
-        } else {
-          documentUpserts.set(change.objectId, open as OpenDocument);
-          removedDocumentIds.delete(change.objectId);
-        }
-        failedObjectIds.delete(change.objectId);
-      }
-
-      cursor = result.cursor;
-      hasMore = result.hasMore;
-      if (logoutStarted.current) return failedObjectIds;
-      await localDb.transaction(
-        "rw",
-        localDb.objects,
-        localDb.outbox,
-        localDb.attachmentChunks,
-        localDb.attachmentOutbox,
-        localDb.meta,
-        async () => {
-          if (logoutStarted.current) return;
-          if (localPuts.length) await localDb.objects.bulkPut(localPuts);
-          if (outboxDeletes.length) await localDb.outbox.bulkDelete(outboxDeletes);
-          for (const objectId of purgedIds) {
-            const key = localKey(user.id, objectId);
-            await localDb.objects.delete(key);
-            await localDb.outbox.delete(key);
-            await localDb.attachmentChunks.where("[userId+attachmentId]").equals([user.id, objectId]).delete();
-            await localDb.attachmentOutbox.where("[userId+attachmentId]").equals([user.id, objectId]).delete();
-          }
-          await localDb.meta.put({ key: cursorKey(user.id), value: String(cursor) });
-        }
-      );
-      if (logoutStarted.current) return failedObjectIds;
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    const result = await pullVaultChanges({
+      userId: user.id,
+      isActive: () => !logoutStarted.current,
+      activeObjectId: () => activeIdRef.current,
+      hasPendingSave: documentSaveQueue.hasPending,
+      flushDocument,
+      preserveConflict: (entry) => preserveConflict(entry, false, false)
+    });
+    if (logoutStarted.current) return result.failedObjectIds;
+    if (result.documentUpserts.size || result.removedDocumentIds.size) {
+      replaceDocuments(mergeByObjectId(documentsRef.current, result.documentUpserts.values(), result.removedDocumentIds));
     }
-
-    if (logoutStarted.current) return failedObjectIds;
-    if (documentUpserts.size || removedDocumentIds.size) {
-      replaceDocuments(mergeByObjectId(documentsRef.current, documentUpserts.values(), removedDocumentIds));
+    if (result.attachmentUpserts.size || result.removedAttachmentIds.size) {
+      replaceAttachments(mergeByObjectId(attachmentsRef.current, result.attachmentUpserts.values(), result.removedAttachmentIds));
     }
-    if (attachmentUpserts.size || removedAttachmentIds.size) {
-      replaceAttachments(mergeByObjectId(attachmentsRef.current, attachmentUpserts.values(), removedAttachmentIds));
+    if (result.activeConflictId) {
+      deferredActiveRemoteId.current = null;
+      deferredActiveRemote.current = null;
+      activeIdRef.current = result.activeConflictId;
+      setActiveId(result.activeConflictId);
+      setSelectedIds(new Set([result.activeConflictId]));
+      selectionAnchor.current = result.activeConflictId;
+    } else if (result.deferredActive) {
+      deferredActiveRemoteId.current = result.deferredActive.objectId;
+      deferredActiveRemote.current = result.deferredActive.document;
     }
-    if (activeConflictId) {
-      activeIdRef.current = activeConflictId;
-      setActiveId(activeConflictId);
-      setSelectedIds(new Set([activeConflictId]));
-      selectionAnchor.current = activeConflictId;
+    if (result.removedDocumentIds.size || result.removedAttachmentIds.size) {
+      setSelectedIds((current) => new Set([...current].filter((id) => (
+        !result.removedDocumentIds.has(id) && !result.removedAttachmentIds.has(id)
+      ))));
+      if (selectionAnchor.current && (
+        result.removedDocumentIds.has(selectionAnchor.current)
+        || result.removedAttachmentIds.has(selectionAnchor.current)
+      )) selectionAnchor.current = null;
     }
-    if (removedDocumentIds.size || removedAttachmentIds.size) {
-      setSelectedIds((current) => new Set([...current].filter((id) => !removedDocumentIds.has(id) && !removedAttachmentIds.has(id))));
-      if (selectionAnchor.current && (removedDocumentIds.has(selectionAnchor.current) || removedAttachmentIds.has(selectionAnchor.current))) {
-        selectionAnchor.current = null;
-      }
+    if (result.deferredActive) {
+      showMessage(result.deferredActive.deleted ? t("notice.activeRemoteDeleted") : t("notice.activeRemoteUpdated"), "info");
     }
-    if (deferredActiveChanged) {
-      showMessage(
-        deferredActiveDeleted
-          ? t("notice.activeRemoteDeleted")
-          : t("notice.activeRemoteUpdated"),
-        "info"
-      );
-    }
-    return failedObjectIds;
+    if (result.purgeDeferred) showMessage(t("notice.purgeWaitSync"), "critical");
+    return result.failedObjectIds;
   };
 
   const outboxPayload = (entry: OutboxEntry) => ({
@@ -1197,29 +1011,18 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         conflictDetected = true;
         return;
       }
-      const current = await localDb.outbox.get(entry.key);
-      if (!current || current.generation === entry.generation) {
-        await localDb.outbox.delete(entry.key);
+      const acknowledgement = await acknowledgeOutboxEntry(
+        user.id,
+        entry,
+        result.revision,
+        () => Date.now() * 1000 + ++generation.current
+      );
+      if (acknowledgement.status === "acknowledged") {
         if (entry.objectType === "attachment") attachmentAcks.set(entry.objectId, result.revision);
         else documentAcks.set(entry.objectId, result.revision);
         return;
       }
-      const newest = await cryptoClient.decryptObject(
-        user.id,
-        current.objectId,
-        current.objectType,
-        current.revision,
-        current.ciphertext,
-        current.nonce
-      );
-      await localDb.outbox.delete(entry.key);
-      await persistObject({
-        ...newest,
-        objectId: current.objectId,
-        serverRevision: result.revision,
-        dirty: true
-      }, { commitState: false });
-      requestPush("editor");
+      if (acknowledgement.status === "rebased") requestPush("editor");
     };
 
     for (const batch of packed.batches) {
@@ -1277,7 +1080,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     try {
       if (intent.pull) {
         const currentActiveId = activeIdRef.current;
-        if (currentActiveId && saveTimers.current.has(currentActiveId)) await flushDocument(currentActiveId);
+        if (currentActiveId && documentSaveQueue.hasPending(currentActiveId)) await flushDocument(currentActiveId);
         const failedPulls = await pullChanges();
         if (failedPulls.size) {
           showMessage(t("notice.remoteIntegrity", { count: failedPulls.size }), "critical");
@@ -1319,7 +1122,10 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         new File([plaintext], source.originalName, { type: source.mime }),
         () => !logoutStarted.current
       ),
-      persistAttachment: (attachment) => persistObject(attachment),
+      persistAttachment: async (attachment) => {
+        upsertAttachment(attachment);
+        return attachment;
+      },
       removeAttachment: (attachmentId) => removePurgedLocal(attachmentId)
     });
     let cloned: Awaited<ReturnType<AttachmentCloneService["clone"]>> | null = null;
@@ -1643,7 +1449,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         closeEvents();
         clearFallback();
         void finishHistorySession(true);
-        for (const id of [...saveTimers.current.keys()]) void flushDocument(id);
+        for (const id of documentSaveQueue.pendingIds()) void flushDocument(id);
       } else {
         if (!serverSessionVerified) return;
         void syncCoordinator.current?.runNow({ pull: true, push: true }).finally(() => void openEvents());
@@ -1668,6 +1474,20 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
   const activeDocumentLocked = isLockedNote(activeDocument);
   const displayedMode = effectiveEditorMode(mode, activeDocument);
+  useEffect(() => {
+    const offset = pendingEditorSelection.current;
+    if (offset === null || displayedMode === "readonly") return;
+    pendingEditorSelection.current = null;
+    const frame = window.requestAnimationFrame(() => editorSurface.current?.setSelectionOffset(offset));
+    return () => window.cancelAnimationFrame(frame);
+  }, [displayedMode]);
+
+  const changeEditorMode = (nextMode: EditorMode) => {
+    if (displayedMode !== "readonly") {
+      pendingEditorSelection.current = editorSurface.current?.getSelectionOffset() ?? null;
+    }
+    setMode(nextMode);
+  };
   useEffect(() => {
     setHistoryPreview(null);
     setHistoryItems([]);
@@ -1935,6 +1755,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.purgeOnlineOnly"));
     setPurging(true);
     try {
+      await documentSaveQueue.flushAll();
+      await objectPersistence.drainAll();
       await synchronize();
       const documentIds = objectIds === null
         ? new Set(documentsRef.current.filter((entry) => entry.deleted).map((entry) => entry.objectId))
@@ -1945,7 +1767,11 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         ...attachmentsRef.current.filter((entry) => entry.deleted && (objectIds === null || noteIds.has(entry.ownerNoteId)))
       ];
       if (!targets.length) return;
-      if (targets.some((entry) => entry.dirty || entry.serverRevision < 1)) {
+      const targetIds = new Set(targets.map((entry) => entry.objectId));
+      if (
+        targets.some((entry) => entry.dirty || entry.serverRevision < 1)
+        || await hasPendingLocalObjectGraph(user.id, targetIds)
+      ) {
         return showMessage(t("notice.purgeWaitSync"));
       }
       await api("/api/objects/purge", {
@@ -2022,7 +1848,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (editableNote && isLockedNote(editableNote)) throw new Error(t("notice.noteLockedEdit", { title: editableNote.title }));
     showMessage(t("notice.encryptingAttachment", { name: file.name }), "info");
     const attachment = await createLocalAttachment(user.id, noteId, file, () => !logoutStarted.current);
-    await persistObject(attachment);
+    upsertAttachment(attachment);
     const note = documentsRef.current.find((entry) => entry.objectId === noteId && entry.kind === "note");
     if (note) patchDocument(note.objectId, { attachmentIds: [...new Set([...note.attachmentIds, attachment.objectId])] }, 0);
     showMessage(t("notice.attachmentSaved", { name: attachment.originalName }), "info");
@@ -2105,11 +1931,21 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         showMessage(t("notice.historyNameRequired"));
         return false;
       }
+      if (change.protected) {
+        const invalid = currentMetadata.attachmentIds.filter((attachmentId) => {
+          const attachment = attachmentIndexRef.current.get(attachmentId);
+          return !attachment || attachment.deleted || attachment.ownerNoteId !== item.noteId;
+        });
+        if (invalid.length) {
+          showMessage(t("notice.historyProtectedMissingAttachments", { count: invalid.length }), "critical");
+          return false;
+        }
+      }
       const updated = await historyController.queueMetadataUpdate(item, snapshot, currentMetadata, {
         name,
         protected: change.protected
       });
-      const { metadata, item: nextItem } = updated;
+      const { item: nextItem } = updated;
       const sizeDelta = nextItem.byteSize - item.byteSize;
       if (sizeDelta) {
         setHistorySettings((current) => {
@@ -2122,13 +1958,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       setHistoryPreview((current) => current?.item.historyId === item.historyId
         ? { ...current, item: nextItem }
         : current);
-      if (change.protected) {
-        const missing = metadata.attachmentIds.filter((attachmentId) => {
-          const attachment = attachmentIndexRef.current.get(attachmentId);
-          return !attachment || attachment.deleted;
-        });
-        if (missing.length) showMessage(t("notice.historyProtectedMissingAttachments", { count: missing.length }));
-      }
       requestPush("structural");
       return true;
     } catch (error) {
@@ -2442,14 +2271,12 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     clearPinRefreshGrant();
     if (!logout) {
       await finishHistorySession(true);
-      for (const id of [...saveTimers.current.keys()]) await flushDocument(id);
+      await documentSaveQueue.flushAll();
       await objectPersistence.drainAll();
     } else {
       logoutStarted.current = true;
       objectPersistence.pause();
-      for (const timer of saveTimers.current.values()) window.clearTimeout(timer);
-      saveTimers.current.clear();
-      saveDeadlines.current.clear();
+      documentSaveQueue.cancelAll();
       await objectPersistence.drainAll();
       try {
         await deleteLocalUserData(user.id);
@@ -2683,7 +2510,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
             });
           }}
           onTitleKeyDown={(event) => { focusEditorFromTitle(event, editorSurface.current); }}
-          onModeChange={setMode}
+          onModeChange={changeEditorMode}
           onToggleLock={() => void toggleActiveNoteLock()}
           onAddImage={() => attachmentInput.current?.click()}
           onOpenRight={() => preferences.outlineCollapsed ? setPreferences({ ...preferences, outlineCollapsed: false }) : setOutlineOpen(true)}

@@ -51,6 +51,11 @@ describe("createApp", () => {
     expect((await app.inject({
       method: "POST",
       url: "/api/auth/register",
+      payload: registrationBody("missing-origin")
+    })).statusCode).toBe(403);
+    expect((await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
       headers: { origin: "https://evil.example.test" },
       payload: registrationBody("blocked")
     })).statusCode).toBe(403);
@@ -98,6 +103,143 @@ describe("createApp", () => {
     expect(alphaPull.json().changes).toEqual([expect.objectContaining({ objectId, ciphertext: "A".repeat(32) })]);
     expect(bravoPull.json().changes).toEqual([expect.objectContaining({ objectId, ciphertext: "B".repeat(32) })]);
 
+    await app.close();
+    db.close();
+  });
+
+  it("binds idempotency keys, validates attachment chunks, and detects a restored cursor", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "mint-notes-integrity-test-"));
+    temporaryDirectories.push(directory);
+    const db = openDatabase(directory);
+    const config = {
+      ...loadServerConfig({ NODE_ENV: "development" }),
+      dataDirectory: directory,
+      allowRegistration: true,
+      appOrigin: "https://notes.example.test"
+    };
+    const app = await createApp({ config, db, maintenance: false });
+    const registration = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      headers: { origin: config.appOrigin },
+      payload: registrationBody("integrity")
+    });
+    const cookie = cookieHeader(registration.headers["set-cookie"]);
+    const idempotencyKey = crypto.randomUUID();
+    const objectId = crypto.randomUUID();
+    const objectPayload = {
+      objectType: "note",
+      ciphertext: "a".repeat(32),
+      nonce: "n".repeat(24),
+      encryptionVersion: 1,
+      baseRevision: 0,
+      idempotencyKey,
+      deleted: false
+    };
+    const objectHeaders = { cookie, origin: config.appOrigin };
+    expect((await app.inject({ method: "PUT", url: `/api/objects/${objectId}`, headers: objectHeaders, payload: objectPayload })).statusCode).toBe(200);
+    expect((await app.inject({
+      method: "PUT",
+      url: `/api/objects/${objectId}`,
+      headers: objectHeaders,
+      payload: { ...objectPayload, ciphertext: "b".repeat(32) }
+    })).statusCode).toBe(409);
+
+    const attachmentId = crypto.randomUUID();
+    const chunkHeaders = {
+      ...objectHeaders,
+      "content-type": "application/octet-stream",
+      "x-webmd-nonce": "c".repeat(24),
+      "x-webmd-total-chunks": "1",
+      "x-webmd-encryption-version": "1",
+      "x-webmd-idempotency-key": crypto.randomUUID()
+    };
+    expect((await app.inject({
+      method: "PUT",
+      url: `/api/attachments/${attachmentId}/chunks/1`,
+      headers: chunkHeaders,
+      payload: Buffer.from("ciphertext")
+    })).statusCode).toBe(400);
+    expect((await app.inject({
+      method: "PUT",
+      url: `/api/attachments/${attachmentId}/chunks/0`,
+      headers: chunkHeaders,
+      payload: Buffer.from("ciphertext")
+    })).statusCode).toBe(200);
+    expect((await app.inject({
+      method: "PUT",
+      url: `/api/attachments/${attachmentId}/chunks/0`,
+      headers: chunkHeaders,
+      payload: Buffer.from("different")
+    })).statusCode).toBe(409);
+
+    expect((await app.inject({
+      method: "PUT",
+      url: `/api/objects/${attachmentId}`,
+      headers: objectHeaders,
+      payload: { ...objectPayload, objectType: "attachment", idempotencyKey: crypto.randomUUID() }
+    })).statusCode).toBe(200);
+    const historyId = crypto.randomUUID();
+    const historyIdempotencyKey = crypto.randomUUID();
+    const historyPayload = {
+      capturedAt: "2026-08-01T00:00:00.000Z",
+      captureKind: "manual",
+      ciphertext: "h".repeat(32),
+      nonce: "m".repeat(24),
+      encryptionVersion: 1,
+      metadataCiphertext: "d".repeat(32),
+      metadataNonce: "e".repeat(24),
+      metadataEncryptionVersion: 1,
+      protected: true,
+      attachmentIds: [crypto.randomUUID()],
+      idempotencyKey: historyIdempotencyKey
+    };
+    expect((await app.inject({
+      method: "POST",
+      url: `/api/notes/${objectId}/history/${historyId}`,
+      headers: objectHeaders,
+      payload: historyPayload
+    })).statusCode).toBe(409);
+    expect((await app.inject({
+      method: "POST",
+      url: `/api/notes/${objectId}/history/${historyId}`,
+      headers: objectHeaders,
+      payload: { ...historyPayload, attachmentIds: [attachmentId] }
+    })).statusCode).toBe(201);
+    expect((await app.inject({
+      method: "POST",
+      url: `/api/notes/${objectId}/history/${historyId}`,
+      headers: objectHeaders,
+      payload: { ...historyPayload, attachmentIds: [attachmentId], ciphertext: "x".repeat(32) }
+    })).statusCode).toBe(409);
+
+    const reset = await app.inject({ method: "GET", url: "/api/sync?since=999999", headers: { cookie } });
+    expect(reset.json()).toMatchObject({ reset: true, cursor: 0, hasMore: true });
+    await app.close();
+    db.close();
+  });
+
+  it("applies the storage quota to object revisions", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "mint-notes-quota-test-"));
+    temporaryDirectories.push(directory);
+    const db = openDatabase(directory);
+    const config = {
+      ...loadServerConfig({ NODE_ENV: "development" }),
+      dataDirectory: directory,
+      allowRegistration: true,
+      appOrigin: "https://notes.example.test",
+      userStorageQuotaBytes: 100
+    };
+    const app = await createApp({ config, db, maintenance: false });
+    const registration = await app.inject({ method: "POST", url: "/api/auth/register", headers: { origin: config.appOrigin }, payload: registrationBody("quota") });
+    const headers = { cookie: cookieHeader(registration.headers["set-cookie"]), origin: config.appOrigin };
+    const objectId = crypto.randomUUID();
+    const payload = (baseRevision: number) => ({
+      objectType: "note", ciphertext: "q".repeat(32), nonce: "n".repeat(24), encryptionVersion: 1,
+      baseRevision, idempotencyKey: crypto.randomUUID(), deleted: false
+    });
+    expect((await app.inject({ method: "PUT", url: `/api/objects/${objectId}`, headers, payload: payload(0) })).statusCode).toBe(200);
+    expect((await app.inject({ method: "PUT", url: `/api/objects/${objectId}`, headers, payload: payload(1) })).statusCode).toBe(413);
     await app.close();
     db.close();
   });

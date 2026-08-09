@@ -5,6 +5,11 @@ export function downloadRecoveryKey(username: string, code: string) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `mint-notes-recovery-key-${username}.txt`;
+  anchor.hidden = true;
+  document.body.append(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => {
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }, 0);
 }

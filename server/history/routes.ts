@@ -109,6 +109,18 @@ export function registerHistoryRoutes(
       .filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
   };
 
+  const validProtectedAttachments = (userId: string, attachmentIds: readonly string[]): boolean => {
+    const ids = [...new Set(attachmentIds)];
+    if (!ids.length) return true;
+    const placeholders = ids.map(() => "?").join(", ");
+    const rows = db.prepare(`
+      SELECT object_id FROM objects
+      WHERE user_id = ? AND object_type = 'attachment' AND deleted = 0
+        AND object_id IN (${placeholders})
+    `).all(userId, ...ids) as Array<{ object_id: string }>;
+    return rows.length === ids.length;
+  };
+
   app.get("/api/account/note-history-settings", { preHandler: authenticate }, async (request) => (
     accountHistorySettings(authenticatedScope(request).userId)
   ));
@@ -200,20 +212,46 @@ export function registerHistoryRoutes(
     const { userId } = authenticatedScope(request);
     cleanupUserHistory(db, userId);
     const prior = db.prepare(`
-      SELECT note_id, history_id, is_protected FROM note_history
+      SELECT note_id, history_id, captured_at, capture_kind, ciphertext, nonce,
+        encryption_version, metadata_ciphertext, metadata_nonce,
+        metadata_encryption_version, is_protected FROM note_history
       WHERE user_id = ? AND idempotency_key = ?
-    `).get(userId, parsed.data.idempotencyKey) as { note_id: string; history_id: string; is_protected: number } | undefined;
-    if (prior) return {
-      ok: true,
-      idempotent: true,
-      noteId: prior.note_id,
-      historyId: prior.history_id,
-      protected: Boolean(prior.is_protected)
-    };
+    `).get(userId, parsed.data.idempotencyKey) as (HistoryRow & { note_id: string; history_id: string }) | undefined;
+    if (prior) {
+      const priorAttachments = (db.prepare(`
+        SELECT attachment_id FROM protected_history_attachments
+        WHERE user_id = ? AND note_id = ? AND history_id = ? ORDER BY attachment_id
+      `).all(userId, prior.note_id, prior.history_id) as Array<{ attachment_id: string }>).map((row) => row.attachment_id);
+      const requestedAttachments = parsed.data.protected ? [...new Set(parsed.data.attachmentIds)].sort() : [];
+      const matches = prior.note_id === params.data.noteId
+        && prior.history_id === params.data.historyId
+        && prior.captured_at === parsed.data.capturedAt
+        && prior.capture_kind === parsed.data.captureKind
+        && prior.ciphertext === parsed.data.ciphertext
+        && prior.nonce === parsed.data.nonce
+        && prior.encryption_version === parsed.data.encryptionVersion
+        && (prior.metadata_ciphertext ?? undefined) === parsed.data.metadataCiphertext
+        && (prior.metadata_nonce ?? undefined) === parsed.data.metadataNonce
+        && (prior.metadata_encryption_version ?? undefined) === parsed.data.metadataEncryptionVersion
+        && Boolean(prior.is_protected) === parsed.data.protected
+        && priorAttachments.length === requestedAttachments.length
+        && priorAttachments.every((id, index) => id === requestedAttachments[index]);
+      if (!matches) return reply.code(409).send({ error: "Idempotency key payload mismatch" });
+      return {
+        ok: true,
+        idempotent: true,
+        noteId: prior.note_id,
+        historyId: prior.history_id,
+        protected: Boolean(prior.is_protected)
+      };
+    }
     const note = db.prepare(`
       SELECT 1 FROM objects WHERE user_id = ? AND object_id = ? AND object_type = 'note'
     `).get(userId, params.data.noteId);
     if (!note) return reply.code(404).send({ error: "Note not found" });
+    if (parsed.data.protected && !validProtectedAttachments(userId, parsed.data.attachmentIds)) {
+      return reply.code(409).send({ error: "Protected history attachment is missing or invalid" });
+    }
     const boundary = historyClearBoundary(userId, params.data.noteId);
     if (!parsed.data.protected && boundary && parsed.data.capturedAt <= boundary) {
       return reply.code(409).send({ error: "History snapshot was cleared", code: "HISTORY_CLEARED", clearedBefore: boundary });
@@ -288,6 +326,9 @@ export function registerHistoryRoutes(
     const metadataNonce = parsed.data.metadataNonce ?? row.metadata_nonce;
     const metadataVersion = parsed.data.metadataEncryptionVersion ?? row.metadata_encryption_version;
     const nextProtected = parsed.data.protected === undefined ? Boolean(row.is_protected) : parsed.data.protected;
+    if (parsed.data.protected === true && !validProtectedAttachments(userId, parsed.data.attachmentIds ?? [])) {
+      return reply.code(409).send({ error: "Protected history attachment is missing or invalid" });
+    }
     const byteSize = Buffer.byteLength(row.ciphertext, "utf8") + Buffer.byteLength(metadataCiphertext ?? "", "utf8");
     const growth = Math.max(0, byteSize - row.byte_size);
     if (historyUsage(db, userId).usedBytes + growth > config.userHistoryQuotaBytes) {

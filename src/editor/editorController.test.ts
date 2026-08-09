@@ -214,16 +214,45 @@ describe("Mint editor core public controller", () => {
       "| --- | --- |",
       "| a &#124; b | value |"
     ].join("\n"));
-    expect(editor.getMarkdown()).toContain("a | b");
+    expect(editor.getMarkdown()).toContain("a &#124; b");
     expect(editor.getMarkdown()).not.toContain("\\|");
 
     editor.replaceMarkdown('[link](https://example.com "a\\"b")');
-    expect(editor.getMarkdown()).toContain('"a"b"');
-    expect(editor.getMarkdown()).not.toContain('\\"');
+    expect(editor.getMarkdown()).toContain('"a\\"b"');
 
     editor.replaceMarkdown('![image](https://example.com/image.png "a\\"b")');
-    expect(editor.getMarkdown()).toContain('"a"b"');
-    expect(editor.getMarkdown()).not.toContain('\\"');
+    expect(editor.getMarkdown()).toContain('"a\\"b"');
+    editor.destroy();
+  });
+
+  it("keeps unedited authored spellings through a real Live transaction", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = [
+      "| Left | Right |",
+      "| --- | --- |",
+      "| a &#124; b | value |",
+      "",
+      "after"
+    ].join("\n");
+    const editor = createMintEditor(host, { initialContent: markdown });
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    const paragraph = editable?.lastElementChild as HTMLElement | null;
+    if (!editable || !paragraph || paragraph.tagName !== "P") throw new Error("Missing paragraph after table");
+    paragraph.textContent = "later";
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    range.collapse(false);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    editable.dispatchEvent(new InputEvent("input", {
+      inputType: "insertText",
+      data: "later",
+      bubbles: true
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(editor.getMarkdown()).toContain("a &#124; b");
+    expect(editor.getMarkdown()).toContain("later");
     editor.destroy();
   });
 

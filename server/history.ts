@@ -35,15 +35,16 @@ export function cleanupUserHistory(
   if (!settings) return 0;
 
   const nowMs = new Date(now).getTime();
+  const removalKey = (noteId: string, historyId: string) => `${noteId}\u0000${historyId}`;
   const removeIds = new Set<string>();
   if (settings.history_retention_days !== null) {
     const cutoff = new Date(nowMs - settings.history_retention_days * DAY_MS).toISOString();
     const expired = db.prepare(`
-      SELECT history_id
+      SELECT note_id, history_id
       FROM note_history
       WHERE user_id = ? AND is_protected = 0 AND captured_at <= ?
-    `).all(userId, cutoff) as Array<{ history_id: string }>;
-    for (const row of expired) removeIds.add(row.history_id);
+    `).all(userId, cutoff) as Array<{ note_id: string; history_id: string }>;
+    for (const row of expired) removeIds.add(removalKey(row.note_id, row.history_id));
   }
 
   const automatic = db.prepare(`
@@ -55,24 +56,28 @@ export function cleanupUserHistory(
   `).all(userId, new Date(nowMs - DAY_MS).toISOString()) as HistoryRow[];
   const buckets = new Set<string>();
   for (const row of automatic) {
-    if (removeIds.has(row.history_id) || !AUTOMATIC_KINDS.has(row.capture_kind)) continue;
+    const rowKey = removalKey(row.note_id, row.history_id);
+    if (removeIds.has(rowKey) || !AUTOMATIC_KINDS.has(row.capture_kind)) continue;
     const capturedMs = new Date(row.captured_at).getTime();
     if (!Number.isFinite(capturedMs)) {
-      removeIds.add(row.history_id);
+      removeIds.add(rowKey);
       continue;
     }
     const ageMs = nowMs - capturedMs;
     const bucketTime = ageMs < 7 * DAY_MS ? row.captured_at.slice(0, 13) : row.captured_at.slice(0, 10);
     const bucket = `${row.note_id}:${bucketTime}`;
-    if (buckets.has(bucket)) removeIds.add(row.history_id);
+    if (buckets.has(bucket)) removeIds.add(rowKey);
     else buckets.add(bucket);
   }
 
   if (!removeIds.size) return 0;
-  const remove = db.prepare("DELETE FROM note_history WHERE user_id = ? AND history_id = ? AND is_protected = 0");
+  const remove = db.prepare("DELETE FROM note_history WHERE user_id = ? AND note_id = ? AND history_id = ? AND is_protected = 0");
   return db.transaction(() => {
     let deleted = 0;
-    for (const historyId of removeIds) deleted += remove.run(userId, historyId).changes;
+    for (const key of removeIds) {
+      const [noteId, historyId] = key.split("\u0000");
+      deleted += remove.run(userId, noteId, historyId).changes;
+    }
     return deleted;
   })();
 }

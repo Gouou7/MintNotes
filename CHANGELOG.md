@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Split local-save retrying, synchronization pulls, purge safety, and outbox acknowledgement out of `VaultWorkspace` into focused controllers with explicit transactional boundaries.
+- Changed Live editing to retain canonical authored Markdown separately from its rendered ProseMirror view, preserving untouched source syntax and source-based caret positions across edits and mode switches.
+- Changed attachment staging so the encrypted manifest, every encrypted chunk, and their durable outbox entries are committed in one IndexedDB transaction before a Markdown reference can be inserted.
+
+### Fixed
+
+- Fixed failed encryption or IndexedDB writes being able to strand the newest edit behind a debounce boundary. Failed generations now remain pending, retry with backoff, block normal locking and unloading, and keep the dirty state until a durable local copy exists.
+- Fixed synchronization cursors advancing past changes that could not be decrypted or safely applied, and added a full replay path when a server restored from an older backup reports a cursor behind the client.
+- Fixed remote purge and upload acknowledgement paths that could remove pending local documents, attachment data, history operations, or a newer object generation before a durable conflict or rebased outbox entry existed.
+- Fixed attachment downloads accepting inconsistent chunk indexes, totals, encryption versions, or attachment identities, and added grace-period cleanup for abandoned server-side chunks without a manifest.
+- Fixed protected history accepting missing or unrelated attachment references, and fixed history retention cleanup treating the same history identifier on different notes as one record.
+- Fixed recovery-key downloads revoking their Blob URL too early and allowed settings to close only after the newly generated key has been explicitly confirmed as saved.
+
+### Security
+
+- Bound object, history, and attachment-chunk idempotency keys to their complete request targets and encrypted payloads, rejecting reuse with different content instead of silently replaying the earlier result.
+- Enforced the shared per-user storage quota across encrypted object revisions and attachment chunks, and reject state-changing requests with a missing or mismatched Origin whenever `APP_ORIGIN` is configured.
+- Validate protected attachment references against the authenticated user's live attachment manifests and prevent physical cleanup while any local object, chunk, history, or purge operation remains pending.
+
 ## [0.12.0] - 2026-08-10
 
 ### Changed

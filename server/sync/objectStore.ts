@@ -34,19 +34,40 @@ export type ObjectWrite = z.infer<typeof objectSchema>;
 export type ObjectWriteResult =
   | { objectId: string; status: "accepted"; revision: number; sequence: number }
   | { objectId: string; status: "idempotent"; revision: number }
-  | { objectId: string; status: "conflict"; currentRevision: number; reason: "revision" | "objectType" };
+  | { objectId: string; status: "conflict"; currentRevision: number; reason: "revision" | "objectType" | "idempotency" };
+
+export class StorageQuotaError extends Error {
+  constructor() {
+    super("User storage quota exceeded");
+  }
+}
 
 export function writeObject(
   db: AppDatabase,
   scope: AuthenticatedScope,
   objectId: string,
-  body: ObjectWrite
+  body: ObjectWrite,
+  quotaBytes: number
 ): ObjectWriteResult {
   const userId = scope.userId;
   const priorIdempotent = db.prepare(
-    "SELECT object_id, revision FROM object_revisions WHERE user_id = ? AND idempotency_key = ?"
-  ).get(userId, body.idempotencyKey) as { object_id: string; revision: number } | undefined;
+    `SELECT object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted
+     FROM object_revisions WHERE user_id = ? AND idempotency_key = ?`
+  ).get(userId, body.idempotencyKey) as {
+    object_id: string; object_type: string; ciphertext: string; nonce: string;
+    encryption_version: number; revision: number; deleted: number;
+  } | undefined;
   if (priorIdempotent) {
+    const matches = priorIdempotent.object_id === objectId
+      && priorIdempotent.object_type === body.objectType
+      && priorIdempotent.ciphertext === body.ciphertext
+      && priorIdempotent.nonce === body.nonce
+      && priorIdempotent.encryption_version === body.encryptionVersion
+      && priorIdempotent.revision - 1 === body.baseRevision
+      && Boolean(priorIdempotent.deleted) === body.deleted;
+    if (!matches) {
+      return { objectId, status: "conflict", currentRevision: priorIdempotent.revision, reason: "idempotency" };
+    }
     return {
       objectId: priorIdempotent.object_id,
       status: "idempotent",
@@ -67,6 +88,15 @@ export function writeObject(
   const currentRevision = current?.revision ?? 0;
   if (currentRevision !== body.baseRevision) {
     return { objectId, status: "conflict", currentRevision, reason: "revision" };
+  }
+  const usedBytes = Number((db.prepare(`
+    SELECT
+      COALESCE((SELECT SUM(LENGTH(ciphertext) + LENGTH(nonce)) FROM object_revisions WHERE user_id = ?), 0)
+      + COALESCE((SELECT SUM(LENGTH(ciphertext) + LENGTH(nonce)) FROM attachment_chunks WHERE user_id = ?), 0)
+      AS bytes
+  `).get(userId, userId) as { bytes: number }).bytes);
+  if (usedBytes + Buffer.byteLength(body.ciphertext, "utf8") + Buffer.byteLength(body.nonce, "utf8") > quotaBytes) {
+    throw new StorageQuotaError();
   }
   const revision = currentRevision + 1;
   const now = new Date().toISOString();

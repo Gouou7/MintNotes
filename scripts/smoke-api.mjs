@@ -82,7 +82,7 @@ async function login(username, authSecret, userAgent, existingCookies = {}, reme
   return { cookie, cookies, body: await response.json(), setCookies: response.headers.getSetCookie() };
 }
 
-async function putObject(account, objectId, ciphertext, objectType = "note", deleted = false) {
+async function putObject(account, objectId, ciphertext, objectType = "note", deleted = false, baseRevision = 0) {
   const response = await fetch(`${baseUrl}/api/objects/${objectId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Cookie: account.cookie },
@@ -91,7 +91,7 @@ async function putObject(account, objectId, ciphertext, objectType = "note", del
       ciphertext,
       nonce: "z".repeat(24),
       encryptionVersion: 1,
-      baseRevision: 0,
+      baseRevision,
       idempotencyKey: crypto.randomUUID(),
       deleted
     })
@@ -193,7 +193,10 @@ try {
   const attachmentId = crypto.randomUUID();
   await putChunk(alpha, attachmentId, "alpha-encrypted-chunk");
   await putChunk(bravo, attachmentId, "bravo-encrypted-chunk");
+  await putObject(alpha, attachmentId, "alpha-encrypted-attachment-manifest", "attachment");
   const [syncA, syncB] = await Promise.all([pull(alpha), pull(bravo)]);
+  const syncedObjectA = syncA.changes.find((change) => change.objectId === objectId);
+  const syncedObjectB = syncB.changes.find((change) => change.objectId === objectId);
   const [chunkA, chunkB] = await Promise.all([getChunk(alpha, attachmentId), getChunk(bravo, attachmentId)]);
   const historyId = crypto.randomUUID();
   const historyCapturedAt = "2026-07-23T10:00:00.000Z";
@@ -307,11 +310,11 @@ try {
     waitForChangedEvent(sourceEvents, 400),
     waitForChangedEvent(bravoEvents, 400)
   ]);
-  await putObject(alpha, attachmentId, "alpha-encrypted-attachment-manifest", "attachment", true);
+  await putObject(alpha, attachmentId, "alpha-encrypted-attachment-manifest", "attachment", true, 1);
   const protectedAttachmentPurge = await fetch(`${baseUrl}/api/objects/purge`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
-    body: JSON.stringify({ objects: [{ objectId: attachmentId, baseRevision: 1 }] })
+    body: JSON.stringify({ objects: [{ objectId: attachmentId, baseRevision: 2 }] })
   });
   const unprotectAttachmentHistory = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
     method: "PATCH",
@@ -321,7 +324,7 @@ try {
   const attachmentPurgeAfterUnprotect = await fetch(`${baseUrl}/api/objects/purge`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
-    body: JSON.stringify({ objects: [{ objectId: attachmentId, baseRevision: 1 }] })
+    body: JSON.stringify({ objects: [{ objectId: attachmentId, baseRevision: 2 }] })
   });
   const attachmentChunkAfterPurge = await fetch(`${baseUrl}/api/attachments/${attachmentId}/chunks/0`, { headers: { Cookie: alpha.cookie } });
   const idempotentBatchResponse = await fetch(`${baseUrl}/api/objects/batch`, {
@@ -528,10 +531,10 @@ try {
     health: true,
     alphaRole: alpha.body.user.role,
     bravoRole: bravo.body.user.role,
-    sameOpaqueObjectId: syncA.changes[0]?.objectId === syncB.changes[0]?.objectId,
-    isolated: syncA.changes.length === 1
+    sameOpaqueObjectId: syncedObjectA?.objectId === syncedObjectB?.objectId,
+    isolated: syncA.changes.length === 2
       && syncB.changes.length === 1
-      && syncA.changes[0].ciphertext !== syncB.changes[0].ciphertext,
+      && syncedObjectA?.ciphertext !== syncedObjectB?.ciphertext,
     attachmentIsolated: chunkA === "alpha-encrypted-chunk" && chunkB === "bravo-encrypted-chunk",
     passwordChanged: passwordChange.ok,
     usernameChanged: usernameChange.ok

@@ -4,6 +4,7 @@ import { cleanupAllHistory } from "./history.js";
 import { SyncEventHub } from "./syncEvents.js";
 import { purgeExpiredTrash } from "./trash.js";
 import { cleanupInactiveEndpoints } from "./account/endpoints.js";
+import { cleanupOrphanAttachmentChunks } from "./attachments/cleanup.js";
 
 export interface MaintenanceController {
   stop: () => void;
@@ -17,6 +18,7 @@ export function startMaintenanceJobs(
   purgeExpiredTrash(db);
   cleanupAllHistory(db);
   cleanupInactiveEndpoints(db);
+  cleanupOrphanAttachmentChunks(db);
   const trashCleanupTimer = setInterval(() => {
     try {
       const purged = purgeExpiredTrash(db, new Date().toISOString(), (changes) => {
@@ -53,11 +55,22 @@ export function startMaintenanceJobs(
   }, 60 * 60 * 1000);
   endpointCleanupTimer.unref();
 
+  const attachmentCleanupTimer = setInterval(() => {
+    try {
+      const deleted = cleanupOrphanAttachmentChunks(db);
+      if (deleted) logger.info({ deleted }, "orphan attachment chunks cleaned");
+    } catch (error) {
+      logger.error(error, "orphan attachment cleanup failed");
+    }
+  }, 60 * 60 * 1000);
+  attachmentCleanupTimer.unref();
+
   return {
     stop: () => {
       clearInterval(trashCleanupTimer);
       clearInterval(historyCleanupTimer);
       clearInterval(endpointCleanupTimer);
+      clearInterval(attachmentCleanupTimer);
     }
   };
 }

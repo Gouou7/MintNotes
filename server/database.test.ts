@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { openDatabase, runRegistrationTransaction, type RegistrationRole } from "./database";
 import { cleanupUserHistory } from "./history";
 import { purgeExpiredTrash, purgeTargets } from "./trash";
+import { cleanupOrphanAttachmentChunks } from "./attachments/cleanup";
 
 const temporaryDirectories: string[] = [];
 
@@ -109,6 +110,26 @@ describe("database isolation", () => {
       "protected-expired",
       "recent-a",
       "recent-b"
+    ]);
+    db.close();
+  });
+
+  it("cleans history by the complete note and history identity", () => {
+    const directory = mkdtempSync(join(tmpdir(), "webmd-history-identity-test-"));
+    temporaryDirectories.push(directory);
+    const db = openDatabase(directory);
+    insertUser(db, "user-a", "alpha");
+    const insert = db.prepare(`
+      INSERT INTO note_history (
+        user_id, note_id, history_id, captured_at, capture_kind, ciphertext, nonce,
+        encryption_version, is_protected, byte_size, idempotency_key, created_at
+      ) VALUES ('user-a', ?, 'shared-history', ?, 'manual', 'ciphertext', 'nonce', 1, ?, 10, ?, ?)
+    `);
+    insert.run("expired-note", "2025-01-01T00:00:00.000Z", 0, "idem-expired", "2025-01-01T00:00:00.000Z");
+    insert.run("protected-note", "2025-01-01T00:00:00.000Z", 1, "idem-protected", "2025-01-01T00:00:00.000Z");
+    expect(cleanupUserHistory(db, "user-a", "2026-08-01T00:00:00.000Z")).toBe(1);
+    expect(db.prepare("SELECT note_id, is_protected FROM note_history").all()).toEqual([
+      { note_id: "protected-note", is_protected: 1 }
     ]);
     db.close();
   });
@@ -300,6 +321,32 @@ describe("database isolation", () => {
     const backedUpChunk = backup.prepare("SELECT CAST(ciphertext AS TEXT) AS ciphertext FROM attachment_chunks WHERE user_id = ? AND attachment_id = ?").get("user-a", "same-attachment-id") as { ciphertext: string };
     expect(backedUpChunk.ciphertext).toBe("chunk-a");
     backup.close();
+    db.close();
+  });
+
+  it("keeps active attachment staging but cleans week-old orphan chunks", () => {
+    const directory = mkdtempSync(join(tmpdir(), "webmd-orphan-chunk-test-"));
+    temporaryDirectories.push(directory);
+    const db = openDatabase(directory);
+    insertUser(db, "user-a", "alpha");
+    const insert = db.prepare(`
+      INSERT INTO attachment_chunks (
+        user_id, attachment_id, chunk_index, total_chunks, ciphertext, nonce,
+        encryption_version, idempotency_key, created_at
+      ) VALUES ('user-a', ?, 0, 1, X'0102', 'nonce', 1, ?, ?)
+    `);
+    insert.run("old-orphan", "idem-old", "2026-01-01T00:00:00.000Z");
+    insert.run("recent-staging", "idem-recent", "2026-01-09T12:00:00.000Z");
+    insert.run("owned-attachment", "idem-owned", "2026-01-01T00:00:00.000Z");
+    db.prepare(`
+      INSERT INTO objects (user_id, object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted, updated_at)
+      VALUES ('user-a', 'owned-attachment', 'attachment', 'ciphertext', 'nonce', 1, 1, 0, '2026-01-01T00:00:00.000Z')
+    `).run();
+    expect(cleanupOrphanAttachmentChunks(db, "2026-01-10T00:00:00.000Z")).toBe(1);
+    expect((db.prepare("SELECT attachment_id FROM attachment_chunks ORDER BY attachment_id").all() as Array<{ attachment_id: string }>).map((row) => row.attachment_id)).toEqual([
+      "owned-attachment",
+      "recent-staging"
+    ]);
     db.close();
   });
 

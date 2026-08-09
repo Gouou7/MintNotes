@@ -1,6 +1,14 @@
 import { downloadAttachmentChunk } from "../api";
 import { cryptoClient } from "../crypto/client";
-import { chunkKey, localDb, type AttachmentOutboxEntry, type LocalAttachmentChunk } from "../storage/database";
+import {
+  chunkKey,
+  localDb,
+  localKey,
+  type AttachmentOutboxEntry,
+  type LocalAttachmentChunk,
+  type LocalEncryptedObject,
+  type OutboxEntry
+} from "../storage/database";
 import type { EncryptedAttachmentChunk, OpenAttachment, VaultAttachment } from "../types";
 import { detectImageMime } from "./attachmentFormat";
 
@@ -38,8 +46,41 @@ export async function createLocalAttachment(
     chunkSize: ATTACHMENT_CHUNK_SIZE
   });
   requireActiveOperation(continueOperation);
+  const encryptedManifest = await cryptoClient.encryptObject(
+    userId,
+    attachmentId,
+    "attachment",
+    1,
+    result.metadata
+  );
+  requireActiveOperation(continueOperation);
   const now = new Date().toISOString();
-  await localDb.transaction("rw", localDb.attachmentChunks, localDb.attachmentOutbox, async () => {
+  const objectKey = localKey(userId, attachmentId);
+  const localObject: LocalEncryptedObject = {
+    key: objectKey,
+    userId,
+    objectId: attachmentId,
+    objectType: "attachment",
+    ciphertext: encryptedManifest.ciphertext,
+    nonce: encryptedManifest.nonce,
+    encryptionVersion: encryptedManifest.encryptionVersion,
+    revision: 1,
+    deleted: false,
+    updatedAt: result.metadata.updatedAt
+  };
+  const objectOutbox: OutboxEntry = {
+    ...localObject,
+    operation: "upsert",
+    baseRevision: 0,
+    idempotencyKey: crypto.randomUUID(),
+    generation: Date.now() * 1000 + result.chunks.length
+  };
+  await localDb.transaction("rw", [
+    localDb.objects,
+    localDb.outbox,
+    localDb.attachmentChunks,
+    localDb.attachmentOutbox
+  ], async () => {
     requireActiveOperation(continueOperation);
     for (const chunk of result.chunks) {
       const key = chunkKey(userId, attachmentId, chunk.chunkIndex);
@@ -62,6 +103,8 @@ export async function createLocalAttachment(
       await localDb.attachmentChunks.put(local);
       await localDb.attachmentOutbox.put(outbox);
     }
+    await localDb.objects.put(localObject);
+    await localDb.outbox.put(objectOutbox);
   });
   return { ...result.metadata, objectId: attachmentId, serverRevision: 0, dirty: true };
 }
@@ -74,12 +117,31 @@ export async function ensureAttachmentChunks(
 ): Promise<EncryptedAttachmentChunk[]> {
   requireActiveOperation(continueOperation);
   const stored = await localDb.attachmentChunks.where("[userId+attachmentId]").equals([userId, attachment.objectId]).toArray();
+  const storedVersions = new Set(stored.map((chunk) => chunk.encryptionVersion));
+  if (stored.some((chunk) => (
+    !Number.isInteger(chunk.chunkIndex)
+    || chunk.chunkIndex < 0
+    || chunk.chunkIndex >= attachment.chunkCount
+    || chunk.totalChunks !== attachment.chunkCount
+    || chunk.attachmentId !== attachment.objectId
+  )) || storedVersions.size > 1) {
+    throw new Error(`附件“${attachment.originalName}”的分块元数据不一致`);
+  }
   const byIndex = new Map(stored.map((chunk) => [chunk.chunkIndex, chunk]));
   for (let index = 0; index < attachment.chunkCount; index += 1) {
     if (byIndex.has(index)) continue;
     if (!navigator.onLine || !allowNetwork) throw new Error(`附件“${attachment.originalName}”尚未缓存，离线时无法读取`);
     const downloaded = await downloadAttachmentChunk(`/api/attachments/${attachment.objectId}/chunks/${index}`);
     requireActiveOperation(continueOperation);
+    const expectedVersion = storedVersions.values().next().value as number | undefined;
+    if (
+      downloaded.totalChunks !== attachment.chunkCount
+      || !Number.isInteger(downloaded.encryptionVersion)
+      || downloaded.encryptionVersion < 1
+      || (expectedVersion !== undefined && downloaded.encryptionVersion !== expectedVersion)
+    ) {
+      throw new Error(`附件“${attachment.originalName}”的远端分块元数据不一致`);
+    }
     const local: LocalAttachmentChunk = {
       key: chunkKey(userId, attachment.objectId, index),
       userId,
@@ -93,7 +155,9 @@ export async function ensureAttachmentChunks(
     };
     await localDb.attachmentChunks.put(local);
     byIndex.set(index, local);
+    storedVersions.add(downloaded.encryptionVersion);
   }
+  if (byIndex.size !== attachment.chunkCount) throw new Error(`附件“${attachment.originalName}”不完整`);
   return [...byIndex.values()].sort((a, b) => a.chunkIndex - b.chunkIndex).map((chunk) => ({
     attachmentId: chunk.attachmentId,
     chunkIndex: chunk.chunkIndex,

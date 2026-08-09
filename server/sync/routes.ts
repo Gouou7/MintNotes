@@ -1,10 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { ServerConfig } from "../config.js";
 import type { AppDatabase } from "../database.js";
 import { SyncEventHub } from "../syncEvents.js";
 import { purgeTargets } from "../trash.js";
 import { authenticatedScope, type AuthGuard, type SessionUser } from "../types.js";
-import { objectBatchSchema, objectSchema, writeObject } from "./objectStore.js";
+import { objectBatchSchema, objectSchema, StorageQuotaError, writeObject } from "./objectStore.js";
 
 export function registerSyncRoutes(
   app: FastifyInstance,
@@ -12,9 +13,10 @@ export function registerSyncRoutes(
     db: AppDatabase;
     syncEvents: SyncEventHub;
     authenticate: AuthGuard;
+    config: ServerConfig;
   }
 ) {
-  const { db, syncEvents, authenticate } = dependencies;
+  const { db, syncEvents, authenticate, config } = dependencies;
   const syncClientHeader = z.string().uuid().optional();
 
   app.get("/api/sync/events", { preHandler: authenticate }, async (request, reply) => {
@@ -77,6 +79,12 @@ export function registerSyncRoutes(
     const query = request.query as { since?: string; limit?: string; compact?: string };
     const since = Math.max(0, Number(query.since ?? 0));
     const limit = Math.min(500, Math.max(1, Number(query.limit ?? 200)));
+    const latestCursor = Number((db.prepare(
+      "SELECT COALESCE(MAX(sequence), 0) AS cursor FROM changes WHERE user_id = ?"
+    ).get(scope.userId) as { cursor: number }).cursor);
+    if (since > latestCursor) {
+      return { changes: [], cursor: 0, hasMore: true, reset: true };
+    }
     const rows = db.prepare(`
       SELECT c.sequence, c.object_id, c.change_type, c.created_at AS change_created_at,
         r.object_type, r.ciphertext, r.nonce, r.encryption_version, r.revision, r.deleted
@@ -118,10 +126,18 @@ export function registerSyncRoutes(
     if (!objectId.success || !parsed.success) {
       return reply.code(400).send({ error: "Invalid encrypted object" });
     }
-    const result = writeObject(db, scope, objectId.data, parsed.data);
+    let result;
+    try {
+      result = writeObject(db, scope, objectId.data, parsed.data, config.userStorageQuotaBytes);
+    } catch (error) {
+      if (error instanceof StorageQuotaError) return reply.code(413).send({ error: error.message });
+      throw error;
+    }
     if (result.status === "conflict") {
       return reply.code(409).send({
-        error: result.reason === "objectType" ? "Object type cannot change" : "Revision conflict",
+        error: result.reason === "objectType" ? "Object type cannot change"
+          : result.reason === "idempotency" ? "Idempotency key payload mismatch"
+          : "Revision conflict",
         currentRevision: result.currentRevision
       });
     }
@@ -146,9 +162,15 @@ export function registerSyncRoutes(
       return reply.code(400).send({ error: "Invalid encrypted object batch" });
     }
     const scope = authenticatedScope(request);
-    const results = parsed.data.objects.map(({ objectId, ...body }) => (
-      writeObject(db, scope, objectId, body)
-    ));
+    let results;
+    try {
+      results = parsed.data.objects.map(({ objectId, ...body }) => (
+        writeObject(db, scope, objectId, body, config.userStorageQuotaBytes)
+      ));
+    } catch (error) {
+      if (error instanceof StorageQuotaError) return reply.code(413).send({ error: error.message });
+      throw error;
+    }
     const cursor = results.reduce(
       (latest, result) => result.status === "accepted"
         ? Math.max(latest, result.sequence)

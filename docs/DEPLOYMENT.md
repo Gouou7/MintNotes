@@ -30,7 +30,7 @@ cp .env.example .env
 | `APP_ORIGIN` | none | Exact browser origin allowed for state-changing requests, including scheme and non-default port. Required in production. |
 | `ALLOW_REGISTRATION` | `false` | Enables public registration after the first account. Administrator-created activation codes are unaffected. |
 | `MAX_ATTACHMENT_SIZE_MB` | `25` | Server-side encrypted attachment limit. The bundled browser client also has a 25 MiB limit; raising only this variable does not raise the client limit. |
-| `USER_STORAGE_QUOTA_MB` | `2048` | Per-user quota for encrypted attachment chunks. |
+| `USER_STORAGE_QUOTA_MB` | `2048` | Per-user quota shared by encrypted object revisions and attachment chunks. |
 | `USER_HISTORY_QUOTA_MB` | `256` | Independent per-user quota for encrypted note-history snapshot and metadata ciphertext. Protected history still counts. |
 | `SESSION_TTL_HOURS` | `168` | Server lifetime of an ordinary, non-remembered login. Remembered endpoints use the application's rolling long-lived window. |
 | `TRUST_PROXY` | `false` | Trusts forwarded proxy information. Set to `true` only behind the controlled reverse proxy described below. |

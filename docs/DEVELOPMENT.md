@@ -50,14 +50,14 @@ pnpm dev:server
 | Other `src/editor/` modules | React Live/Source adapter, source/live drop handling, Markdown presentation codecs, read-only rendering, and outline extraction. |
 | `src/features/history.ts`, `src/features/vault/historyController.ts`, and `src/components/HistoryPanel.tsx` | History payload/deduplication policy, typed encrypted local persistence/metadata queue, and right-panel history presentation. |
 | `src/features/session/` | Session restoration, trusted-device state, cross-tab invalidation, and locked-session commands. |
-| `src/features/vault/` | Unlocked-vault composition, typed state/controller hooks, serialized object persistence, and vault-specific presentation such as the document tree. |
+| `src/features/vault/` | Unlocked-vault composition, typed state/controller hooks, serialized object persistence, retrying document saves, page-based pull/cursor application, local purge, atomic outbox acknowledgement, and vault-specific presentation such as the document tree. |
 | `src/i18n/` | Typed English, Simplified Chinese, and Traditional Chinese messages, browser-language resolution, date formatting, and language preference context. |
 | `src/crypto/` | Browser Worker key derivation, password/recovery/device envelopes, AES-GCM object encryption, and attachment chunk encryption. |
 | `src/storage/` | Dexie schema for encrypted IndexedDB objects, chunks, preferences, cursors, and durable outboxes. |
 | `src/features/` | Authentication, settings, administration, file-tree and device-local workspace-state utilities, legacy workspace migration, synchronization coordination and batching, attachments, import/export, and text statistics. |
 | `server/index.ts` and `server/app.ts` | Process startup and dependency composition; neither file owns route or SQL behavior. |
 | `server/auth/`, `server/account/`, `server/admin/`, `server/attachments/`, `server/history/`, and `server/sync/` | Session-derived guards, account endpoint lifecycle, domain routes, validation, and repositories. User-owned operations receive authenticated scope rather than a request-supplied user ID. |
-| `src/features/vault/VaultWorkspace.tsx` and `server/routes.ts` | Integration coordinators retained while remaining account/document workflows are extracted. History persistence and routes are already delegated to focused modules. They are not extension points. |
+| `src/features/vault/VaultWorkspace.tsx` and `server/routes.ts` | Integration coordinators retained while remaining account/document workflows are extracted. Document-save scheduling, pull/cursor application, purge storage, outbox acknowledgement, history persistence, and history/attachment server routes are delegated to focused modules. They are not extension points. |
 | Other `server/` modules | SQLite schema, history/trash policies, synchronization events, maintenance jobs, and online backup. |
 | `scripts/` | Crypto Worker integration test and API smoke test. |
 | `deploy/` | Reverse-proxy example. |

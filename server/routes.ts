@@ -74,7 +74,12 @@ app.decorateRequest("sessionContext", null);
 app.addHook("onRequest", async (request, reply) => {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
   const origin = request.headers.origin;
-  if (!origin) return;
+  if (!origin) {
+    if (config.production || config.appOrigin) {
+      return reply.code(403).send({ error: "Origin header required for state change" });
+    }
+    return;
+  }
   const allowed = config.appOrigin ?? `${request.protocol}://${request.headers.host}`;
   if (origin !== allowed) {
     return reply.code(403).send({ error: "Cross-origin state change rejected" });
@@ -523,7 +528,7 @@ app.patch("/api/account/trash-retention", { preHandler: authenticate }, async (r
 });
 
 registerEndpointRoutes(app, { db, syncEvents, authenticate });
-registerSyncRoutes(app, { db, syncEvents, authenticate });
+registerSyncRoutes(app, { db, syncEvents, authenticate, config });
 registerAttachmentRoutes(app, { db, config, authenticate });
 registerAdminRoutes(app, { db, syncEvents, requireAdmin });
 registerHistoryRoutes(app, { db, config, authenticate });

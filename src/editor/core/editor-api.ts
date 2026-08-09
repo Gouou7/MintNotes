@@ -15,6 +15,7 @@ import { parse } from "./parser";
 import { schema } from "./schema";
 import { serialize } from "./serializer";
 import type { EditorExtension } from "./extension";
+import { mapEquivalentOffset, preserveAuthoredSource } from "./sourcePatch";
 
 export interface EditorOptions {
   /** Initial markdown the editor opens with. Defaults to empty. */
@@ -40,6 +41,10 @@ export interface Editor {
   insertMarkdown(markdown: string, offset?: number): void;
   /** Replace the complete document and place the caret at a Markdown offset. */
   replaceMarkdown(markdown: string, offset?: number): void;
+  /** Read the active caret/selection head as a canonical Markdown offset. */
+  getSelectionOffset(): number;
+  /** Restore the caret from a canonical Markdown offset. */
+  setSelectionOffset(offset: number): void;
   /** Execute a command registered by an editor extension. */
   runExtensionCommand<Result>(command: string, input?: unknown): Result | undefined;
   /** Flip between rendered and raw-source views. ⌘/ does the same. */
@@ -68,6 +73,8 @@ export function createEditor(
 
   let view: EditorView;
   let inSource = false;
+  let canonicalMarkdown = options.initialContent ?? "";
+  let pendingCanonicalReplacement: string | null = null;
 
   function buildView(initialMd: string): EditorView {
     const doc = initialMd ? parse(initialMd) : schema.nodes.doc.createAndFill()!;
@@ -84,9 +91,16 @@ export function createEditor(
     const v: EditorView = new EditorView(editorHost, {
       state,
       dispatchTransaction(tr) {
+        const beforeRendered = serialize(v.state.doc);
         const next = v.state.apply(tr);
         v.updateState(next);
-        if (tr.docChanged) options.onChange?.(serialize(next.doc));
+        if (tr.docChanged) {
+          const afterRendered = serialize(next.doc);
+          canonicalMarkdown = pendingCanonicalReplacement
+            ?? preserveAuthoredSource(canonicalMarkdown, beforeRendered, afterRendered);
+          pendingCanonicalReplacement = null;
+          options.onChange?.(canonicalMarkdown);
+        }
       },
       handleDOMEvents: {
         focus: () => { options.onFocus?.(); return false; },
@@ -167,14 +181,18 @@ export function createEditor(
   function renderedCursorToMdOffset(): number {
     const sel = view.state.selection;
     try {
-      return serialize(view.state.doc.cut(0, sel.from)).length;
+      const rendered = serialize(view.state.doc);
+      const renderedOffset = serialize(view.state.doc.cut(0, sel.from)).length;
+      return mapEquivalentOffset(rendered, canonicalMarkdown, renderedOffset);
     } catch {
-      return serialize(view.state.doc).length;
+      return canonicalMarkdown.length;
     }
   }
   function mdOffsetToRenderedPos(md: string, offset: number): number {
     try {
-      return parse(md.slice(0, Math.max(0, offset))).content.size;
+      const rendered = serialize(parse(md));
+      const renderedOffset = mapEquivalentOffset(md, rendered, Math.max(0, offset));
+      return parse(rendered.slice(0, renderedOffset)).content.size;
     } catch {
       return 0;
     }
@@ -185,14 +203,15 @@ export function createEditor(
     const position = view.posAtCoords({ left: clientX, top: clientY })?.pos
       ?? view.state.selection.from;
     try {
-      return serialize(view.state.doc.cut(0, position)).length;
+      const rendered = serialize(view.state.doc);
+      return mapEquivalentOffset(rendered, canonicalMarkdown, serialize(view.state.doc.cut(0, position)).length);
     } catch {
       return renderedCursorToMdOffset();
     }
   }
 
   function insertMarkdown(markdown: string, offset?: number): void {
-    const current = inSource ? sourceTextarea.value : serialize(view.state.doc);
+    const current = inSource ? sourceTextarea.value : canonicalMarkdown;
     const insertionOffset = Math.max(0, Math.min(offset ?? renderedCursorToMdOffset(), current.length));
     const next = current.slice(0, insertionOffset) + markdown + current.slice(insertionOffset);
     const nextOffset = insertionOffset + markdown.length;
@@ -202,6 +221,7 @@ export function createEditor(
       sourceTextarea.setSelectionRange(nextOffset, nextOffset);
       autoSizeSource();
     } else {
+      canonicalMarkdown = next;
       rebuild(next);
       const position = Math.min(mdOffsetToRenderedPos(next, nextOffset), view.state.doc.content.size);
       try {
@@ -225,6 +245,7 @@ export function createEditor(
     }
 
     const doc = parse(markdown);
+    pendingCanonicalReplacement = markdown;
     const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, doc.content);
     const position = Math.min(
       mdOffsetToRenderedPos(markdown, markdownOffset),
@@ -238,6 +259,18 @@ export function createEditor(
     view.focus();
   }
 
+  function setSelectionOffset(offset: number): void {
+    const clamped = Math.max(0, Math.min(offset, canonicalMarkdown.length));
+    if (inSource) {
+      sourceTextarea.setSelectionRange(clamped, clamped);
+      return;
+    }
+    const position = Math.min(mdOffsetToRenderedPos(canonicalMarkdown, clamped), view.state.doc.content.size);
+    try {
+      view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(position))).scrollIntoView());
+    } catch {}
+  }
+
   function runExtensionCommand<Result>(command: string, input?: unknown): Result | undefined {
     if (inSource) return undefined;
     for (const extension of options.extensions ?? []) {
@@ -248,7 +281,7 @@ export function createEditor(
   }
 
   function enterSource(): void {
-    const md = serialize(view.state.doc);
+    const md = canonicalMarkdown;
     const mdCursor = renderedCursorToMdOffset();
     sourceTextarea.value = md;
     editorHost.hidden = true;
@@ -265,6 +298,7 @@ export function createEditor(
     const md = sourceTextarea.value;
     const mdCursor = sourceTextarea.selectionStart ?? md.length;
     const targetRaw = mdOffsetToRenderedPos(md, mdCursor);
+    canonicalMarkdown = md;
     rebuild(md);
     const target = Math.min(targetRaw, view.state.doc.content.size);
     try {
@@ -278,6 +312,7 @@ export function createEditor(
     editorHost.hidden = false;
     view.focus();
     inSource = false;
+    options.onChange?.(md);
   }
 
   // ⌘/ on Mac, Ctrl+/ elsewhere. Window-level keydown so it works
@@ -309,16 +344,17 @@ export function createEditor(
   // owns the scroll, never the textarea.
   sourceTextarea.addEventListener("input", autoSizeSource);
 
-  view = buildView(options.initialContent ?? "");
+  view = buildView(canonicalMarkdown);
 
   return {
     getMarkdown(): string {
-      return inSource ? sourceTextarea.value : serialize(view.state.doc);
+      return inSource ? sourceTextarea.value : canonicalMarkdown;
     },
     setMarkdown(md: string): void {
       if (inSource) {
         sourceTextarea.value = md;
       } else {
+        canonicalMarkdown = md;
         rebuild(md);
       }
     },
@@ -330,6 +366,12 @@ export function createEditor(
     },
     replaceMarkdown(markdown: string, offset?: number): void {
       replaceMarkdown(markdown, offset);
+    },
+    getSelectionOffset(): number {
+      return inSource ? sourceTextarea.selectionStart ?? canonicalMarkdown.length : renderedCursorToMdOffset();
+    },
+    setSelectionOffset(offset: number): void {
+      setSelectionOffset(offset);
     },
     runExtensionCommand<Result>(command: string, input?: unknown): Result | undefined {
       return runExtensionCommand<Result>(command, input);

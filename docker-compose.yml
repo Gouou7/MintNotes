@@ -14,7 +14,7 @@ services:
       PORT: ${PORT:-8787}
       # Public registration after the bootstrap administrator is opt-in.
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
-      # Server attachment limit and per-user encrypted attachment quota (MiB).
+      # Server attachment limit and per-user encrypted object/chunk quota (MiB).
       MAX_ATTACHMENT_SIZE_MB: ${MAX_ATTACHMENT_SIZE_MB:-25}
       USER_STORAGE_QUOTA_MB: ${USER_STORAGE_QUOTA_MB:-2048}
       # Independent quota for encrypted note history (MiB).

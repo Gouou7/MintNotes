@@ -442,6 +442,8 @@ describe("SettingsPanel", () => {
     expect(api).toHaveBeenCalledWith("/api/account/recovery-key", expect.objectContaining({ method: "POST" }));
     expect(dialog.querySelector("textarea")?.textContent).toBe("new-recovery-code");
     expect(dialog.querySelector("button[aria-label='关闭']")).toBeNull();
+    expect((button(container, "我已保存") as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => (dialog.querySelector(".recovery-confirm input") as HTMLInputElement).click());
     await act(async () => button(container, "我已保存").click());
     expect(container.querySelector(".account-credential-dialog")).toBeNull();
   });

@@ -77,7 +77,7 @@ Every attachment chunk uses a fresh 96-bit nonce and authenticates the user ID, 
 - Logging out revokes all sessions for the current endpoint and, after an explicit confirmation, discards every current-account browser record including unsynchronized changes. It does not delete server-synchronized content or another local user's rows. Password recovery and account disabling revoke every endpoint; password changes revoke other endpoints. Remote logout is scoped to the authenticated user, cannot target the current endpoint, and is allowed only after its server-recorded first-trusted time is 24 hours old. Repeated login does not reset that time.
 - Remembered sessions have a rolling long-lived cookie; ordinary sessions use a session cookie and the configured server TTL. An eligible remembered credential may unlock its local cache while the server is unreachable, but all network capabilities remain disabled until `/api/auth/me` confirms the same remembered endpoint. Remote revocation and cookie loss therefore take effect on the next successful connection attempt, not while the device remains offline. Browser storage cleanup terminates local trust immediately.
 - Immediate permanent deletion requires an authenticated session, an explicit client-side confirmation, a synchronized tombstone, and the server-side user scope derived from that session.
-- Browser CSRF resistance relies on `SameSite=Strict` cookies plus exact `Origin` validation when an `Origin` header is present. `APP_ORIGIN` must therefore match the public browser origin exactly.
+- Browser CSRF resistance relies on `SameSite=Strict` cookies plus exact `Origin` validation. Production and any deployment with `APP_ORIGIN` configured reject a state-changing request when the header is absent or mismatched. `APP_ORIGIN` must therefore match the public browser origin exactly.
 - Markdown does not execute raw HTML or scriptable embeds.
 - KaTeX and Mermaid execute only from the reviewed local application bundle. Mermaid uses strict rendering, removes event handlers and external resource references from generated SVG, and displays the result as a non-interactive Blob image. It does not add a CDN, remote font, frame, or new network origin.
 - The application uses a restrictive Content Security Policy and no runtime CDN scripts.
@@ -96,6 +96,8 @@ The first account bootstraps the administrator role. The empty-database check an
 
 - Local encrypted copy before network upload.
 - Durable retry outbox.
+- Failed local encryption or IndexedDB commits remain in the unlocked in-memory retry queue with bounded backoff, and ordinary locking waits for durability instead of clearing the only plaintext generation. A completely unwritable browser storage subsystem cannot provide crash durability without violating the no-plaintext-persistence boundary, so the UI keeps a critical warning visible and never reports that generation as saved.
+- Pull cursors commit only with successfully authenticated and locally applied pages; remote purge cannot remove pending object, chunk, or history queues, and concurrent document edits are preserved as conflict copies first.
 - Per-object decryption failure isolation: one invalid ciphertext cannot hide other readable notes. Failed local ciphertext and pending edits remain untouched, and remote ciphertext must authenticate before replacing a known-good local copy. Suppressing a repeated warning stores only a local fingerprint for that exact failed revision and does not delete the ciphertext.
 - Append-only server revisions.
 - Independent encrypted note history with retention, quota, clear markers, generation-safe local-first creation/metadata retry storage, and protected-row/attachment retention. Protected history blocks individual deletion, bulk history clearing, scheduled history cleanup, and physical purge of its owning note and referenced attachments. User-visible history deletion never removes synchronization revisions.
@@ -105,7 +107,7 @@ The first account bootstraps the administrator role. The empty-database check an
 - Exportable plaintext Markdown and consistent server backups.
 - Consistent SQLite online backups and documented restore drills.
 
-Recovery-key rotation creates a fresh random recovery key in the Crypto Worker, updates only its server-side verifier and vault-key envelope after master-password verification, and invalidates the previous recovery key. The plaintext recovery key is displayed once and is not persisted.
+Recovery-key rotation creates a fresh random recovery key in the Crypto Worker, updates only its server-side verifier and vault-key envelope after master-password verification, and invalidates the previous recovery key. The plaintext recovery key is displayed once and is not persisted. Its download URL remains valid through the browser click task, and the result surface cannot be dismissed until the user explicitly confirms that the replacement was copied or downloaded.
 
 ## Operational requirements
 

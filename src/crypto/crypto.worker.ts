@@ -506,8 +506,12 @@ async function handle(operation: string, payload: any): Promise<any> {
       if (chunks.length !== metadata.chunkCount) throw new Error("Attachment is incomplete");
       const parts: Uint8Array[] = [];
       let size = 0;
-      for (const chunk of chunks) {
+      for (let expectedIndex = 0; expectedIndex < chunks.length; expectedIndex += 1) {
+        const chunk = chunks[expectedIndex];
+        if (chunk.attachmentId !== payload.attachmentId) throw new Error("Attachment chunk ID mismatch");
+        if (chunk.chunkIndex !== expectedIndex) throw new Error("Attachment chunk index mismatch");
         if (chunk.totalChunks !== metadata.chunkCount) throw new Error("Attachment chunk count mismatch");
+        if (chunk.encryptionVersion !== ENCRYPTION_VERSION) throw new Error("Attachment encryption version mismatch");
         const part = await openBinary(
           chunk.ciphertext,
           chunk.nonce,

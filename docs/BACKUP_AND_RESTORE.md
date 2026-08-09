@@ -54,6 +54,7 @@ Always test restoration on a separate deployment first. A restore is successful 
 5. Test normal login for more than one account.
 6. Test recovery-key password reset on a designated test account.
 7. Open representative folders and notes, then verify revision synchronization on a second browser.
+   A browser whose saved cursor is newer than the restored database must receive a reset response, replay from zero, and preserve any newer local outbox entry through normal conflict handling.
 8. Download representative attachments, verify they decrypt, and create a fresh Markdown ZIP export.
 9. Confirm administrators can still create activation codes and inspect account storage without seeing note plaintext.
 10. Open **Settings > Security** and confirm trusted-endpoint history is readable; revoke a designated test endpoint that satisfies the 24-hour rule and verify all of its sessions stop working.
