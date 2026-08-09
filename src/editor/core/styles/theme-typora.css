@@ -113,6 +113,7 @@
   background: #ddd;
   border: 0;
 }
+.ProseMirror .hr-node-view { padding: 1.6em 0; }
 
 /* ─── tables (cells; layout from widgets.css) ────────────────────── */
 .ProseMirror table th,

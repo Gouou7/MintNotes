@@ -50,6 +50,15 @@
   min-height: 168px;
 }
 .ProseMirror[contenteditable="true"]:focus { outline: none; }
+.ProseMirror .hr-node-view {
+  box-sizing: border-box;
+  width: 100%;
+  cursor: text;
+}
+.ProseMirror .hr-node-view > hr {
+  margin: 0;
+  pointer-events: none;
+}
 
 /* ─── method-B syntax hints ──────────────────────────────────────── */
 .ProseMirror .syntax-hint {

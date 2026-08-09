@@ -76,6 +76,8 @@ The note lock is an encrypted, cross-device client-side safety control, not pass
 
 In Live mode, a line-leading `>` remains visible while you type. Press Enter to confirm the completed line and render it as a blockquote, matching the delayed conversion used for headings. The Live editor does not automatically insert backslashes before any punctuation. To request a literal Markdown-significant symbol, type the backslash yourself in Live or Source mode—for example, `\>` displays as an ordinary `>` instead of starting a blockquote. Live mode hides that user-authored escape while the canonical Markdown retains it across reloads.
 
+In Live mode, click anywhere on a rendered horizontal-rule row to reveal its `---`, `***`, or `___` Markdown source with the caret at the end. Moving the caret into a horizontal rule with the arrow keys also reveals its source, placing the caret at the side from which you entered. You can then delete or edit the delimiter, or press Enter to add a line after it. Moving the caret away from an unchanged delimiter renders it as a horizontal rule again.
+
 ### Math, diagrams, and WikiLinks
 
 Use `$...$` for inline KaTeX and `$$...$$` for display math. Display math may occupy one line or use opening and closing `$$` lines:

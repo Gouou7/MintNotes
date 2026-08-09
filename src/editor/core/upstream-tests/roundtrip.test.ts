@@ -29,6 +29,8 @@ describe("round-trip: blocks", () => {
   test("blockquote single paragraph", () => roundTripStable("> quoted text"));
   test("blockquote multi paragraph", () => roundTripStable("> first\n>\n> second"));
   test("horizontal rule", () => roundTripStable("before\n\n---\n\nafter"));
+  test("horizontal rule preserves asterisk delimiter", () =>
+    roundTripStable("before\n\n***\n\nafter"));
   test("toc", () => roundTripStable("# Title\n\n[toc]\n\nbody"));
   test("toc uppercase normalizes", () =>
     roundTripStable("# Title\n\n[toc]\n\nbody")); // [TOC] also accepted on input; output is [toc]

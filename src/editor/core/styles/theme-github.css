@@ -124,6 +124,7 @@
   background: #d8dee4;
   border: 0;
 }
+.ProseMirror .hr-node-view { padding: 24px 0; }
 
 /* ─── tables (cell + header styling — layout is in widgets.css) ──── */
 .ProseMirror table th,

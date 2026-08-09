@@ -58,6 +58,7 @@ const coreNodes: Record<string, NodeSpec> = {
 
   horizontal_rule: {
     group: "block",
+    attrs: { markup: { default: "---" } },
     parseDOM: [{ tag: "hr" }],
     toDOM: () => ["hr"],
   },

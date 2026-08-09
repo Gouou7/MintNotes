@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Changed Live-mode horizontal rules so clicking anywhere on the rendered row or moving the caret into it reveals the original `---`, `***`, or `___` Markdown source for reliable deletion, editing, and line insertion.
+
 ## [0.11.0] - 2026-08-09
 
 ### Changed

@@ -312,7 +312,7 @@ const coreBlockHandlers: Record<string, BlockHandler> = {
   },
 
   horizontal_rule: (state, node) => {
-    state.write("---");
+    state.write((node.attrs.markup as string) || "---");
     state.closeBlock(node);
   },
 

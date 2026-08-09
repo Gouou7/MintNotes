@@ -25,6 +25,93 @@ afterEach(() => {
 });
 
 describe("Mint editor core public controller", () => {
+  it("reveals a horizontal rule source on click and preserves its delimiter", () => {
+    for (const delimiter of ["---", "***"] as const) {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createMintEditor(host, { initialContent: delimiter });
+      const ruleRow = host.querySelector<HTMLElement>(".hr-node-view");
+      if (!ruleRow) throw new Error(`Missing rendered rule row for ${delimiter}`);
+
+      const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+      ruleRow.dispatchEvent(down);
+      expect(down.defaultPrevented).toBe(true);
+      ruleRow.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+      const source = host.querySelector<HTMLParagraphElement>("p.hr-draft");
+      expect(source?.textContent).toBe(delimiter);
+      expect(editor.getMarkdown()).toBe(delimiter);
+      editor.destroy();
+      host.remove();
+    }
+  });
+
+  it("lets an activated horizontal rule be deleted or followed by a new line", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createMintEditor(host, { initialContent: "---" });
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    const ruleRow = host.querySelector<HTMLElement>(".hr-node-view");
+    if (!editable || !ruleRow) throw new Error("Missing live horizontal rule");
+
+    ruleRow.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    const source = host.querySelector<HTMLParagraphElement>("p.hr-draft");
+    if (!source) throw new Error("Missing revealed horizontal rule source");
+    source.textContent = "--";
+    const range = document.createRange();
+    range.selectNodeContents(source);
+    range.collapse(false);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    editable.dispatchEvent(new InputEvent("input", {
+      inputType: "deleteContentBackward",
+      data: null,
+      bubbles: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(host.querySelector("hr")).toBeNull();
+    expect(editor.getMarkdown()).toBe("--");
+    editor.destroy();
+    host.remove();
+
+    const lineHost = document.createElement("div");
+    document.body.append(lineHost);
+    const lineEditor = createMintEditor(lineHost, { initialContent: "---" });
+    const lineEditable = lineHost.querySelector<HTMLElement>(".ProseMirror");
+    const lineRuleRow = lineHost.querySelector<HTMLElement>(".hr-node-view");
+    if (!lineEditable || !lineRuleRow) throw new Error("Missing second live horizontal rule");
+    lineRuleRow.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const lineSource = lineHost.querySelector<HTMLParagraphElement>("p.hr-draft");
+    if (!lineSource) throw new Error("Missing second revealed horizontal rule source");
+    const lineRange = document.createRange();
+    lineRange.selectNodeContents(lineSource);
+    lineRange.collapse(false);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(lineRange);
+    lineEditable.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(lineHost.querySelector(".hr-node-view")).not.toBeNull();
+    expect(lineHost.querySelectorAll(".ProseMirror > p")).toHaveLength(1);
+    expect(lineEditor.getMarkdown()).toBe("---");
+
+    const restoredRuleRow = lineHost.querySelector<HTMLElement>(".hr-node-view");
+    if (!restoredRuleRow) throw new Error("Missing restored horizontal rule row");
+    restoredRuleRow.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(lineHost.querySelector("p.hr-draft")?.textContent).toBe("---");
+    lineEditor.destroy();
+  });
+
   it("loads Mint-specific presentation only through explicit extensions", () => {
     const bareHost = document.createElement("div");
     document.body.append(bareHost);

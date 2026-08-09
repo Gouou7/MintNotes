@@ -193,7 +193,7 @@ function handleBlock(state: ParserState, token: Token): void {
       return;
     }
     case "hr":
-      state.push(nodes.horizontal_rule.create());
+      state.push(nodes.horizontal_rule.create({ markup: token.markup || "---" }));
       return;
     case "inline": {
       for (const child of token.children ?? []) handleInline(state, child);

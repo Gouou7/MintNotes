@@ -72,6 +72,11 @@ describe("parser: block nodes", () => {
   test("horizontal rule", () => {
     const doc = parse("foo\n\n---\n\nbar");
     expect(doc.child(1).type).toBe(schema.nodes.horizontal_rule);
+    expect(doc.child(1).attrs.markup).toBe("---");
+
+    const asteriskDoc = parse("foo\n\n***\n\nbar");
+    expect(asteriskDoc.child(1).type).toBe(schema.nodes.horizontal_rule);
+    expect(asteriskDoc.child(1).attrs.markup).toBe("***");
   });
 });
 
