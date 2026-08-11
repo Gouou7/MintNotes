@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fixed edited notes repeatedly re-entering the local persistence queue after a successful durable save, which continuously replaced the synchronization outbox generation and could leave the application showing **Syncing…** indefinitely.
 - Fixed encrypted images in Live mode remaining in a broken-source state after switching away from a note and back. Asynchronously restored Blob URLs now refresh only the presentation layer without changing canonical Markdown, undo history, focus, or caret position.
 - Fixed editing or deleting an empty line inside a blockquote or Callout collapsing its lines into one sequence of repeated `>` prefixes. Enter, Backspace, and Delete now operate the authored quote source in order, including moving to the previous editable line from the block's left edge instead of removing the delimiter to the caret's right.
 - Fixed Live blockquotes and Callouts shifting surrounding content when switching between rendered preview and source editing.

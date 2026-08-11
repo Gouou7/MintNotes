@@ -36,7 +36,7 @@ describe("document save recovery queue", () => {
     const documents = new Map([[draft.objectId, draft]]);
     const persist = vi.fn()
       .mockRejectedValueOnce(new Error("IndexedDB unavailable"))
-      .mockResolvedValue(undefined);
+      .mockResolvedValue(draft);
     let queue!: ReturnType<typeof useDocumentSaveQueue>;
     function Harness() {
       queue = useDocumentSaveQueue({
@@ -65,6 +65,43 @@ describe("document save recovery queue", () => {
     const allowedUnload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(allowedUnload);
     expect(allowedUnload.defaultPrevented).toBe(false);
+    await act(async () => root.unmount());
+  });
+
+  it("does not resave the normalized object returned by a successful durable write", async () => {
+    vi.useFakeTimers();
+    const documents = new Map([[draft.objectId, draft]]);
+    const persist = vi.fn(async (current: OpenDocument) => {
+      const persisted = {
+        ...current,
+        updatedAt: "2026-01-01T00:00:01.000Z"
+      };
+      documents.set(current.objectId, persisted);
+      return persisted;
+    });
+    const onPersisted = vi.fn();
+    let queue!: ReturnType<typeof useDocumentSaveQueue>;
+    function Harness() {
+      queue = useDocumentSaveQueue({
+        isActive: () => true,
+        getDocument: (id) => documents.get(id),
+        upsertDocument: (next) => documents.set(next.objectId, next),
+        persistDocument: persist,
+        onPersisted
+      });
+      return null;
+    }
+    const host = globalThis.document.createElement("div");
+    globalThis.document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => root.render(<Harness />));
+
+    act(() => queue.queue(draft));
+    await act(async () => { await queue.flush(draft.objectId); });
+
+    expect(persist).toHaveBeenCalledOnce();
+    expect(onPersisted).toHaveBeenCalledOnce();
+    expect(queue.hasPending(draft.objectId)).toBe(false);
     await act(async () => root.unmount());
   });
 });
