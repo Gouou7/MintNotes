@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-08-12
+
 ### Fixed
 
 - Fixed edited notes repeatedly re-entering the local persistence queue after a successful durable save, which continuously replaced the synchronization outbox generation and could leave the application showing **Syncing…** indefinitely.
