@@ -16,11 +16,19 @@ describe("installed PWA shell", () => {
 
   it("keeps primary mobile surfaces inside every device safe area", () => {
     expect(styles).toContain("--safe-area-top: env(safe-area-inset-top, 0px)");
+    expect(styles).toMatch(/\.app-shell\s*\{[^}]*height: 100%;/s);
     expect(styles).toMatch(/\.note-toolbar\s*\{[^}]*var\(--safe-area-top\)/s);
     expect(styles).toMatch(/\.side-header\s*\{[^}]*var\(--safe-area-top\)/s);
     expect(styles).toMatch(/\.side-footer\s*\{[^}]*var\(--safe-area-bottom\)/s);
+    expect(styles).toMatch(/\.status-bar\s*\{[^}]*var\(--safe-area-bottom\)/s);
     expect(styles).toMatch(/\.settings-modal > header\s*\{[^}]*var\(--safe-area-top\)/s);
-    expect(styles).toMatch(/\.auth-shell, \.loading-shell\s*\{[^}]*height: 100dvh;[^}]*overflow: auto/s);
+    expect(styles).toMatch(/\.auth-shell, \.loading-shell\s*\{[^}]*height: 100%;[^}]*overflow: auto/s);
+  });
+
+  it("renders each desktop pane boundary as a single line with a wider resize target", () => {
+    expect(styles).toMatch(/\.app-shell\s*\{[^}]*--tree-resizer-track: 1px;[^}]*--outline-resizer-track: 1px;/s);
+    expect(styles).toMatch(/\.pane-resizer\s*\{[^}]*background: var\(--border\);/s);
+    expect(styles).toMatch(/\.pane-resizer::before\s*\{[^}]*width: 12px;/s);
   });
 
   it("keeps responsive sidebar controls available at their intended breakpoints", () => {
