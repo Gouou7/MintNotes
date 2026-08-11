@@ -523,7 +523,15 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
   const trashRoots = trashItems.filter((item) => !item.parentId || !trashIds.has(item.parentId)).sort(compareDocuments(preferences.sortMode));
   const changeTab = (next: Tab) => setTab(next);
 
-  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t("settings.title")}>
+  return <div
+    className="modal-backdrop"
+    role="dialog"
+    aria-modal="true"
+    aria-label={t("settings.title")}
+    onClick={(event) => {
+      if (event.target === event.currentTarget && !newRecoveryKey) onClose();
+    }}
+  >
     <section className="modal settings-modal">
       <header><h2>{t("settings.title")}</h2><button disabled={Boolean(newRecoveryKey)} onClick={onClose} aria-label={t("settings.close")}><AppIcon icon={X} /></button></header>
       {!serverSessionVerified && <p className="auth-guidance warning">{t("settings.localOnly")}</p>}
@@ -597,12 +605,12 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
             <label className="settings-control-row"><span>{t("settings.autoLockAfter")}</span><select disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select></label>
             <h3>{t("settings.loginDevices")}</h3><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
             {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
-            {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && device.active) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row ${device.current ? "current" : ""}`} key={device.id}><span className="session-device-icon"><AppIcon icon={Laptop} /></span><span className="session-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && (device.active ? <button className="session-revoke" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={LogOut} size={15} />{t("settings.signOut")}</button> : <button className="session-revoke" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={Trash2} size={15} />{t("common.remove")}</button>)}</article>)}</div></>}
+            {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && device.active) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row ${device.current ? "current" : ""}`} key={device.id}><span className="session-device-icon"><AppIcon icon={Laptop} /></span><span className="session-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && (device.active ? <button className="session-revoke" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={LogOut} size={15} />{t("settings.signOut")}</button> : <button className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={Trash2} size={15} />{t("common.remove")}</button>)}</article>)}</div></>}
             <h3>{t("settings.accountCredentials")}</h3><p className="settings-help">{t("settings.accountCredentialsHelp")}</p>
             <div className="settings-actions"><button type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</button><button type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecovery")}</button></div>
           </div>}
 
-          {tab === "data" && <div className="settings-section"><h3>{t("settings.portableData")}</h3><p className="settings-help">{t("settings.portableHelp")}</p><input ref={fileInput} type="file" accept=".md,.markdown,.txt,.zip" multiple hidden onChange={(event) => { void importSelected(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><button disabled={busy} onClick={() => fileInput.current?.click()}>{t("settings.import")}</button><button disabled={busy} onClick={() => void onExport()}>{t("settings.export")}</button></div></div>}
+          {tab === "data" && <div className="settings-section"><h3>{t("settings.data")}</h3><p className="settings-help">{t("settings.portableHelp")}</p><input ref={fileInput} type="file" accept=".md,.markdown,.txt,.zip" multiple hidden onChange={(event) => { void importSelected(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><button disabled={busy} onClick={() => fileInput.current?.click()}>{t("settings.import")}</button><button disabled={busy} onClick={() => void onExport()}>{t("settings.export")}</button></div></div>}
           {tab === "about" && <div className="settings-section about-settings">
             <div className="about-product">
               <h3>Mint Notes</h3>
@@ -619,9 +627,9 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
             </ul>
           </div>}
           {tab === "users" && user.role === "admin" && serverSessionVerified && <div className="admin-settings"><AdminPanel currentUser={user} onNotify={onNotify} /></div>}
-          <div className="settings-logout-section">
+          {tab === "general" && <div className="settings-logout-section">
             <button type="button" className="settings-logout" onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} size={16} />{t("app.logout")}</button>
-          </div>
+          </div>}
         </div>
       </div>
       {profileDialogOpen && <div className="danger-confirm profile-edit-dialog settings-section" role="dialog" aria-modal="true" aria-label={t("settings.editProfile")}>

@@ -504,7 +504,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .session-details span, .session-details small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 .session-details span { font-size: 12px; }
 .session-details small { font-size: 10px; }
-.settings-section button.session-revoke { min-height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; color: var(--danger); }
+.settings-section button.session-revoke, .settings-section button.session-remove { min-height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; }
+.settings-section button.session-revoke { color: var(--danger); }
 .trash-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .trash-heading h3 { margin: 0; }
 .settings-section button.trash-clear { min-height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; color: var(--danger); }
@@ -558,6 +559,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .user-row strong { display: flex; align-items: center; gap: 7px; }
 .user-row strong em { padding: 2px 6px; border-radius: 999px; color: var(--accent-text); background: var(--accent-soft); font-size: calc(10px + var(--font-adjust)); font-style: normal; }
 .user-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.settings-section .user-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding-inline: 12px; white-space: nowrap; }
 .settings-section button.danger { color: var(--danger); }
 .settings-section button.danger-solid { border-color: var(--danger); color: #fff; background: var(--danger); }
 .danger-confirm { position: fixed; z-index: 180; inset: 50% auto auto 50%; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; transform: translate(-50%, -50%); padding: 18px; border: 1px solid color-mix(in srgb, var(--danger) 50%, var(--border)); border-radius: 14px; background: var(--surface-raised); box-shadow: 0 24px 80px rgba(0,0,0,.5); }
@@ -649,7 +651,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .profile-avatar-editor .profile-action-button, .profile-dialog-footer .profile-action-button { width: 100%; }
   .profile-edit-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 18px; }
   .session-row { grid-template-columns: auto minmax(0, 1fr); }
-  .session-revoke { grid-column: 2; justify-self: start; }
+  .session-revoke, .session-remove { grid-column: 2; justify-self: start; }
   .trash-row { grid-template-columns: auto minmax(0, 1fr); }
   .trash-actions { grid-column: 2; }
   .admin-create { grid-template-columns: 1fr; }

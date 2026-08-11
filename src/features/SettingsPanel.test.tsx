@@ -76,13 +76,13 @@ function mockApi() {
   });
 }
 
-async function renderSettings(user: User = admin, onNotify = vi.fn(), onPreferences = vi.fn(), onLogout = vi.fn(), onUsername = vi.fn(), credential: Parameters<typeof SettingsPanel>[0]["credential"] = null, onDisplayName = vi.fn(), avatarUrl: string | null = null) {
+async function renderSettings(user: User = admin, onNotify = vi.fn(), onPreferences = vi.fn(), onLogout = vi.fn(), onUsername = vi.fn(), credential: Parameters<typeof SettingsPanel>[0]["credential"] = null, onDisplayName = vi.fn(), avatarUrl: string | null = null, onClose = vi.fn()) {
   localStorage.setItem("webmd-notes-language", "zh-CN");
   mockApi();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container); roots.push(root);
-  await act(async () => root.render(<I18nProvider><SettingsPanel user={user} endpoint={{ id: "endpoint", remembered: false }} credential={credential} serverSessionVerified onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={vi.fn()} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={onDisplayName} onUsername={onUsername} avatarUrl={avatarUrl} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
+  await act(async () => root.render(<I18nProvider><SettingsPanel user={user} endpoint={{ id: "endpoint", remembered: false }} credential={credential} serverSessionVerified onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={onClose} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={onDisplayName} onUsername={onUsername} avatarUrl={avatarUrl} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
   await act(async () => { await Promise.resolve(); });
   return container;
 }
@@ -388,7 +388,8 @@ describe("SettingsPanel", () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
       input.dispatchEvent(new Event("input", { bubbles: true }));
     };
-    const container = await renderSettings();
+    const onClose = vi.fn();
+    const container = await renderSettings(admin, vi.fn(), vi.fn(), vi.fn(), vi.fn(), null, vi.fn(), null, onClose);
     vi.mocked(api).mockImplementation(async (path) => {
       if (String(path).startsWith("/api/auth/parameters/")) return {
         kdfSalt: "salt",
@@ -443,6 +444,8 @@ describe("SettingsPanel", () => {
     expect(dialog.querySelector("textarea")?.textContent).toBe("new-recovery-code");
     expect(dialog.querySelector("button[aria-label='关闭']")).toBeNull();
     expect((button(container, "我已保存") as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => (container.querySelector(".modal-backdrop") as HTMLDivElement).click());
+    expect(onClose).not.toHaveBeenCalled();
     await act(async () => (dialog.querySelector(".recovery-confirm input") as HTMLInputElement).click());
     await act(async () => button(container, "我已保存").click());
     expect(container.querySelector(".account-credential-dialog")).toBeNull();
@@ -459,13 +462,28 @@ describe("SettingsPanel", () => {
 
   it("separates administrator settings and removes the encrypted snapshot", async () => {
     const container = await renderSettings();
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === "/api/admin/users") return {
+        users: [
+          { id: "admin-id", username: "admin", displayName: "Administrator", role: "admin", disabled: false, objectCount: 58, encryptedBytes: 2.7 * 1024 * 1024 },
+          { id: "user-id", username: "eros", displayName: "Eros", role: "user", disabled: false, objectCount: 79, encryptedBytes: 1.4 * 1024 * 1024 }
+        ],
+        setups: []
+      } as never;
+      return {} as never;
+    });
     expect(container.querySelector(".admin-tab")?.textContent).toContain("管理员设置");
     await act(async () => button(container, "管理员设置").click());
+    await act(async () => { await Promise.resolve(); });
     const management = container.querySelector(".admin-user-management");
     expect(management?.firstElementChild?.textContent).toBe("用户管理");
     expect([...management!.querySelectorAll(".admin-subsection > h4")].map((heading) => heading.textContent)).toEqual(["新增用户", "现有用户"]);
     expect(container.textContent).not.toContain("创建待激活用户");
+    expect(button(container, "禁用").querySelector(".lucide-user-round-x")).toBeTruthy();
+    expect(button(container, "删除").querySelector(".lucide-trash-2")).toBeTruthy();
     await act(async () => button(container, "数据迁移").click());
+    expect(container.querySelector(".settings-content > .settings-section > h3")?.textContent).toBe("数据迁移");
+    expect(container.textContent).not.toContain("可移植数据");
     expect(container.textContent).not.toContain("密文快照");
     const userContainer = await renderSettings({ ...admin, role: "user" });
     expect(userContainer.textContent).not.toContain("管理员设置");
@@ -486,13 +504,16 @@ describe("SettingsPanel", () => {
     expect(container.querySelector("a[href='https://lucide.dev']")).toBeTruthy();
   });
 
-  it("places logout at the bottom of settings and requires confirmation", async () => {
+  it("shows logout only at the bottom of General and requires confirmation", async () => {
     const onLogout = vi.fn();
     const container = await renderSettings(admin, vi.fn(), vi.fn(), onLogout);
     const logoutSection = container.querySelector(".settings-logout-section");
     expect(logoutSection).toBeTruthy();
     expect(logoutSection?.parentElement).toBe(container.querySelector(".settings-content"));
-    await act(async () => (logoutSection?.querySelector("button") as HTMLButtonElement).click());
+    await act(async () => button(container, "安全").click());
+    expect(container.querySelector(".settings-logout-section")).toBeNull();
+    await act(async () => button(container, "常规").click());
+    await act(async () => (container.querySelector(".settings-logout-section button") as HTMLButtonElement).click());
     expect(onLogout).not.toHaveBeenCalled();
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("确认从当前设备登出？");
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
@@ -501,13 +522,26 @@ describe("SettingsPanel", () => {
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
+  it("closes settings only when the backdrop itself is clicked", async () => {
+    const onClose = vi.fn();
+    const container = await renderSettings(admin, vi.fn(), vi.fn(), vi.fn(), vi.fn(), null, vi.fn(), null, onClose);
+    const backdrop = container.querySelector(".modal-backdrop") as HTMLDivElement;
+    const modal = container.querySelector(".settings-modal") as HTMLElement;
+    await act(async () => modal.click());
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => backdrop.click());
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("routes device sign-out feedback through the shared toast callback", async () => {
     const onNotify = vi.fn();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const container = await renderSettings(admin, onNotify);
     await act(async () => button(container, "安全").click());
     await act(async () => { await Promise.resolve(); });
-    await act(async () => button(container, "登出").click());
+    const signOutButton = button(container, "登出");
+    expect(signOutButton.classList).toContain("session-revoke");
+    await act(async () => signOutButton.click());
     await act(async () => { await Promise.resolve(); });
     expect(onNotify).toHaveBeenCalledWith("Firefox · macOS 已登出", "info");
     expect(container.querySelector(".notice")).toBeNull();
@@ -542,7 +576,10 @@ describe("SettingsPanel", () => {
     await act(async () => button(container, "安全").click());
     await act(async () => { await Promise.resolve(); });
     expect(container.textContent).not.toContain("可在 2026");
-    await act(async () => button(container, "移除").click());
+    const removeButton = button(container, "移除");
+    expect(removeButton.classList).toContain("session-remove");
+    expect(removeButton.classList).not.toContain("session-revoke");
+    await act(async () => removeButton.click());
     await act(async () => { await Promise.resolve(); });
     expect(api).toHaveBeenCalledWith("/api/account/endpoints/inactive-endpoint", { method: "DELETE" });
     expect(onNotify).toHaveBeenCalledWith("已移除 Firefox · Windows", "info");

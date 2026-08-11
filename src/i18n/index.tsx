@@ -300,7 +300,6 @@ const messages = {
   "settings.resetRecovery": { en: "Reset recovery key", "zh-CN": "重置恢复密钥", "zh-TW": "重設復原金鑰" },
   "settings.recoveryShownOnce": { en: "The new recovery key is shown only once", "zh-CN": "新的恢复密钥仅在本次显示", "zh-TW": "新的復原金鑰僅在本次顯示" },
   "settings.savedRecovery": { en: "I have saved it", "zh-CN": "我已保存", "zh-TW": "我已儲存" },
-  "settings.portableData": { en: "Portable data", "zh-CN": "可移植数据", "zh-TW": "可攜式資料" },
   "settings.portableHelp": {
     en: "Markdown ZIP files contain readable plaintext. Store them in a trusted location. ZIP exports retain folders, empty directories, and attachments.",
     "zh-CN": "Markdown ZIP 是可读的明文，请保存到可信位置。ZIP 会保留文件夹、空目录和附件。",
