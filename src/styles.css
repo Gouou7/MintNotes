@@ -507,21 +507,42 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-section button.session-revoke, .settings-section button.session-remove { min-height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; }
 .settings-section button.session-revoke { color: var(--danger); }
 .trash-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.trash-heading > span:first-child { min-width: 0; display: grid; gap: 3px; }
 .trash-heading h3 { margin: 0; }
+.trash-heading small { color: var(--muted); font-size: 11px; }
+.trash-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
 .settings-section button.trash-clear { min-height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; color: var(--danger); }
-.trash-list { display: grid; gap: 5px; }
+.settings-section button.trash-collapse-all { min-height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; color: var(--muted); }
+.trash-toolbar { min-width: 0; display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: 8px; }
+.settings-section label.trash-search { min-width: 0; height: 38px; display: flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); background: var(--surface-input); font-weight: 400; }
+.trash-search:focus-within { border-color: var(--accent); background: var(--surface-raised); box-shadow: 0 0 0 2px var(--accent-soft); }
+.trash-search > svg { flex: 0 0 auto; }
+.settings-section .trash-search input { min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; outline: 0; background: transparent; }
+.settings-section .trash-search input:focus { border: 0; box-shadow: none; }
+.settings-section .trash-toolbar select { width: auto; min-width: 112px; height: 38px; padding: 0 30px 0 10px; background: var(--surface-input); cursor: pointer; }
+.trash-list { display: block; }
 .trash-node { min-width: 0; }
-.trash-row { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
-.trash-item-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; color: var(--accent-text); background: var(--accent-soft); }
+.trash-row { position: relative; min-width: 0; display: grid; grid-template-columns: 26px auto minmax(0, 1fr) auto; align-items: center; gap: 7px; min-height: 48px; margin: 1px 0; padding: 6px 7px; border-radius: 8px; background: transparent; }
+.trash-row:hover { background: var(--surface-hover); }
+.trash-item-icon { width: 24px; height: 30px; display: grid; place-items: center; color: var(--text); }
+.settings-section button.trash-disclosure, .trash-disclosure, .trash-disclosure-spacer { width: 26px; height: 30px; min-height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; color: var(--muted); background: transparent; }
+.settings-section button.trash-disclosure:hover, .settings-section button.trash-disclosure:focus-visible { border: 0; color: var(--text-strong); background: var(--surface-hover); }
+.trash-disclosure.forced { height: 30px; }
 .trash-details { min-width: 0; display: grid; gap: 3px; }
 .trash-details strong, .trash-details small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trash-details strong { color: var(--text-strong); font-size: 13px; }
 .trash-details small { color: var(--muted); font-size: 11px; }
-.trash-actions { display: flex; gap: 5px; }
+.trash-actions { display: flex; align-items: center; gap: 5px; }
 .settings-section .trash-actions button { width: 32px; min-height: 32px; padding: 0; display: grid; place-items: center; }
 .settings-section .trash-actions button.danger { color: var(--danger); }
-.trash-children { margin-left: 19px; padding-left: 8px; border-left: 1px solid var(--border); }
-.trash-children .trash-row { margin-top: 5px; }
+.trash-more { position: relative; }
+.trash-more summary { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); cursor: pointer; list-style: none; }
+.trash-more summary::-webkit-details-marker { display: none; }
+.trash-more summary:hover, .trash-more summary:focus-visible, .trash-more[open] summary { border-color: var(--accent); background: var(--surface-hover); }
+.trash-more > div { position: absolute; z-index: 5; top: calc(100% + 5px); right: 0; min-width: 154px; padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); box-shadow: 0 10px 30px rgba(0,0,0,.2); }
+.settings-section .trash-more > div button { width: 100%; min-height: 34px; display: flex; justify-content: flex-start; gap: 7px; padding: 0 9px; border: 0; white-space: nowrap; }
+.trash-children { margin-left: 17px; padding-left: 2px; border-left: 1px solid var(--border); }
+.settings-section button.trash-load-more { width: fit-content; min-height: 34px; justify-self: center; padding: 0 14px; color: var(--accent-text); }
 .trash-empty { margin: 0; padding: 28px 16px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); text-align: center; }
 .history-usage { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 12px; padding: 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .history-usage > span:first-child { min-width: 0; display: grid; gap: 3px; }
@@ -652,8 +673,14 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .profile-edit-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 18px; }
   .session-row { grid-template-columns: auto minmax(0, 1fr); }
   .session-revoke, .session-remove { grid-column: 2; justify-self: start; }
-  .trash-row { grid-template-columns: auto minmax(0, 1fr); }
-  .trash-actions { grid-column: 2; }
+  .trash-heading { align-items: flex-start; flex-direction: column; }
+  .trash-heading-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .trash-toolbar { grid-template-columns: 1fr 1fr; }
+  .trash-search { grid-column: 1 / -1; }
+  .settings-section .trash-toolbar select { width: 100%; min-width: 0; }
+  .trash-row { grid-template-columns: 24px auto minmax(0, 1fr); gap: 7px; }
+  .trash-actions { grid-column: 3; justify-self: start; }
+  .trash-children { margin-left: 17px; padding-left: 2px; }
   .admin-create { grid-template-columns: 1fr; }
   .settings-tabs button.admin-tab { margin-top: 0; }
   .settings-tabs button.admin-tab.active { box-shadow: inset 0 3px 0 color-mix(in srgb, var(--warning-text) 65%, transparent); }

@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Added scalable trash browsing in Settings: deleted folders start collapsed with descendant counts, title search and type filters reveal matching ancestor paths, deletion-time and name sorting are independent from the file tree, and long root lists load in batches.
+
+### Changed
+
+- Refined deleted-item rows to match the file tree's compact borderless presentation, while keeping restore immediately available and moving permanent deletion into the more-actions menu.
+
 ## [0.13.0] - 2026-08-11
 
 ### Changed

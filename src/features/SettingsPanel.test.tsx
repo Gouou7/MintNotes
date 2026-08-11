@@ -288,13 +288,30 @@ describe("SettingsPanel", () => {
     expect(onNotify).toHaveBeenCalledWith("用户名和恢复密钥已更新，其他设备需要重新登录", "info");
   });
 
-  it("shows deleted content as a hierarchy and auto-saves retention", async () => {
+  it("keeps deleted folders collapsed, reveals matching paths, and auto-saves retention", async () => {
     const container = await renderSettings();
     await act(async () => button(container, "回收站").click());
     expect(container.textContent).toContain("回收站的内容会在到达设置的自动删除时间后自动删除。");
+    expect(container.textContent).toContain("1 个删除项目 · 共 2 项");
+    expect(container.textContent).toContain("包含 1 项");
+    expect(container.querySelector(".trash-children")).toBeNull();
+    await act(async () => (container.querySelector("button[aria-label='展开 Deleted folder']") as HTMLButtonElement).click());
     expect(container.querySelector(".trash-children")?.textContent).toContain("Nested note");
+    expect(button(container, "全部收起")).toBeTruthy();
+    await act(async () => button(container, "全部收起").click());
+    expect(container.querySelector(".trash-children")).toBeNull();
+
+    const search = container.querySelector("input[aria-label='搜索回收站']") as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "Nested");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.querySelector(".trash-children")?.textContent).toContain("Nested note");
+    expect(container.textContent).toContain("1 个匹配项");
+    expect((container.querySelector("select[aria-label='排序已删除项目']") as HTMLSelectElement).value).toBe("deleted-desc");
     expect(container.querySelectorAll("button[aria-label^='恢复']")).toHaveLength(1);
-    const select = container.querySelector(".trash-settings select") as HTMLSelectElement;
+    expect(button(container, "永久删除")).toBeTruthy();
+    const select = container.querySelector(".settings-control-row select") as HTMLSelectElement;
     await act(async () => { select.value = "90"; select.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(vi.mocked(api)).toHaveBeenCalledWith("/api/account/trash-retention", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ days: 90 }) }));
   });
