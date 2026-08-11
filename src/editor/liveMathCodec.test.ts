@@ -56,4 +56,17 @@ describe("live math codec", () => {
     expect(live).toBe("````mint-math\n\\text{```}\n````");
     expect(canonicalizeMathBlocksFromLive(live)).toBe(markdown);
   });
+
+  it.each([
+    "$$\nvalue\n$$",
+    "$$\r\nvalue\r\n$$\r\n",
+    "before\r\n$$\nvalue\r\n$$\nafter",
+    "> $$\r\n> value\n> $$\r\n",
+    "  $$  \n`code` and ``ticks``\n  $$  ",
+    "$$\nincomplete",
+    "````md\n$$\nnot math\n$$\n````",
+    "~~~md\r\n$$\r\nnot math\r\n$$\r\n~~~",
+  ])("is an exact Live/canonical bijection for %j", (markdown) => {
+    expect(canonicalizeMathBlocksFromLive(materializeMathBlocksForLive(markdown))).toBe(markdown);
+  });
 });

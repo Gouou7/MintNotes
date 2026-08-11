@@ -31,6 +31,8 @@ import {
 } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 
+import { SOURCE_BLOCK_PRESENTATION_META } from "./extension";
+
 export type MatchResult<M> = { data: M; prefixLen: number };
 
 export type LeaveLineDraftSpec<M> = {
@@ -146,6 +148,7 @@ export function leaveLineDraft<M>(spec: LeaveLineDraftSpec<M>): LeaveLineDraftHa
 
       const tr = newState.tr;
       spec.commit(tr, mapped, paraNow, reMatched.data);
+      tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
       return tr.docChanged ? tr : null;
     },
   });
@@ -156,6 +159,7 @@ export function leaveLineDraft<M>(spec: LeaveLineDraftSpec<M>): LeaveLineDraftHa
     const tr = view.state.tr;
     spec.commit(tr, hit.paragraphPos, hit.paragraph, hit.data);
     if (!tr.docChanged) return false;
+    tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
     view.dispatch(tr);
     return true;
   };

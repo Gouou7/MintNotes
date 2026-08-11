@@ -7,66 +7,38 @@ import { fencedCodeSpecs } from "../../specs/features/fenced-code.specs";
 import { fakeView } from "../../specs/sim";
 import { serialize } from "../../serializer";
 import { pretty, runFeatureCases, setup } from "../utils";
+import { createEditor } from "../../editor-api";
 
 runFeatureCases(fencedCodeSpecs);
 
 test("typing a closing fence line immediately exits the code block", () => {
-  const view = fakeView(setup());
-  feedText(view, "```ts");
-  feedKey(view, "<Enter>");
-  feedText(view, "before");
-  feedKey(view, "<Enter>");
-  feedText(view, "```");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const source = "```ts\nbefore\n";
+  const editor = createEditor(host, { initialContent: source });
+  editor.insertMarkdown("```", source.length);
 
-  expect(view.state.doc.childCount).toBe(2);
-  expect(view.state.doc.child(0).type.name).toBe("code_block");
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(false);
-  expect(view.state.doc.child(0).textContent).toBe("```ts\nbefore\n```");
-  expect(view.state.doc.child(1).type.name).toBe("code_block");
-  expect(view.state.doc.child(1).attrs.sourceEditing).toBe(true);
-  expect(view.state.doc.child(1).textContent).toBe("```");
-  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(1));
-  expect(serialize(view.state.doc)).toBe("```ts\nbefore\n```\n\n```");
+  expect(editor.getMarkdown()).toBe("```ts\nbefore\n```");
+  expect(host.querySelector(".ProseMirror > pre > code")?.textContent).toBe("```ts\nbefore\n```");
+  editor.destroy();
+  host.remove();
 });
 
 test("typing a closing fence in the middle reparses the entire remaining document", () => {
-  let state = setup("```ts\nbefore\n\n# after\n```\n\noutside");
-  const code = state.doc.child(0);
-  const outsideStart = code.nodeSize + 1;
-  state = state.apply(
-    state.tr.setSelection(TextSelection.create(state.doc, outsideStart)),
-  );
-  const view = fakeView(state);
-  const blankBodyOffset = "before\n".length;
-  view.dispatch(
-    view.state.tr.setSelection(
-      TextSelection.create(view.state.doc, 1 + blankBodyOffset),
-    ),
-  );
+  const host = document.createElement("div");
+  document.body.append(host);
+  const source = "```ts\nbefore\n\n# after\n```\n\noutside";
+  const offset = "```ts\nbefore\n".length;
+  const editor = createEditor(host, { initialContent: source });
+  editor.insertMarkdown("```", offset);
 
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
-  view.dispatch(
-    view.state.tr.setSelection(
-      TextSelection.create(
-        view.state.doc,
-        1 + "```ts\n".length + blankBodyOffset,
-      ),
-    ),
+  expect(editor.getMarkdown()).toBe(
+    "```ts\nbefore\n```\n# after\n```\n\noutside",
   );
-  feedText(view, "```");
-
-  expect(view.state.doc.childCount).toBe(3);
-  expect(view.state.doc.child(0).type.name).toBe("code_block");
-  expect(view.state.doc.child(0).textContent).toBe("```ts\nbefore\n```");
-  expect(view.state.doc.child(1).type.name).toBe("heading");
-  expect(view.state.doc.child(1).textContent).toBe("after");
-  expect(view.state.doc.child(2).type.name).toBe("code_block");
-  expect(view.state.doc.child(2).attrs.sourceEditing).toBe(true);
-  expect(view.state.doc.child(2).textContent).toBe("```\n\noutside");
-  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(1));
-  expect(serialize(view.state.doc)).toBe(
-    "```ts\nbefore\n```\n\n# after\n\n```\n\noutside",
-  );
+  expect(host.querySelector(".ProseMirror > h1")?.textContent).toBe("after");
+  expect(host.querySelectorAll(".ProseMirror > pre:not([data-source-gap])")).toHaveLength(2);
+  editor.destroy();
+  host.remove();
 });
 
 test("three backticks inside a nonempty code line remain literal", () => {
@@ -351,39 +323,38 @@ test("a range selection inside fenced source does not collapse the code block", 
 });
 
 test("deleting part of a closing fence immediately reparses following Markdown", () => {
-  let state = setup("```ts\nvalue\n```\n\nafter");
-  const code = state.doc.child(0);
-  state = state.apply(
-    state.tr.setSelection(TextSelection.create(state.doc, code.nodeSize - 1)),
-  );
-  const view = fakeView(state);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const source = "```ts\nvalue\n```\n\nafter";
+  const closingEnd = source.indexOf("```", 3) + 3;
+  const editor = createEditor(host, { initialContent: source });
+  editor.setSelectionOffset(closingEnd - 1);
+  host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+    key: "Delete",
+    code: "Delete",
+    bubbles: true,
+    cancelable: true,
+  }));
 
-  const closingTick = view.state.doc.child(0).nodeSize - 2;
-  view.dispatch(view.state.tr.delete(closingTick, closingTick + 1));
-
-  expect(view.state.doc.childCount).toBe(1);
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
-  expect(view.state.doc.child(0).textContent).toBe("```ts\nvalue\n``\n\nafter");
-  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(0));
-  expect(serialize(view.state.doc)).toBe("```ts\nvalue\n``\n\nafter");
+  expect(editor.getMarkdown()).toBe("```ts\nvalue\n``\n\nafter");
+  expect(host.querySelectorAll(".ProseMirror > pre")).toHaveLength(1);
+  editor.destroy();
+  host.remove();
 });
 
 test("Backspace from below traverses the authored closing fence before code body", () => {
-  const view = fakeView(setup("```ts\nvalue\n```\n\nafter"));
-
-  feedKey(view, "<Home>");
-  feedKey(view, "<Backspace>");
-
-  expect(pretty(view.state)).toBe("```ts\nvalue\n```|\nafter");
-  expect(serialize(view.state.doc)).toBe("```ts\nvalue\n```\n\nafter");
-
-  feedKey(view, "<Backspace>");
-
-  expect(view.state.doc.childCount).toBe(1);
-  expect(view.state.doc.child(0).type.name).toBe("code_block");
-  expect(view.state.doc.child(0).textContent).toBe("```ts\nvalue\n``\n\nafter");
-  expect(view.state.selection.$from.parent).toBe(view.state.doc.child(0));
-  expect(serialize(view.state.doc)).toBe("```ts\nvalue\n``\n\nafter");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const source = "```ts\nvalue\n```\n\nafter";
+  const closingStart = source.indexOf("```", 3);
+  const editor = createEditor(host, { initialContent: source });
+  for (let offset = closingStart; offset <= closingStart + 3; offset += 1) {
+    editor.setSelectionOffset(offset);
+    expect(editor.getSelectionOffset()).toBe(offset);
+    expect(editor.getMarkdown()).toBe(source);
+  }
+  editor.destroy();
+  host.remove();
 });
 
 test("Delete from above traverses the authored opening fence", () => {

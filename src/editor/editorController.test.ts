@@ -1,21 +1,36 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createEditor, type EditorOptions } from "./core/lib";
+import { createEditor, type EditorExtension, type EditorOptions } from "./core/lib";
 import { createCalloutExtension, focusCalloutMarker } from "./extensions/callout";
+import { createMathExtension } from "./extensions/math";
+import { createMermaidExtension } from "./extensions/mermaid";
+import { createWikiLinkExtension } from "./extensions/wikilink";
 import {
-  createRichSyntaxExtension,
-  type RichSyntaxOptions,
-} from "./extensions/richSyntax";
+  INVALID_SOURCE_FIDELITY_STRINGS,
+  SOURCE_FIDELITY_LINE_ENDING_STRINGS,
+} from "./core/source-fidelity-fixtures";
+
+interface MintPresentationOptions {
+  renderMath?: (container: HTMLElement, source: string) => void | (() => void);
+  renderMathBlock?: (container: HTMLElement, source: string) => void | (() => void);
+  renderMermaid?: (container: HTMLElement, source: string) => void | (() => void);
+  onWikiLink?: (target: string) => void;
+}
 
 function createMintEditor(
   host: HTMLElement,
-  options: EditorOptions & { richSyntax?: RichSyntaxOptions } = {},
+  options: EditorOptions & { presentations?: MintPresentationOptions } = {},
 ) {
-  const { richSyntax, ...editorOptions } = options;
+  const { presentations, ...editorOptions } = options;
   return createEditor(host, {
     ...editorOptions,
     extensions: [
       createCalloutExtension(),
-      createRichSyntaxExtension(richSyntax),
+      createMathExtension({
+        renderInline: presentations?.renderMath,
+        renderBlock: presentations?.renderMathBlock,
+      }),
+      createMermaidExtension({ render: presentations?.renderMermaid }),
+      createWikiLinkExtension({ onNavigate: presentations?.onWikiLink }),
     ],
   });
 }
@@ -25,6 +40,320 @@ afterEach(() => {
 });
 
 describe("Mint editor core public controller", () => {
+  it.each(SOURCE_FIDELITY_LINE_ENDING_STRINGS)(
+    "keeps %j exact through no-edit controller lifecycle operations",
+    (markdown) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const editor = createEditor(host, {
+        initialContent: markdown,
+        onChange: (next) => changes.push(next),
+      });
+
+      expect(editor.getMarkdown()).toBe(markdown);
+      editor.focus();
+      editor.refreshPresentation();
+      editor.toggleSource();
+      expect(editor.getMarkdown()).toBe(markdown);
+      editor.setMarkdown(markdown);
+      editor.toggleSource();
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(changes).toEqual([]);
+      editor.destroy();
+    },
+  );
+
+  const structuredSourceFixtures = [
+    ["heading", "### Heading ###"],
+    ["bullet list", "* item\n  + nested"],
+    ["ordered list", "07) item\n    9. nested"],
+    ["task list", "- [X] item"],
+    ["table", "| a  | b |\n| :--- | ---: |\n| x\\|y | z |"],
+    ["reference definition", "[Ref]: <https://example.test> 'Title'"],
+    ["TOC", "[TOC]"],
+    ["horizontal rule", "* * *"],
+  ] as const;
+
+  it.each(structuredSourceFixtures)(
+    "round-trips every authored offset in a structured %s block",
+    (_name, markdown) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const editor = createEditor(host, {
+        initialContent: markdown,
+        onChange: (next) => changes.push(next),
+      });
+      for (let offset = 0; offset <= markdown.length; offset += 1) {
+        editor.setSelectionOffset(offset);
+        expect(editor.getSelectionOffset()).toBe(offset);
+        expect(editor.getMarkdown()).toBe(markdown);
+      }
+      expect(changes).toEqual([]);
+      editor.destroy();
+    },
+  );
+
+  it.each([
+    ["heading", "### Heading ###", 1],
+    ["bullet list", "* item\n  + nested", 1],
+    ["ordered list", "07) item", 2],
+    ["task list", "- [X] item", 4],
+    ["table", "| a  | b |\n| :--- | ---: |", 1],
+    ["reference definition", "[Ref]: <https://example.test> 'Title'", 6],
+    ["TOC", "[TOC]", 1],
+    ["horizontal rule", "* * *", 1],
+  ] as const)(
+    "deletes exactly one authored delimiter character in a %s block",
+    (_name, syntax, caretInSyntax) => {
+      const prefix = "before repeated repeated\n\n";
+      const suffix = "\n\nafter repeated repeated\n \t";
+      const markdown = `${prefix}${syntax}${suffix}`;
+      const deleteAt = prefix.length + caretInSyntax - 1;
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const editor = createEditor(host, {
+        initialContent: markdown,
+        onChange: (next) => changes.push(next),
+      });
+
+      editor.setSelectionOffset(prefix.length + caretInSyntax);
+      expect(host.querySelector("pre[data-source-block], pre[data-source-gap]")).not.toBeNull();
+      host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Backspace",
+        code: "Backspace",
+        bubbles: true,
+        cancelable: true,
+      }));
+
+      const expected = markdown.slice(0, deleteAt) + markdown.slice(deleteAt + 1);
+      expect(editor.getMarkdown()).toBe(expected);
+      const editable = host.querySelector<HTMLElement>(".ProseMirror");
+      editable?.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "z",
+        code: "KeyZ",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+      expect(editor.getMarkdown()).toBe(markdown);
+      editable?.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "z",
+        code: "KeyZ",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+      expect(editor.getMarkdown()).toBe(expected);
+      expect(changes).toEqual([expected, markdown, expected]);
+      editor.destroy();
+    },
+  );
+
+  const sourceEditBoundaryFixtures = [
+    ...structuredSourceFixtures,
+    ["blockquote", "> quote\n>\n> tail"],
+    ["Callout", "> [!NOTE]\n> body"],
+    ["fenced code", "````ts\nconst value = `x`;\n````"],
+  ] as const;
+
+  it.each(sourceEditBoundaryFixtures)(
+    "isolates beginning, middle, and end source edits in %s",
+    (_name, syntax) => {
+      const prefix = "lead repeated repeated\r\n\r\n";
+      const suffix = "\r\n\r\ntail repeated repeated\r\n \t";
+      const markdown = `${prefix}${syntax}${suffix}`;
+      const positions = [
+        prefix.length + 1,
+        prefix.length + Math.max(1, Math.floor(syntax.length / 2)),
+        prefix.length + Math.max(1, syntax.length - 1),
+      ];
+
+      const exercise = (
+        key: "Backspace" | "Delete" | "Enter",
+        position: number,
+        expected: string,
+      ) => {
+        const host = document.createElement("div");
+        document.body.append(host);
+        const changes: string[] = [];
+        const editor = createEditor(host, {
+          initialContent: markdown,
+          onChange: (next) => changes.push(next),
+        });
+        editor.setSelectionOffset(position);
+        host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+          key,
+          code: key,
+          bubbles: true,
+          cancelable: true,
+        }));
+        expect(editor.getMarkdown()).toBe(expected);
+        expect(changes).toEqual([expected]);
+        editor.destroy();
+        host.remove();
+      };
+
+      for (const position of positions) {
+        exercise(
+          "Backspace",
+          position,
+          markdown.slice(0, position - 1) + markdown.slice(position),
+        );
+        const deletePosition = Math.min(position, prefix.length + syntax.length - 1);
+        exercise(
+          "Delete",
+          deletePosition,
+          markdown.slice(0, deletePosition) + markdown.slice(deletePosition + 1),
+        );
+        const lineStart = markdown.lastIndexOf("\n", position - 1) + 1;
+        const line = markdown.slice(lineStart, markdown.indexOf("\n", lineStart) < 0
+          ? markdown.length
+          : markdown.indexOf("\n", lineStart));
+        const quotePrefix = /^(?: {0,3}>[\t ]?)+/.exec(line)?.[0] ?? "";
+        const enterText = quotePrefix ? `\n${quotePrefix}` : "\n";
+        exercise(
+          "Enter",
+          position,
+          markdown.slice(0, position) + enterText + markdown.slice(position),
+        );
+      }
+    },
+  );
+
+  it.each(INVALID_SOURCE_FIDELITY_STRINGS)(
+    "keeps incomplete syntax %j exact through no-edit mode switches",
+    (markdown) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const editor = createEditor(host, {
+        initialContent: markdown,
+        onChange: (next) => changes.push(next),
+      });
+      editor.toggleSource();
+      editor.toggleSource();
+      editor.refreshPresentation();
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(changes).toEqual([]);
+      editor.destroy();
+    },
+  );
+
+  it.each(INVALID_SOURCE_FIDELITY_STRINGS)(
+    "keeps valid neighbors rendered around the smallest literal fallback for %j",
+    (invalid) => {
+      const markdown = `# Valid before\n\n${invalid}\n\n**valid after**`;
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const editor = createEditor(host, {
+        initialContent: markdown,
+        onChange: (next) => changes.push(next),
+      });
+
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(host.querySelector(".ProseMirror > h1")?.textContent).toBe("Valid before");
+      expect(host.querySelector("strong")?.textContent).toBe("valid after");
+      expect(changes).toEqual([]);
+      editor.destroy();
+    },
+  );
+
+  it("preserves source through renderer failure, close, and reopen without onChange", () => {
+    const markdown = "> [!NOTE]\n> Body\r\n\r\n### Heading ###\r\n";
+    const changes: string[] = [];
+    const firstHost = document.createElement("div");
+    document.body.append(firstHost);
+    const first = createEditor(firstHost, {
+      initialContent: markdown,
+      extensions: [createCalloutExtension({
+        renderBlockquotePreview: () => {
+          throw new Error("renderer unavailable");
+        },
+      })],
+      onChange: (next) => changes.push(next),
+    });
+
+    first.focus();
+    (document.activeElement as HTMLElement | null)?.blur();
+    first.refreshPresentation();
+    expect(firstHost.querySelector(".live-presentation-fallback")?.textContent)
+      .toBe("> [!NOTE]\n> Body");
+    first.toggleSource();
+    first.toggleSource();
+    const saved = first.getMarkdown();
+    first.destroy();
+    firstHost.remove();
+
+    const secondHost = document.createElement("div");
+    document.body.append(secondHost);
+    const reopened = createEditor(secondHost, {
+      initialContent: saved,
+      onChange: (next) => changes.push(next),
+    });
+    expect(reopened.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+    reopened.destroy();
+  });
+
+  it("keeps soft breaks inside one Live paragraph and extra blank lines as source gaps", () => {
+    const softHost = document.createElement("div");
+    document.body.append(softHost);
+    const soft = createEditor(softHost, { initialContent: "a\nb" });
+    expect(softHost.querySelectorAll(".ProseMirror > p")).toHaveLength(1);
+    expect(softHost.querySelector(".ProseMirror > p")?.textContent).toBe("a\nb");
+    soft.destroy();
+
+    const blankHost = document.createElement("div");
+    document.body.append(blankHost);
+    const blank = createEditor(blankHost, { initialContent: "a\n\n\nb" });
+    expect(blankHost.querySelector("pre[data-source-gap]")?.textContent).toBe("\n\n\n");
+    expect(blank.getMarkdown()).toBe("a\n\n\nb");
+    blank.destroy();
+  });
+
+  it("applies Enter as one canonical source transaction and reparses the Live view", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const editor = createEditor(host, {
+      initialContent: "abc",
+      onChange: (markdown) => changes.push(markdown),
+    });
+    editor.setSelectionOffset(1);
+
+    host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    expect(editor.getMarkdown()).toBe("a\n\nbc");
+    expect(changes).toEqual(["a\n\nbc"]);
+    expect(host.querySelectorAll(".ProseMirror > p")).toHaveLength(2);
+
+    editor.destroy();
+  });
+
+  it.each(SOURCE_FIDELITY_LINE_ENDING_STRINGS)(
+    "round-trips every available source offset for %j",
+    (markdown) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host, { initialContent: markdown });
+      for (let offset = 0; offset <= markdown.length; offset += 1) {
+        editor.setSelectionOffset(offset);
+        expect(editor.getSelectionOffset()).toBe(offset);
+      }
+      editor.destroy();
+    },
+  );
+
   it("refreshes a pending image source without changing Markdown or the caret", () => {
     const host = document.createElement("div");
     document.body.append(host);
@@ -149,8 +478,27 @@ describe("Mint editor core public controller", () => {
       cancelable: true,
     }));
     expect(lineHost.querySelector(".hr-node-view")).not.toBeNull();
-    expect(lineHost.querySelectorAll(".ProseMirror > p")).toHaveLength(1);
+    expect(lineHost.querySelector("pre[data-source-gap]")?.textContent).toBe("\n\n");
+    expect(lineEditor.getMarkdown()).toBe("---\n\n");
+
+    lineEditable.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
     expect(lineEditor.getMarkdown()).toBe("---");
+
+    lineEditable.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(lineEditor.getMarkdown()).toBe("---\n\n");
 
     const restoredRuleRow = lineHost.querySelector<HTMLElement>(".hr-node-view");
     if (!restoredRuleRow) throw new Error("Missing restored horizontal rule row");
@@ -637,7 +985,7 @@ describe("Mint editor core public controller", () => {
     ].join("\n");
     const editor = createMintEditor(host, {
       initialContent: markdown,
-      richSyntax: {
+      presentations: {
         renderMath: (container, source) => { container.textContent = `inline:${source}`; },
         renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
         renderMermaid: (container, source) => { container.textContent = `diagram:${source}`; },
@@ -653,6 +1001,66 @@ describe("Mint editor core public controller", () => {
     wikiLink?.click();
     expect(wikiLinks).toEqual(["Guide"]);
     expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it("keeps new rich renderers on the declaration-only extension path", () => {
+    const math = createMathExtension();
+    const mermaid = createMermaidExtension();
+    const wikiLink = createWikiLinkExtension();
+
+    for (const extension of [math, mermaid, wikiLink]) {
+      expect(extension.presentations).toBeDefined();
+      expect(extension.createPlugins).toBeUndefined();
+      expect(extension.commands).toBeUndefined();
+    }
+  });
+
+  it("rejects ambiguous primary block presentations instead of using registration order", () => {
+    const presentationExtension = (id: string): EditorExtension => ({
+      id,
+      presentations: {
+        block: [{
+          id: `${id}-paragraph`,
+          nodeTypes: ["paragraph"],
+          sourceClassName: `${id}-source`,
+          widgetClassName: `${id}-widget`,
+          match: (source) => ({ source, renderSource: source, key: source, data: null }),
+          render: () => undefined,
+        }],
+      },
+    });
+    const host = document.createElement("div");
+    document.body.append(host);
+
+    expect(() => createEditor(host, {
+      initialContent: "ambiguous",
+      extensions: [presentationExtension("first"), presentationExtension("second")],
+    })).toThrow(/Conflicting primary presentations/);
+  });
+
+  it("falls back to literal authored source when a presentation renderer fails", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "Before $x_i$ after";
+    const changes: string[] = [];
+    const editor = createEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+      extensions: [createMathExtension({
+        renderInline: () => { throw new Error("renderer unavailable"); },
+      })],
+    });
+
+    const fallback = host.querySelector<HTMLElement>(".live-presentation-fallback");
+    expect(fallback?.textContent).toBe("$x_i$");
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+
+    editor.setSelectionOffset(markdown.indexOf("x_i"));
+    expect(host.querySelector(".live-inline-math-widget")).toBeNull();
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
     editor.destroy();
   });
 });

@@ -14,7 +14,7 @@ export { pretty };
 export type { Event } from "../specs/events";
 
 export function setup(md = ""): EditorState {
-  const doc = md ? parse(md) : schema.nodes.doc.createAndFill()!;
+  const doc = md ? parse(md, { sourceGaps: false }) : schema.nodes.doc.createAndFill()!;
   const base = createState(doc);
   const last = doc.lastChild;
   const fenced = last?.type === schema.nodes.code_block

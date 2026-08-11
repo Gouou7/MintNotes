@@ -50,6 +50,20 @@
   min-height: 168px;
 }
 .ProseMirror[contenteditable="true"]:focus { outline: none; }
+.ProseMirror pre[data-source-gap] {
+  display: block;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  tab-size: inherit;
+}
+.ProseMirror pre[data-source-gap] > code { font: inherit; white-space: inherit; }
 .ProseMirror .hr-node-view {
   box-sizing: border-box;
   width: 100%;
@@ -408,4 +422,19 @@
   border-radius: 4px;
   text-align: center;
   font: inherit;
+}
+
+/* Canonical-source activation for delimiters that rich nodes cannot expose as
+ * native caret positions. The text is real editable content, never a widget. */
+pre[data-source-block] {
+  white-space: break-spaces;
+  overflow-wrap: anywhere;
+}
+pre[data-source-block] > code {
+  font: inherit;
+  color: inherit;
+}
+pre[data-source-block][data-source-kind="heading"] {
+  font-size: 1.35em;
+  font-weight: 650;
 }

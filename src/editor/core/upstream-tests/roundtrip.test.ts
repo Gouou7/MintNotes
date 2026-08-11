@@ -3,13 +3,13 @@ import { describe, test } from "vitest";
 import { parse } from "../parser";
 import { serialize } from "../serializer";
 
-// Core invariant: parse(serialize(parse(md))) is structurally equal to parse(md).
-// We do not assert md string equality (the serializer normalizes), only that
-// parsing again yields the same tree — i.e. the doc round-trips losslessly.
+// These imported compatibility fixtures retain their upstream structural
+// check. Mint Notes' stronger byte-for-byte gates live in source-gaps.test.ts
+// and the syntax-specific source-fidelity suites.
 function roundTripStable(md: string): void {
-  const doc1 = parse(md);
+  const doc1 = parse(md, { sourceGaps: false });
   const md2 = serialize(doc1);
-  const doc2 = parse(md2);
+  const doc2 = parse(md2, { sourceGaps: false });
   if (!doc1.eq(doc2)) {
     throw new Error(
       `round-trip mismatch\n--- input md ---\n${md}\n--- serialized md ---\n${md2}\n--- doc1 ---\n${JSON.stringify(doc1.toJSON(), null, 2)}\n--- doc2 ---\n${JSON.stringify(doc2.toJSON(), null, 2)}`,

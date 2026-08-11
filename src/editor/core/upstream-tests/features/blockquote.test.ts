@@ -5,6 +5,7 @@ import { serialize } from "../../serializer";
 import { expect, test } from "vitest";
 import { runFeatureCases, setup } from "../utils";
 import { blockquoteSpecs } from "../../specs/features/blockquote.specs";
+import { createEditor } from "../../editor-api";
 
 runFeatureCases(blockquoteSpecs);
 
@@ -35,11 +36,19 @@ test("Backspace before a quote delimiter at document start is a no-op", () => {
 });
 
 test("Delete traverses the authored quote prefix instead of deleting a visual block", () => {
-  const view = fakeView(setup("> quoted"));
-  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)));
+  const host = document.createElement("div");
+  document.body.append(host);
+  const editor = createEditor(host, { initialContent: "> quoted" });
+  editor.setSelectionOffset(0);
+  host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+    key: "Delete",
+    code: "Delete",
+    bubbles: true,
+    cancelable: true,
+  }));
 
-  feedKey(view, "<Delete>");
-
-  expect(view.state.doc.firstChild?.type.name).toBe("paragraph");
-  expect(serialize(view.state.doc)).toBe(" quoted");
+  expect(editor.getMarkdown()).toBe(" quoted");
+  expect(host.querySelector(".ProseMirror > p")?.textContent).toBe(" quoted");
+  editor.destroy();
+  host.remove();
 });

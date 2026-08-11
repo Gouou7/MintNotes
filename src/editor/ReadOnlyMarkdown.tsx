@@ -106,6 +106,9 @@ export function ReadOnlyMarkdown({
             : defaultUrlTransform(url)
         )}
         components={{
+          p: ({ node: _node, children, ...props }) => (
+            <p {...props} className="markdown-softbreak-paragraph">{children}</p>
+          ),
           blockquote: ({ node, children }) => {
             const properties = node?.properties ?? {};
             const kind = (properties["data-callout-kind"] ?? properties["dataCalloutKind"]) as CalloutKind | undefined;

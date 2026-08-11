@@ -204,6 +204,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-editor-host .ProseMirror h6, .markdown-editor-host .ProseMirror blockquote { color: var(--muted); }
 .markdown-editor-host .ProseMirror code, .readonly-markdown code { background: var(--surface-input); color: var(--text); }
 .markdown-editor-host .ProseMirror pre, .readonly-markdown pre { background: var(--code-block-bg); color: var(--code-block-text); border: 0; border-radius: 8px; }
+.markdown-editor-host .ProseMirror pre[data-source-gap] { min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; line-height: inherit; white-space: pre-wrap; tab-size: inherit; }
+.readonly-markdown .markdown-softbreak-paragraph { white-space: break-spaces; }
 .markdown-editor-host .ProseMirror pre { box-sizing: border-box; padding: 16px 18px; line-height: 1.55; }
 .markdown-editor-host .ProseMirror pre:not(.cb-source-editing)[data-lang] { padding-right: 72px; }
 .markdown-editor-host .ProseMirror pre code { background: transparent; color: inherit; }

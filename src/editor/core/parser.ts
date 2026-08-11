@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
 import {
+  Fragment,
   Mark,
   type Attrs,
   type MarkType,
@@ -15,9 +16,84 @@ import {
 } from "./features/index";
 import { parseFencedCodeSource } from "./fenced-code-source";
 import { schema } from "./schema";
+import {
+  SOURCE_FINGERPRINT_ATTR,
+  SOURCE_FROM_ATTR,
+  SOURCE_TEXT_ATTR,
+  SOURCE_TO_ATTR,
+} from "./source";
+import { sourceFingerprint } from "./source-fingerprint";
 
 const md: MarkdownIt = new MarkdownIt("commonmark", { html: false });
 for (const plugin of collectMdItPlugins()) md.use(plugin);
+
+const LITERAL_FENCE_SENTINEL = "\uE000";
+
+type SourceLine = { text: string; from: number };
+
+function sourceLines(source: string): SourceLine[] {
+  const lines: SourceLine[] = [];
+  let from = 0;
+  while (from <= source.length) {
+    let to = from;
+    while (to < source.length && source[to] !== "\r" && source[to] !== "\n") to += 1;
+    lines.push({ text: source.slice(from, to), from });
+    if (to >= source.length) break;
+    from = source[to] === "\r" && source[to + 1] === "\n" ? to + 2 : to + 1;
+  }
+  return lines;
+}
+
+function recoverableBlockLine(line: string): boolean {
+  return /^(?: {0,3}(?:#{1,6}(?:\s|$)|>|[-+*]\s|\d+[.)]\s)|(?:\*\*|__).+(?:\*\*|__)$|\[[^\]]+\]:|\|)/.test(line);
+}
+
+/**
+ * CommonMark lets an unclosed fence consume the rest of the document. Live
+ * mode instead keeps an invalid fence literal when a later blank-line block is
+ * clearly valid Markdown. Replacing one delimiter character with a same-size
+ * private sentinel affects parsing only; ParserState restores the authored
+ * character immediately, and source ranges are still calculated from `src`.
+ */
+function protectRecoverableUnclosedFences(source: string): string {
+  const lines = sourceLines(source);
+  const protectedOffsets: number[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const open = /^( {0,3})(`{3,}|~{3,})/.exec(lines[index]!.text);
+    if (!open) continue;
+    const marker = open[2]!;
+    const markerChar = marker[0]!;
+    let closed = false;
+    for (let next = index + 1; next < lines.length; next += 1) {
+      const close = /^( {0,3})(`{3,}|~{3,})([\t ]*)$/.exec(lines[next]!.text);
+      if (close && close[2]![0] === markerChar && close[2]!.length >= marker.length) {
+        closed = true;
+        index = next;
+        break;
+      }
+    }
+    if (closed) continue;
+    let hasRecovery = false;
+    for (let next = index + 1; next + 1 < lines.length; next += 1) {
+      if (lines[next]!.text.trim()) continue;
+      let candidate = next + 1;
+      while (candidate < lines.length && !lines[candidate]!.text.trim()) candidate += 1;
+      if (candidate < lines.length && recoverableBlockLine(lines[candidate]!.text)) {
+        hasRecovery = true;
+        break;
+      }
+    }
+    if (hasRecovery) protectedOffsets.push(lines[index]!.from + open[1]!.length);
+  }
+  if (protectedOffsets.length === 0) return source;
+  let protectedSource = source;
+  for (const offset of protectedOffsets.sort((left, right) => right - left)) {
+    protectedSource = protectedSource.slice(0, offset)
+      + LITERAL_FENCE_SENTINEL
+      + protectedSource.slice(offset + 1);
+  }
+  return protectedSource;
+}
 
 // markdown-it normally exposes an escaped character without the authored
 // backslash. Live mode treats that backslash as canonical Markdown and hides
@@ -93,7 +169,10 @@ export class ParserState {
 
   addText(text: string): void {
     if (!text) return;
-    this.top().content.push(schema.text(text, this.marks));
+    this.top().content.push(schema.text(
+      text.replaceAll(LITERAL_FENCE_SENTINEL, "`"),
+      this.marks,
+    ));
   }
 
   openMark(mark: Mark): void {
@@ -142,6 +221,7 @@ function stripBlockquotePrefix(line: string): string {
 function fenceSourceLines(token: Token, src: string): string[] {
   if (!token.map) return [];
   const lines = src.split("\n").slice(token.map[0], token.map[1]);
+  if (lines.at(-1)?.endsWith("\r")) lines[lines.length - 1] = lines.at(-1)!.slice(0, -1);
   const quoted = /^ {0,3}>/.test(lines[0] ?? "");
   return quoted ? lines.map(stripBlockquotePrefix) : lines;
 }
@@ -165,6 +245,7 @@ function sourceForToken(token: Token, src: string): string {
 function sourceForBlockquote(token: Token, src: string): string {
   if (!token.map) return "> ";
   const lines = src.split("\n").slice(token.map[0], token.map[1]);
+  if (lines.at(-1)?.endsWith("\r")) lines[lines.length - 1] = lines.at(-1)!.slice(0, -1);
   if (token.level === 0) return lines.join("\n");
 
   const first = lines[0] ?? "";
@@ -283,8 +364,132 @@ function handleInline(state: ParserState, token: Token): void {
   }
 }
 
-export function parse(src: string): PMNode {
-  const tokens = md.parse(src, {});
+type SourceBlockRange = { from: number; to: number };
+
+function originalLineStarts(source: string): number[] {
+  const starts = [0];
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] === "\n") starts.push(index + 1);
+  }
+  return starts;
+}
+
+function contentEndOfLine(source: string, start: number): number {
+  let end = start;
+  while (end < source.length && source[end] !== "\r" && source[end] !== "\n") end += 1;
+  return end;
+}
+
+function topLevelSourceRanges(tokens: readonly Token[], source: string): SourceBlockRange[] {
+  const starts = originalLineStarts(source);
+  const ranges: SourceBlockRange[] = [];
+  for (const token of tokens) {
+    if (
+      !token.block
+      || token.level !== 0
+      || !token.map
+      || token.type === "inline"
+      || token.nesting === -1
+    ) continue;
+    const [fromLine, toLine] = token.map;
+    if (toLine <= fromLine) continue;
+    const from = starts[fromLine] ?? source.length;
+    const lastLineStart = starts[toLine - 1] ?? source.length;
+    const to = contentEndOfLine(source, lastLineStart);
+    const previous = ranges.at(-1);
+    if (previous?.from === from && previous.to === to) continue;
+    ranges.push({ from, to });
+  }
+  return ranges;
+}
+
+function sourceGapNode(source: string, from: number, to: number): PMNode {
+  const node = schema.nodes.source_gap.createChecked(
+    {
+      [SOURCE_FROM_ATTR]: from,
+      [SOURCE_TO_ATTR]: to,
+      [SOURCE_TEXT_ATTR]: source,
+    },
+    source ? schema.text(source) : undefined,
+  );
+  return node.type.createChecked({
+    ...node.attrs,
+    [SOURCE_FINGERPRINT_ATTR]: sourceFingerprint(node),
+  }, node.content);
+}
+
+function withSourceRange(node: PMNode, range: SourceBlockRange, source: string): PMNode {
+  return node.type.createChecked({
+    ...node.attrs,
+    [SOURCE_FROM_ATTR]: range.from,
+    [SOURCE_TO_ATTR]: range.to,
+    [SOURCE_TEXT_ATTR]: source,
+    [SOURCE_FINGERPRINT_ATTR]: sourceFingerprint(node),
+  }, node.content, node.marks);
+}
+
+function restoreParagraphLineEndings(node: PMNode, source: string): PMNode {
+  if (node.type.name !== "paragraph") return node;
+  const endings = [...source.matchAll(/\r\n|\r|\n/g)].map((match) => match[0]);
+  let endingIndex = 0;
+  const rewrite = (child: PMNode): PMNode => {
+    if (child.isText) {
+      const text = (child.text ?? "").replaceAll("\n", () => endings[endingIndex++] ?? "\n");
+      return schema.text(text, child.marks);
+    }
+    if (child.type.name === "hard_break") {
+      return child.type.create({ ...child.attrs, eol: endings[endingIndex++] ?? "\n" });
+    }
+    if (child.childCount === 0) return child;
+    const children: PMNode[] = [];
+    child.forEach((nested) => children.push(rewrite(nested)));
+    return child.copy(Fragment.from(children));
+  };
+  const children: PMNode[] = [];
+  node.forEach((child) => children.push(rewrite(child)));
+  return node.copy(Fragment.from(children));
+}
+
+function addSourceGaps(doc: PMNode, tokens: readonly Token[], source: string): PMNode {
+  if (!source) return doc;
+  const ranges = topLevelSourceRanges(tokens, source);
+  if (ranges.length === 0) {
+    return schema.nodes.doc.createChecked(null, [sourceGapNode(source, 0, source.length)]);
+  }
+  if (ranges.length !== doc.childCount) return doc;
+
+  const children: PMNode[] = [];
+  let cursor = 0;
+  doc.forEach((child, _offset, index) => {
+    const range = ranges[index]!;
+    if (range.from > cursor) {
+      children.push(sourceGapNode(source.slice(cursor, range.from), cursor, range.from));
+    }
+    const authoredSource = source.slice(range.from, range.to);
+    children.push(withSourceRange(
+      restoreParagraphLineEndings(child, authoredSource),
+      range,
+      authoredSource,
+    ));
+    cursor = range.to;
+  });
+  if (cursor < source.length) {
+    children.push(sourceGapNode(source.slice(cursor), cursor, source.length));
+  }
+  return schema.nodes.doc.createChecked(null, children);
+}
+
+export interface ParseOptions {
+  /**
+   * Keep canonical whitespace as explicit Live-only source blocks. Feature
+   * unit tests may disable this to exercise an isolated upstream-derived
+   * transform without changing its historical tree fixtures.
+   */
+  readonly sourceGaps?: boolean;
+}
+
+export function parse(src: string, options: ParseOptions = {}): PMNode {
+  const tokens = md.parse(protectRecoverableUnclosedFences(src), {});
   const state = new ParserState();
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
@@ -301,5 +506,5 @@ export function parse(src: string): PMNode {
   }
   let doc = state.finish();
   for (const f of collectParserPostProcessors()) doc = f(doc);
-  return doc;
+  return options.sourceGaps === false ? doc : addSourceGaps(doc, tokens, src);
 }

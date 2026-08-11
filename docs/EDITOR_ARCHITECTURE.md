@@ -35,7 +35,7 @@ Newline presentation follows these rules without rewriting the source:
 
 The first case remains a soft Markdown line break: it must not be rewritten as two trailing spaces, `<br>`, or an empty paragraph. In all three cases, Source, Live, Reading, save, and reopen preserve the exact canonical string. LF and CRLF inputs remain distinguishable until an explicit, user-authorized line-ending conversion is implemented.
 
-The current implementation is measured against this gate in the [editor source-fidelity audit](EDITOR_SOURCE_FIDELITY_AUDIT.md). That audit records current gaps; it does not weaken this normative contract or advertise unimplemented behavior.
+Conformance is enforced by exact-string parser/controller tests, every-offset source mapping tests, structured local-edit and boundary matrices, renderer-failure and reopen lifecycle tests, and release-level multi-viewport interaction checks. A derived representation is never acceptable evidence by itself.
 
 ## One-way data flow
 
@@ -71,16 +71,35 @@ Reading mode parses canonical Markdown without creating an editable copy. Render
 
 | Module | Responsibility |
 | --- | --- |
-| `src/editor/core/` | Canonical parser and serializer, authored-source patching, source-position transactions, stable controller, and generic extension lifecycle. |
-| `src/editor/extensions/` | Callout and cursor-aware Math, Mermaid, and WikiLink presentation registered through `EditorExtension`. |
+| `src/editor/core/` | Canonical source transactions, explicit source-position mapping, derived parser/serializer, stable controller, and generic extension lifecycle. |
+| `src/editor/extensions/` | Product-specific Callout, Math, Mermaid, WikiLink, and similar Live presentations registered through `EditorExtension`. Math, Mermaid, and WikiLink are independent extensions rather than one combined rich-syntax plugin. |
 | Other `src/editor/` modules | React adapter, Source mode, image-drop routing, read-only rendering, and outline extraction. |
 | Vault components | Store canonical Markdown and call typed editor/controller APIs; they never receive a ProseMirror view or rendered DOM as document data. |
 
 The core must not import Mint Notes extensions. Extensions may use ProseMirror only through `EditorExtension`; React and vault modules use the stable controller or typed extension helpers.
 
+The controller applies edits through `CanonicalSource`/`SourceTransaction`. Ordinary inline `ReplaceStep` operations are mapped to exact source ranges; structure-changing commands either attach an explicit source transaction or use a narrowly defined inference such as paragraph splitting. A document-changing transaction with no canonical source effect is rejected. The removed `sourcePatch` heuristic and full-document serialization fallback must not be reintroduced.
+
+The derived document stores exact top-level source ranges. Authored whitespace between parsed blocks is represented by source-gap blocks so leading, repeated, whitespace-only, and trailing lines have stable Live positions and exact line endings. Parsed structured blocks retain their authored source snapshot and a semantic fingerprint, allowing diagnostics and round-trip tests to emit unchanged spelling exactly while ensuring an edited structure cannot reuse a stale snapshot. Canonical state still lives only in the controller string; these attributes are derived metadata, not another editable model.
+
+## Extension and presentation architecture
+
+Core features and product extensions have deliberately different ownership:
+
+- A core feature recognizes portable Markdown grammar, owns its exact source range and invalid-input fallback, and defines source-position editing semantics. Headings, lists, tables, blockquotes, and fenced code remain core features even when their inactive Live presentation is visually rich.
+- A product extension recognizes or renders optional Mint Notes behavior over source already owned by the core. Callouts decorate source-backed blockquotes, Mermaid decorates fenced code, Math decorates authored math ranges, and WikiLink decorates authored inline ranges.
+- Reading mode has a separate React rendering adapter. It may share recognizers and rendering services with Live mode, but it does not mount a ProseMirror extension or create a second editable model.
+
+New product presentations use the declaration-only `EditorExtension.presentations` contract. An extension supplies exact source-local matches and a renderer; the core-owned presentation host creates ProseMirror decorations and widgets, activates source selection, runs cleanup, and falls back to literal authored source when a renderer fails. Declaration-only renderers do not receive an editor view and cannot dispatch a document transaction.
+
+Block presentations are exclusive. When more than one primary block presentation matches the same derived node, explicit priority selects the owner; equal-priority matches are a configuration error rather than registration-order behavior. Inline presentations must return ranges that exactly slice the source they claim. Selection entering a claimed range reveals the authored source without emitting `onChange`.
+
+The low-level `createPlugins`, raw `EditorView` command, and source-block presentation hooks remain transitional compatibility surfaces for the existing source-backed Callout integration. New presentation types must not use them. A source-changing extension command must eventually return a canonical source transaction with an authorized range, selection mapping, and undo unit; it must never serialize a derived document to obtain replacement Markdown.
+
 ## Presentation-only representations
 
 - Callouts are detected from the authored lines of a source-backed blockquote. The Callout extension may decorate the block and provide a React preview renderer, but it does not materialize a rendered Callout as editable ProseMirror content and does not canonicalize the marker on exit.
+- Math, Mermaid, and WikiLink are separate declaration-only presentation extensions. Their renderer code receives authored source slices but no ProseMirror view; renderer mounting, failure fallback, selection activation, and cleanup remain core responsibilities.
 - Callouts round-trip their authored `> [!TYPE]` marker, including incomplete markers and equivalent quote-prefix spacing. No placeholder, word-joiner, highlight, backtick, or other private sentinel may reach canonical Markdown.
 - Multiline display math may use the reserved `mint-math` fenced language only inside the mounted Live editor. It must be canonicalized before application `onChange` and must never reach React document state, IndexedDB, history, synchronization, export, or the server.
 - Live serialization must not synthesize backslashes for punctuation, block starts, table cells, link titles, or image titles. Canonical backslashes are user-authored and remain preserved even when Live presentation hides them.

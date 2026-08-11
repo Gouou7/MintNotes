@@ -15,6 +15,20 @@ afterEach(() => {
 });
 
 describe("ReadOnlyMarkdown", () => {
+  it("keeps an authored soft line break in one paragraph", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(
+      <I18nProvider><ReadOnlyMarkdown markdown={"a\nb"} /></I18nProvider>
+    ));
+
+    const paragraph = container.querySelector("p.markdown-softbreak-paragraph");
+    expect(paragraph?.textContent).toBe("a\nb");
+    expect(container.querySelectorAll("p")).toHaveLength(1);
+    await act(async () => root.unmount());
+  });
+
   it("renders an attachment reference from its in-memory Blob URL", () => {
     localStorage.setItem("webmd-notes-language", "zh-CN");
     const attachmentId = "11111111-1111-4111-8111-111111111111";

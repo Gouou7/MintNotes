@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { parse } from "../parser";
+import { parse as parseMarkdown } from "../parser";
 import { schema } from "../schema";
 import { serialize } from "../serializer";
+
+const parse = (markdown: string) => parseMarkdown(markdown, { sourceGaps: false });
 
 describe("parser: block nodes", () => {
   test("paragraph with plain text", () => {

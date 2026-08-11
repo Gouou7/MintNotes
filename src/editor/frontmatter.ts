@@ -5,6 +5,7 @@ import {
   isSeq,
   parseDocument,
   Scalar,
+  stringify,
   type Document,
   type Node,
   type Pair,
@@ -211,40 +212,87 @@ function matchingPair(map: YAMLMap, key: string): Pair | undefined {
   return map.items.find((pair) => isScalar(pair.key) && String(pair.key.value ?? "") === key);
 }
 
-function serialize(parsed: ValidFrontmatter): string {
-  let yamlSource = parsed.document.toString({ lineWidth: 0 });
-  if (parsed.openingEol === "\r\n") yamlSource = yamlSource.replace(/\n/g, "\r\n");
+function withYamlSource(parsed: ValidFrontmatter, yamlSource: string): string {
   return `${parsed.bom}---${parsed.openingEol}${yamlSource}${parsed.closingDelimiter}${parsed.closingEol}${parsed.body}`;
 }
 
-function mutate(markdown: string, change: (parsed: ValidFrontmatter, map: YAMLMap) => boolean): string {
-  const parsed = parseFrontmatter(markdown);
-  if (parsed.status !== "valid") return markdown;
-  const map = editableMap(parsed);
-  if (!change(parsed, map)) return markdown;
-  return serialize(parsed);
+function yamlEol(parsed: ValidFrontmatter): string {
+  return parsed.openingEol === "\r\n" ? "\r\n" : "\n";
+}
+
+function normalizeYamlEol(parsed: ValidFrontmatter, source: string): string {
+  return parsed.openingEol === "\r\n" ? source.replace(/\r?\n/g, "\r\n") : source;
+}
+
+function replaceYamlRange(
+  parsed: ValidFrontmatter,
+  from: number,
+  to: number,
+  insert: string,
+): string {
+  return withYamlSource(
+    parsed,
+    parsed.yamlSource.slice(0, from) + normalizeYamlEol(parsed, insert) + parsed.yamlSource.slice(to),
+  );
+}
+
+function scalarSource(parsed: ValidFrontmatter, scalar: Scalar, value: string | number | boolean | null): string {
+  const authored = scalar.range
+    ? parsed.yamlSource.slice(scalar.range[0], scalar.range[1]).replace(/(?:\r\n|\n)$/, "")
+    : "";
+  if (typeof value === "string" && authored.startsWith("'") && authored.endsWith("'")) {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+  if (typeof value === "string" && authored.startsWith('"') && authored.endsWith('"')) {
+    return JSON.stringify(value);
+  }
+  scalar.value = value;
+  if (typeof value === "string" && (
+    scalar.type === Scalar.BLOCK_FOLDED || scalar.type === Scalar.BLOCK_LITERAL
+  )) scalar.type = Scalar.PLAIN;
+  return normalizeYamlEol(parsed, scalar.toString());
+}
+
+function valueSource(parsed: ValidFrontmatter, value: string | number | boolean | string[] | null): string {
+  return normalizeYamlEol(
+    parsed,
+    stringify(value, { collectionStyle: "flow", lineWidth: 0 }).replace(/\n$/, ""),
+  );
 }
 
 export function addFrontmatterProperty(markdown: string, key: string): string {
-  return mutate(markdown, (parsed, map) => {
-    if (!key.trim() || matchingPair(map, key)) return false;
-    map.add({ key, value: parsed.document.createNode(null) });
-    return true;
-  });
+  const parsed = parseFrontmatter(markdown);
+  if (parsed.status !== "valid") return markdown;
+  const normalized = key.trim();
+  const map = editableMap(parsed);
+  if (!normalized || matchingPair(map, normalized)) return markdown;
+  const eol = yamlEol(parsed);
+  const separator = parsed.yamlSource.length > 0 && !/\r?\n$/.test(parsed.yamlSource) ? eol : "";
+  const keySource = stringify(normalized, { lineWidth: 0 }).replace(/\n$/, "");
+  return withYamlSource(parsed, `${parsed.yamlSource}${separator}${keySource}: null${eol}`);
 }
 
 export function renameFrontmatterProperty(markdown: string, key: string, nextKey: string): string {
-  return mutate(markdown, (parsed, map) => {
-    const normalized = nextKey.trim();
-    const pair = matchingPair(map, key);
-    if (!pair || !normalized || normalized === key || matchingPair(map, normalized)) return false;
-    pair.key = parsed.document.createNode(normalized);
-    return true;
-  });
+  const parsed = parseFrontmatter(markdown);
+  if (parsed.status !== "valid") return markdown;
+  const map = editableMap(parsed);
+  const normalized = nextKey.trim();
+  const pair = matchingPair(map, key);
+  const range = isScalar(pair?.key) ? pair.key.range : undefined;
+  if (!pair || !range || !normalized || normalized === key || matchingPair(map, normalized)) return markdown;
+  const keySource = stringify(normalized, { lineWidth: 0 }).replace(/\n$/, "");
+  return replaceYamlRange(parsed, range[0], range[1], keySource);
 }
 
 export function deleteFrontmatterProperty(markdown: string, key: string): string {
-  return mutate(markdown, (_parsed, map) => map.delete(key));
+  const parsed = parseFrontmatter(markdown);
+  if (parsed.status !== "valid") return markdown;
+  const pair = matchingPair(editableMap(parsed), key);
+  const keyRange = isScalar(pair?.key) ? pair.key.range : undefined;
+  if (!pair || !keyRange) return markdown;
+  const valueRange = (pair.value as Node | null | undefined)?.range;
+  const to = valueRange?.[2] ?? keyRange[2];
+  return replaceYamlRange(parsed, keyRange[0], to, "");
 }
 
 export function setFrontmatterProperty(
@@ -252,19 +300,24 @@ export function setFrontmatterProperty(
   key: string,
   value: string | number | boolean | string[] | null
 ): string {
-  return mutate(markdown, (parsed, map) => {
-    const pair = matchingPair(map, key);
-    if (!pair) return false;
-    if (isScalar(pair.value) && !Array.isArray(value)) {
-      pair.value.value = value;
-      if (typeof value === "string" && (
-        pair.value.type === Scalar.BLOCK_FOLDED || pair.value.type === Scalar.BLOCK_LITERAL
-      )) pair.value.type = Scalar.PLAIN;
-    } else {
-      pair.value = parsed.document.createNode(value);
-    }
-    return true;
-  });
+  const parsed = parseFrontmatter(markdown);
+  if (parsed.status !== "valid") return markdown;
+  const pair = matchingPair(editableMap(parsed), key);
+  const current = pair?.value as Node | null | undefined;
+  if (!pair) return markdown;
+  if (current?.range) {
+    let source = isScalar(current) && !Array.isArray(value)
+      ? scalarSource(parsed, current, value)
+      : valueSource(parsed, value);
+    const ownedSource = parsed.yamlSource.slice(current.range[0], current.range[1]);
+    const trailingEol = ownedSource.match(/(?:\r\n|\n)$/)?.[0];
+    if (trailingEol && !/(?:\r\n|\n)$/.test(source)) source += trailingEol;
+    return replaceYamlRange(parsed, current.range[0], current.range[1], source);
+  }
+
+  const keyRange = isScalar(pair.key) ? pair.key.range : undefined;
+  if (!keyRange) return markdown;
+  return replaceYamlRange(parsed, keyRange[1], keyRange[1], `: ${valueSource(parsed, value)}`);
 }
 
 export function replaceFrontmatterBody(parsed: ParsedFrontmatter, body: string): string {

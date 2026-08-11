@@ -3,16 +3,24 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditor, type Editor as EditorController } from "./core/lib";
 import { createCalloutExtension } from "./extensions/callout";
-import { createRichSyntaxExtension } from "./extensions/richSyntax";
+import { createMathExtension } from "./extensions/math";
+import { createMermaidExtension } from "./extensions/mermaid";
+import { createWikiLinkExtension } from "./extensions/wikilink";
 import { I18nProvider } from "../i18n";
 import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
 
 vi.mock("./core/lib", () => ({ createEditor: vi.fn() }));
 vi.mock("./extensions/callout", () => ({
-  createCalloutExtension: vi.fn(() => ({ id: "mint-callout", createPlugins: () => [] })),
+  createCalloutExtension: vi.fn(() => ({ id: "mint-callout" })),
 }));
-vi.mock("./extensions/richSyntax", () => ({
-  createRichSyntaxExtension: vi.fn(() => ({ id: "mint-rich-syntax", createPlugins: () => [] }))
+vi.mock("./extensions/math", () => ({
+  createMathExtension: vi.fn(() => ({ id: "mint-math" })),
+}));
+vi.mock("./extensions/mermaid", () => ({
+  createMermaidExtension: vi.fn(() => ({ id: "mint-mermaid" })),
+}));
+vi.mock("./extensions/wikilink", () => ({
+  createWikiLinkExtension: vi.fn(() => ({ id: "mint-wikilink" })),
 }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -331,16 +339,21 @@ describe("MarkdownEditor live mode", () => {
     ));
 
     const options = vi.mocked(createEditor).mock.calls[0]?.[1];
-    const richSyntax = vi.mocked(createRichSyntaxExtension).mock.calls[0]?.[0];
+    const math = vi.mocked(createMathExtension).mock.calls[0]?.[0];
+    const mermaid = vi.mocked(createMermaidExtension).mock.calls[0]?.[0];
+    const wikiLink = vi.mocked(createWikiLinkExtension).mock.calls[0]?.[0];
     expect(options?.initialContent).toBe("```mint-math\nE = mc^2\n```\n\n[[Guide]]");
     expect(options?.extensions?.map((extension) => extension.id)).toEqual([
       "mint-callout",
-      "mint-rich-syntax"
+      "mint-math",
+      "mint-mermaid",
+      "mint-wikilink",
     ]);
     expect(createCalloutExtension).toHaveBeenCalledOnce();
-    expect(richSyntax?.renderMath).toBeTypeOf("function");
-    expect(richSyntax?.renderMermaid).toBeTypeOf("function");
-    act(() => richSyntax?.onWikiLink?.("Guide"));
+    expect(math?.renderInline).toBeTypeOf("function");
+    expect(math?.renderBlock).toBeTypeOf("function");
+    expect(mermaid?.render).toBeTypeOf("function");
+    act(() => wikiLink?.onNavigate?.("Guide"));
     expect(onWikiLink).toHaveBeenCalledWith("Guide");
 
     act(() => editorChange?.("```mint-math\nE = ma\n```\n\n[[Guide]]"));

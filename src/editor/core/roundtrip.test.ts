@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parse } from "./parser";
 import { serialize } from "./serializer";
+import { INVALID_SOURCE_FIDELITY_STRINGS } from "./source-fidelity-fixtures";
 
 const upstreamRoundTripCases = [
   "hello world",
@@ -28,10 +29,29 @@ const upstreamRoundTripCases = [
 ] as const;
 
 describe("Mint editor core Markdown round trips", () => {
-  it.each(upstreamRoundTripCases)("preserves the parsed document for %j", (markdown) => {
-    const initial = parse(markdown);
-    const reparsed = parse(serialize(initial));
+  it.each(upstreamRoundTripCases)("preserves exact canonical Markdown for %j", (markdown) => {
+    const initial = parse(markdown, { sourceGaps: false });
+    // Compatibility mode intentionally omits source snapshots, so retain the
+    // structural imported-core assertion there.
+    const reparsed = parse(serialize(initial), { sourceGaps: false });
     expect(reparsed.eq(initial)).toBe(true);
+
+    const sourceBacked = parse(markdown);
+    expect(serialize(sourceBacked)).toBe(markdown);
+  });
+
+  it.each([
+    "#  spaced heading ##",
+    "Title\n-----",
+    "* item\n+ item two",
+    "01) first\n02) second",
+    "- [X] complete\n- [ ]  spaced",
+    "|a| b  |\n|:---|---:|\n|x|y|",
+    "[TOC]",
+    "[ref][id]\n\n[id]: <https://example.com> 'title'",
+    "---\n# comment\ntitle: 'quoted'\nflow: { a: 1 }\n---\n\nbody",
+  ])("keeps equivalent structured spelling byte-for-byte for %j", (markdown) => {
+    expect(serialize(parse(markdown))).toBe(markdown);
   });
 
   it.each([
@@ -46,6 +66,10 @@ describe("Mint editor core Markdown round trips", () => {
 
   it("never introduces an escape that the author did not write", () => {
     const markdown = "plain # - + * _ [ ] < > \\ `";
+    expect(serialize(parse(markdown))).toBe(markdown);
+  });
+
+  it.each(INVALID_SOURCE_FIDELITY_STRINGS)("keeps incomplete syntax literal and exact for %j", (markdown) => {
     expect(serialize(parse(markdown))).toBe(markdown);
   });
 });

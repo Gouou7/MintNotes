@@ -1,6 +1,12 @@
 import { Schema, type NodeSpec, type MarkSpec } from "prosemirror-model";
 
 import { collectMarks, collectNodes } from "./features/index";
+import {
+  SOURCE_FINGERPRINT_ATTR,
+  SOURCE_FROM_ATTR,
+  SOURCE_TEXT_ATTR,
+  SOURCE_TO_ATTR,
+} from "./source";
 
 const coreNodes: Record<string, NodeSpec> = {
   doc: { content: "block+" },
@@ -10,6 +16,45 @@ const coreNodes: Record<string, NodeSpec> = {
     content: "inline*",
     parseDOM: [{ tag: "p" }],
     toDOM: () => ["p", 0],
+  },
+
+  source_gap: {
+    group: "block",
+    content: "text*",
+    marks: "",
+    code: true,
+    defining: true,
+    parseDOM: [{
+      tag: "pre[data-source-gap]",
+      preserveWhitespace: "full",
+    }],
+    toDOM: () => ["pre", { "data-source-gap": "1", "aria-hidden": "true" }, ["code", 0]],
+  },
+
+  // Exact authored Markdown for a structured block whose delimiter position
+  // has no concrete position in the derived rich node. The controller swaps
+  // to this text-backed presentation only while that source range is being
+  // navigated or edited, then reparses the canonical string on exit.
+  source_block: {
+    group: "block",
+    content: "text*",
+    marks: "",
+    code: true,
+    defining: true,
+    attrs: {
+      kind: { default: "block" },
+    },
+    parseDOM: [{
+      tag: "pre[data-source-block]",
+      preserveWhitespace: "full",
+      getAttrs: (el) => ({
+        kind: (el as HTMLElement).getAttribute("data-source-kind") ?? "block",
+      }),
+    }],
+    toDOM: (node) => ["pre", {
+      "data-source-block": "1",
+      "data-source-kind": node.attrs.kind as string,
+    }, ["code", 0]],
   },
 
   heading: {
@@ -130,6 +175,7 @@ const coreNodes: Record<string, NodeSpec> = {
     group: "inline",
     inline: true,
     selectable: false,
+    attrs: { eol: { default: "\n" } },
     parseDOM: [{ tag: "br" }],
     toDOM: () => ["br"],
   },
@@ -137,7 +183,23 @@ const coreNodes: Record<string, NodeSpec> = {
 
 const coreMarks: Record<string, MarkSpec> = {};
 
-const nodes = { ...coreNodes, ...collectNodes() };
+function withSourceRangeAttrs(nodes: Record<string, NodeSpec>): Record<string, NodeSpec> {
+  return Object.fromEntries(Object.entries(nodes).map(([name, spec]) => {
+    if (!(spec.group ?? "").split(/\s+/).includes("block")) return [name, spec];
+    return [name, {
+      ...spec,
+      attrs: {
+        ...(spec.attrs ?? {}),
+        [SOURCE_FROM_ATTR]: { default: null },
+        [SOURCE_TO_ATTR]: { default: null },
+        [SOURCE_TEXT_ATTR]: { default: null },
+        [SOURCE_FINGERPRINT_ATTR]: { default: null },
+      },
+    } satisfies NodeSpec];
+  }));
+}
+
+const nodes = withSourceRangeAttrs({ ...coreNodes, ...collectNodes() });
 const marks = { ...coreMarks, ...collectMarks() };
 
 export const schema = new Schema({ nodes, marks });

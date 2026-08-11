@@ -6,6 +6,7 @@ import type { EditorView, NodeView } from "prosemirror-view";
 import type { SourceBlockPresentation } from "../extension";
 import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
 import { INLINE_PRESENTATION_META } from "../inline-parse";
+import { SOURCE_TRANSACTION_META } from "../source-transaction";
 import type { FeaturePluginContext, FeatureSpec } from "./_types";
 
 // A Live blockquote owns its complete authored Markdown. The NodeView toggles
@@ -288,12 +289,18 @@ class BlockquoteView implements NodeView {
     this.destroyPreview?.();
     this.destroyPreview = undefined;
     this.preview.replaceChildren();
+    this.preview.classList.remove("live-presentation-fallback");
     const presentation = this.presentations.find((candidate) => (
       candidate.nodeType === "blockquote" && candidate.matches(source)
     ));
     if (presentation) {
-      const cleanup = presentation.render(this.preview, source);
-      if (cleanup) this.destroyPreview = cleanup;
+      try {
+        const cleanup = presentation.render(this.preview, source);
+        if (cleanup) this.destroyPreview = cleanup;
+      } catch {
+        this.preview.classList.add("live-presentation-fallback");
+        this.preview.textContent = source;
+      }
     } else {
       this.preview.innerHTML = md.render(source);
       for (const child of Array.from(this.preview.childNodes)) {
@@ -344,33 +351,6 @@ class BlockquoteView implements NodeView {
   }
 }
 
-function markdownOffsetToDocumentPosition(
-  markdown: string,
-  offset: number,
-  parseMarkdown: FeaturePluginContext["parseMarkdown"],
-): number {
-  try {
-    return parseMarkdown(markdown.slice(0, Math.max(0, offset))).content.size;
-  } catch {
-    return 0;
-  }
-}
-
-function sourceRemainsOneQuote(
-  source: string,
-  parseMarkdown: FeaturePluginContext["parseMarkdown"],
-): boolean {
-  if (!QUOTE_PREFIX.test(source)) return false;
-  try {
-    const parsed = parseMarkdown(source);
-    return parsed.childCount === 1
-      && parsed.firstChild?.type.name === "blockquote"
-      && parsed.firstChild.textContent === source;
-  } catch {
-    return false;
-  }
-}
-
 function blockquotePlugin(
   schema: Schema,
   context: FeaturePluginContext,
@@ -384,36 +364,6 @@ function blockquotePlugin(
       apply: (tr, value) => tr.getMeta(INLINE_PRESENTATION_META) ? value + 1 : value,
     },
     appendTransaction(transactions, oldState, newState) {
-      if (transactions.some((transaction) => transaction.docChanged)) {
-        let invalid = false;
-        newState.doc.descendants((node) => {
-          if (node.type === schema.nodes.blockquote && !sourceRemainsOneQuote(node.textContent, context.parseMarkdown)) {
-            invalid = true;
-            return false;
-          }
-          return !invalid;
-        });
-        if (invalid) {
-          const markdown = context.serializeMarkdown(newState.doc);
-          const offset = (() => {
-            try {
-              return context.serializeMarkdown(newState.doc.cut(0, newState.selection.head)).length;
-            } catch {
-              return markdown.length;
-            }
-          })();
-          const parsed = context.parseMarkdown(markdown);
-          const tr = newState.tr.replaceWith(0, newState.doc.content.size, parsed.content);
-          const position = Math.min(
-            markdownOffsetToDocumentPosition(markdown, offset, context.parseMarkdown),
-            tr.doc.content.size,
-          );
-          tr.setSelection(TextSelection.near(tr.doc.resolve(position)));
-          tr.setMeta("addToHistory", false);
-          return tr;
-        }
-      }
-
       const selectionChanged = !oldState.selection.eq(newState.selection);
       let hasActive = false;
       newState.doc.descendants((node) => {
@@ -507,11 +457,24 @@ export const blockquote: FeatureSpec = {
           const pos = $from.before();
           const source = `${$from.parent.textContent}\n${prefix}`;
           const quote = schema.nodes.blockquote.create(
-            { sourceEditing: true },
+            { ...$from.parent.attrs, sourceEditing: true },
             schema.text(source),
           );
           const tr = state.tr.replaceWith(pos, pos + $from.parent.nodeSize, quote);
           tr.setSelection(TextSelection.create(tr.doc, pos + 1 + source.length));
+          const sourceFrom = Number($from.parent.attrs.sourceFrom);
+          if (Number.isInteger(sourceFrom) && sourceFrom >= 0) {
+            const head = sourceFrom + source.length;
+            tr.setMeta(SOURCE_TRANSACTION_META, {
+              edits: [{
+                from: sourceFrom + $from.parent.textContent.length,
+                to: sourceFrom + $from.parent.textContent.length,
+                insert: `\n${prefix}`,
+              }],
+              selection: { anchor: head, head },
+              origin: "input",
+            });
+          }
           dispatch(tr.scrollIntoView());
         }
         return true;

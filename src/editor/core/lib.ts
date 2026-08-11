@@ -7,9 +7,30 @@
 export { createEditor } from "./editor-api";
 export type { Editor, EditorOptions } from "./editor-api";
 export type {
+  BlockPresentationMatch,
+  BlockPresentationSearchContext,
+  BlockSourcePresentation,
   EditorExtension,
   EditorExtensionCommand,
   EditorExtensionContext,
+  ExtensionPresentations,
+  InlinePresentationMatch,
+  InlinePresentationSearchContext,
+  InlineSourcePresentation,
+  PresentationCleanup,
   SourceBlockPresentation,
 } from "./extension";
 export { SOURCE_BLOCK_PRESENTATION_META } from "./extension";
+export { CanonicalSource, replaceSourceRange } from "./source";
+export type {
+  AppliedSourceTransaction,
+  SourceEdit,
+  SourceOffset,
+  SourceRange,
+  SourceSelection,
+  SourceTransaction,
+} from "./source";
+export { SourcePositionMap } from "./source-position-map";
+export type { PositionAffinity } from "./source-position-map";
+export { SOURCE_TRANSACTION_META, transactionSourceEffect } from "./source-transaction";
+export type { TransactionSourceEffect } from "./source-transaction";

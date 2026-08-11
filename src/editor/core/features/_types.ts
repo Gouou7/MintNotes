@@ -36,8 +36,6 @@ export type TokenHandler = (
 ) => void;
 
 export type FeaturePluginContext = {
-  parseMarkdown: (markdown: string) => PMNode;
-  serializeMarkdown: (doc: PMNode) => string;
   resolveImageSource?: InlinePresentationContext["resolveImageSource"];
   sourceBlockPresentations?: readonly SourceBlockPresentation[];
 };

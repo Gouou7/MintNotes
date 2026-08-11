@@ -11,7 +11,9 @@ import { createEditor, type Editor as EditorController } from "./core/lib";
 import "./core/styles/widgets.css";
 import "./core/styles/theme-typora.css";
 import { createCalloutExtension } from "./extensions/callout";
-import { createRichSyntaxExtension } from "./extensions/richSyntax";
+import { createMathExtension } from "./extensions/math";
+import { createMermaidExtension } from "./extensions/mermaid";
+import { createWikiLinkExtension } from "./extensions/wikilink";
 import { I18nProvider, useI18n } from "../i18n";
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter, replaceFrontmatterBody } from "./frontmatter";
@@ -136,12 +138,14 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
             return () => root.unmount();
           },
         }),
-        createRichSyntaxExtension({
-          renderMath: (container, source) => renderMathInto(container, source),
-          renderMathBlock: (container, source) => renderMathInto(container, source, true),
-          renderMermaid: renderMermaidInto,
-          onWikiLink: (target) => wikiLinkRef.current?.(target)
-        })
+        createMathExtension({
+          renderInline: (container, source) => renderMathInto(container, source),
+          renderBlock: (container, source) => renderMathInto(container, source, true),
+        }),
+        createMermaidExtension({ render: renderMermaidInto }),
+        createWikiLinkExtension({
+          onNavigate: (target) => wikiLinkRef.current?.(target),
+        }),
       ],
       resolveImageSource: (source) => {
         const match = /^webmd-attachment:([0-9a-f-]{36})$/i.exec(source);

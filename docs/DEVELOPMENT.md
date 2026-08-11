@@ -57,8 +57,8 @@ first be converted to process-local anonymous references.
 | --- | --- |
 | `src/App.tsx` | Top-level routing between authentication, device lock, and the unlocked vault. |
 | `src/components/` | Shared presentation primitives, including the standard icon wrapper. |
-| `src/editor/core/` | ProseMirror/Markdown core, canonical parser and serializer, input transactions, generic extension contract, stable controller, imported behavior specs, and provenance. |
-| `src/editor/extensions/` | Injected Callout and Math/Mermaid/WikiLink Live-mode behavior; the core does not import these modules. |
+| `src/editor/core/` | ProseMirror/Markdown core, canonical parser and serializer, input transactions, generic declaration-only presentation host and extension contract, stable controller, imported behavior specs, and provenance. |
+| `src/editor/extensions/` | Separate product-specific Callout, Math, Mermaid, and WikiLink Live presentations; the core does not import these modules. New renderers declare source matches and renderer callbacks instead of creating raw ProseMirror plugins. |
 | Other `src/editor/` modules | React Live/Source adapter, source/live drop handling, Markdown presentation codecs, read-only rendering, and outline extraction. |
 | `src/features/history.ts`, `src/features/vault/historyController.ts`, and `src/components/HistoryPanel.tsx` | History payload/deduplication policy, typed encrypted local persistence/metadata queue, and right-panel history presentation. |
 | `src/features/session/` | Session restoration, trusted-device state, cross-tab invalidation, and locked-session commands. |

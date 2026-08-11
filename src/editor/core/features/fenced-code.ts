@@ -8,10 +8,7 @@ import {
 } from "prosemirror-view";
 
 import { leaveLineDraft } from "../block-draft";
-import {
-  fencedCodeStructureSignature,
-  parseFencedCodeSource,
-} from "../fenced-code-source";
+import { parseFencedCodeSource } from "../fenced-code-source";
 import type { FeatureSpec } from "./_types";
 
 // A fenced code node always contains its complete Markdown source, including
@@ -34,35 +31,6 @@ function parseCompleteSource(source: string): { lang: string; body: string } | n
 
 function isSourceEditing(node: PMNode): boolean {
   return node.type.name === "code_block" && node.attrs.sourceEditing === true;
-}
-
-function fenceStructureChanged(oldNode: PMNode, newNode: PMNode): boolean {
-  return oldNode.textContent !== newNode.textContent
-    && fencedCodeStructureSignature(oldNode.textContent)
-      !== fencedCodeStructureSignature(newNode.textContent);
-}
-
-function selectionMarkdownOffset(
-  state: EditorView["state"],
-  serializeMarkdown: (doc: PMNode) => string,
-): number {
-  try {
-    return serializeMarkdown(state.doc.cut(0, state.selection.head)).length;
-  } catch {
-    return serializeMarkdown(state.doc).length;
-  }
-}
-
-function markdownOffsetToDocumentPosition(
-  markdown: string,
-  offset: number,
-  parseMarkdown: (markdown: string) => PMNode,
-): number {
-  try {
-    return parseMarkdown(markdown.slice(0, Math.max(0, offset))).content.size;
-  } catch {
-    return 0;
-  }
 }
 
 function sourceOffset(node: PMNode, target: SourceTarget): number {
@@ -435,78 +403,13 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
   return true;
 }
 
-function fencedCodeSourcePlugin(
-  parseMarkdown: (markdown: string) => PMNode,
-  serializeMarkdown: (doc: PMNode) => string,
-): Plugin {
+function fencedCodeSourcePlugin(): Plugin {
   return new Plugin({
     appendTransaction(transactions, oldState, newState) {
       if (!transactions.some((tr) => tr.selectionSet || tr.docChanged)) return null;
 
       const oldCode = codeBlockAtSelection(oldState);
       const newCode = codeBlockAtSelection(newState);
-      if (
-        oldCode
-        && newCode
-        && oldCode.pos === newCode.pos
-        && oldState.selection.empty
-        && newState.selection.empty
-      ) {
-        if (fenceStructureChanged(oldCode.node, newCode.node)) {
-          let codeOrdinal = 0;
-          newState.doc.descendants((node, pos) => {
-            if (node.type.name === "code_block" && pos < newCode.pos) codeOrdinal++;
-          });
-          const markdown = serializeMarkdown(newState.doc);
-          const markdownOffset = selectionMarkdownOffset(newState, serializeMarkdown);
-          const reparsed = parseMarkdown(markdown);
-          const tr = newState.tr.replaceWith(
-            0,
-            newState.doc.content.size,
-            reparsed.content,
-          );
-          let seenCodeBlocks = 0;
-          let reparsedCode: { pos: number; node: PMNode } | null = null;
-          tr.doc.descendants((node, pos) => {
-            if (reparsedCode || node.type.name !== "code_block") return;
-            if (seenCodeBlocks === codeOrdinal) reparsedCode = { pos, node };
-            seenCodeBlocks++;
-          });
-
-          const nowClosed = parseFencedCodeSource(newCode.node.textContent)?.closingFrom
-            != null;
-          if (reparsedCode && nowClosed) {
-            const code = reparsedCode as { pos: number; node: PMNode };
-            const codeEnd = code.pos + code.node.nodeSize;
-            const outside = Selection.findFrom(tr.doc.resolve(codeEnd), 1, true);
-            if (outside) {
-              tr.setSelection(outside);
-            } else {
-              tr.setSelection(TextSelection.create(
-                tr.doc,
-                code.pos + 1 + code.node.content.size,
-              ));
-              tr.setNodeMarkup(code.pos, undefined, {
-                ...code.node.attrs,
-                sourceEditing: true,
-              });
-            }
-          } else if (reparsedCode) {
-            const code = reparsedCode as { pos: number; node: PMNode };
-            tr.setSelection(TextSelection.create(
-              tr.doc,
-              code.pos + 1 + Math.min(newCode.offset, code.node.content.size),
-            ));
-          } else {
-            const target = Math.min(
-              markdownOffsetToDocumentPosition(markdown, markdownOffset, parseMarkdown),
-              tr.doc.content.size,
-            );
-            tr.setSelection(Selection.near(tr.doc.resolve(target), 1));
-          }
-          return tr;
-        }
-      }
       const presentationUpdates: Array<{
         pos: number;
         node: PMNode;
@@ -657,9 +560,9 @@ function makeFencedPlugin(schema: Schema) {
 export const fencedCode: FeatureSpec = {
   name: "code_block",
 
-  plugins: (schema, { parseMarkdown, serializeMarkdown }) => [
+  plugins: (schema) => [
     makeFencedPlugin(schema).plugin,
-    fencedCodeSourcePlugin(parseMarkdown, serializeMarkdown),
+    fencedCodeSourcePlugin(),
   ],
 
   keymap: (schema) => ({

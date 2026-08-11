@@ -84,4 +84,54 @@ describe("frontmatter", () => {
     const next = setFrontmatterProperty(source, "name", "changed");
     expect(next).toBe("\uFEFF---\r\nname: changed\r\n---\r\nBody\r\n");
   });
+
+  it("patches only the owned YAML range", () => {
+    const source = [
+      "---",
+      "# leading comment",
+      "title: 'quoted' # inline comment",
+      "flow: { a: 1, b: 2 }",
+      "",
+      "keep: \"double\"",
+      "---",
+      "body",
+    ].join("\n");
+    const next = setFrontmatterProperty(source, "title", "changed");
+
+    expect(next).toBe(source.replace("'quoted'", "'changed'"));
+  });
+
+  it("keeps every unrelated byte across the CRLF property command matrix", () => {
+    const source = [
+      "---",
+      "# leading comment",
+      "title: 'quoted' # inline comment",
+      "flow: { a: 1, b: 2 }",
+      "",
+      "tags: [one, two]",
+      "keep: \"double\"",
+      "---",
+      "body",
+      "",
+    ].join("\r\n");
+
+    const changed = setFrontmatterProperty(source, "title", "changed");
+    expect(changed).toBe(source.replace("'quoted'", "'changed'"));
+
+    const relisted = setFrontmatterProperty(changed, "tags", ["alpha", "gamma"]);
+    expect(relisted).toBe(changed.replace("[one, two]", "[ alpha, gamma ]"));
+
+    const renamed = renameFrontmatterProperty(relisted, "keep", "retained");
+    expect(renamed).toBe(relisted.replace('keep: "double"', 'retained: "double"'));
+
+    const deleted = deleteFrontmatterProperty(renamed, "flow");
+    expect(deleted).toBe(renamed.replace("flow: { a: 1, b: 2 }\r\n", ""));
+
+    const added = addFrontmatterProperty(deleted, "owner");
+    expect(added).toBe(deleted.replace("---\r\nbody", "owner: null\r\n---\r\nbody"));
+    expect(added).toContain("# leading comment\r\n");
+    expect(added).toContain("title: 'changed' # inline comment\r\n");
+    expect(added).toContain("\r\n\r\ntags:");
+    expect(added.endsWith("body\r\n")).toBe(true);
+  });
 });

@@ -3,6 +3,8 @@ import { NodeSelection, Plugin, PluginKey, TextSelection } from "prosemirror-sta
 import type { EditorView } from "prosemirror-view";
 
 import { leaveLineDraft } from "../block-draft";
+import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
+import { SOURCE_TRANSACTION_META } from "../source-transaction";
 import type { FeatureSpec } from "./_types";
 
 // horizontal_rule (HR).
@@ -24,8 +26,12 @@ type HRVariant = "-" | "*" | "_";
 const HR_RE = /^(-{3,}|\*{3,}|_{3,})$/;
 const hrRevealKey = new PluginKey<number | null>("horizontalRuleReveal");
 
-function createHrNode(schema: Schema, markup: string): PMNode {
-  return schema.nodes.horizontal_rule!.create({ markup });
+function createHrNode(
+  schema: Schema,
+  markup: string,
+  sourceAttrs: Record<string, unknown> = {},
+): PMNode {
+  return schema.nodes.horizontal_rule!.create({ ...sourceAttrs, markup });
 }
 
 function makeHrPlugin(schema: Schema) {
@@ -44,6 +50,7 @@ function makeHrPlugin(schema: Schema) {
       const hrNode = createHrNode(
         schema,
         data.variant.repeat(paragraph.textContent.length),
+        paragraph.attrs,
       );
       // If the HR would end up as the doc's last node, PM needs a
       // trailing textblock for the caret to live in. Enter typically
@@ -92,10 +99,11 @@ function makeHrNodeView(schema: Schema) {
       if (!current || current.type !== schema.nodes.horizontal_rule) return;
 
       const markup = (current.attrs.markup as string) || "---";
-      const paragraph = schema.nodes.paragraph!.create(null, schema.text(markup));
+      const paragraph = schema.nodes.paragraph!.create(current.attrs, schema.text(markup));
       const tr = view.state.tr.replaceWith(pos, pos + current.nodeSize, paragraph);
       tr.setSelection(TextSelection.create(tr.doc, pos + 1 + markup.length));
       tr.setMeta(hrRevealKey, pos);
+      tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
       view.dispatch(tr.scrollIntoView());
       view.focus();
     };
@@ -148,12 +156,13 @@ function makeHrInteractionPlugin(schema: Schema): Plugin {
 
       const pos = selection.from;
       const markup = (current.attrs.markup as string) || "---";
-      const paragraph = schema.nodes.paragraph!.create(null, schema.text(markup));
+      const paragraph = schema.nodes.paragraph!.create(current.attrs, schema.text(markup));
       const tr = newState.tr.replaceWith(pos, pos + current.nodeSize, paragraph);
       const enteredFromBefore = oldState.selection.from <= pos;
       const offset = enteredFromBefore ? 0 : markup.length;
       tr.setSelection(TextSelection.create(tr.doc, pos + 1 + offset));
       tr.setMeta(hrRevealKey, pos);
+      tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
       return tr.scrollIntoView();
     },
     props: {
@@ -186,10 +195,24 @@ export const hr: FeatureSpec = {
 
       if (dispatch) {
         const markup = match[1]!;
-        const rule = createHrNode(schema, markup);
+        const rule = createHrNode(schema, markup, paragraph.attrs);
         const empty = schema.nodes.paragraph!.create();
         const tr = state.tr.replaceWith(pos, pos + paragraph.nodeSize, [rule, empty]);
         tr.setSelection(TextSelection.create(tr.doc, pos + rule.nodeSize + 1));
+        const sourceFrom = Number(paragraph.attrs.sourceFrom);
+        if (Number.isInteger(sourceFrom) && sourceFrom >= 0) {
+          const head = sourceFrom + markup.length + 2;
+          tr.setMeta(SOURCE_TRANSACTION_META, {
+            edits: [{
+              from: sourceFrom + markup.length,
+              to: sourceFrom + markup.length,
+              insert: "\n\n",
+            }],
+            selection: { anchor: head, head },
+            origin: "input",
+            reparseDerivedDocument: true,
+          });
+        }
         dispatch(tr.scrollIntoView());
       }
       return true;

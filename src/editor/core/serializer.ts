@@ -7,6 +7,7 @@ import {
   collectMarkDelims,
 } from "./features/index";
 import { schema } from "./schema";
+import { unchangedAuthoredSource } from "./source-fingerprint";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configurable surface: mark delimiters and character escaping. md and pretty
@@ -65,6 +66,7 @@ export class SerializerState {
   out = "";
   delim = "";
   private closed: PMNode | null = null;
+  private exactSourceGap = false;
 
   pmPos = 0;
   markers: InternalMarker[];
@@ -112,6 +114,19 @@ export class SerializerState {
     this.closed = node;
   }
 
+  writeSourceGap(source: string): void {
+    // A source gap already contains the complete authored separator,
+    // including every line ending. Do not let flushClose synthesize another.
+    this.closed = null;
+    this.exactSourceGap = true;
+    this.out += source;
+    this.advance(source.length);
+  }
+
+  hasExactSourceGap(): boolean {
+    return this.exactSourceGap;
+  }
+
   wrapBlock(delim: string, firstDelim: string | null, node: PMNode, f: () => void): void {
     const old = this.delim;
     this.write(firstDelim ?? delim);
@@ -122,7 +137,16 @@ export class SerializerState {
   }
 
   renderDoc(doc: PMNode): void {
-    doc.forEach((child) => this.renderBlock(child));
+    doc.forEach((child) => {
+      const authored = unchangedAuthoredSource(child);
+      if (authored !== null) {
+        this.advance(1);
+        this.writeSourceGap(authored);
+        this.advance(1);
+      } else {
+        this.renderBlock(child);
+      }
+    });
   }
 
   renderBlock(node: PMNode): void {
@@ -221,7 +245,7 @@ export class SerializerState {
         closeMarks([]);
         this.write();
         this.tick("inner");
-        this.out += "  \n";
+        this.out += `  ${String(child.attrs.eol ?? "\n")}`;
         if (this.delim) this.out += this.delim;
         this.advance(1);
         return; // hard_break doesn't contribute to textContent offsets
@@ -266,6 +290,10 @@ export class SerializerState {
 export type BlockHandler = (state: SerializerState, node: PMNode) => void;
 
 const coreBlockHandlers: Record<string, BlockHandler> = {
+  source_gap: (state, node) => {
+    state.writeSourceGap(node.textContent);
+  },
+
   paragraph: (state, node) => {
     state.renderInline(node);
     state.closeBlock(node);
@@ -380,7 +408,7 @@ const blockHandlers: Record<string, BlockHandler> = {
 export function serialize(doc: PMNode): string {
   const state = new SerializerState(mdConfig);
   state.renderDoc(doc);
-  return state.out.replace(/\n+$/, "\n");
+  return state.hasExactSourceGap() ? state.out : state.out.replace(/\n+$/, "\n");
 }
 
 export function serializeWith(

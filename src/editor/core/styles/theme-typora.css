@@ -39,7 +39,7 @@
 .ProseMirror h6 { font-size: 0.95em; color: #666; }
 
 /* ─── paragraphs ─────────────────────────────────────────────────── */
-.ProseMirror p { margin: 0 0 1em; }
+.ProseMirror p { margin: 0 0 1em; white-space: break-spaces; }
 .ProseMirror p:last-child { margin-bottom: 0; }
 
 /* ─── links ──────────────────────────────────────────────────────── */

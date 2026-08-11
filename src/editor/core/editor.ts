@@ -11,9 +11,9 @@ import { markdownInputRules, spaceBreaksStoredMarks } from "./input-rules";
 import { normalizeInlinePlugin } from "./normalize";
 import { parse } from "./parser";
 import { schema } from "./schema";
-import { serialize } from "./serializer";
 import { manualEscapeDecorationPlugin } from "./canonical-markdown";
 import type { EditorExtension } from "./extension";
+import { extensionPresentationPlugin } from "./presentation";
 
 // Open `<a>` links on Cmd/Ctrl+click. Inside contenteditable, a plain
 // click moves the caret instead of navigating — opting in to the
@@ -48,9 +48,19 @@ export function defaultPlugins(options: {
   // focused — only useful for the replay harness (fakeView has no focus).
   // A real browser editor already draws its own caret, so a live editor
   // should pass `{ cursorWidget: false }`.
-  const { cursorWidget = true, extensions = [], resolveImageSource } = options;
+  const {
+    cursorWidget = true,
+    extensions = [],
+    resolveImageSource,
+  } = options;
   const sourceBlockPresentations = extensions.flatMap(
     (extension) => extension.sourceBlockPresentations ?? [],
+  );
+  const inlinePresentations = extensions.flatMap(
+    (extension) => extension.presentations?.inline ?? [],
+  );
+  const blockPresentations = extensions.flatMap(
+    (extension) => extension.presentations?.block ?? [],
   );
   const featureKeymap = collectKeymaps(schema);
   const plugins: Plugin[] = [
@@ -59,16 +69,18 @@ export function defaultPlugins(options: {
     markdownInputRules(),
     spaceBreaksStoredMarks(),
     manualEscapeDecorationPlugin(),
-    ...extensions.flatMap((extension) => extension.createPlugins({ schema })),
+    ...extensions.flatMap((extension) => extension.createPlugins?.({ schema }) ?? []),
     normalizeInlinePlugin({ resolveImageSource }),
     // Feature-contributed plugins sit after normalize (so block-draft
     // watchers see the post-normalize doc) and before syntaxHints (so any
     // extra decorations merge into PM's decoration pipeline naturally).
     ...collectPlugins(schema, {
-      parseMarkdown: parse,
-      serializeMarkdown: serialize,
       resolveImageSource,
       sourceBlockPresentations,
+    }),
+    extensionPresentationPlugin({
+      inline: inlinePresentations,
+      block: blockPresentations,
     }),
     syntaxHintsPlugin(),
     openLinkOnModClickPlugin(),
@@ -82,5 +94,9 @@ export function defaultPlugins(options: {
 }
 
 export function createState(doc: PMNode): EditorState {
-  return EditorState.create({ schema, doc, plugins: defaultPlugins() });
+  return EditorState.create({
+    schema,
+    doc,
+    plugins: defaultPlugins(),
+  });
 }

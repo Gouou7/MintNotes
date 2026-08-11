@@ -50,7 +50,7 @@
 .ProseMirror h6 { font-size: 0.85em; color: #59636e; }
 
 /* ─── paragraphs / br ─────────────────────────────────────────────── */
-.ProseMirror p { margin: 0 0 16px; }
+.ProseMirror p { margin: 0 0 16px; white-space: break-spaces; }
 .ProseMirror p:last-child { margin-bottom: 0; }
 
 /* ─── links ──────────────────────────────────────────────────────── */
