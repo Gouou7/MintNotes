@@ -34,7 +34,7 @@ export class SourcePositionMap {
       let to = numericAttr(node, SOURCE_TO_ATTR);
       if (
         from !== null
-        && ["paragraph", "source_gap", "source_block", "blockquote", "code_block"].includes(node.type.name)
+        && ["paragraph", "source_block", "blockquote", "code_block"].includes(node.type.name)
         && source.slice(from, from + node.textContent.length) === node.textContent
       ) {
         to = from + node.textContent.length;
@@ -44,6 +44,30 @@ export class SourcePositionMap {
         const contentTo = contentFrom + node.content.size;
         map.add(from, contentFrom);
         map.add(to, contentTo);
+
+        if (node.type.name === "source_gap") {
+          let sourceOffset = from;
+          node.forEach((child, relativePosition) => {
+            const documentStart = contentFrom + relativePosition;
+            if (child.isText) {
+              const text = child.text ?? "";
+              for (let index = 0; index <= text.length; index += 1) {
+                map.add(sourceOffset + index, documentStart + index);
+              }
+              sourceOffset += text.length;
+              return;
+            }
+            if (child.type.name === "source_gap_eol") {
+              const character = child.attrs.character;
+              if (character !== "\r" && character !== "\n") return;
+              map.add(sourceOffset, documentStart);
+              sourceOffset += 1;
+              map.add(sourceOffset, documentStart + child.nodeSize);
+            }
+          });
+          topLevelPosition += node.nodeSize;
+          return;
+        }
 
         const ownedSource = source.slice(from, to);
         let searchOffset = 0;

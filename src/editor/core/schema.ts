@@ -20,7 +20,7 @@ const coreNodes: Record<string, NodeSpec> = {
 
   source_gap: {
     group: "block",
-    content: "text*",
+    content: "(text | source_gap_eol)*",
     marks: "",
     code: true,
     defining: true,
@@ -29,6 +29,48 @@ const coreNodes: Record<string, NodeSpec> = {
       preserveWhitespace: "full",
     }],
     toDOM: () => ["pre", { "data-source-gap": "1", "aria-hidden": "true" }, ["code", 0]],
+  },
+
+  // Line-ending characters inside a source gap need stable document
+  // positions without letting <pre> turn the structural separators on both
+  // sides of a Markdown block boundary into additional visible rows. Each
+  // atom owns exactly one canonical character. Only atoms representing an
+  // authored blank row render a <br>; boundary atoms remain zero-width.
+  source_gap_eol: {
+    group: "inline",
+    inline: true,
+    atom: true,
+    selectable: false,
+    attrs: {
+      character: { default: "\n" },
+      visible: { default: true },
+    },
+    parseDOM: [
+      {
+        tag: "br[data-source-gap-eol]",
+        getAttrs: (el) => ({
+          character: (el as HTMLElement).getAttribute("data-source-gap-eol") === "cr" ? "\r" : "\n",
+          visible: true,
+        }),
+      },
+      {
+        tag: "span[data-source-gap-eol]",
+        getAttrs: (el) => ({
+          character: (el as HTMLElement).getAttribute("data-source-gap-eol") === "cr" ? "\r" : "\n",
+          visible: false,
+        }),
+      },
+    ],
+    toDOM: (node) => {
+      const kind = node.attrs.character === "\r" ? "cr" : "lf";
+      return node.attrs.visible
+        ? ["br", { "data-source-gap-eol": kind }]
+        : ["span", {
+            "data-source-gap-eol": kind,
+            "data-source-gap-hidden": "1",
+            contenteditable: "false",
+          }];
+    },
   },
 
   // Exact authored Markdown for a structured block whose delimiter position

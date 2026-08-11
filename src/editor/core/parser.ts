@@ -403,14 +403,51 @@ function topLevelSourceRanges(tokens: readonly Token[], source: string): SourceB
   return ranges;
 }
 
-function sourceGapNode(source: string, from: number, to: number): PMNode {
+function sourceGapContent(
+  source: string,
+  hideFirstLineEnding: boolean,
+  hideLastLineEnding: boolean,
+): PMNode[] {
+  const lineEndings = [...source.matchAll(/\r\n|\r|\n/g)];
+  const children: PMNode[] = [];
+  let cursor = 0;
+  const pushText = (text: string): void => {
+    if (text) children.push(schema.text(text));
+  };
+  for (const [index, match] of lineEndings.entries()) {
+    const start = match.index;
+    pushText(source.slice(cursor, start));
+    const ending = match[0];
+    const visible = !(hideFirstLineEnding && index === 0)
+      && !(hideLastLineEnding && index === lineEndings.length - 1);
+    for (let characterIndex = 0; characterIndex < ending.length; characterIndex += 1) {
+      const character = ending[characterIndex]!;
+      children.push(schema.nodes.source_gap_eol.createChecked({
+        character,
+        // CRLF is one authored line ending. Its CR remains a separately
+        // addressable source character while the LF alone owns presentation.
+        visible: visible && characterIndex === ending.length - 1,
+      }));
+    }
+    cursor = start + ending.length;
+  }
+  pushText(source.slice(cursor));
+  return children;
+}
+
+function sourceGapNode(
+  source: string,
+  from: number,
+  to: number,
+  fullSourceLength: number,
+): PMNode {
   const node = schema.nodes.source_gap.createChecked(
     {
       [SOURCE_FROM_ATTR]: from,
       [SOURCE_TO_ATTR]: to,
       [SOURCE_TEXT_ATTR]: source,
     },
-    source ? schema.text(source) : undefined,
+    sourceGapContent(source, from > 0, to < fullSourceLength),
   );
   return node.type.createChecked({
     ...node.attrs,
@@ -454,7 +491,7 @@ function addSourceGaps(doc: PMNode, tokens: readonly Token[], source: string): P
   if (!source) return doc;
   const ranges = topLevelSourceRanges(tokens, source);
   if (ranges.length === 0) {
-    return schema.nodes.doc.createChecked(null, [sourceGapNode(source, 0, source.length)]);
+    return schema.nodes.doc.createChecked(null, [sourceGapNode(source, 0, source.length, source.length)]);
   }
   if (ranges.length !== doc.childCount) return doc;
 
@@ -463,7 +500,12 @@ function addSourceGaps(doc: PMNode, tokens: readonly Token[], source: string): P
   doc.forEach((child, _offset, index) => {
     const range = ranges[index]!;
     if (range.from > cursor) {
-      children.push(sourceGapNode(source.slice(cursor, range.from), cursor, range.from));
+      children.push(sourceGapNode(
+        source.slice(cursor, range.from),
+        cursor,
+        range.from,
+        source.length,
+      ));
     }
     const authoredSource = source.slice(range.from, range.to);
     children.push(withSourceRange(
@@ -474,7 +516,7 @@ function addSourceGaps(doc: PMNode, tokens: readonly Token[], source: string): P
     cursor = range.to;
   });
   if (cursor < source.length) {
-    children.push(sourceGapNode(source.slice(cursor), cursor, source.length));
+    children.push(sourceGapNode(source.slice(cursor), cursor, source.length, source.length));
   }
   return schema.nodes.doc.createChecked(null, children);
 }

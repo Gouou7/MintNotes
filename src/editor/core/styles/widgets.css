@@ -64,6 +64,12 @@
   tab-size: inherit;
 }
 .ProseMirror pre[data-source-gap] > code { font: inherit; white-space: inherit; }
+.ProseMirror [data-source-gap-hidden] { display: none; }
+/* The source-gap row owns paragraph separation whenever it is present.
+ * Remove themed block margins on its two neighbors so the same authored
+ * blank line is not counted once by Markdown spacing and again by the gap. */
+.ProseMirror > :has(+ pre[data-source-gap]) { margin-bottom: 0; }
+.ProseMirror > pre[data-source-gap] + * { margin-top: 0; }
 .ProseMirror .hr-node-view {
   box-sizing: border-box;
   width: 100%;
@@ -114,6 +120,12 @@
 .ProseMirror .heading-draft-4,
 .ProseMirror .heading-draft-5,
 .ProseMirror .heading-draft-6 { font-weight: bold; }
+.ProseMirror .heading-draft-1 { font-size: 2em; }
+.ProseMirror .heading-draft-2 { font-size: 1.5em; }
+.ProseMirror .heading-draft-3 { font-size: 1.25em; }
+.ProseMirror .heading-draft-4 { font-size: 1.1em; }
+.ProseMirror .heading-draft-5 { font-size: 1em; }
+.ProseMirror .heading-draft-6 { font-size: .9em; }
 
 /* ─── play caret + selection marker (test-pretty / fakeView) ─────── */
 .ProseMirror .play-caret {
@@ -434,7 +446,17 @@ pre[data-source-block] > code {
   font: inherit;
   color: inherit;
 }
-pre[data-source-block][data-source-kind="heading"] {
-  font-size: 1.35em;
+pre[data-source-block][data-source-kind^="heading-"] {
   font-weight: 650;
+}
+pre[data-source-block][data-source-kind="heading-1"] { font-size: 2em; }
+pre[data-source-block][data-source-kind="heading-2"] { font-size: 1.5em; }
+pre[data-source-block][data-source-kind="heading-3"] { font-size: 1.25em; }
+pre[data-source-block][data-source-kind="heading-4"] { font-size: 1.1em; }
+pre[data-source-block][data-source-kind="heading-5"] { font-size: 1em; }
+pre[data-source-block][data-source-kind="heading-6"] { font-size: .9em; }
+
+.live-comment-source,
+.live-comment-widget {
+  display: none;
 }

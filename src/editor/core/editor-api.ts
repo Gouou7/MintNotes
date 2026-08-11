@@ -8,7 +8,6 @@
 
 import { EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
-import { closeHistory } from "prosemirror-history";
 
 import { defaultPlugins } from "./editor";
 import { parse } from "./parser";
@@ -28,6 +27,7 @@ import {
   type SourceTransaction,
 } from "./source";
 import { transactionSourceEffect } from "./source-transaction";
+import { liveSourceKeyTransaction } from "./live-source-commands";
 
 export interface EditorOptions {
   /** Initial markdown the editor opens with. Defaults to empty. */
@@ -90,6 +90,18 @@ export function createEditor(
   let view: EditorView;
   let inSource = false;
   let canonicalMarkdown = options.initialContent ?? "";
+  type SourceHistoryEntry = { source: string; selection: { anchor: number; head: number } };
+  const sourceUndo: SourceHistoryEntry[] = [];
+  const sourceRedo: SourceHistoryEntry[] = [];
+  const SOURCE_HISTORY_LIMIT = 500;
+
+  function rememberSourceHistory(
+    stack: SourceHistoryEntry[],
+    entry: SourceHistoryEntry,
+  ): void {
+    stack.push(entry);
+    if (stack.length > SOURCE_HISTORY_LIMIT) stack.shift();
+  }
 
   function sourceRangeAtOffset(offset: number): {
     pos: number;
@@ -97,6 +109,7 @@ export function createEditor(
     to: number;
     source: string;
     kind: string;
+    presentationKind: string;
   } | null {
     let found: ReturnType<typeof sourceRangeAtOffset> = null;
     view.state.doc.forEach((node, pos) => {
@@ -111,7 +124,10 @@ export function createEditor(
         && from <= offset
         && offset <= to
       ) {
-        found = { pos, from, to, source, kind: node.type.name };
+        const presentationKind = node.type.name === "heading"
+          ? `heading-${String(node.attrs.level ?? 1)}`
+          : node.type.name;
+        found = { pos, from, to, source, kind: node.type.name, presentationKind };
       }
     });
     return found;
@@ -126,7 +142,7 @@ export function createEditor(
     const sourceBlockType = schema.nodes.source_block;
     if (!sourceBlockType) return false;
     const base = sourceBlockType.createChecked({
-      kind: range.kind,
+      kind: range.presentationKind,
       [SOURCE_FROM_ATTR]: range.from,
       [SOURCE_TO_ATTR]: range.to,
       [SOURCE_TEXT_ATTR]: range.source,
@@ -148,7 +164,11 @@ export function createEditor(
     return true;
   }
 
-  function reparsePresentation(state: EditorState, sourceSelection: number): void {
+  function reparsePresentation(
+    state: EditorState,
+    sourceSelection: number,
+    reactivateSource = false,
+  ): void {
     const reparsed = parse(canonicalMarkdown);
     const repair = state.tr.replaceWith(0, state.doc.content.size, reparsed.content);
     const repairedPosition = SourcePositionMap.fromDocument(
@@ -161,13 +181,53 @@ export function createEditor(
     repair.setMeta("addToHistory", false);
     repair.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
     view.updateState(state.apply(repair));
+    if (reactivateSource) activateSourceBoundary(sourceSelection);
   }
 
-  function applyCanonicalTransaction(transaction: SourceTransaction): boolean {
+  function applyCanonicalTransaction(
+    transaction: SourceTransaction,
+    previousSelection: { anchor: number; head: number },
+  ): boolean {
     const applied = new CanonicalSource(canonicalMarkdown).apply(transaction);
     if (applied.source.value === canonicalMarkdown) return false;
+    rememberSourceHistory(sourceUndo, {
+      source: canonicalMarkdown,
+      selection: previousSelection,
+    });
+    sourceRedo.length = 0;
     canonicalMarkdown = applied.source.value;
     options.onChange?.(canonicalMarkdown);
+    return true;
+  }
+
+  function sourceSelectionForState(state: EditorState): { anchor: number; head: number } {
+    const positions = SourcePositionMap.fromDocument(state.doc, canonicalMarkdown);
+    return {
+      anchor: positions.documentToSource(state.selection.anchor, "left"),
+      head: positions.documentToSource(state.selection.head, "right"),
+    };
+  }
+
+  function applyAndRenderCanonicalTransaction(transaction: SourceTransaction): boolean {
+    const previousSelection = sourceSelectionForState(view.state);
+    if (!applyCanonicalTransaction(transaction, previousSelection)) return false;
+    reparsePresentation(view.state, transaction.selection.head, true);
+    return true;
+  }
+
+  function restoreSourceHistory(
+    from: SourceHistoryEntry[],
+    to: SourceHistoryEntry[],
+  ): boolean {
+    const target = from.pop();
+    if (!target) return false;
+    rememberSourceHistory(to, {
+      source: canonicalMarkdown,
+      selection: sourceSelectionForState(view.state),
+    });
+    canonicalMarkdown = target.source;
+    options.onChange?.(canonicalMarkdown);
+    reparsePresentation(view.state, target.selection.head, true);
     return true;
   }
 
@@ -191,14 +251,17 @@ export function createEditor(
       state,
       dispatchTransaction(tr) {
         const beforeCanonical = canonicalMarkdown;
+        const beforeSelection = sourceSelectionForState(v.state);
+        const editedSourceBlock = tr.docChanged
+          && v.state.selection.$head.parent.type.name === "source_block";
         const next = v.state.apply(tr);
         v.updateState(next);
         if (tr.docChanged && !tr.getMeta(SOURCE_BLOCK_PRESENTATION_META)) {
           const effect = transactionSourceEffect(tr, beforeCanonical);
           if (effect.kind === "source") {
-            const changed = applyCanonicalTransaction(effect.transaction);
-            if (changed && effect.reparseDerivedDocument) {
-              reparsePresentation(next, effect.transaction.selection.head);
+            const changed = applyCanonicalTransaction(effect.transaction, beforeSelection);
+            if (changed && (effect.reparseDerivedDocument || editedSourceBlock)) {
+              reparsePresentation(next, effect.transaction.selection.head, editedSourceBlock);
             }
           } else if (effect.kind === "unsupported") {
             // Undo/redo may replay a group of presentation and source steps
@@ -227,24 +290,64 @@ export function createEditor(
             canonicalMarkdown,
           ).documentToSource(currentState.selection.head, "right");
           reparsePresentation(currentState, sourceSelection);
+          return;
+        }
+        if (
+          !hasActivatedSourceBlock
+          && !tr.docChanged
+          && !tr.getMeta(SOURCE_BLOCK_PRESENTATION_META)
+        ) {
+          const sourceSelection = SourcePositionMap.fromDocument(
+            currentState.doc,
+            canonicalMarkdown,
+          ).documentToSource(currentState.selection.head, "right");
+          const range = sourceRangeAtOffset(sourceSelection);
+          if (range?.kind !== "table") activateSourceBoundary(sourceSelection);
         }
       },
       handleKeyDown(_view, event) {
+        const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+        const mod = isMac ? event.metaKey : event.ctrlKey;
         if (
-          (event.key === "Backspace" || event.key === "Delete")
+          mod
+          && event.key.toLowerCase() === "z"
+          && !event.altKey
+        ) {
+          if (event.shiftKey) restoreSourceHistory(sourceRedo, sourceUndo);
+          else restoreSourceHistory(sourceUndo, sourceRedo);
+          event.preventDefault();
+          return true;
+        }
+        if (
+          (event.key === "Enter"
+            || event.key === "Backspace"
+            || event.key === "Delete"
+            || event.key === "Tab")
           && !event.metaKey
           && !event.ctrlKey
           && !event.altKey
-          && view.state.selection.empty
-          && view.state.selection.$head.parent.isTextblock
         ) {
-          const { head } = view.state.selection;
-          const parentStart = head - view.state.selection.$head.parentOffset;
-          const parentEnd = parentStart + view.state.selection.$head.parent.content.size;
-          const from = event.key === "Backspace" ? head - 1 : head;
-          const to = event.key === "Backspace" ? head : head + 1;
-          if (from >= parentStart && to <= parentEnd && from < to) {
-            view.dispatch(view.state.tr.delete(from, to));
+          if (
+            event.key === "Backspace"
+            && view.state.selection.empty
+            && view.state.selection.$head.parentOffset === 0
+            && ["blockquote", "code_block", "source_block"].includes(
+              view.state.selection.$head.parent.type.name,
+            )
+          ) {
+            const selection = sourceSelectionForState(view.state);
+            if (selection.head > 0) setSelectionOffset(selection.head - 1);
+            event.preventDefault();
+            return true;
+          }
+          const transaction = liveSourceKeyTransaction(
+            canonicalMarkdown,
+            sourceSelectionForState(view.state),
+            event.key,
+            event.shiftKey,
+          );
+          if (transaction) {
+            applyAndRenderCanonicalTransaction(transaction);
             event.preventDefault();
             return true;
           }
@@ -282,6 +385,59 @@ export function createEditor(
       handleDOMEvents: {
         focus: () => { options.onFocus?.(); return false; },
         blur: () => { options.onBlur?.(); return false; },
+        copy: (_view, event) => {
+          const selection = sourceSelectionForState(view.state);
+          if (selection.anchor === selection.head || !event.clipboardData) return false;
+          const from = Math.min(selection.anchor, selection.head);
+          const to = Math.max(selection.anchor, selection.head);
+          event.clipboardData.setData("text/plain", canonicalMarkdown.slice(from, to));
+          event.preventDefault();
+          return true;
+        },
+        cut: (_view, event) => {
+          const selection = sourceSelectionForState(view.state);
+          if (selection.anchor === selection.head || !event.clipboardData) return false;
+          const from = Math.min(selection.anchor, selection.head);
+          const to = Math.max(selection.anchor, selection.head);
+          event.clipboardData.setData("text/plain", canonicalMarkdown.slice(from, to));
+          applyAndRenderCanonicalTransaction({
+            edits: [{ from, to, insert: "" }],
+            selection: { anchor: from, head: from },
+            origin: "delete",
+            reparseDerivedDocument: true,
+          });
+          event.preventDefault();
+          return true;
+        },
+      },
+      handleTextInput(_view, fromPosition, toPosition, text) {
+        const positions = SourcePositionMap.fromDocument(view.state.doc, canonicalMarkdown);
+        const from = positions.documentToSource(fromPosition, "right");
+        const to = positions.documentToSource(toPosition, "left");
+        if (to < from) return true;
+        const head = from + text.length;
+        applyAndRenderCanonicalTransaction({
+          edits: [{ from, to, insert: text }],
+          selection: { anchor: head, head },
+          origin: "input",
+          reparseDerivedDocument: true,
+        });
+        return true;
+      },
+      handlePaste(_view, event) {
+        const text = event.clipboardData?.getData("text/plain");
+        if (text == null) return false;
+        const selection = sourceSelectionForState(view.state);
+        const from = Math.min(selection.anchor, selection.head);
+        const to = Math.max(selection.anchor, selection.head);
+        const head = from + text.length;
+        applyAndRenderCanonicalTransaction({
+          edits: [{ from, to, insert: text }],
+          selection: { anchor: head, head },
+          origin: "paste",
+          reparseDerivedDocument: true,
+        });
+        return true;
       },
     });
     return v;
@@ -356,11 +512,6 @@ export function createEditor(
       canonicalMarkdown,
     ).documentToSource(view.state.selection.head);
   }
-  function mdOffsetToRenderedPos(md: string, offset: number): number {
-    const doc = parse(md);
-    return SourcePositionMap.fromDocument(doc, md).sourceToDocument(offset);
-  }
-
   function markdownOffsetAtPoint(clientX: number, clientY: number): number {
     if (inSource) return sourceTextarea.selectionStart ?? sourceTextarea.value.length;
     const position = view.posAtCoords({ left: clientX, top: clientY })?.pos
@@ -387,19 +538,18 @@ export function createEditor(
     if (inSource) {
       sourceTextarea.value = next;
       sourceTextarea.setSelectionRange(nextOffset, nextOffset);
+      canonicalMarkdown = next;
       autoSizeSource();
     } else {
-      canonicalMarkdown = next;
-      rebuild(next);
-      const position = Math.min(mdOffsetToRenderedPos(next, nextOffset), view.state.doc.content.size);
-      try {
-        view.dispatch(view.state.tr
-          .setSelection(TextSelection.near(view.state.doc.resolve(position)))
-          .scrollIntoView());
-      } catch {}
+      applyAndRenderCanonicalTransaction({
+        edits: [{ from: insertionOffset, to: insertionOffset, insert: markdown }],
+        selection: { anchor: nextOffset, head: nextOffset },
+        origin: "command",
+        reparseDerivedDocument: true,
+      });
       view.focus();
     }
-    options.onChange?.(next);
+    if (inSource) options.onChange?.(next);
   }
 
   function replaceMarkdown(markdown: string, offset?: number): void {
@@ -412,16 +562,18 @@ export function createEditor(
     if (inSource) {
       sourceTextarea.value = markdown;
       sourceTextarea.setSelectionRange(markdownOffset, markdownOffset);
+      canonicalMarkdown = markdown;
       autoSizeSource();
       options.onChange?.(markdown);
       return;
     }
 
-    canonicalMarkdown = markdown;
-    rebuild(markdown);
-    setSelectionOffset(markdownOffset);
-    options.onChange?.(markdown);
-    view.dispatch(closeHistory(view.state.tr));
+    applyAndRenderCanonicalTransaction({
+      edits: [{ from: 0, to: canonicalMarkdown.length, insert: markdown }],
+      selection: { anchor: markdownOffset, head: markdownOffset },
+      origin: "command",
+      reparseDerivedDocument: true,
+    });
     view.focus();
   }
 
@@ -521,6 +673,10 @@ export function createEditor(
       return inSource ? sourceTextarea.value : canonicalMarkdown;
     },
     setMarkdown(md: string): void {
+      if (md !== canonicalMarkdown) {
+        sourceUndo.length = 0;
+        sourceRedo.length = 0;
+      }
       if (inSource) {
         sourceTextarea.value = md;
         canonicalMarkdown = md;

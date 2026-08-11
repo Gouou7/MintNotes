@@ -9,10 +9,9 @@ export const headingSpecs: FeatureSpecs = {
       seed: "",
       events: ["#", " ", "a", "<Enter>"],
       checkpoints: [
-        // `#` alone: not entered (needs ` ` + content).
-        { at: 1, expect: "#|" },
-        // `# `: still not entered (pattern requires non-empty content).
-        { at: 2, expect: "# |" },
+        // Candidate heading level and syntax color update immediately.
+        { at: 1, expect: "<g>#</g>|" },
+        { at: 2, expect: "<g>#</g> |" },
         // `# a`: draft active — `# ` gets syntax-hint deco, content visible.
         { at: 3, expect: "<g># </g>a|" },
         // Enter commits the draft to a real heading; caret lands in a new
@@ -27,8 +26,8 @@ export const headingSpecs: FeatureSpecs = {
       seed: "",
       events: ["#", "#", "#", " ", "x", "<Enter>"],
       checkpoints: [
-        { at: 3, expect: "###|" },          // not entered
-        { at: 4, expect: "### |" },         // still not entered (empty content)
+        { at: 3, expect: "<g>###</g>|" },
+        { at: 4, expect: "<g>###</g> |" },
         { at: 5, expect: "<g>### </g>x|" }, // draft
         { at: 6, expect: "<h3>x</h3>\n|" }, // commit
       ],
@@ -40,7 +39,7 @@ export const headingSpecs: FeatureSpecs = {
       seed: "",
       events: ["#", " ", "<Enter>"],
       checkpoints: [
-        { at: 2, expect: "# |" },
+        { at: 2, expect: "<g>#</g> |" },
         // Enter on a "not entered" paragraph splits normally: two
         // paragraphs, caret at start of the second.
         { at: 3, expect: "# \n|" },
@@ -55,9 +54,9 @@ export const headingSpecs: FeatureSpecs = {
       checkpoints: [
         { at: 3, expect: "<g># </g>a|" },   // draft
         // Delete `a` → text is `# ` → pattern fails → draft exits → plain paragraph.
-        { at: 4, expect: "# |" },
+        { at: 4, expect: "<g>#</g> |" },
         // Delete the space → text is `#` → still paragraph, no deco.
-        { at: 5, expect: "#|" },
+        { at: 5, expect: "<g>#</g>|" },
       ],
     },
 

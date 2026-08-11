@@ -11,6 +11,7 @@ import { createEditor, type Editor as EditorController } from "./core/lib";
 import "./core/styles/widgets.css";
 import "./core/styles/theme-typora.css";
 import { createCalloutExtension } from "./extensions/callout";
+import { createCommentExtension } from "./extensions/comment";
 import { createMathExtension } from "./extensions/math";
 import { createMermaidExtension } from "./extensions/mermaid";
 import { createWikiLinkExtension } from "./extensions/wikilink";
@@ -123,6 +124,7 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
     const editor = createEditor(hostRef.current, {
       initialContent: renderedMarkdownRef.current,
       extensions: [
+        createCommentExtension(),
         createCalloutExtension({
           renderBlockquotePreview: (container, source) => {
             const root = createRoot(container);

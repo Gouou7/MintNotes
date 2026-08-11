@@ -344,6 +344,7 @@ describe("MarkdownEditor live mode", () => {
     const wikiLink = vi.mocked(createWikiLinkExtension).mock.calls[0]?.[0];
     expect(options?.initialContent).toBe("```mint-math\nE = mc^2\n```\n\n[[Guide]]");
     expect(options?.extensions?.map((extension) => extension.id)).toEqual([
+      "mint-comment",
       "mint-callout",
       "mint-math",
       "mint-mermaid",

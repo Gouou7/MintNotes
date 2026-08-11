@@ -75,6 +75,24 @@ describe("ProseMirror to canonical source transactions", () => {
     expect(transactionSourceEffect(transaction, source)).toMatchObject({
       kind: "source",
       transaction: { edits: [{ from, to: from + 1, insert: "" }] },
+      reparseDerivedDocument: true,
+    });
+  });
+
+  it("reparses text inserted into an authored blank line", () => {
+    const source = "a\n\nb";
+    const state = stateFor(source);
+    const sourceOffset = 2;
+    const position = SourcePositionMap.fromDocument(state.doc, source)
+      .sourceToDocument(sourceOffset);
+    expect(transactionSourceEffect(state.tr.insertText("x", position), source)).toEqual({
+      kind: "source",
+      transaction: {
+        edits: [{ from: sourceOffset, to: sourceOffset, insert: "x" }],
+        selection: { anchor: sourceOffset + 1, head: sourceOffset + 1 },
+        origin: "input",
+      },
+      reparseDerivedDocument: true,
     });
   });
 

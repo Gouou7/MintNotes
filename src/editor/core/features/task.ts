@@ -7,6 +7,8 @@ import type { EditorView } from "prosemirror-view";
 
 import type { FeatureSpec } from "./_types";
 import { liftNestedEmptyItemToBulletless } from "./list";
+import { SOURCE_FROM_ATTR, SOURCE_TEXT_ATTR } from "../source";
+import { SOURCE_TRANSACTION_META } from "../source-transaction";
 
 // Task list — implemented as an atom inline node `task_marker` that lives
 // at the start of a list_item's first paragraph. The node renders as a
@@ -157,11 +159,51 @@ function buildNodeView() {
       // every toggle (so checked → checked → checked instead of toggling).
       const cur = view.state.doc.nodeAt(pos);
       if (!cur) return;
-      view.dispatch(
-        view.state.tr.setNodeMarkup(pos, undefined, {
-          checked: !cur.attrs.checked,
-        }),
-      );
+      let topLevel: { node: PMNode; pos: number } | null = null;
+      view.state.doc.forEach((candidate, candidatePos) => {
+        if (
+          topLevel === null
+          && pos >= candidatePos
+          && pos < candidatePos + candidate.nodeSize
+        ) topLevel = { node: candidate, pos: candidatePos };
+      });
+      if (!topLevel) return;
+      const owner = topLevel as { node: PMNode; pos: number };
+      const sourceFrom = Number(owner.node.attrs[SOURCE_FROM_ATTR]);
+      const source = owner.node.attrs[SOURCE_TEXT_ATTR];
+      if (!Number.isInteger(sourceFrom) || sourceFrom < 0 || typeof source !== "string") return;
+
+      let markerIndex = 0;
+      owner.node.descendants((child, relativePos) => {
+        if (child.type.name === "task_marker" && owner.pos + 1 + relativePos < pos) {
+          markerIndex += 1;
+        }
+      });
+      const pattern = /^(\s*(?:[-+*]|\d+[.)])[\t ]+\[)([^\]\r\n])(\])/gm;
+      let sourceMatch: RegExpExecArray | null = null;
+      for (let index = 0; index <= markerIndex; index += 1) {
+        sourceMatch = pattern.exec(source);
+        if (!sourceMatch) return;
+      }
+      if (!sourceMatch) return;
+      const statusOffset = sourceMatch.index + sourceMatch[1]!.length;
+      const status = sourceMatch[2]!;
+      const replacement = status === " " ? "x" : " ";
+      const absoluteStatus = sourceFrom + statusOffset;
+      const tr = view.state.tr.setNodeMarkup(pos, undefined, {
+        checked: replacement !== " ",
+      });
+      tr.setMeta(SOURCE_TRANSACTION_META, {
+        edits: [{
+          from: absoluteStatus,
+          to: absoluteStatus + 1,
+          insert: replacement,
+        }],
+        selection: { anchor: absoluteStatus + 1, head: absoluteStatus + 1 },
+        origin: "command",
+        reparseDerivedDocument: true,
+      });
+      view.dispatch(tr);
     };
     dom.addEventListener("mousedown", onMousedown);
     dom.addEventListener("click", onClick);

@@ -110,6 +110,15 @@ describe("ReadOnlyMarkdown", () => {
     expect(html).not.toContain("<script");
   });
 
+  it("omits Obsidian comments from Reading mode", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={"visible %%secret%% text"} /></I18nProvider>
+    );
+    expect(html).toContain("visible  text");
+    expect(html).not.toContain("secret");
+    expect(html).not.toContain("%%");
+  });
+
   it("copies every line from a fenced code block", async () => {
     localStorage.setItem("webmd-notes-language", "en");
     const writeText = vi.fn().mockResolvedValue(undefined);

@@ -54,6 +54,11 @@ const widgetBuilders: Record<string, (attrs: Record<string, string>) => HTMLElem
     el.setAttribute("data-checked", attrs.checked === "1" ? "1" : "0");
     return el;
   },
+  "html-break": () => {
+    const el = document.createElement("br");
+    el.className = "html-break-render";
+    return el;
+  },
   "file-input": (attrs) => {
     // Wrapping element: PM marks widgets contenteditable=false but a real
     // <input type="file"> still misbehaves inside contenteditable (focus
@@ -115,6 +120,56 @@ function buildWidget(w: WidgetDecoration): HTMLElement {
 function buildDecorationSet(state: EditorState): DecorationSet {
   const decos: Decoration[] = [];
   const cursor = state.selection.empty ? state.selection.from : null;
+  state.doc.descendants((node, position) => {
+    if (node.type.name !== "source_block") return;
+    const kind = String(node.attrs.kind ?? "");
+    const source = node.textContent;
+    const hint = (from: number, to: number): void => {
+      if (to > from) decos.push(Decoration.inline(
+        position + 1 + from,
+        position + 1 + to,
+        { class: "syntax-hint" },
+      ));
+    };
+
+    if (kind.startsWith("heading-")) {
+      const atx = /^(#{1,6})([\t ]?)/.exec(source);
+      if (atx) hint(0, atx[0].length);
+      else {
+        const underline = /(?:^|\n)([=-]{3,})[\t ]*$/.exec(source);
+        if (underline) hint(underline.index + (underline[0].startsWith("\n") ? 1 : 0), source.length);
+      }
+      return false;
+    }
+
+    if (kind === "bullet_list" || kind === "ordered_list") {
+      const prefix = /^(\s*(?:[-+*]|\d+[.)])[\t ]+(?:\[[^\]\r\n]\][\t ]+)?)/gm;
+      let match: RegExpExecArray | null;
+      while ((match = prefix.exec(source))) hint(match.index, match.index + match[1]!.length);
+      return false;
+    }
+
+    if (kind === "table") {
+      for (let index = 0; index < source.length; index += 1) {
+        if (source[index] === "|") hint(index, index + 1);
+      }
+      const divider = /(?:^|\n)([\t ]*\|?[\t ]*:?-{3,}:?(?:[\t ]*\|[\t ]*:?-{3,}:?)*[\t ]*\|?)/g;
+      let match: RegExpExecArray | null;
+      while ((match = divider.exec(source))) {
+        const start = match.index + (match[0].startsWith("\n") ? 1 : 0);
+        hint(start, match.index + match[0].length);
+      }
+      return false;
+    }
+
+    if (kind === "reference_definition") {
+      const prefix = /^\[[^\]\r\n]+\]:[\t ]*/.exec(source);
+      if (prefix) hint(0, prefix[0].length);
+    } else if (kind === "toc") {
+      hint(0, source.length);
+    }
+    return false;
+  });
   for (const d of getDelims(state)) {
     const cursorInside =
       cursor !== null && cursor >= d.spanFrom && cursor <= d.spanTo;

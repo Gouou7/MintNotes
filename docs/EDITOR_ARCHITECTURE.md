@@ -72,7 +72,7 @@ Reading mode parses canonical Markdown without creating an editable copy. Render
 | Module | Responsibility |
 | --- | --- |
 | `src/editor/core/` | Canonical source transactions, explicit source-position mapping, derived parser/serializer, stable controller, and generic extension lifecycle. |
-| `src/editor/extensions/` | Product-specific Callout, Math, Mermaid, WikiLink, and similar Live presentations registered through `EditorExtension`. Math, Mermaid, and WikiLink are independent extensions rather than one combined rich-syntax plugin. |
+| `src/editor/extensions/` | Product-specific Callout, Comment, Math, Mermaid, WikiLink/Embed, and similar Live presentations registered through `EditorExtension`. These syntax types remain independent extensions rather than one combined rich-syntax plugin. |
 | Other `src/editor/` modules | React adapter, Source mode, image-drop routing, read-only rendering, and outline extraction. |
 | Vault components | Store canonical Markdown and call typed editor/controller APIs; they never receive a ProseMirror view or rendered DOM as document data. |
 
@@ -87,7 +87,7 @@ The derived document stores exact top-level source ranges. Authored whitespace b
 Core features and product extensions have deliberately different ownership:
 
 - A core feature recognizes portable Markdown grammar, owns its exact source range and invalid-input fallback, and defines source-position editing semantics. Headings, lists, tables, blockquotes, and fenced code remain core features even when their inactive Live presentation is visually rich.
-- A product extension recognizes or renders optional Mint Notes behavior over source already owned by the core. Callouts decorate source-backed blockquotes, Mermaid decorates fenced code, Math decorates authored math ranges, and WikiLink decorates authored inline ranges.
+- A product extension recognizes or renders optional Mint Notes behavior over source already owned by the core. Callouts decorate source-backed blockquotes, Mermaid decorates fenced code, Math decorates authored math ranges, and Comment and WikiLink/Embed decorate authored inline ranges. The explicitly supported `<br>` spelling is a core portable hard-break feature; arbitrary raw HTML remains disabled.
 - Reading mode has a separate React rendering adapter. It may share recognizers and rendering services with Live mode, but it does not mount a ProseMirror extension or create a second editable model.
 
 New product presentations use the declaration-only `EditorExtension.presentations` contract. An extension supplies exact source-local matches and a renderer; the core-owned presentation host creates ProseMirror decorations and widgets, activates source selection, runs cleanup, and falls back to literal authored source when a renderer fails. Declaration-only renderers do not receive an editor view and cannot dispatch a document transaction.

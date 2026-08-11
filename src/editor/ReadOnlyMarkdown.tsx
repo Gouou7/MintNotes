@@ -18,6 +18,7 @@ import {
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter } from "./frontmatter";
 import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
+import { stripCommentsForReading } from "./extensions/comment";
 import { MermaidDiagram } from "./richRenderers";
 import { remarkWikiLinks } from "./wikilinks";
 
@@ -87,7 +88,7 @@ export function ReadOnlyMarkdown({
   const allowedAttachmentUrls = new Set(attachmentUrls.values());
   const frontmatter = parseFrontmatter(markdown);
   const renderedMarkdown = materializeSingleLineDisplayMathForReading(
-    materializeAttachmentUrls(frontmatter.body, attachmentUrls)
+    stripCommentsForReading(materializeAttachmentUrls(frontmatter.body, attachmentUrls))
   );
 
   return (

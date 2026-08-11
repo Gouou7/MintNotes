@@ -1,5 +1,6 @@
 import type { Schema } from "prosemirror-model";
 import { Plugin, Selection, TextSelection } from "prosemirror-state";
+import { Decoration, DecorationSet } from "prosemirror-view";
 
 import { leaveLineDraft } from "../block-draft";
 import type { FeatureSpec } from "./_types";
@@ -23,6 +24,30 @@ import type { FeatureSpec } from "./_types";
 // block; we want the "unwrap in place" semantics Typora uses.
 
 const HEADING_RE = /^(#{1,6}) (.+)$/;
+const HEADING_CANDIDATE_RE = /^(#{1,6})(?: )?$/;
+
+function headingCandidatePlugin(): Plugin {
+  return new Plugin({
+    props: {
+      decorations(state) {
+        const selection = state.selection;
+        if (!selection.empty || selection.$from.parent.type.name !== "paragraph") {
+          return DecorationSet.empty;
+        }
+        const match = HEADING_CANDIDATE_RE.exec(selection.$from.parent.textContent);
+        if (!match) return DecorationSet.empty;
+        const position = selection.$from.before();
+        const start = selection.$from.start();
+        return DecorationSet.create(state.doc, [
+          Decoration.node(position, position + selection.$from.parent.nodeSize, {
+            class: `heading-draft-${match[1]!.length}`,
+          }),
+          Decoration.inline(start, start + match[1]!.length, { class: "syntax-hint" }),
+        ]);
+      },
+    },
+  });
+}
 
 // Typora-specific UX: ArrowDown inside a HEADING DRAFT line, at the very
 // end of the doc, spawns a fresh empty paragraph below and moves the
@@ -91,7 +116,11 @@ function makeHeadingPlugin(schema: Schema) {
 export const heading: FeatureSpec = {
   name: "heading",
 
-  plugins: (schema) => [makeHeadingPlugin(schema).plugin, headingArrowDownPlugin()],
+  plugins: (schema) => [
+    headingCandidatePlugin(),
+    makeHeadingPlugin(schema).plugin,
+    headingArrowDownPlugin(),
+  ],
 
   keymap: (schema) => ({
     // Empty heading + Backspace at start → unwrap to paragraph.

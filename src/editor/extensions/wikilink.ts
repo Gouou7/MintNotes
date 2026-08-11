@@ -14,7 +14,7 @@ function preventDefault(event: Event): void {
 }
 
 function wikiLinkPresentation(
-  onNavigate: NonNullable<WikiLinkExtensionOptions["onNavigate"]>,
+  onNavigate?: WikiLinkExtensionOptions["onNavigate"],
 ): InlineSourcePresentation<WikiLinkData> {
   return {
     id: "mint-wikilink-inline",
@@ -48,7 +48,54 @@ function wikiLinkPresentation(
       button.textContent = match.data.label;
       button.setAttribute("aria-label", match.data.target);
       button.addEventListener("mousedown", preventDefault);
-      const navigate = () => onNavigate(match.data.target);
+      const navigate = () => onNavigate?.(match.data.target);
+      button.addEventListener("click", navigate);
+      container.appendChild(button);
+      return () => {
+        button.removeEventListener("mousedown", preventDefault);
+        button.removeEventListener("click", navigate);
+        button.remove();
+      };
+    },
+  };
+}
+
+function wikiEmbedPresentation(
+  onNavigate?: WikiLinkExtensionOptions["onNavigate"],
+): InlineSourcePresentation<WikiLinkData> {
+  return {
+    id: "mint-wiki-embed-inline",
+    priority: 1,
+    sourceClassName: "live-wikilink-source",
+    widgetClassName: "live-wikilink-widget live-wiki-embed-widget",
+    find(source) {
+      const matches = [];
+      const pattern = /!\[\[([^\]\n]+)\]\]/g;
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(source))) {
+        const parts = match[1]!.split("|");
+        const target = (parts.shift() ?? "").trim();
+        const label = parts.join("|").trim() || target;
+        if (!target) continue;
+        matches.push({
+          from: match.index,
+          to: match.index + match[0].length,
+          source: match[0],
+          renderSource: label,
+          key: `${target}:${label}`,
+          data: { target, label },
+        });
+      }
+      return matches;
+    },
+    render(container, match) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "live-wikilink live-wiki-embed";
+      button.textContent = match.data.label;
+      button.setAttribute("aria-label", match.data.target);
+      button.addEventListener("mousedown", preventDefault);
+      const navigate = () => onNavigate?.(match.data.target);
       button.addEventListener("click", navigate);
       container.appendChild(button);
       return () => {
@@ -66,7 +113,10 @@ export function createWikiLinkExtension(
   return {
     id: "mint-wikilink",
     presentations: {
-      inline: options.onNavigate ? [wikiLinkPresentation(options.onNavigate)] : [],
+      inline: [
+        wikiEmbedPresentation(options.onNavigate),
+        wikiLinkPresentation(options.onNavigate),
+      ],
     },
   };
 }

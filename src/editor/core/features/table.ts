@@ -3,6 +3,8 @@ import { Plugin, TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 
 import type { FeatureSpec } from "./_types";
+import { SOURCE_FROM_ATTR, SOURCE_TEXT_ATTR, SOURCE_TO_ATTR } from "../source";
+import { SOURCE_TRANSACTION_META } from "../source-transaction";
 
 // GFM table — phase 1 (parse / serialize / display only). Live editor
 // input (typing `| col |` etc.) and cell navigation (Tab between cells,
@@ -61,6 +63,124 @@ type TableInfo = {
   cellIdx: number;
 };
 
+type AuthoredTable = {
+  source: string;
+  from: number;
+  to: number;
+};
+
+function authoredTable(info: TableInfo): AuthoredTable | null {
+  const source = info.node.attrs[SOURCE_TEXT_ATTR];
+  const from = Number(info.node.attrs[SOURCE_FROM_ATTR]);
+  const to = Number(info.node.attrs[SOURCE_TO_ATTR]);
+  return typeof source === "string"
+    && Number.isInteger(from)
+    && Number.isInteger(to)
+    && from >= 0
+    && to === from + source.length
+    ? { source, from, to }
+    : null;
+}
+
+type AuthoredTableLine = { cells: string[]; outerPipes: boolean };
+
+function splitAuthoredTableLine(line: string): AuthoredTableLine {
+  const outerPipes = /^\s*\|/.test(line) && /\|\s*$/.test(line);
+  const cells: string[] = [];
+  let cell = "";
+  let escaped = false;
+  for (const character of line) {
+    if (escaped) {
+      cell += character;
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      cell += character;
+      escaped = true;
+      continue;
+    }
+    if (character === "|") {
+      cells.push(cell);
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell);
+  if (outerPipes) {
+    cells.shift();
+    cells.pop();
+  }
+  return { cells, outerPipes };
+}
+
+function joinAuthoredTableLine(line: AuthoredTableLine): string {
+  const joined = line.cells.join("|");
+  return line.outerPipes ? `|${joined}|` : joined;
+}
+
+export function resizeAuthoredTableSource(source: string, rows: number, cols: number): string {
+  if (rows < 1 || cols < 1) return source;
+  const lines = source.split("\n");
+  const parsed = lines.map(splitAuthoredTableLine);
+  const outerPipes = parsed[0]?.outerPipes ?? true;
+  const resized: AuthoredTableLine[] = [];
+  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+    const existing = parsed[rowIndex];
+    const cells = existing ? existing.cells.slice(0, cols) : [];
+    while (cells.length < cols) cells.push(rowIndex === 1 ? " --- " : " ");
+    resized.push({ cells, outerPipes: existing?.outerPipes ?? outerPipes });
+  }
+  if (rows === 1) {
+    resized.push({
+      cells: Array.from({ length: cols }, () => " --- "),
+      outerPipes,
+    });
+  }
+  return resized.map(joinAuthoredTableLine).join("\n");
+}
+
+export function alignAuthoredTableSource(
+  source: string,
+  column: number,
+  align: "left" | "center" | "right" | null,
+): string {
+  const lines = source.split("\n");
+  if (lines.length < 2) return source;
+  const divider = splitAuthoredTableLine(lines[1]!);
+  const cell = divider.cells[column];
+  if (cell === undefined) return source;
+  const leading = /^\s*/.exec(cell)?.[0] ?? "";
+  const trailing = /\s*$/.exec(cell)?.[0] ?? "";
+  const width = Math.max(3, cell.trim().replaceAll(":", "").length);
+  const dashes = "-".repeat(width);
+  const marker = align === "left"
+    ? `:${dashes}`
+    : align === "right"
+      ? `${dashes}:`
+      : align === "center"
+        ? `:${dashes}:`
+        : dashes;
+  divider.cells[column] = `${leading}${marker}${trailing}`;
+  lines[1] = joinAuthoredTableLine(divider);
+  return lines.join("\n");
+}
+
+function bindTableSourceTransaction(
+  tr: import("prosemirror-state").Transaction,
+  table: AuthoredTable,
+  replacement: string,
+): void {
+  const head = table.from + replacement.length;
+  tr.setMeta(SOURCE_TRANSACTION_META, {
+    edits: [{ from: table.from, to: table.to, insert: replacement }],
+    selection: { anchor: head, head },
+    origin: "command",
+    reparseDerivedDocument: true,
+  });
+}
+
 function findTableAtSelection(state: import("prosemirror-state").EditorState): TableInfo | null {
   const $from = state.selection.$from;
   let cellDepth = -1;
@@ -97,6 +217,13 @@ function applyAlignToColumn(
     });
     pos += row.nodeSize;
   });
+  const table = authoredTable(info);
+  if (!table) return;
+  bindTableSourceTransaction(
+    tr,
+    table,
+    alignAuthoredTableSource(table.source, info.cellIdx, align),
+  );
   view.dispatch(tr);
   view.focus();
 }
@@ -109,6 +236,9 @@ function deleteTable(view: EditorView, info: TableInfo): void {
   const para = schema.nodes.paragraph.create();
   tr.replaceWith(start, end, para);
   tr.setSelection(TextSelection.create(tr.doc, start + 1));
+  const table = authoredTable(info);
+  if (!table) return;
+  bindTableSourceTransaction(tr, table, "");
   view.dispatch(tr);
   view.focus();
 }
@@ -163,6 +293,9 @@ function resizeTable(
   //   if rows=1: tableStart+1 (table) + 1 (row open) + 1 (cell open)
   const safePos = Math.min(firstBodyCell, tr.doc.content.size);
   tr.setSelection(TextSelection.create(tr.doc, safePos));
+  const table = authoredTable(info);
+  if (!table) return;
+  bindTableSourceTransaction(tr, table, resizeAuthoredTableSource(table.source, rows, cols));
   view.dispatch(tr);
   view.focus();
 }

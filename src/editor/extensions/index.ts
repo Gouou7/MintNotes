@@ -1,5 +1,6 @@
 export { createCalloutExtension, focusCalloutMarker } from "./callout";
 export type { CalloutExtensionOptions } from "./callout";
+export { createCommentExtension, stripCommentsForReading } from "./comment";
 export { createMathExtension } from "./math";
 export type { MathExtensionOptions } from "./math";
 export { createMermaidExtension } from "./mermaid";

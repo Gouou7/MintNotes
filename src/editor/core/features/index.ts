@@ -22,6 +22,7 @@ import { heading } from "./heading";
 import { highlight } from "./highlight";
 import { hr } from "./hr";
 import { htmlComment } from "./html-comment";
+import { htmlBreak } from "./html-break";
 import { image } from "./image";
 import { link } from "./link";
 import { refDef } from "./ref-def";
@@ -34,6 +35,7 @@ import { toc } from "./toc";
 
 export const ALL_FEATURES: FeatureSpec[] = [
   htmlComment,
+  htmlBreak,
   emoji,
   emphasis,
   code,

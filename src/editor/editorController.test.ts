@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createEditor, type EditorExtension, type EditorOptions } from "./core/lib";
 import { createCalloutExtension, focusCalloutMarker } from "./extensions/callout";
+import { createCommentExtension } from "./extensions/comment";
 import { createMathExtension } from "./extensions/math";
 import { createMermaidExtension } from "./extensions/mermaid";
 import { createWikiLinkExtension } from "./extensions/wikilink";
@@ -24,6 +25,7 @@ function createMintEditor(
   return createEditor(host, {
     ...editorOptions,
     extensions: [
+      createCommentExtension(),
       createCalloutExtension(),
       createMathExtension({
         renderInline: presentations?.renderMath,
@@ -152,6 +154,89 @@ describe("Mint editor core public controller", () => {
       editor.destroy();
     },
   );
+
+  it("toggles a task checkbox through one canonical source transaction", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const editor = createEditor(host, {
+      initialContent: "- [ ] task",
+      onChange: (markdown) => changes.push(markdown),
+    });
+    const checkbox = host.querySelector<HTMLElement>(".checkbox");
+    expect(checkbox).not.toBeNull();
+    checkbox?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(editor.getMarkdown()).toBe("- [x] task");
+    expect(changes).toEqual(["- [x] task"]);
+
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    editable?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(editor.getMarkdown()).toBe("- [ ] task");
+    editor.destroy();
+  });
+
+  it("keeps canonical command undo local to the current external document", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, { initialContent: "a" });
+    editor.insertMarkdown("b", 1);
+    expect(editor.getMarkdown()).toBe("ab");
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    editable?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(editor.getMarkdown()).toBe("a");
+
+    editor.setMarkdown("external");
+    host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(editor.getMarkdown()).toBe("external");
+    editor.destroy();
+  });
+
+  it("renders a source-backed HTML break and reveals its exact source for editing", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, { initialContent: "a<br>b" });
+    expect(host.querySelector("br.html-break-render")).not.toBeNull();
+    expect(host.querySelector(".syntax-hidden")?.textContent).toBe("<br>");
+    expect(editor.getMarkdown()).toBe("a<br>b");
+
+    editor.setSelectionOffset(3);
+    expect(host.querySelector("br.html-break-render")).toBeNull();
+    expect(host.querySelector(".syntax-hint")?.textContent).toBe("<br>");
+    expect(editor.getMarkdown()).toBe("a<br>b");
+    editor.destroy();
+  });
+
+  it("hides complete Obsidian comments until their authored range is selected", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createMintEditor(host, { initialContent: "before %%secret%% after" });
+    expect(host.querySelector(".live-comment-source")?.textContent).toBe("%%secret%%");
+    expect(editor.getMarkdown()).toBe("before %%secret%% after");
+
+    editor.setSelectionOffset(10);
+    expect(host.querySelector(".live-comment-source")).toBeNull();
+    expect(host.textContent).toContain("%%secret%%");
+    expect(editor.getMarkdown()).toBe("before %%secret%% after");
+    editor.destroy();
+  });
 
   const sourceEditBoundaryFixtures = [
     ...structuredSourceFixtures,
@@ -308,10 +393,21 @@ describe("Mint editor core public controller", () => {
     expect(softHost.querySelector(".ProseMirror > p")?.textContent).toBe("a\nb");
     soft.destroy();
 
+    const standardGapHost = document.createElement("div");
+    document.body.append(standardGapHost);
+    const standardGap = createEditor(standardGapHost, { initialContent: "a\n\nb" });
+    expect(standardGapHost.querySelectorAll("pre[data-source-gap] br[data-source-gap-eol]")).toHaveLength(0);
+    expect(standardGapHost.querySelectorAll("pre[data-source-gap] [data-source-gap-hidden]")).toHaveLength(2);
+    expect(standardGapHost.querySelectorAll("pre[data-source-gap] br")).toHaveLength(1);
+    expect(standardGap.getMarkdown()).toBe("a\n\nb");
+    standardGap.destroy();
+
     const blankHost = document.createElement("div");
     document.body.append(blankHost);
     const blank = createEditor(blankHost, { initialContent: "a\n\n\nb" });
-    expect(blankHost.querySelector("pre[data-source-gap]")?.textContent).toBe("\n\n\n");
+    expect(blankHost.querySelectorAll("pre[data-source-gap] br[data-source-gap-eol]")).toHaveLength(1);
+    expect(blankHost.querySelectorAll("pre[data-source-gap] [data-source-gap-hidden]")).toHaveLength(2);
+    expect(blankHost.querySelectorAll("pre[data-source-gap] br")).toHaveLength(2);
     expect(blank.getMarkdown()).toBe("a\n\n\nb");
     blank.destroy();
   });
@@ -333,9 +429,9 @@ describe("Mint editor core public controller", () => {
       cancelable: true,
     }));
 
-    expect(editor.getMarkdown()).toBe("a\n\nbc");
-    expect(changes).toEqual(["a\n\nbc"]);
-    expect(host.querySelectorAll(".ProseMirror > p")).toHaveLength(2);
+    expect(editor.getMarkdown()).toBe("a\nbc");
+    expect(changes).toEqual(["a\nbc"]);
+    expect(host.querySelectorAll(".ProseMirror > p")).toHaveLength(1);
 
     editor.destroy();
   });
@@ -478,8 +574,9 @@ describe("Mint editor core public controller", () => {
       cancelable: true,
     }));
     expect(lineHost.querySelector(".hr-node-view")).not.toBeNull();
-    expect(lineHost.querySelector("pre[data-source-gap]")?.textContent).toBe("\n\n");
-    expect(lineEditor.getMarkdown()).toBe("---\n\n");
+    expect(lineHost.querySelectorAll("pre[data-source-gap] br[data-source-gap-eol]")).toHaveLength(0);
+    expect(lineHost.querySelectorAll("pre[data-source-gap] [data-source-gap-hidden]")).toHaveLength(1);
+    expect(lineEditor.getMarkdown()).toBe("---\n");
 
     lineEditable.dispatchEvent(new KeyboardEvent("keydown", {
       key: "z",
@@ -498,7 +595,7 @@ describe("Mint editor core public controller", () => {
       bubbles: true,
       cancelable: true,
     }));
-    expect(lineEditor.getMarkdown()).toBe("---\n\n");
+    expect(lineEditor.getMarkdown()).toBe("---\n");
 
     const restoredRuleRow = lineHost.querySelector<HTMLElement>(".hr-node-view");
     if (!restoredRuleRow) throw new Error("Missing restored horizontal rule row");
@@ -550,7 +647,7 @@ describe("Mint editor core public controller", () => {
     extendedEditor.destroy();
   });
 
-  it("waits until Enter to turn a line-leading greater-than sign into a blockquote", async () => {
+  it("recognizes a line-leading greater-than candidate without changing its source", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
@@ -571,7 +668,7 @@ describe("Mint editor core public controller", () => {
       bubbles: true
     }));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(host.querySelector("blockquote")).toBeNull();
+    expect(host.querySelector("blockquote")).not.toBeNull();
     expect(editor.getMarkdown()).toBe(">");
 
     editable.dispatchEvent(new KeyboardEvent("keydown", {

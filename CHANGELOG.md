@@ -10,18 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added privacy-preserving server terminal logs with readable development output, structured production JSON, configurable levels, request IDs, process-local anonymous references, and high-value lifecycle, authentication, synchronization, administration, quota, and maintenance events.
 - Added scalable trash browsing in Settings: deleted folders start collapsed with descendant counts, title search and type filters reveal matching ancestor paths, deletion-time and name sorting are independent from the file tree, and long root lists load in batches.
+- Added source-aware Live editing commands for Enter, Shift+Enter, Tab, and Shift+Tab, including list and quote continuation, ordered-list numbering, task creation, Markdown hard breaks, and source-level indentation changes.
+- Added Live and Reading presentations for safe inline `<br>` hard breaks, Obsidian comments, and WikiLink embeds, while keeping their authored Markdown portable and editable.
+- Added source-backed table controls for resizing, column alignment, and table deletion without discarding retained cell spellings or escaped pipes.
 
 ### Changed
 
 - Refined deleted-item rows to match the file tree's compact borderless presentation, while keeping restore immediately available and moving permanent deletion into the more-actions menu.
 - Reworked Live blockquotes and Callouts as source-backed editor blocks. Activating a rendered preview now reveals the complete authored quote source—including prefixes, blank quoted lines, nested levels, and fenced content—within the same reserved layout footprint, while Callout rendering is provided through the editor extension lifecycle instead of a React overlay or private Markdown transformation.
 - Established exact Markdown string and whitespace fidelity as a release-blocking editor invariant, with a source-fidelity audit covering current normalization gaps, source-coordinate risks, invalid-syntax fallback, and the required cross-mode regression matrix.
+- Changed Live editing to keep source-level undo and redo independent from the derived ProseMirror view, while copy, cut, cursor movement, and delimiter activation continue to operate on canonical Markdown offsets.
+- Changed source-backed headings, lists, tasks, tables, reference definitions, and other structures to reveal their authored delimiters in place with muted syntax hints, preserving equivalent spellings and content styling as the caret moves.
 
 ### Fixed
 
 - Fixed encrypted images in Live mode remaining in a broken-source state after switching away from a note and back. Asynchronously restored Blob URLs now refresh only the presentation layer without changing canonical Markdown, undo history, focus, or caret position.
 - Fixed editing or deleting an empty line inside a blockquote or Callout collapsing its lines into one sequence of repeated `>` prefixes. Enter, Backspace, and Delete now operate the authored quote source in order, including moving to the previous editable line from the block's left edge instead of removing the delimiter to the caret's right.
 - Fixed Live blockquotes and Callouts shifting surrounding content when switching between rendered preview and source editing.
+- Fixed ordinary paragraph gaps in Live mode being rendered as several extra editable rows. Authored blank lines now occupy only their intended visual rows, retain every LF/CRLF character and whitespace boundary, and reparse immediately when edited.
+- Fixed Live structural edits losing source spelling or caret context after list, task, heading, table, and inline-syntax changes; incomplete delimiters now fall back to literal source without silently normalizing neighboring content.
 
 ## [0.13.0] - 2026-08-11
 

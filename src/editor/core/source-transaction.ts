@@ -36,6 +36,12 @@ function inlineFragmentSource(fragment: Fragment): string | null {
       source += `  ${String(node.attrs.eol ?? "\n")}`;
       return;
     }
+    if (node.type.name === "source_gap_eol") {
+      const character = node.attrs.character;
+      if (character !== "\r" && character !== "\n") supported = false;
+      else source += character;
+      return;
+    }
     // ReplaceStep slices produced by ordinary text input may retain an open
     // inline container. It is safe only when every descendant is inline.
     if (!node.isBlock && node.childCount > 0) {
@@ -84,6 +90,12 @@ export function transactionSourceEffect(
       reparseDerivedDocument = fencedCodeStructureSignature(editedParent.textContent)
         !== fencedCodeStructureSignature(afterParent.textContent);
     }
+  }
+  if (editedParent.type.name === "source_gap") {
+    // Any edit in source-backed whitespace can create or remove a Markdown
+    // block boundary. Reparse immediately so typed text becomes an ordinary
+    // paragraph instead of remaining inside a whitespace presentation node.
+    reparseDerivedDocument = true;
   }
   const positions = SourcePositionMap.fromDocument(before, canonicalSource);
   const from = positions.documentToSource(step.from, "right");
