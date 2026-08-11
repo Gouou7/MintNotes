@@ -4,6 +4,7 @@ import type { ServerConfig } from "../config.js";
 import type { AppDatabase } from "../database.js";
 import { cleanupUserHistory, HISTORY_CAPTURE_KINDS, historyUsage } from "../history.js";
 import { authenticatedScope, type AuthGuard } from "../types.js";
+import { LogReferenceFactory, logEvent } from "../logging.js";
 
 const envelopeField = z.string().min(16).max(2_000_000);
 const historyMetadataFields = {
@@ -63,9 +64,14 @@ function responseMetadata(row: HistoryRow) {
 
 export function registerHistoryRoutes(
   app: FastifyInstance,
-  dependencies: { db: AppDatabase; config: ServerConfig; authenticate: AuthGuard }
+  dependencies: {
+    db: AppDatabase;
+    config: ServerConfig;
+    authenticate: AuthGuard;
+    logRefs: LogReferenceFactory;
+  }
 ) {
-  const { db, config, authenticate } = dependencies;
+  const { db, config, authenticate, logRefs } = dependencies;
 
   const historySettingsSchema = z.object({
     enabled: z.boolean().optional(),
@@ -260,6 +266,10 @@ export function registerHistoryRoutes(
       + Buffer.byteLength(parsed.data.metadataCiphertext ?? "", "utf8");
     const usage = historyUsage(db, userId);
     if (usage.usedBytes + byteSize > config.userHistoryQuotaBytes) {
+      logEvent(request.log, "warn", "storage.quota_rejected", {
+        actorRef: logRefs.create("user", userId),
+        resource: "history"
+      });
       return reply.code(413).send({ error: "Note history quota exceeded" });
     }
     try {
@@ -332,6 +342,10 @@ export function registerHistoryRoutes(
     const byteSize = Buffer.byteLength(row.ciphertext, "utf8") + Buffer.byteLength(metadataCiphertext ?? "", "utf8");
     const growth = Math.max(0, byteSize - row.byte_size);
     if (historyUsage(db, userId).usedBytes + growth > config.userHistoryQuotaBytes) {
+      logEvent(request.log, "warn", "storage.quota_rejected", {
+        actorRef: logRefs.create("user", userId),
+        resource: "history"
+      });
       return reply.code(413).send({ error: "Note history quota exceeded" });
     }
     db.transaction(() => {

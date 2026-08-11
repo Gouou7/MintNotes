@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { LOG_LEVELS, type LogLevel } from "./logging.js";
 
 export interface ServerConfig {
   host: string;
@@ -12,10 +13,15 @@ export interface ServerConfig {
   appOrigin?: string;
   production: boolean;
   trustProxy: boolean;
+  logLevel: LogLevel;
 }
 
 export function loadServerConfig(environment: NodeJS.ProcessEnv = process.env): ServerConfig {
   const production = environment.NODE_ENV === "production";
+  const requestedLogLevel = environment.LOG_LEVEL ?? "info";
+  if (!LOG_LEVELS.includes(requestedLogLevel as LogLevel)) {
+    throw new Error(`Invalid LOG_LEVEL: ${requestedLogLevel}`);
+  }
   return {
     host: environment.HOST ?? "127.0.0.1",
     port: Number(environment.PORT ?? 8787),
@@ -27,6 +33,7 @@ export function loadServerConfig(environment: NodeJS.ProcessEnv = process.env): 
     sessionTtlHours: Number(environment.SESSION_TTL_HOURS ?? 168),
     appOrigin: environment.APP_ORIGIN || undefined,
     production,
-    trustProxy: environment.TRUST_PROXY === "true"
+    trustProxy: environment.TRUST_PROXY === "true",
+    logLevel: requestedLogLevel as LogLevel
   };
 }

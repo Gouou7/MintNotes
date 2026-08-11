@@ -12,6 +12,9 @@ services:
       # the loopback-only port mapping below.
       HOST: ${HOST:-0.0.0.0}
       PORT: ${PORT:-8787}
+      # Production logs are structured JSON. Raise to debug temporarily when
+      # diagnosing an issue; never place secrets in log configuration.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       # Public registration after the bootstrap administrator is opt-in.
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
       # Server attachment limit and per-user encrypted object/chunk quota (MiB).

@@ -5,64 +5,98 @@ import { SyncEventHub } from "./syncEvents.js";
 import { purgeExpiredTrash } from "./trash.js";
 import { cleanupInactiveEndpoints } from "./account/endpoints.js";
 import { cleanupOrphanAttachmentChunks } from "./attachments/cleanup.js";
+import { logEvent, safeError } from "./logging.js";
 
 export interface MaintenanceController {
   stop: () => void;
 }
 
+export interface MaintenanceOperations {
+  purgeTrash: typeof purgeExpiredTrash;
+  cleanupHistory: typeof cleanupAllHistory;
+  cleanupEndpoints: typeof cleanupInactiveEndpoints;
+  cleanupAttachments: typeof cleanupOrphanAttachmentChunks;
+}
+
+const DEFAULT_OPERATIONS: MaintenanceOperations = {
+  purgeTrash: purgeExpiredTrash,
+  cleanupHistory: cleanupAllHistory,
+  cleanupEndpoints: cleanupInactiveEndpoints,
+  cleanupAttachments: cleanupOrphanAttachmentChunks
+};
+
 export function startMaintenanceJobs(
   db: AppDatabase,
   syncEvents: SyncEventHub,
-  logger: FastifyBaseLogger
+  logger: FastifyBaseLogger,
+  operations: MaintenanceOperations = DEFAULT_OPERATIONS
 ): MaintenanceController {
-  purgeExpiredTrash(db);
-  cleanupAllHistory(db);
-  cleanupInactiveEndpoints(db);
-  cleanupOrphanAttachmentChunks(db);
-  const trashCleanupTimer = setInterval(() => {
+  const runTrashCleanup = () => {
     try {
-      const purged = purgeExpiredTrash(db, new Date().toISOString(), (changes) => {
+      const purged = operations.purgeTrash(db, new Date().toISOString(), (changes) => {
         const latestByUser = new Map<string, number>();
         for (const change of changes) {
           latestByUser.set(change.userId, Math.max(latestByUser.get(change.userId) ?? 0, change.cursor));
         }
         for (const [userId, cursor] of latestByUser) syncEvents.publish(userId, cursor);
       });
-      if (purged) logger.info({ purged }, "expired trash purged");
+      logEvent(logger, purged ? "info" : "debug", "maintenance.completed", {
+        job: "trash",
+        affected: purged
+      });
     } catch (error) {
-      logger.error(error, "trash retention cleanup failed");
+      logEvent(logger, "error", "maintenance.failed", { job: "trash", ...safeError(error) });
     }
-  }, 60 * 60 * 1000);
+  };
+
+  const runHistoryCleanup = () => {
+    try {
+      const deleted = operations.cleanupHistory(db);
+      logEvent(logger, deleted ? "info" : "debug", "maintenance.completed", {
+        job: "history",
+        affected: deleted
+      });
+    } catch (error) {
+      logEvent(logger, "error", "maintenance.failed", { job: "history", ...safeError(error) });
+    }
+  };
+
+  const runEndpointCleanup = () => {
+    try {
+      const deleted = operations.cleanupEndpoints(db);
+      logEvent(logger, deleted ? "info" : "debug", "maintenance.completed", {
+        job: "endpoints",
+        affected: deleted
+      });
+    } catch (error) {
+      logEvent(logger, "error", "maintenance.failed", { job: "endpoints", ...safeError(error) });
+    }
+  };
+
+  const runAttachmentCleanup = () => {
+    try {
+      const deleted = operations.cleanupAttachments(db);
+      logEvent(logger, deleted ? "info" : "debug", "maintenance.completed", {
+        job: "attachments",
+        affected: deleted
+      });
+    } catch (error) {
+      logEvent(logger, "error", "maintenance.failed", { job: "attachments", ...safeError(error) });
+    }
+  };
+
+  runTrashCleanup();
+  runHistoryCleanup();
+  runEndpointCleanup();
+  runAttachmentCleanup();
+
+  const trashCleanupTimer = setInterval(runTrashCleanup, 60 * 60 * 1000);
+  const historyCleanupTimer = setInterval(runHistoryCleanup, 60 * 60 * 1000);
+  const endpointCleanupTimer = setInterval(runEndpointCleanup, 60 * 60 * 1000);
+  const attachmentCleanupTimer = setInterval(runAttachmentCleanup, 60 * 60 * 1000);
   trashCleanupTimer.unref();
-
-  const historyCleanupTimer = setInterval(() => {
-    try {
-      const deleted = cleanupAllHistory(db);
-      if (deleted) logger.info({ deleted }, "expired note history cleaned");
-    } catch (error) {
-      logger.error(error, "note history cleanup failed");
-    }
-  }, 60 * 60 * 1000);
   historyCleanupTimer.unref();
-
-  const endpointCleanupTimer = setInterval(() => {
-    try {
-      const deleted = cleanupInactiveEndpoints(db);
-      if (deleted) logger.info({ deleted }, "inactive login devices cleaned");
-    } catch (error) {
-      logger.error(error, "inactive login device cleanup failed");
-    }
-  }, 60 * 60 * 1000);
   endpointCleanupTimer.unref();
-
-  const attachmentCleanupTimer = setInterval(() => {
-    try {
-      const deleted = cleanupOrphanAttachmentChunks(db);
-      if (deleted) logger.info({ deleted }, "orphan attachment chunks cleaned");
-    } catch (error) {
-      logger.error(error, "orphan attachment cleanup failed");
-    }
-  }, 60 * 60 * 1000);
   attachmentCleanupTimer.unref();
 
   return {

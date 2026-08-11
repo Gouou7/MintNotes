@@ -5,6 +5,7 @@ import type { AppDatabase } from "../database.js";
 import { createSessionToken, hashToken, verifyOpaqueSecret } from "../security.js";
 import { SyncEventHub } from "../syncEvents.js";
 import type { AuthGuard, SessionUser } from "../types.js";
+import { LogReferenceFactory, logEvent } from "../logging.js";
 
 const secretField = z.string().min(20).max(1024);
 const usernameField = z.string().trim().toLowerCase().regex(/^[a-z0-9][a-z0-9._-]{2,47}$/);
@@ -15,9 +16,10 @@ export function registerAdminRoutes(
     db: AppDatabase;
     syncEvents: SyncEventHub;
     requireAdmin: AuthGuard;
+    logRefs: LogReferenceFactory;
   }
 ) {
-  const { db, syncEvents, requireAdmin } = dependencies;
+  const { db, syncEvents, requireAdmin, logRefs } = dependencies;
 
   app.get("/api/admin/users", { preHandler: requireAdmin }, async () => {
     const users = db.prepare(`
@@ -98,6 +100,11 @@ export function registerAdminRoutes(
       now.toISOString(),
       expires.toISOString()
     );
+    logEvent(request.log, "info", "admin.account_setup_created", {
+      actorRef: logRefs.create("user", request.sessionUser!.id),
+      setupRef: logRefs.create("setup", id),
+      expiresInHours: parsed.data.expiresInHours
+    });
     return reply.code(201).send({
       id,
       username: parsed.data.username,
@@ -112,6 +119,10 @@ export function registerAdminRoutes(
     if (!setupId.success) return reply.code(404).send({ error: "Account setup not found" });
     const result = db.prepare("DELETE FROM account_setups WHERE id = ?").run(setupId.data);
     if (!result.changes) return reply.code(404).send({ error: "Account setup not found" });
+    logEvent(request.log, "info", "admin.account_setup_deleted", {
+      actorRef: logRefs.create("user", request.sessionUser!.id),
+      setupRef: logRefs.create("setup", setupId.data)
+    });
     return { ok: true };
   });
 
@@ -137,6 +148,11 @@ export function registerAdminRoutes(
       })();
       syncEvents.closeUser(targetId.data);
     }
+    logEvent(request.log, "info", "admin.account_status_changed", {
+      actorRef: logRefs.create("user", request.sessionUser!.id),
+      targetRef: logRefs.create("user", targetId.data),
+      disabled: body.data.disabled
+    });
     return { ok: true };
   });
 
@@ -179,6 +195,10 @@ export function registerAdminRoutes(
       db.prepare("DELETE FROM users WHERE id = ?").run(targetId.data);
     })();
     syncEvents.closeUser(targetId.data);
+    logEvent(request.log, "info", "admin.account_deleted", {
+      actorRef: logRefs.create("user", administrator.id),
+      targetRef: logRefs.create("user", targetId.data)
+    });
     return { ok: true };
   });
 }

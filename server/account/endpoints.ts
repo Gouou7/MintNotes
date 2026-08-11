@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppDatabase } from "../database.js";
 import { SyncEventHub } from "../syncEvents.js";
 import type { AuthGuard, SessionContext, SessionUser } from "../types.js";
+import { LogReferenceFactory, logEvent } from "../logging.js";
 
 const SESSION_REVOCATION_AGE_MS = 24 * 60 * 60 * 1000;
 export const INACTIVE_ENDPOINT_RETENTION_DAYS = 30;
@@ -39,9 +40,14 @@ export function cleanupInactiveEndpoints(db: AppDatabase, now = new Date()): num
 
 export function registerEndpointRoutes(
   app: FastifyInstance,
-  dependencies: { db: AppDatabase; syncEvents: SyncEventHub; authenticate: AuthGuard }
+  dependencies: {
+    db: AppDatabase;
+    syncEvents: SyncEventHub;
+    authenticate: AuthGuard;
+    logRefs: LogReferenceFactory;
+  }
 ) {
-  const { db, syncEvents, authenticate } = dependencies;
+  const { db, syncEvents, authenticate, logRefs } = dependencies;
 
   app.get("/api/account/endpoints", { preHandler: authenticate }, async (request) => {
     const user = request.sessionUser as SessionUser;
@@ -117,6 +123,11 @@ export function registerEndpointRoutes(
     if (!target.active || target.revoked_at !== null) {
       db.prepare("DELETE FROM trusted_endpoints WHERE endpoint_id = ? AND user_id = ?")
         .run(endpointId.data, user.id);
+      logEvent(request.log, "info", "account.endpoint_changed", {
+        actorRef: logRefs.create("user", user.id),
+        endpointRef: logRefs.create("endpoint", endpointId.data),
+        action: "removed"
+      });
       return { ok: true, action: "removed" };
     }
 
@@ -132,6 +143,11 @@ export function registerEndpointRoutes(
         .run(revokedAt, endpointId.data, user.id);
     })();
     syncEvents.closeEndpoint(user.id, endpointId.data);
+    logEvent(request.log, "info", "account.endpoint_changed", {
+      actorRef: logRefs.create("user", user.id),
+      endpointRef: logRefs.create("endpoint", endpointId.data),
+      action: "signed_out"
+    });
     return { ok: true, action: "signed-out" };
   });
 }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ServerConfig } from "../config.js";
 import type { AppDatabase } from "../database.js";
 import { authenticatedScope, type AuthGuard } from "../types.js";
+import { LogReferenceFactory, logEvent } from "../logging.js";
 
 export function registerAttachmentRoutes(
   app: FastifyInstance,
@@ -10,9 +11,10 @@ export function registerAttachmentRoutes(
     db: AppDatabase;
     config: ServerConfig;
     authenticate: AuthGuard;
+    logRefs: LogReferenceFactory;
   }
 ) {
-  const { db, config, authenticate } = dependencies;
+  const { db, config, authenticate, logRefs } = dependencies;
   const chunkHeaderSchema = z.object({
     "x-webmd-nonce": z.string().min(16).max(200),
     "x-webmd-total-chunks": z.coerce.number().int().min(1)
@@ -76,6 +78,10 @@ export function registerAttachmentRoutes(
         AS bytes
     `).get(scope.userId, scope.userId) as { bytes: number }).bytes);
     if (used + body.byteLength > config.userStorageQuotaBytes) {
+      logEvent(request.log, "warn", "storage.quota_rejected", {
+        actorRef: logRefs.create("user", scope.userId),
+        resource: "attachments"
+      });
       return reply.code(413).send({ error: "User storage quota exceeded" });
     }
     db.prepare(`

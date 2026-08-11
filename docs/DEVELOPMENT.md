@@ -39,6 +39,18 @@ pnpm dev:web
 pnpm dev:server
 ```
 
+The development server formats logs as colored, readable single lines. It logs
+one completion record per API request except health checks and static assets,
+plus important authentication, conflict, quota, administration, and maintenance
+events. Use `LOG_LEVEL=debug pnpm dev:server` when detailed synchronization
+batch summaries are required. Production uses the same event fields as JSON.
+
+Every API response includes a server-generated `X-Request-ID` for correlation.
+Log only through the typed helpers in `server/logging.ts`: never pass a request,
+headers, cookies, body, response, username, complete internal ID, ciphertext,
+nonce, or secret to a logger. User, object, endpoint, and account-setup IDs must
+first be converted to process-local anonymous references.
+
 ## Project layout
 
 | Path | Responsibility |
@@ -58,7 +70,7 @@ pnpm dev:server
 | `server/index.ts` and `server/app.ts` | Process startup and dependency composition; neither file owns route or SQL behavior. |
 | `server/auth/`, `server/account/`, `server/admin/`, `server/attachments/`, `server/history/`, and `server/sync/` | Session-derived guards, account endpoint lifecycle, domain routes, validation, and repositories. User-owned operations receive authenticated scope rather than a request-supplied user ID. |
 | `src/features/vault/VaultWorkspace.tsx` and `server/routes.ts` | Integration coordinators retained while remaining account/document workflows are extracted. Document-save scheduling, pull/cursor application, purge storage, outbox acknowledgement, history persistence, and history/attachment server routes are delegated to focused modules. They are not extension points. |
-| Other `server/` modules | SQLite schema, history/trash policies, synchronization events, maintenance jobs, and online backup. |
+| Other `server/` modules | Structured logging, SQLite schema, history/trash policies, synchronization events, maintenance jobs, and online backup. |
 | `scripts/` | Crypto Worker integration test and API smoke test. |
 | `deploy/` | Reverse-proxy example. |
 | `docs/` | Task-oriented documentation and its [navigation index](README.md). |

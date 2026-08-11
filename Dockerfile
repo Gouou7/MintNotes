@@ -37,6 +37,7 @@ RUN set -eu; \
   if [ "$status" -ne 0 ] && [ "$status" -ne 134 ]; then exit "$status"; fi; \
   test -e node_modules/better-sqlite3; \
   test ! -e node_modules/vitest; \
+  test ! -e node_modules/pino-pretty; \
   apt-get purge -y --auto-remove python3 make g++
 
 FROM node:22-bookworm-slim AS runtime

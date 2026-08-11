@@ -8,6 +8,27 @@ The application is designed to keep note titles, Markdown, tags, custom history 
 
 The server necessarily observes usernames, display names, roles, account status, a random vault-envelope context and its version, trash/history-retention preferences, history capture frequency and enablement, whether encrypted avatar, legacy workspace, or history records exist, random note/history IDs, history capture times and capture kinds, the history protection bit, protected-history relationships to random attachment UUIDs, avatar/legacy-workspace/history ciphertext sizes and update times, random user/content/session/endpoint IDs, an ephemeral random synchronization-client ID, the reserved legacy workspace object ID, ciphertext sizes, object counts, revisions, synchronization times, browser/device summaries, IP addresses, login counts and activity times, remembered status, and access patterns. These protected attachment references deliberately reveal random-ID relationships so server cleanup can preserve ciphertext without learning attachment names, MIME types, bytes, keys, or the custom history name. SSE notifications expose only a user-scoped change cursor to the authenticated browser and do not carry object IDs or ciphertext. Current clients do not send active/open note identifiers, editor mode, or sidebar state to the server; these fields remain in per-user device-local preferences. Opaque legacy workspace records may remain on the server during rolling upgrades but are ignored by current clients. The server also does not receive historical titles, Markdown, tags, custom history names, note lock state, attachment names or bytes, the avatar image, or avatar MIME type in plaintext. Users can view their own trusted-endpoint and encrypted note-history metadata; administrators can view account identity, status, object count, and aggregate ciphertext storage usage. Inactive endpoint metadata is bounded: a user may remove it immediately, and the server removes it automatically after 30 days.
 
+## Operational logging boundary
+
+The server writes structured operational events to stdout only. Production uses
+JSON and development uses readable text; there is no browser log-ingestion
+endpoint, application log file, SQLite log table, or application-managed
+retention. Operators must protect and expire collected logs separately.
+
+API completion logs contain a server-generated request ID, HTTP method,
+parameterized route, status code, and duration. Selected security and lifecycle
+events add outcome categories, counts, or short references produced by a keyed
+HMAC with a random in-memory process salt. These references permit correlation
+only during one process lifetime and change after restart.
+
+Logs must not contain raw URLs or query strings, IP addresses, usernames,
+display names, complete internal IDs, request or response headers, cookies,
+bodies, authentication or recovery secrets, activation codes, encryption keys,
+ciphertext, nonces, attachment bytes, or client plaintext. Typed event fields,
+request-log suppression, route templates, and logger redaction provide layered
+enforcement. Request IDs and the remaining timing, status, event, count, and
+anonymous-reference metadata are still sensitive and may reveal access patterns.
+
 ## Threats covered by the design
 
 - Theft of the SQLite database or an application backup.

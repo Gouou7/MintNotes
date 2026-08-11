@@ -27,6 +27,7 @@ cp .env.example .env
 | `PGID` | `1000` | Non-zero numeric Linux group ID used to run the Compose container. Match the owner of the host-side data directory. |
 | `HOST` | `0.0.0.0` | Address used inside the container. Keep the default for Compose. |
 | `PORT` | `8787` | HTTP port used inside the container. The supplied Compose mapping expects `8787`. |
+| `LOG_LEVEL` | `info` | Minimum terminal log level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or `silent`. Invalid values stop startup. |
 | `APP_ORIGIN` | none | Exact browser origin allowed for state-changing requests, including scheme and non-default port. Required in production. |
 | `ALLOW_REGISTRATION` | `false` | Enables public registration after the first account. Administrator-created activation codes are unaffected. |
 | `MAX_ATTACHMENT_SIZE_MB` | `25` | Server-side encrypted attachment limit. The bundled browser client also has a 25 MiB limit; raising only this variable does not raise the client limit. |
@@ -40,6 +41,7 @@ Recommended production values:
 ```env
 PUID=1000
 PGID=1000
+LOG_LEVEL=info
 APP_ORIGIN=https://notes.example.com
 ALLOW_REGISTRATION=false
 MAX_ATTACHMENT_SIZE_MB=25
@@ -50,6 +52,30 @@ TRUST_PROXY=true
 ```
 
 Do not put passwords, recovery keys, or encryption keys in `.env`; the service does not need them.
+
+## Server logs
+
+The application writes logs only to the process terminal. Production emits one
+JSON object per line for Docker or another log collector; local development uses
+colored, single-line text. View recent container output with:
+
+```bash
+docker compose logs --tail=100 notes
+```
+
+At the default `info` level, each API completion is logged once together with
+high-value authentication, synchronization conflict, quota, administration,
+and maintenance events. Health checks and static assets are omitted. Set
+`LOG_LEVEL=debug` temporarily for high-frequency synchronization summaries, then
+return it to `info`. File rotation and retention belong to Docker or the host;
+Mint Notes does not create a log file or store logs in SQLite.
+
+Request records contain a server-generated request ID, HTTP method, parameterized
+route, status, and duration. Responses expose the same value in `X-Request-ID`.
+Logs intentionally omit raw URLs and query strings, IP addresses, usernames,
+display names, complete user/object/endpoint IDs, headers, cookies, bodies,
+ciphertext, nonces, and secrets. Treat the remaining operational metadata and
+anonymous per-process references as sensitive deployment data.
 
 The production image always stores the SQLite database, WAL files, and online
 backups under `/data`. Keep the container side of the volume mapping fixed at

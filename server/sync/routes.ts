@@ -6,6 +6,7 @@ import { SyncEventHub } from "../syncEvents.js";
 import { purgeTargets } from "../trash.js";
 import { authenticatedScope, type AuthGuard, type SessionUser } from "../types.js";
 import { objectBatchSchema, objectSchema, StorageQuotaError, writeObject } from "./objectStore.js";
+import { LogReferenceFactory, logEvent } from "../logging.js";
 
 export function registerSyncRoutes(
   app: FastifyInstance,
@@ -14,9 +15,10 @@ export function registerSyncRoutes(
     syncEvents: SyncEventHub;
     authenticate: AuthGuard;
     config: ServerConfig;
+    logRefs: LogReferenceFactory;
   }
 ) {
-  const { db, syncEvents, authenticate, config } = dependencies;
+  const { db, syncEvents, authenticate, config, logRefs } = dependencies;
   const syncClientHeader = z.string().uuid().optional();
 
   app.get("/api/sync/events", { preHandler: authenticate }, async (request, reply) => {
@@ -34,7 +36,8 @@ export function registerSyncRoutes(
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "private, no-cache, no-store",
       "Connection": "keep-alive",
-      "X-Accel-Buffering": "no"
+      "X-Accel-Buffering": "no",
+      "X-Request-ID": request.id
     });
     reply.raw.write("retry: 5000\n\n");
     const unsubscribe = syncEvents.subscribe({
@@ -130,10 +133,21 @@ export function registerSyncRoutes(
     try {
       result = writeObject(db, scope, objectId.data, parsed.data, config.userStorageQuotaBytes);
     } catch (error) {
-      if (error instanceof StorageQuotaError) return reply.code(413).send({ error: error.message });
+      if (error instanceof StorageQuotaError) {
+        logEvent(request.log, "warn", "storage.quota_rejected", {
+          actorRef: logRefs.create("user", scope.userId),
+          resource: "objects"
+        });
+        return reply.code(413).send({ error: error.message });
+      }
       throw error;
     }
     if (result.status === "conflict") {
+      logEvent(request.log, "warn", "sync.object_conflict", {
+        actorRef: logRefs.create("user", scope.userId),
+        objectRef: logRefs.create("object", objectId.data),
+        reason: result.reason
+      });
       return reply.code(409).send({
         error: result.reason === "objectType" ? "Object type cannot change"
           : result.reason === "idempotency" ? "Idempotency key payload mismatch"
@@ -168,7 +182,13 @@ export function registerSyncRoutes(
         writeObject(db, scope, objectId, body, config.userStorageQuotaBytes)
       ));
     } catch (error) {
-      if (error instanceof StorageQuotaError) return reply.code(413).send({ error: error.message });
+      if (error instanceof StorageQuotaError) {
+        logEvent(request.log, "warn", "storage.quota_rejected", {
+          actorRef: logRefs.create("user", scope.userId),
+          resource: "objects"
+        });
+        return reply.code(413).send({ error: error.message });
+      }
       throw error;
     }
     const cursor = results.reduce(
@@ -185,6 +205,16 @@ export function registerSyncRoutes(
         sourceClientId.success ? sourceClientId.data : undefined
       );
     }
+    const accepted = results.filter((result) => result.status === "accepted").length;
+    const idempotent = results.filter((result) => result.status === "idempotent").length;
+    const conflicts = results.filter((result) => result.status === "conflict").length;
+    logEvent(request.log, conflicts ? "warn" : "debug", "sync.batch_completed", {
+      actorRef: logRefs.create("user", scope.userId),
+      count: results.length,
+      accepted,
+      idempotent,
+      conflicts
+    });
     return { results };
   });
 
@@ -219,11 +249,25 @@ export function registerSyncRoutes(
             sourceClientId.success ? sourceClientId.data : undefined
           );
         }
+        logEvent(request.log, "info", "sync.purge_completed", {
+          actorRef: logRefs.create("user", scope.userId),
+          count: changes.length
+        });
       } catch (error) {
         if (error instanceof Error && error.message === "PURGE_CONFLICT") {
+          logEvent(request.log, "warn", "sync.purge_blocked", {
+            actorRef: logRefs.create("user", scope.userId),
+            count: parsed.data.objects.length,
+            reason: "conflict"
+          });
           return reply.code(409).send({ error: "Purge conflict" });
         }
         if (error instanceof Error && error.message === "PROTECTED_HISTORY") {
+          logEvent(request.log, "warn", "sync.purge_blocked", {
+            actorRef: logRefs.create("user", scope.userId),
+            count: parsed.data.objects.length,
+            reason: "protected_history"
+          });
           return reply.code(409).send({ error: "Protected history blocks purge", code: "PROTECTED_HISTORY" });
         }
         throw error;

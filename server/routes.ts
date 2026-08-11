@@ -2,7 +2,7 @@ import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
-import Fastify from "fastify";
+import Fastify, { LogController } from "fastify";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
@@ -23,19 +23,38 @@ import {
 import { registerSyncRoutes } from "./sync/routes.js";
 import type { SessionUser } from "./types.js";
 import { registerEndpointRoutes } from "./account/endpoints.js";
+import {
+  createLoggerOptions,
+  type LogDestination,
+  LogReferenceFactory,
+  logEvent,
+  registerHttpLogging,
+  serverRequestId
+} from "./logging.js";
 
 export interface RouteApplicationOptions {
   config?: ServerConfig;
   db?: AppDatabase;
   syncEvents?: SyncEventHub;
   maintenance?: boolean;
+  logDestination?: LogDestination;
 }
 
 export async function createRouteApplication(options: RouteApplicationOptions = {}) {
 const config = options.config ?? loadServerConfig();
-const app = Fastify({ logger: true, trustProxy: config.trustProxy, bodyLimit: 2 * 1024 * 1024 });
+const app = Fastify({
+  logger: createLoggerOptions(config, options.logDestination),
+  logController: new LogController({
+    disableRequestLogging: true,
+    requestIdLogLabel: "requestId"
+  }),
+  genReqId: serverRequestId,
+  trustProxy: config.trustProxy,
+  bodyLimit: 2 * 1024 * 1024
+});
 const db = options.db ?? openDatabase(config.dataDirectory);
 const syncEvents = options.syncEvents ?? new SyncEventHub();
+const logRefs = new LogReferenceFactory();
 const ownsDatabase = options.db === undefined;
 const {
   authenticate,
@@ -46,6 +65,7 @@ const {
 } = createSessionService(db, config, syncEvents);
 
 await app.register(cookie);
+registerHttpLogging(app);
 app.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_request, body, done) => done(null, body));
 await app.register(rateLimit, { global: false });
 await app.register(helmet, {
@@ -76,12 +96,14 @@ app.addHook("onRequest", async (request, reply) => {
   const origin = request.headers.origin;
   if (!origin) {
     if (config.production || config.appOrigin) {
+      logEvent(request.log, "warn", "security.origin_rejected", { reason: "missing" });
       return reply.code(403).send({ error: "Origin header required for state change" });
     }
     return;
   }
   const allowed = config.appOrigin ?? `${request.protocol}://${request.headers.host}`;
   if (origin !== allowed) {
+    logEvent(request.log, "warn", "security.origin_rejected", { reason: "mismatch" });
     return reply.code(403).send({ error: "Cross-origin state change rejected" });
   }
 });
@@ -169,6 +191,10 @@ app.post(
       throw error;
     }
     const endpoint = setSession(request, reply, registration.id, false);
+    logEvent(request.log, "info", "auth.registered", {
+      actorRef: logRefs.create("user", registration.id),
+      role: registration.role
+    });
     return reply.code(201).send({ user: { id: registration.id, username: body.username, displayName: body.displayName, role: registration.role }, endpoint });
   }
 );
@@ -197,6 +223,9 @@ app.post(
       throw error;
     }
     const endpoint = setSession(request, reply, id, false);
+    logEvent(request.log, "info", "auth.activated", {
+      actorRef: logRefs.create("user", id)
+    });
     return reply.code(201).send({ user: { id, username: setup.username, displayName: setup.display_name, role: "user" }, endpoint });
   }
 );
@@ -228,15 +257,24 @@ app.post(
   { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
   async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "Invalid credentials" });
+    if (!parsed.success) {
+      logEvent(request.log, "warn", "auth.login_failed", { reason: "invalid_request" });
+      return reply.code(400).send({ error: "Invalid credentials" });
+    }
     const row = db.prepare(`
       SELECT id, username, display_name, role, disabled, auth_salt, auth_hash, wrapped_vault_key, wrapped_vault_nonce
       FROM users WHERE username = ? COLLATE NOCASE
     `).get(parsed.data.username) as any;
     if (!row || row.disabled || !verifyOpaqueSecret(parsed.data.authSecret, row.auth_salt, row.auth_hash)) {
+      logEvent(request.log, "warn", "auth.login_failed", { reason: "invalid_credentials" });
       return reply.code(401).send({ error: "Invalid credentials" });
     }
     const endpoint = setSession(request, reply, row.id, parsed.data.rememberDevice);
+    logEvent(request.log, "info", "auth.login_succeeded", {
+      actorRef: logRefs.create("user", row.id),
+      endpointRef: logRefs.create("endpoint", endpoint.id),
+      remembered: parsed.data.rememberDevice
+    });
     return {
       user: { id: row.id, username: row.username, displayName: row.display_name, role: row.role },
       wrappedVaultKey: row.wrapped_vault_key,
@@ -256,6 +294,10 @@ app.post("/api/auth/logout", { preHandler: authenticate }, async (request, reply
   })();
   syncEvents.closeEndpoint(user.id, endpointId);
   reply.clearCookie(sessionCookie, { path: "/" });
+  logEvent(request.log, "info", "auth.logged_out", {
+    actorRef: logRefs.create("user", user.id),
+    endpointRef: logRefs.create("endpoint", endpointId)
+  });
   return { ok: true };
 });
 
@@ -312,6 +354,9 @@ app.post(
       db.prepare("UPDATE trusted_endpoints SET remembered = 0, revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").run(new Date().toISOString(), row.id);
     })();
     syncEvents.closeUser(row.id);
+    logEvent(request.log, "info", "auth.recovery_succeeded", {
+      actorRef: logRefs.create("user", row.id)
+    });
     return { ok: true };
   }
 );
@@ -350,6 +395,9 @@ app.post("/api/auth/password", { preHandler: authenticate }, async (request, rep
     );
   })();
   syncEvents.closeUser(user.id, request.sessionContext!.id);
+  logEvent(request.log, "info", "auth.password_changed", {
+    actorRef: logRefs.create("user", user.id)
+  });
   return { ok: true };
 });
 
@@ -380,6 +428,9 @@ app.post("/api/account/recovery-key", { preHandler: authenticate }, async (reque
     parsed.data.recoveryWrappedVaultNonce,
     user.id
   );
+  logEvent(request.log, "info", "auth.recovery_key_rotated", {
+    actorRef: logRefs.create("user", user.id)
+  });
   return { ok: true };
 });
 
@@ -458,6 +509,10 @@ app.patch(
       throw error;
     }
     syncEvents.closeUser(user.id, request.sessionContext!.id);
+    logEvent(request.log, "info", "account.username_changed", {
+      actorRef: logRefs.create("user", user.id),
+      recoveryKeyReplaced: Boolean(body.replacementRecoveryAuthSecret)
+    });
     return { user: { ...user, username: body.username } };
   }
 );
@@ -527,11 +582,11 @@ app.patch("/api/account/trash-retention", { preHandler: authenticate }, async (r
   return { days: parsed.data.days };
 });
 
-registerEndpointRoutes(app, { db, syncEvents, authenticate });
-registerSyncRoutes(app, { db, syncEvents, authenticate, config });
-registerAttachmentRoutes(app, { db, config, authenticate });
-registerAdminRoutes(app, { db, syncEvents, requireAdmin });
-registerHistoryRoutes(app, { db, config, authenticate });
+registerEndpointRoutes(app, { db, syncEvents, authenticate, logRefs });
+registerSyncRoutes(app, { db, syncEvents, authenticate, config, logRefs });
+registerAttachmentRoutes(app, { db, config, authenticate, logRefs });
+registerAdminRoutes(app, { db, syncEvents, requireAdmin, logRefs });
+registerHistoryRoutes(app, { db, config, authenticate, logRefs });
 
 const webRoot = resolve("dist");
 if (existsSync(webRoot)) {

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Added privacy-preserving server terminal logs with readable development output, structured production JSON, configurable levels, request IDs, process-local anonymous references, and high-value lifecycle, authentication, synchronization, administration, quota, and maintenance events.
 - Added scalable trash browsing in Settings: deleted folders start collapsed with descendant counts, title search and type filters reveal matching ancestor paths, deletion-time and name sorting are independent from the file tree, and long root lists load in batches.
 
 ### Changed
