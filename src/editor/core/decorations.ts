@@ -152,7 +152,7 @@ function buildDecorationSet(state: EditorState): DecorationSet {
     decos.push(
       Decoration.widget(w.pos, dom, {
         side: w.side ?? -1,
-        key: `${w.kind}@${w.pos}`,
+        key: `${w.kind}@${w.pos}${w.key ? `:${w.key}` : ""}`,
         ignoreSelection: true,
         // PM should not forward DOM events bubbled out of the widget
         // back as editor input — otherwise input/keydown fired around

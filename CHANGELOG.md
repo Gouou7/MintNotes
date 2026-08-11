@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Refined deleted-item rows to match the file tree's compact borderless presentation, while keeping restore immediately available and moving permanent deletion into the more-actions menu.
 
+### Fixed
+
+- Fixed encrypted images in Live mode remaining in a broken-source state after switching away from a note and back. Asynchronously restored Blob URLs now refresh only the presentation layer without changing canonical Markdown, undo history, focus, or caret position.
+
 ## [0.13.0] - 2026-08-11
 
 ### Changed

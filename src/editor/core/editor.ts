@@ -45,12 +45,13 @@ function openLinkOnModClickPlugin(): Plugin {
 export function defaultPlugins(options: {
   cursorWidget?: boolean;
   extensions?: readonly EditorExtension[];
+  resolveImageSource?: (source: string) => string | null | undefined;
 } = {}): Plugin[] {
   // cursorRenderPlugin paints a visible caret even when the view is not
   // focused — only useful for the replay harness (fakeView has no focus).
   // A real browser editor already draws its own caret, so a live editor
   // should pass `{ cursorWidget: false }`.
-  const { cursorWidget = true, extensions = [] } = options;
+  const { cursorWidget = true, extensions = [], resolveImageSource } = options;
   const featureKeymap = collectKeymaps(schema);
   const plugins: Plugin[] = [
     history(),
@@ -60,13 +61,14 @@ export function defaultPlugins(options: {
     blockquoteInputPlugin(),
     manualEscapeDecorationPlugin(),
     ...extensions.flatMap((extension) => extension.createPlugins({ schema })),
-    normalizeInlinePlugin(),
+    normalizeInlinePlugin({ resolveImageSource }),
     // Feature-contributed plugins sit after normalize (so block-draft
     // watchers see the post-normalize doc) and before syntaxHints (so any
     // extra decorations merge into PM's decoration pipeline naturally).
     ...collectPlugins(schema, {
       parseMarkdown: parse,
       serializeMarkdown: serialize,
+      resolveImageSource,
     }),
     syntaxHintsPlugin(),
     openLinkOnModClickPlugin(),

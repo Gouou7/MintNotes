@@ -54,6 +54,7 @@ The core must not import Mint Notes extensions. Extensions may use ProseMirror o
 - Multiline display math may use the reserved `mint-math` fenced language only inside the mounted Live editor. It must be canonicalized before application `onChange` and must never reach React document state, IndexedDB, history, synchronization, export, or the server.
 - Live serialization must not synthesize backslashes for punctuation, block starts, table cells, link titles, or image titles. Canonical backslashes are user-authored and remain preserved even when Live presentation hides them.
 - Mermaid SVG, decrypted attachment Blob URLs, and WikiLink lookup results are in-memory presentation artifacts. They are not Markdown and are never persisted as document content.
+- Live attachment images resolve their authored `webmd-attachment:` source through the core's presentation callback. Loading completion refreshes inline decorations only; it must not replace the ProseMirror document, reset undo history, or move the canonical-source selection.
 - Raw HTML and remote executable embeds remain disabled.
 
 ## Required verification

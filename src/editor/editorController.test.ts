@@ -25,6 +25,31 @@ afterEach(() => {
 });
 
 describe("Mint editor core public controller", () => {
+  it("refreshes a pending image source without changing Markdown or the caret", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const attachmentSource = "webmd-attachment:11111111-1111-4111-8111-111111111111";
+    const markdown = `before ![image](${attachmentSource}) after`;
+    const displaySource = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+    let resolvedSource: string | null | undefined = null;
+    const editor = createMintEditor(host, {
+      initialContent: markdown,
+      resolveImageSource: (source) => source === attachmentSource ? resolvedSource : undefined,
+    });
+
+    editor.setSelectionOffset(markdown.length);
+    const initialOffset = editor.getSelectionOffset();
+    expect(host.querySelector("img.image-render")?.hasAttribute("src")).toBe(false);
+
+    resolvedSource = displaySource;
+    editor.refreshPresentation();
+
+    expect(host.querySelector("img.image-render")?.getAttribute("src")).toBe(displaySource);
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(editor.getSelectionOffset()).toBe(initialOffset);
+    editor.destroy();
+  });
+
   it("reveals a horizontal rule source on click and preserves its delimiter", () => {
     for (const delimiter of ["---", "***"] as const) {
       const host = document.createElement("div");

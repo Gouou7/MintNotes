@@ -34,6 +34,12 @@ export function useAttachmentUrls(options: {
   onError: (error: unknown) => void;
 }) {
   const [urls, setUrls] = useState<Map<string, string>>(new Map());
+  const resolutionKey = [
+    options.activeDocumentId ?? "",
+    options.allowNetwork ? "network" : "local",
+    options.signature,
+  ].join("\u0000");
+  const [resolvedKey, setResolvedKey] = useState<string | null>(null);
   const cache = useRef<Map<string, CachedAttachmentUrl>>(new Map());
 
   useEffect(() => {
@@ -82,6 +88,7 @@ export function useAttachmentUrls(options: {
       }
       cache.current = nextCache;
       setUrls(nextUrls);
+      setResolvedKey(resolutionKey);
     })();
     return () => {
       cancelled = true;
@@ -98,5 +105,5 @@ export function useAttachmentUrls(options: {
     cache.current.clear();
   }, []);
 
-  return { urls, cache };
+  return { urls, cache, loading: resolvedKey !== resolutionKey };
 }

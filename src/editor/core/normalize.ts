@@ -9,7 +9,12 @@ import type { Node as PMNode } from "prosemirror-model";
 import { Plugin, PluginKey, type EditorState } from "prosemirror-state";
 
 import { collectInlineFeatures } from "./features/index";
-import { parseInline, type InlineSpan } from "./inline-parse";
+import {
+  INLINE_PRESENTATION_META,
+  parseInline,
+  type InlinePresentationContext,
+  type InlineSpan,
+} from "./inline-parse";
 import { schema } from "./schema";
 
 export type DelimRange = {
@@ -48,6 +53,7 @@ export type WidgetDecoration = {
   when: "inside" | "outside" | "always";
   kind: string;
   attrs?: Record<string, string>;
+  key?: string;
   side?: number;
 };
 
@@ -63,7 +69,7 @@ export type NormalizeState = {
 type BlockPlan = { blockStart: number; spans: InlineSpan[] };
 
 // Walk the doc, return per-textblock parse plan + absolute-pos delim list.
-function computePlan(doc: PMNode): {
+function computePlan(doc: PMNode, presentation: InlinePresentationContext): {
   blocks: Array<{ blockPos: number; plan: BlockPlan }>;
   delims: DelimRange[];
   extras: ExtraDecoration[];
@@ -76,7 +82,7 @@ function computePlan(doc: PMNode): {
   doc.descendants((node, pos, parent) => {
     if (!node.isTextblock) return true;
     const text = node.textContent;
-    const spans = parseInline(text, parent);
+    const spans = parseInline(text, parent, presentation);
     const blockStart = pos + 1;
     blocks.push({ blockPos: pos, plan: { blockStart, spans } });
     for (const s of spans) {
@@ -118,6 +124,7 @@ function computePlan(doc: PMNode): {
             when: w.when,
             kind: w.kind,
             attrs: w.attrs,
+            key: w.key,
             side: w.side,
           });
         }
@@ -130,17 +137,21 @@ function computePlan(doc: PMNode): {
 
 const normalizeKey = new PluginKey<NormalizeState>("normalize-inline");
 
-export function normalizeInlinePlugin(): Plugin<NormalizeState> {
+export function normalizeInlinePlugin(
+  presentation: InlinePresentationContext = {},
+): Plugin<NormalizeState> {
   return new Plugin<NormalizeState>({
     key: normalizeKey,
 
     state: {
-      init: (_, state) => computePlan(state.doc),
+      init: (_, state) => computePlan(state.doc, presentation),
       apply: (tr, prev, _oldState, newState) =>
         // Skip the doc walk when nothing in the doc changed — selection-
         // only transactions are very common (every keystroke that moves
         // the cursor) and the cached plan stays valid for them.
-        tr.docChanged ? computePlan(newState.doc) : prev,
+        tr.docChanged || tr.getMeta(INLINE_PRESENTATION_META)
+          ? computePlan(newState.doc, presentation)
+          : prev,
     },
 
     appendTransaction(_transactions, _oldState, newState) {

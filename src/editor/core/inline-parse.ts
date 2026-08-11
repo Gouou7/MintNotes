@@ -11,6 +11,17 @@ import type { Node as PMNode } from "prosemirror-model";
 
 import { collectInlineFeatures } from "./features/index";
 
+export type InlinePresentationContext = {
+  /**
+   * Resolve an authored image source to an in-memory presentation source.
+   * `null` means the source is still loading; `undefined` keeps the authored
+   * source and the core's normal image-load probing.
+   */
+  resolveImageSource?: (source: string) => string | null | undefined;
+};
+
+export const INLINE_PRESENTATION_META = "inline-presentation-changed";
+
 // Some inline features need parent context (e.g. task-list trigger only
 // fires for textblocks directly inside a list_item). parseInline threads
 // the parent textblock node through to each feature's scan.
@@ -71,6 +82,7 @@ export type InlineSpan = {
     when: "inside" | "outside" | "always";
     kind: string;
     attrs?: Record<string, string>;
+    key?: string;
     side?: number;
   }>;
 };
@@ -192,11 +204,12 @@ export function markExtRanges(
 export function parseInline(
   text: string,
   parentBlock: PMNode | null = null,
+  presentation: InlinePresentationContext = {},
 ): InlineSpan[] {
   const out: InlineSpan[] = [];
   const consumed = new Uint8Array(text.length);
   for (const f of collectInlineFeatures()) {
-    for (const s of f.scan(text, consumed, parentBlock)) out.push(s);
+    for (const s of f.scan(text, consumed, parentBlock, presentation)) out.push(s);
   }
   return out;
 }

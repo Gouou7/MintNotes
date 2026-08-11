@@ -66,6 +66,8 @@ The center toolbar provides three modes:
 
 Markdown remains the canonical note format in every mode. Switching modes does not convert it to a proprietary document format. The right outline is generated from H1-H6 headings and never uploads as separate plaintext metadata.
 
+Encrypted image attachments render in Live and Reading modes after their browser-local Blob URLs are ready. Switching away from a note revokes those temporary URLs; returning to it reloads the images in place without changing the Markdown or moving the Live-mode caret.
+
 In Reading mode and read-only historical previews, hover over a fenced code block to reveal its copy button in the upper-right corner. Select it to copy the complete code block. The button remains visible on touch devices and can also be reached with the keyboard.
 
 An empty Live or Source editor shows a **Start writing…** hint at the first editable line. The hint disappears as soon as the editor receives focus, keeping the insertion caret unobstructed, and is presentation only: it is never added to Markdown, history, IndexedDB, synchronization, or exports.

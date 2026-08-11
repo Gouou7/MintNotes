@@ -15,6 +15,7 @@ import { parse } from "./parser";
 import { schema } from "./schema";
 import { serialize } from "./serializer";
 import type { EditorExtension } from "./extension";
+import { INLINE_PRESENTATION_META } from "./inline-parse";
 import { mapEquivalentOffset, preserveAuthoredSource } from "./sourcePatch";
 
 export interface EditorOptions {
@@ -28,6 +29,8 @@ export interface EditorOptions {
   onBlur?: () => void;
   /** Optional editor-owned behavior and presentation extensions. */
   extensions?: readonly EditorExtension[];
+  /** Resolve authored image sources to presentation-only URLs. `null` means loading. */
+  resolveImageSource?: (source: string) => string | null | undefined;
 }
 
 export interface Editor {
@@ -45,6 +48,8 @@ export interface Editor {
   getSelectionOffset(): number;
   /** Restore the caret from a canonical Markdown offset. */
   setSelectionOffset(offset: number): void;
+  /** Recompute presentation-only decorations without changing Markdown or history. */
+  refreshPresentation(): void;
   /** Execute a command registered by an editor extension. */
   runExtensionCommand<Result>(command: string, input?: unknown): Result | undefined;
   /** Flip between rendered and raw-source views. ⌘/ does the same. */
@@ -81,7 +86,11 @@ export function createEditor(
     const base = EditorState.create({
       schema,
       doc,
-      plugins: defaultPlugins({ cursorWidget: false, extensions: options.extensions }),
+      plugins: defaultPlugins({
+        cursorWidget: false,
+        extensions: options.extensions,
+        resolveImageSource: options.resolveImageSource,
+      }),
     });
     // Fire one no-op transaction so normalize's appendTransaction runs
     // and method-B marks (em, strong, autolink, etc.) apply on first
@@ -372,6 +381,11 @@ export function createEditor(
     },
     setSelectionOffset(offset: number): void {
       setSelectionOffset(offset);
+    },
+    refreshPresentation(): void {
+      if (!inSource) {
+        view.dispatch(view.state.tr.setMeta(INLINE_PRESENTATION_META, true));
+      }
     },
     runExtensionCommand<Result>(command: string, input?: unknown): Result | undefined {
       return runExtensionCommand<Result>(command, input);

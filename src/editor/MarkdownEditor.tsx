@@ -18,7 +18,6 @@ import {
   focusCalloutMarker as focusCalloutMarkerInEditor,
 } from "./extensions/callout";
 import { createRichSyntaxExtension } from "./extensions/richSyntax";
-import { materializeAttachmentUrls } from "../features/attachmentFormat";
 import { useI18n } from "../i18n";
 import { CalloutHeader } from "./Callout";
 import {
@@ -41,6 +40,7 @@ interface Props {
   mode: "live" | "source";
   onChange: (markdown: string) => void;
   attachmentUrls?: Map<string, string>;
+  attachmentsPending?: boolean;
   onImageInsert?: (file: File) => Promise<string | null>;
   onWikiLink?: (target: string) => void;
   emptyHint?: string;
@@ -108,19 +108,23 @@ const SourceEditor = forwardRef<MarkdownEditorHandle, Props>(function SourceEdit
   );
 });
 
-const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), onImageInsert, onWikiLink, emptyHint }, ref) {
+const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), attachmentsPending = false, onImageInsert, onWikiLink, emptyHint }, ref) {
   const frontmatter = parseFrontmatter(markdown);
   const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorController | null>(null);
   const changeRef = useRef(onChange);
   const attachmentUrlHistoryRef = useRef(new Map<string, string>());
+  const attachmentUrlsRef = useRef(attachmentUrls);
+  const attachmentsPendingRef = useRef(attachmentsPending);
   const frontmatterRef = useRef(frontmatter);
   const editorMarkdownRef = useRef(markdown);
-  const renderedMarkdownRef = useRef(materializeLiveMarkdown(frontmatter.body, attachmentUrls));
+  const renderedMarkdownRef = useRef(materializeLiveMarkdown(frontmatter.body));
   const wikiLinkRef = useRef(onWikiLink);
   const [calloutOverlays, setCalloutOverlays] = useState<LiveCalloutOverlay[]>([]);
   changeRef.current = onChange;
+  attachmentUrlsRef.current = attachmentUrls;
+  attachmentsPendingRef.current = attachmentsPending;
   frontmatterRef.current = frontmatter;
   wikiLinkRef.current = onWikiLink;
   useImperativeHandle(ref, () => ({
@@ -143,6 +147,12 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
           onWikiLink: (target) => wikiLinkRef.current?.(target)
         })
       ],
+      resolveImageSource: (source) => {
+        const match = /^webmd-attachment:([0-9a-f-]{36})$/i.exec(source);
+        if (!match) return undefined;
+        return attachmentUrlsRef.current.get(match[1].toLowerCase())
+          ?? (attachmentsPendingRef.current ? null : undefined);
+      },
       onChange: (next) => {
         const canonicalizedLiveBody = canonicalizeCalloutsFromLive(canonicalizeMathBlocksFromLive(next));
         let canonicalBody = canonicalizedLiveBody;
@@ -169,37 +179,18 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
 
   useEffect(() => {
     if (!editorRef.current) return;
-    // Attachment Blob URLs are presentation state. The image observer below
-    // updates them in place; feeding them through setMarkdown would rebuild
-    // the core's internal ProseMirror view and discard the active selection.
+    // Attachment Blob URLs are refreshed through the presentation resolver
+    // below. Only authored Markdown changes rebuild the editor document.
     if (markdown === editorMarkdownRef.current) return;
-    const renderedMarkdown = materializeLiveMarkdown(frontmatter.body, attachmentUrls);
+    const renderedMarkdown = materializeLiveMarkdown(frontmatter.body);
     editorMarkdownRef.current = markdown;
     renderedMarkdownRef.current = renderedMarkdown;
     editorRef.current.setMarkdown(renderedMarkdown);
-  }, [markdown, attachmentUrls, frontmatter.body]);
+  }, [markdown, frontmatter.body]);
 
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const resolveImages = () => {
-      for (const image of host.querySelectorAll<HTMLImageElement>("img")) {
-        const source = image.dataset.webmdAttachment ?? image.getAttribute("src") ?? "";
-        const match = /^webmd-attachment:([0-9a-f-]{36})$/i.exec(source);
-        const materializedId = match ? null : [...attachmentUrls].find(([, url]) => url === source)?.[0];
-        const attachmentId = match?.[1].toLowerCase() ?? materializedId;
-        if (!attachmentId) continue;
-        image.dataset.webmdAttachment = `webmd-attachment:${attachmentId}`;
-        const resolved = attachmentUrls.get(attachmentId);
-        if (resolved && image.getAttribute("src") !== resolved) image.src = resolved;
-        else if (!resolved && image.hasAttribute("src")) image.removeAttribute("src");
-      }
-    };
-    resolveImages();
-    const observer = new MutationObserver(resolveImages);
-    observer.observe(host, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
-    return () => observer.disconnect();
-  }, [attachmentUrls]);
+    editorRef.current?.refreshPresentation?.();
+  }, [attachmentUrls, attachmentsPending]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -340,7 +331,7 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
       return Boolean(parseCalloutMarker(firstLine));
     });
     const calloutIndex = liveCallouts.indexOf(blockquote as HTMLElement);
-    const renderedMarkdown = materializeLiveMarkdown(frontmatterRef.current.body, attachmentUrls);
+    const renderedMarkdown = materializeLiveMarkdown(frontmatterRef.current.body);
     const collapsed = collapseEmptyCalloutBodyForMarkerEdit(renderedMarkdown, calloutIndex);
     if (!collapsed) return;
 
@@ -398,8 +389,8 @@ interface LiveCalloutOverlay {
   style: CSSProperties;
 }
 
-function materializeLiveMarkdown(markdown: string, attachmentUrls: Map<string, string>): string {
-  return materializeLiveSyntax(materializeAttachmentUrls(markdown, attachmentUrls));
+function materializeLiveMarkdown(markdown: string): string {
+  return materializeLiveSyntax(markdown);
 }
 
 function imageFileFromTransfer(transfer: Pick<DataTransfer, "files" | "items">): File | null {

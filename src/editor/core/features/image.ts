@@ -1,7 +1,11 @@
 import type { Mark } from "prosemirror-model";
 import { Plugin } from "prosemirror-state";
 
-import { markConsumed, type InlineSpan } from "../inline-parse";
+import {
+  INLINE_PRESENTATION_META,
+  markConsumed,
+  type InlineSpan,
+} from "../inline-parse";
 import type { FeatureSpec, InlineFeatureSpec } from "./_types";
 
 // image in Typora-pilot (method B) mode.
@@ -33,9 +37,7 @@ const IMAGE_RE = /!\[([^\]]*?)\]\(([^\s)]*)(?:\s+"([^"]*)")?\)/g;
 // state.apply / appendTransaction so decorations re-emit.
 type LoadStatus = "loading" | "ok" | "error";
 const imageLoadStatus = new Map<string, LoadStatus>();
-const IMAGE_LOAD_META = "image-load-status-changed";
-
-const scan: InlineFeatureSpec["scan"] = (text, consumed) => {
+const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentation) => {
   const out: InlineSpan[] = [];
   IMAGE_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -60,6 +62,10 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed) => {
 
     markConsumed(consumed, fullStart, fullEnd);
     const src = m[2]!;
+    const resolvedSource = presentation?.resolveImageSource?.(src);
+    const pendingSource = resolvedSource === null;
+    const displaySource = pendingSource ? "" : resolvedSource ?? src;
+    const presentationKey = pendingSource ? "pending" : resolvedSource;
     const title = m[3] ?? null;
     const alt = m[1]!;
     const span: InlineSpan = {
@@ -80,7 +86,11 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed) => {
     // Otherwise (probe pending or confirmed ok) render optimistically —
     // shows the image and only flashes back to edit-mode if a real load
     // error comes in. Avoids a long edit-mode delay on every valid image.
-    const status = src === "" ? null : imageLoadStatus.get(src) ?? null;
+    const status = src === ""
+      ? null
+      : pendingSource
+        ? "loading"
+        : imageLoadStatus.get(displaySource) ?? null;
     const editMode = src === "" || status === "error";
     // Icon side=1: caret at openFrom renders to the LEFT of the icon, so
     // ArrowLeft from inside the source can park the cursor before the icon
@@ -106,7 +116,8 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed) => {
           pos: closeTo,
           when: "always",
           kind: "image-render",
-          attrs: { src, alt, ...(title ? { title } : {}) },
+          attrs: { src: displaySource, alt, ...(title ? { title } : {}) },
+          ...(presentationKey !== undefined ? { key: presentationKey } : {}),
         },
       );
     } else {
@@ -128,7 +139,9 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed) => {
 // Probes every image src found in the doc. On load/error, updates the
 // shared status map and dispatches a meta-only tx to retrigger normalize/
 // decorations so the span flips between image-mode and edit-mode.
-function imageLoadProbePlugin(): Plugin {
+function imageLoadProbePlugin(
+  resolveImageSource?: (source: string) => string | null | undefined,
+): Plugin {
   return new Plugin({
     view(editorView) {
       const probe = (src: string): void => {
@@ -140,7 +153,7 @@ function imageLoadProbePlugin(): Plugin {
           // setMeta-only tx: nothing in doc changes, but state.apply runs
           // for normalize+decorations and the per-span editMode flag re-
           // evaluates with the new status.
-          editorView.dispatch(editorView.state.tr.setMeta(IMAGE_LOAD_META, status));
+          editorView.dispatch(editorView.state.tr.setMeta(INLINE_PRESENTATION_META, status));
         };
         probeImg.onload = (): void => finish("ok");
         probeImg.onerror = (): void => finish("error");
@@ -153,8 +166,11 @@ function imageLoadProbePlugin(): Plugin {
           IMAGE_RE.lastIndex = 0;
           let m: RegExpExecArray | null;
           while ((m = IMAGE_RE.exec(text))) {
-            const src = m[2];
-            if (src) probe(src);
+            const authoredSource = m[2];
+            if (!authoredSource) continue;
+            const resolvedSource = resolveImageSource?.(authoredSource);
+            if (resolvedSource === null) continue;
+            probe(resolvedSource ?? authoredSource);
           }
           return false;
         });
@@ -262,7 +278,10 @@ export const image: FeatureSpec = {
     image: { open: "", close: "" },
   },
 
-  plugins: () => [imageFileInputPlugin(), imageLoadProbePlugin()],
+  plugins: (_schema, context) => [
+    imageFileInputPlugin(),
+    imageLoadProbePlugin(context.resolveImageSource),
+  ],
 
   inline: {
     // Before link: image's `![alt](url)` strictly contains link's `[alt](url)`

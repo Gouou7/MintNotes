@@ -82,7 +82,7 @@ describe("MarkdownEditor live mode", () => {
     await act(async () => root.unmount());
   });
 
-  it("updates an attachment image without rebuilding or refocusing the editor document", async () => {
+  it("refreshes an asynchronously resolved attachment without rebuilding or refocusing the editor", async () => {
     const editor = {
       destroy: vi.fn(),
       focus: vi.fn(),
@@ -90,13 +90,13 @@ describe("MarkdownEditor live mode", () => {
       getMarkdownOffsetAtPoint: vi.fn(),
       insertMarkdown: vi.fn(),
       isSourceMode: vi.fn(),
+      refreshPresentation: vi.fn(),
       setMarkdown: vi.fn(),
       toggleSource: vi.fn()
     } as unknown as EditorController;
-    vi.mocked(createEditor).mockImplementation((host) => {
-      const image = document.createElement("img");
-      image.setAttribute("src", `webmd-attachment:${attachmentId}`);
-      host.append(image);
+    let resolveImageSource: ((source: string) => string | null | undefined) | undefined;
+    vi.mocked(createEditor).mockImplementation((_host, options) => {
+      resolveImageSource = options?.resolveImageSource;
       return editor;
     });
 
@@ -108,16 +108,17 @@ describe("MarkdownEditor live mode", () => {
         markdown={`![image](webmd-attachment:${attachmentId})`}
         mode="live"
         attachmentUrls={attachmentUrls}
+        attachmentsPending={!attachmentUrls.size}
         onChange={vi.fn()}
       />
     );
 
     await act(async () => root.render(render(new Map())));
+    expect(resolveImageSource?.(`webmd-attachment:${attachmentId}`)).toBeNull();
     await act(async () => root.render(render(new Map([[attachmentId, "blob:http://localhost/image"]]))));
 
-    const image = container.querySelector("img");
-    expect(image?.dataset.webmdAttachment).toBe(`webmd-attachment:${attachmentId}`);
-    expect(image?.getAttribute("src")).toBe("blob:http://localhost/image");
+    expect(resolveImageSource?.(`webmd-attachment:${attachmentId}`)).toBe("blob:http://localhost/image");
+    expect(editor.refreshPresentation).toHaveBeenCalledTimes(2);
     expect(editor.setMarkdown).not.toHaveBeenCalled();
     expect(editor.focus).toHaveBeenCalledOnce();
 
@@ -150,7 +151,7 @@ describe("MarkdownEditor live mode", () => {
       />
     ));
 
-    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe(`![image](${blobUrl})`);
+    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe(`![image](webmd-attachment:${attachmentId})`);
     act(() => editorChange?.(`![image](${blobUrl})`));
     expect(onChange).not.toHaveBeenCalled();
 
@@ -186,7 +187,7 @@ describe("MarkdownEditor live mode", () => {
     await act(async () => root.render(render(`before\n\n![image](webmd-attachment:${attachmentId})`)));
 
     expect(editor.setMarkdown).toHaveBeenCalledOnce();
-    expect(editor.setMarkdown).toHaveBeenCalledWith(`before\n\n![image](${blobUrl})`);
+    expect(editor.setMarkdown).toHaveBeenCalledWith(`before\n\n![image](webmd-attachment:${attachmentId})`);
 
     await act(async () => root.unmount());
   });

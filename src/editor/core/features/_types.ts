@@ -21,7 +21,7 @@ import type {
 } from "prosemirror-model";
 import type { Command, Plugin } from "prosemirror-state";
 
-import type { InlineSpan } from "../inline-parse";
+import type { InlinePresentationContext, InlineSpan } from "../inline-parse";
 import type { ParserState } from "../parser";
 import type {
   BlockHandler,
@@ -37,6 +37,7 @@ export type TokenHandler = (
 export type FeaturePluginContext = {
   parseMarkdown: (markdown: string) => PMNode;
   serializeMarkdown: (doc: PMNode) => string;
+  resolveImageSource?: InlinePresentationContext["resolveImageSource"];
 };
 
 export type FeatureSpec = {
@@ -89,6 +90,7 @@ export type InlineFeatureSpec = {
     text: string,
     consumed: Uint8Array,
     parentBlock?: PMNode | null,
+    presentation?: InlinePresentationContext,
   ) => InlineSpan[];
   markNames: string[];
   extRanges: (parent: PMNode) => Array<[number, number]>;

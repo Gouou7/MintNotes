@@ -2538,7 +2538,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
             ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
             : displayedMode === "readonly"
             ? <ReadOnlyMarkdown markdown={activeDocument.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : <MarkdownEditor ref={editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} onChange={(markdown) => {
+            : <MarkdownEditor ref={editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={(markdown) => {
               const latest = documentIndexRef.current.get(activeDocument.objectId);
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });
