@@ -6,14 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-11
+
 ### Changed
 
+- Refined Settings actions: the logout control now appears only under **General**, the **Data migration** heading uses consistent wording, inactive login-device removal uses a neutral style, and administrator user actions now have matching status icons and spacing.
 - Split local-save retrying, synchronization pulls, purge safety, and outbox acknowledgement out of `VaultWorkspace` into focused controllers with explicit transactional boundaries.
 - Changed Live editing to retain canonical authored Markdown separately from its rendered ProseMirror view, preserving untouched source syntax and source-based caret positions across edits and mode switches.
 - Changed attachment staging so the encrypted manifest, every encrypted chunk, and their durable outbox entries are committed in one IndexedDB transaction before a Markdown reference can be inserted.
 
 ### Fixed
 
+- Fixed installed iPadOS layouts stopping above the bottom safe area and leaving an empty strip; application backgrounds now fill the complete viewport while bottom controls remain inset from system UI.
+- Fixed both desktop sidebar resize tracks showing surface-colored gutters between the gray sidebars and white document pane; each boundary is now a single divider line with a wider invisible drag target.
+- Fixed Settings requiring the close button to dismiss the window; clicking outside the Settings window now closes it while recovery-key confirmation is not pending.
 - Fixed failed encryption or IndexedDB writes being able to strand the newest edit behind a debounce boundary. Failed generations now remain pending, retry with backoff, block normal locking and unloading, and keep the dirty state until a durable local copy exists.
 - Fixed synchronization cursors advancing past changes that could not be decrypted or safely applied, and added a full replay path when a server restored from an older backup reports a cursor behind the client.
 - Fixed remote purge and upload acknowledgement paths that could remove pending local documents, attachment data, history operations, or a newer object generation before a durable conflict or rebased outbox entry existed.
