@@ -270,7 +270,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .properties-invalid h2, .properties-invalid p { margin: 0 0 8px; color: inherit; }
 .properties-invalid pre { max-height: 190px; overflow: auto; margin: 10px 0; padding: 10px; border-radius: 6px; background: color-mix(in srgb, var(--surface) 65%, transparent); color: var(--text); font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
 
-.markdown-callout, .live-callout-surface, .live-callout-overlay { --callout-color: #6b7280; --callout-soft: color-mix(in srgb, var(--callout-color) 13%, transparent); }
+.markdown-callout, .source-blockquote-node.live-callout { --callout-color: #6b7280; --callout-soft: color-mix(in srgb, var(--callout-color) 13%, transparent); }
 .callout-note, .callout-info, .callout-todo { --callout-color: #38a8e8 !important; }
 .callout-abstract { --callout-color: #2fbac5 !important; }
 .callout-tip, .callout-success { --callout-color: #43b83f !important; }
@@ -302,14 +302,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-callout > .callout-content:empty { margin-top: 0; }
 
 .markdown-editor-host { position: relative; z-index: 1; }
-.markdown-editor-host blockquote.live-callout { position: relative; margin: 0 0 1em; padding: 50px 17px 15px; border: 1px solid transparent; border-radius: 10px; color: var(--text); }
-.markdown-editor-host blockquote.live-callout > :first-child { margin-top: 0; }
-.markdown-editor-host blockquote.live-callout > :last-child { margin-bottom: 0; }
-.markdown-editor-host blockquote.live-callout > p.live-callout-marker { position: absolute; z-index: 3; top: 13px; right: 17px; left: 17px; min-height: 24px; margin: 0; color: var(--callout-color); }
-.markdown-editor-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing { overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; }
-.markdown-editor-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing::-webkit-scrollbar { display: none; }
-.markdown-editor-host blockquote.live-callout > p.live-callout-marker.is-live-callout-marker-editing::before { content: attr(data-callout-prefix); user-select: none; }
-.markdown-editor-host .live-callout-marker-hidden { visibility: hidden; }
+.markdown-editor-host .source-blockquote-node { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; margin: 0 0 1em; color: var(--text); }
+.markdown-editor-host .source-blockquote-preview, .markdown-editor-host .source-blockquote-source { min-width: 0; grid-area: 1 / 1; }
+.markdown-editor-host .source-blockquote-node > [hidden] { display: block; visibility: hidden; pointer-events: none; }
+.markdown-editor-host .source-blockquote-preview > .readonly-markdown { width: 100%; min-height: 0; margin: 0; padding: 0; font-family: inherit; font-size: inherit; line-height: inherit; }
+.markdown-editor-host .source-blockquote-preview > .readonly-markdown > :first-child { margin-top: 0; }
+.markdown-editor-host .source-blockquote-preview > .readonly-markdown > :last-child { margin-bottom: 0; }
+.markdown-editor-host .source-blockquote-preview blockquote { margin-bottom: 0; }
+.markdown-editor-host .source-blockquote-source { box-sizing: border-box; min-height: 1.7em; margin: 0; padding: 10px 14px; overflow-wrap: anywhere; border: 0; border-left: 3px solid var(--document-divider); border-radius: 0; background: transparent; color: var(--text); font: inherit; white-space: break-spaces; }
+.markdown-editor-host .source-blockquote-source > .source-blockquote-source-code { display: inline; padding: 0; background: transparent; color: inherit; font: inherit; white-space: inherit; }
+.markdown-editor-host .source-blockquote-node.live-callout .source-blockquote-source { border: 1px solid var(--callout-color); border-radius: 10px; background: var(--callout-soft); caret-color: var(--text-strong); }
 .markdown-editor-host .live-markdown-escape-hidden { font-size: 0; line-height: 0; color: transparent; }
 .markdown-editor-host .live-inline-math-source, .markdown-editor-host .live-wikilink-source { font-size: 0; line-height: 0; color: transparent; }
 .live-inline-math-widget { display: inline-block; max-width: 100%; padding: 0 .08em; vertical-align: middle; pointer-events: none; }
@@ -327,13 +329,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .mermaid-diagram { margin: 1.2em 0; }
 .mermaid-diagram-canvas { min-height: 28px; }
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: .35em 0; }
-.live-callout-overlays { position: absolute; inset: 0; pointer-events: none; }
-.live-callout-surface { position: absolute; z-index: 0; border: 1px solid var(--callout-color); border-radius: 10px; background: var(--callout-soft); }
-.live-callout-overlay { position: absolute; z-index: 2; min-height: 50px; box-sizing: border-box; display: flex; align-items: flex-start; padding: 13px 17px; overflow: hidden; pointer-events: auto; cursor: text; }
-.live-callout-overlay.is-marker-editing { pointer-events: none; }
-.live-callout-overlay.is-marker-editing .callout-header { visibility: hidden; }
-.live-callout-overlay .callout-header { min-width: 0; }
-.live-callout-overlay .callout-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-placeholder { display: inline-block; padding: 10px; border: 1px dashed var(--border); border-radius: 7px; color: var(--muted); }
 .empty-editor { height: 100%; display: grid; place-content: center; text-align: center; color: var(--muted); }
 .empty-editor h2 { margin-bottom: 3px; color: var(--text-strong); }

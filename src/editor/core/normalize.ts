@@ -81,6 +81,10 @@ function computePlan(doc: PMNode, presentation: InlinePresentationContext): {
   const widgets: WidgetDecoration[] = [];
   doc.descendants((node, pos, parent) => {
     if (!node.isTextblock) return true;
+    // Source-backed blockquotes render through their NodeView while stable
+    // and expose literal Markdown while active. Inline normalization must not
+    // hide or mark syntax inside that literal source text.
+    if (node.type === schema.nodes.blockquote) return false;
     const text = node.textContent;
     const spans = parseInline(text, parent, presentation);
     const blockStart = pos + 1;

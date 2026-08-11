@@ -22,6 +22,7 @@ import type {
 import type { Command, Plugin } from "prosemirror-state";
 
 import type { InlinePresentationContext, InlineSpan } from "../inline-parse";
+import type { SourceBlockPresentation } from "../extension";
 import type { ParserState } from "../parser";
 import type {
   BlockHandler,
@@ -38,6 +39,7 @@ export type FeaturePluginContext = {
   parseMarkdown: (markdown: string) => PMNode;
   serializeMarkdown: (doc: PMNode) => string;
   resolveImageSource?: InlinePresentationContext["resolveImageSource"];
+  sourceBlockPresentations?: readonly SourceBlockPresentation[];
 };
 
 export type FeatureSpec = {

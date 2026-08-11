@@ -50,6 +50,31 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
+  it("refreshes a blockquote preview without changing source or selection", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "> [!NOTE]\n> Body";
+    let renderCount = 0;
+    const editor = createEditor(host, {
+      initialContent: markdown,
+      extensions: [createCalloutExtension({
+        renderBlockquotePreview: (container, source) => {
+          renderCount += 1;
+          container.textContent = source;
+        },
+      })],
+    });
+
+    expect(focusCalloutMarker(editor, 0, 3)).toBe(true);
+    const offset = editor.getSelectionOffset();
+    editor.refreshPresentation();
+
+    expect(renderCount).toBe(2);
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(editor.getSelectionOffset()).toBe(offset);
+    editor.destroy();
+  });
+
   it("reveals a horizontal rule source on click and preserves its delimiter", () => {
     for (const delimiter of ["---", "***"] as const) {
       const host = document.createElement("div");
@@ -166,14 +191,14 @@ describe("Mint editor core public controller", () => {
     const bareEditor = createEditor(bareHost, { initialContent: markdown });
 
     expect(bareHost.querySelector("blockquote")).not.toBeNull();
-    expect(bareHost.querySelector("blockquote.live-callout")).toBeNull();
+    expect(bareHost.querySelector(".source-blockquote-node.live-callout")).toBeNull();
     bareEditor.destroy();
 
     const extendedHost = document.createElement("div");
     document.body.append(extendedHost);
     const extendedEditor = createMintEditor(extendedHost, { initialContent: markdown });
 
-    expect(extendedHost.querySelector("blockquote.live-callout")).not.toBeNull();
+    expect(extendedHost.querySelector(".source-blockquote-node.live-callout")).not.toBeNull();
     extendedEditor.destroy();
   });
 
@@ -208,9 +233,10 @@ describe("Mint editor core public controller", () => {
       cancelable: true
     }));
     expect(host.querySelector("blockquote")).not.toBeNull();
-    expect(host.querySelectorAll("blockquote > p")).toHaveLength(2);
-    expect(editor.getMarkdown()).toMatch(/^> ?/);
-    expect(changes.at(-1)).toMatch(/^> ?/);
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(">\n>");
+    expect(editor.getMarkdown()).toBe(">\n>");
+    expect(changes.at(-1)).toBe(">\n>");
     expect(editor.getMarkdown()).not.toContain("\\>");
 
     editor.replaceMarkdown("a > b", "a > b".length);
@@ -306,29 +332,75 @@ describe("Mint editor core public controller", () => {
     });
 
     expect(editor.getMarkdown()).toBe("> [!WARNING]\n>\n> Body");
-    expect(host.querySelector("blockquote")?.classList.contains("live-callout")).toBe(true);
-    expect(host.querySelector("blockquote > p")?.classList.contains("live-callout-marker")).toBe(true);
+    expect(host.querySelector(".source-blockquote-node.live-callout")).not.toBeNull();
+    expect(host.querySelector(".source-blockquote-preview")?.hasAttribute("hidden")).toBe(false);
     editor.replaceMarkdown("> [!WARNI\n>\n> Body");
     expect(editor.getMarkdown()).toBe("> [!WARNI\n>\n> Body");
     expect(host.querySelector("blockquote")).not.toBeNull();
-    expect(host.querySelector("blockquote.live-callout")).toBeNull();
-    expect(host.querySelector("blockquote > p.live-callout-marker")).toBeNull();
+    expect(host.querySelector(".source-blockquote-node.live-callout")).toBeNull();
     expect(editor.getMarkdown()).not.toMatch(/==`|\\\[|\\\]/);
     editor.replaceMarkdown("> [!WARNING]\n>\n> Body");
-    expect(host.querySelector("blockquote.live-callout")).not.toBeNull();
-    expect(host.querySelector("blockquote > p.live-callout-marker")).not.toBeNull();
+    expect(host.querySelector(".source-blockquote-node.live-callout")).not.toBeNull();
     editor.destroy();
   });
 
-  it("decorates an inactive callout marker without changing its Markdown", () => {
+  it("keeps an inactive callout as presentation over unchanged authored source", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const markdown = "Before\n\n> [!NOTE]\n>\n> Body";
     const editor = createMintEditor(host, { initialContent: markdown });
 
-    expect(host.querySelector("blockquote.live-callout")).not.toBeNull();
-    expect(host.querySelector("blockquote > p.live-callout-marker > .live-callout-marker-hidden")?.textContent).toBe("[!NOTE]");
+    expect(host.querySelector(".source-blockquote-node.live-callout")).not.toBeNull();
+    expect(host.querySelector(".source-blockquote-preview .markdown-callout")?.textContent).toContain("Note");
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe("> [!NOTE]\n>\n> Body");
+    expect(host.querySelector(".source-blockquote-source")?.hasAttribute("hidden")).toBe(true);
     expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it("reveals a two-line Callout without merging its authored lines", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const markdown = "> [!NOTE] \n> Note callout";
+    const editor = createMintEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+    });
+    const preview = host.querySelector<HTMLElement>(".source-blockquote-preview");
+    if (!preview) throw new Error("Missing Callout preview");
+
+    preview.dispatchEvent(new MouseEvent("mousedown", {
+      button: 0,
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(markdown);
+    expect(host.querySelector(".source-blockquote-source")?.hasAttribute("hidden")).toBe(false);
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+    editor.destroy();
+  });
+
+  it("reveals a source-backed quote when keyboard focus lands inside it", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const markdown = "> Keyboard editable";
+    const editor = createMintEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+    });
+    const surface = host.querySelector<HTMLElement>(".ProseMirror");
+
+    expect(host.querySelector(".source-blockquote-source")?.hasAttribute("hidden")).toBe(true);
+    surface?.dispatchEvent(new FocusEvent("focus"));
+
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
+    expect(host.querySelector(".source-blockquote-source")?.hasAttribute("hidden")).toBe(false);
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
     editor.destroy();
   });
 
@@ -351,18 +423,18 @@ describe("Mint editor core public controller", () => {
     const serialized = editor.getMarkdown();
 
     expect(focusCalloutMarker(editor, 0, 8)).toBe(true);
-    const outerMarker = host.querySelector<HTMLParagraphElement>("blockquote > p.live-callout-marker");
-    expect(outerMarker?.classList.contains("is-live-callout-marker-editing")).toBe(true);
-    expect(outerMarker?.dataset.calloutPrefix).toBe("> ");
-    expect(document.getSelection()?.anchorOffset).toBe(8);
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
+    expect(host.querySelector(".source-blockquote-source")?.hasAttribute("hidden")).toBe(false);
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(markdown);
+    expect(editor.getSelectionOffset()).toBe("> ".length + 8);
     expect(editor.getMarkdown()).toBe(serialized);
     expect(changes).toEqual([]);
 
     expect(focusCalloutMarker(editor, 1, 999)).toBe(true);
-    const nestedMarker = host.querySelector<HTMLParagraphElement>("blockquote blockquote > p.live-callout-marker");
-    expect(nestedMarker?.classList.contains("is-live-callout-marker-editing")).toBe(true);
-    expect(nestedMarker?.dataset.calloutPrefix).toBe("> > ");
-    expect(document.getSelection()?.anchorOffset).toBe("[!WARNING]- Nested".length);
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(markdown);
+    expect(editor.getSelectionOffset()).toBe(
+      markdown.indexOf("[!WARNING]- Nested") + "[!WARNING]- Nested".length,
+    );
     expect(editor.getMarkdown()).toBe(serialized);
     expect(changes).toEqual([]);
 
@@ -383,22 +455,23 @@ describe("Mint editor core public controller", () => {
 
     expect(editor.getMarkdown()).toBe("> [!NOTE]");
     expect(changes.at(-1)).toBe("> [!NOTE]");
-    expect(host.querySelector("blockquote")?.textContent).toBe("[!NOTE]");
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe("> [!NOTE]");
     expect(editor.getMarkdown()).not.toMatch(/==`|\\>|\\\[|\\\]/);
     editor.destroy();
   });
 
-  it("keeps a trailing title space and custom title visible while the marker is edited", async () => {
+  it("edits trailing spaces and titles in the real Callout source", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const editor = createMintEditor(host, { initialContent: "> [!TIP]" });
     const editable = host.querySelector<HTMLElement>(".ProseMirror");
-    const markerParagraph = host.querySelector<HTMLParagraphElement>("blockquote > p");
-    if (!editable || !markerParagraph) throw new Error("Missing callout marker");
+    expect(focusCalloutMarker(editor, 0)).toBe(true);
+    const markerSource = host.querySelector<HTMLElement>(".source-blockquote-source-code");
+    if (!editable || !markerSource) throw new Error("Missing callout source");
 
-    markerParagraph.textContent = "[!TIP] ";
+    markerSource.textContent = "> [!TIP] ";
     const range = document.createRange();
-    range.selectNodeContents(markerParagraph);
+    range.selectNodeContents(markerSource);
     range.collapse(false);
     document.getSelection()?.removeAllRanges();
     document.getSelection()?.addRange(range);
@@ -410,13 +483,12 @@ describe("Mint editor core public controller", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(editor.getMarkdown()).toBe("> [!TIP] ");
-    expect(host.querySelector(".live-callout-marker-hidden")).toBeNull();
-    expect(host.querySelector("blockquote > p")?.textContent).toBe("[!TIP] ");
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe("> [!TIP] ");
 
-    const editedParagraph = host.querySelector<HTMLParagraphElement>("blockquote > p");
-    if (!editedParagraph) throw new Error("Missing edited callout marker");
-    editedParagraph.textContent = "[!TIP] Custom title";
-    range.selectNodeContents(editedParagraph);
+    const editedSource = host.querySelector<HTMLElement>(".source-blockquote-source-code");
+    if (!editedSource) throw new Error("Missing edited callout source");
+    editedSource.textContent = "> [!TIP] Custom title";
+    range.selectNodeContents(editedSource);
     range.collapse(false);
     document.getSelection()?.removeAllRanges();
     document.getSelection()?.addRange(range);
@@ -428,46 +500,124 @@ describe("Mint editor core public controller", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(editor.getMarkdown()).toBe("> [!TIP] Custom title");
-    expect(host.querySelector(".live-callout-marker-hidden")).toBeNull();
-    expect(host.querySelector("blockquote > p")?.textContent).toBe("[!TIP] Custom title");
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe("> [!TIP] Custom title");
     editor.destroy();
   });
 
-  it("undoes an incomplete marker and then restores its empty callout body", () => {
+  it("preserves quote lines when native editing creates block DOM", async () => {
+    for (const fixture of [
+      {
+        initial: "> [!note] \n> \n> callout ",
+        dom: "&gt; [!note] <div>&gt; test</div><div>&gt; callout </div>",
+        expected: "> [!note] \n> test\n> callout ",
+      },
+      {
+        initial: "> quote\n> \n> tail",
+        dom: "&gt; quote<div>&gt; test</div><div>&gt; tail</div>",
+        expected: "> quote\n> test\n> tail",
+      },
+    ]) {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const editor = createMintEditor(host, {
+        initialContent: fixture.initial,
+        onChange: (next) => changes.push(next),
+      });
+      const source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
+      if (!source) throw new Error("Missing source-backed quote content");
+
+      source.innerHTML = fixture.dom;
+      source.dispatchEvent(new InputEvent("input", {
+        inputType: "insertText",
+        data: "test",
+        bubbles: true,
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(editor.getMarkdown()).toBe(fixture.expected);
+      expect(changes.at(-1)).toBe(fixture.expected);
+      expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(fixture.expected);
+      expect(host.querySelector(".source-blockquote-source-code")?.querySelector("div, br")).toBeNull();
+      editor.destroy();
+      host.remove();
+    }
+  });
+
+  it("inserts and deletes text on a middle quote line before native DOM mutation", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const initial = "> [!note] \n> \n> callout ";
+    const inserted = "> [!note] \n> test\n> callout ";
+    const changes: string[] = [];
+    const editor = createMintEditor(host, {
+      initialContent: initial,
+      onChange: (next) => changes.push(next),
+    });
+    expect(focusCalloutMarker(editor, 0)).toBe(true);
+
+    let source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
+    let text = source?.firstChild;
+    if (!source || !text) throw new Error("Missing editable quote source");
+    const insertAt = initial.indexOf("\n> ") + 3;
+    let range = document.createRange();
+    range.setStart(text, insertAt);
+    range.collapse(true);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    const insert = new InputEvent("beforeinput", {
+      inputType: "insertText",
+      data: "test",
+      bubbles: true,
+      cancelable: true,
+    });
+
+    source.dispatchEvent(insert);
+
+    expect(insert.defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe(inserted);
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(inserted);
+
+    source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
+    text = source?.firstChild;
+    if (!source || !text) throw new Error("Missing updated quote source");
+    const deleteFrom = inserted.indexOf("test");
+    range = document.createRange();
+    range.setStart(text, deleteFrom + 4);
+    range.collapse(true);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    for (let index = 0; index < 4; index += 1) {
+      source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
+      if (!source) throw new Error("Missing quote source while deleting");
+      const remove = new InputEvent("beforeinput", {
+        inputType: "deleteContentBackward",
+        bubbles: true,
+        cancelable: true,
+      });
+      source.dispatchEvent(remove);
+      expect(remove.defaultPrevented).toBe(true);
+    }
+
+    expect(editor.getMarkdown()).toBe(initial);
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(initial);
+    expect(changes.at(0)).toBe(inserted);
+    expect(changes.at(-1)).toBe(initial);
+    editor.destroy();
+  });
+
+  it("keeps an empty Callout body editable without a private placeholder", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const editor = createMintEditor(host, {
-      initialContent: "> [!CAUTION]\n>\n> \u2060"
+      initialContent: "> [!CAUTION]\n> "
     });
 
-    editor.replaceMarkdown("> [!CAUTION]", "> [!CAUTION]".length);
-    editor.replaceMarkdown("> [!CAUTION", "> [!CAUTION".length);
-
-    expect(editor.getMarkdown()).toBe("> [!CAUTION");
-    expect(host.querySelector("blockquote")).not.toBeNull();
-    expect(host.querySelector("blockquote.live-callout")).toBeNull();
-
-    const editable = host.querySelector<HTMLElement>(".ProseMirror");
-    editable?.dispatchEvent(new KeyboardEvent("keydown", {
-      key: "z",
-      code: "KeyZ",
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true
-    }));
-
-    expect(editor.getMarkdown()).toBe("> [!CAUTION]");
-    expect(host.querySelector("blockquote.live-callout")).not.toBeNull();
-
-    editable?.dispatchEvent(new KeyboardEvent("keydown", {
-      key: "z",
-      code: "KeyZ",
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true
-    }));
-
-    expect(editor.getMarkdown()).toBe("> [!CAUTION]\n>\n> \u2060");
+    expect(editor.getMarkdown()).toBe("> [!CAUTION]\n> ");
+    expect(editor.getMarkdown()).not.toContain("\u2060");
+    expect(focusCalloutMarker(editor, 0)).toBe(true);
+    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe("> [!CAUTION]\n> ");
     editor.destroy();
   });
 

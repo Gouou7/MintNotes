@@ -4,72 +4,45 @@ export const blockquoteSpecs: FeatureSpecs = {
   name: "blockquote",
   cases: [
     {
-      id: "immediate-wrap",
-      label: "`>` alone stays paragraph; space triggers wrap",
-      seed: "",
-      events: [">", " ", "a"],
-      checkpoints: [
-        // at=1: text `>`, plain paragraph.
-        { at: 1, expect: ">|" },
-        // at=2: space fires the input rule; blockquote with empty
-        // paragraph inside, cursor at the start.
-        { at: 2, expect: "<bq>|</bq>" },
-        // at=3: typed `a` inside the blockquote paragraph.
-        { at: 3, expect: "<bq>a|</bq>" },
-      ],
-    },
-
-    {
-      id: "content-can-start-with-space",
-      label: "first content char can be a space",
-      seed: "",
-      events: [">", " ", " "],
-      checkpoints: [
-        { at: 2, expect: "<bq>|</bq>" },
-        { at: 3, expect: "<bq> |</bq>" },
-      ],
-    },
-
-    {
-      id: "non-space-first-content",
-      label: "first content char can be any non-space (e.g. `x`)",
-      seed: "",
-      events: [">", " ", "x"],
-      checkpoints: [
-        { at: 3, expect: "<bq>x|</bq>" },
-      ],
-    },
-
-    {
-      id: "enter-extends",
-      label: "Enter inside non-empty blockquote line → new blockquote line",
+      id: "enter-confirms-source",
+      label: "a line-leading `>` stays authored text until Enter confirms it",
       seed: "",
       events: [">", " ", "a", "<Enter>", "b"],
       checkpoints: [
-        { at: 3, expect: "<bq>a|</bq>" },
-        { at: 4, expect: "<bq>a\n|</bq>" },
-        { at: 5, expect: "<bq>a\nb|</bq>" },
+        { at: 1, expect: ">|" },
+        { at: 2, expect: "> |" },
+        { at: 3, expect: "> a|" },
+        { at: 4, expect: "<bq>> a\n> |</bq>" },
+        { at: 5, expect: "<bq>> a\n> b|</bq>" },
       ],
     },
-
     {
-      id: "enter-on-empty-line-exits",
-      label: "Enter on an empty blockquote line → exit blockquote",
-      seed: "",
-      events: [">", " ", "a", "<Enter>", "<Enter>"],
+      id: "enter-extends-source",
+      label: "Enter inside a source-backed quote adds an authored quote line",
+      seed: "> a",
+      events: ["<Enter>", "b"],
       checkpoints: [
-        { at: 4, expect: "<bq>a\n|</bq>" },
-        { at: 5, expect: "<bq>a</bq>\n|" },
+        { at: 1, expect: "<bq>> a\n> |</bq>" },
+        { at: 2, expect: "<bq>> a\n> b|</bq>" },
       ],
     },
-
     {
-      id: "mid-line-enter-splits",
-      label: "Enter in the middle of a blockquote line → split, both halves stay inside",
+      id: "empty-line-exits",
+      label: "Enter on the final empty authored quote line exits the block",
+      seed: "> a",
+      events: ["<Enter>", "<Enter>"],
+      checkpoints: [
+        { at: 1, expect: "<bq>> a\n> |</bq>" },
+        { at: 2, expect: "<bq>a</bq>\n|" },
+      ],
+    },
+    {
+      id: "mid-line-enter",
+      label: "Enter in the middle preserves both real quote prefixes",
       seed: "> ab",
-      events: ["<Home>", "<ArrowRight>", "<Enter>"],
+      events: ["<Home>", "<ArrowRight>", "<ArrowRight>", "<ArrowRight>", "<Enter>"],
       checkpoints: [
-        { at: 3, expect: "<bq>a\n|b</bq>" },
+        { at: 5, expect: "<bq>> a\n> |b</bq>" },
       ],
     },
   ],

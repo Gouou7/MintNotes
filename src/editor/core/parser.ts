@@ -162,6 +162,30 @@ function sourceForToken(token: Token, src: string): string {
   return fenceSourceLines(token, src).join("\n");
 }
 
+function sourceForBlockquote(token: Token, src: string): string {
+  if (!token.map) return "> ";
+  const lines = src.split("\n").slice(token.map[0], token.map[1]);
+  if (token.level === 0) return lines.join("\n");
+
+  const first = lines[0] ?? "";
+  const markerOffset = first.search(/>/);
+  if (markerOffset <= 0) return lines.join("\n");
+
+  // markdown-it token maps are document-relative. When a quote lives in a
+  // list item, the list serializer owns the outer indentation, so keep the
+  // exact quote spelling relative to that container.
+  return lines.map((line) => line.slice(Math.min(markerOffset, line.length))).join("\n");
+}
+
+function blockquoteCloseIndex(tokens: Token[], openIndex: number): number {
+  let depth = 0;
+  for (let index = openIndex; index < tokens.length; index += 1) {
+    if (tokens[index]?.type === "blockquote_open") depth += 1;
+    else if (tokens[index]?.type === "blockquote_close" && --depth === 0) return index;
+  }
+  return openIndex;
+}
+
 function handleBlock(state: ParserState, token: Token, src: string): void {
   const { nodes } = schema;
   switch (token.type) {
@@ -184,12 +208,6 @@ function handleBlock(state: ParserState, token: Token, src: string): void {
       return;
     }
     case "heading_close":
-      state.closeNode();
-      return;
-    case "blockquote_open":
-      state.openNode(nodes.blockquote);
-      return;
-    case "blockquote_close":
       state.closeNode();
       return;
     case "bullet_list_open":
@@ -268,7 +286,19 @@ function handleInline(state: ParserState, token: Token): void {
 export function parse(src: string): PMNode {
   const tokens = md.parse(src, {});
   const state = new ParserState();
-  for (const token of tokens) handleBlock(state, token, src);
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    if (token.type === "blockquote_open") {
+      const source = sourceForBlockquote(token, src);
+      state.push(schema.nodes.blockquote.createChecked(
+        { sourceEditing: false },
+        source ? schema.text(source) : undefined,
+      ));
+      index = blockquoteCloseIndex(tokens, index);
+      continue;
+    }
+    handleBlock(state, token, src);
+  }
   let doc = state.finish();
   for (const f of collectParserPostProcessors()) doc = f(doc);
   return doc;

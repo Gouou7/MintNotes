@@ -12,10 +12,7 @@ import { normalizeInlinePlugin } from "./normalize";
 import { parse } from "./parser";
 import { schema } from "./schema";
 import { serialize } from "./serializer";
-import {
-  blockquoteInputPlugin,
-  manualEscapeDecorationPlugin,
-} from "./canonical-markdown";
+import { manualEscapeDecorationPlugin } from "./canonical-markdown";
 import type { EditorExtension } from "./extension";
 
 // Open `<a>` links on Cmd/Ctrl+click. Inside contenteditable, a plain
@@ -52,13 +49,15 @@ export function defaultPlugins(options: {
   // A real browser editor already draws its own caret, so a live editor
   // should pass `{ cursorWidget: false }`.
   const { cursorWidget = true, extensions = [], resolveImageSource } = options;
+  const sourceBlockPresentations = extensions.flatMap(
+    (extension) => extension.sourceBlockPresentations ?? [],
+  );
   const featureKeymap = collectKeymaps(schema);
   const plugins: Plugin[] = [
     history(),
     keymap({ "Mod-z": undo, "Mod-y": redo, "Mod-Shift-z": redo }),
     markdownInputRules(),
     spaceBreaksStoredMarks(),
-    blockquoteInputPlugin(),
     manualEscapeDecorationPlugin(),
     ...extensions.flatMap((extension) => extension.createPlugins({ schema })),
     normalizeInlinePlugin({ resolveImageSource }),
@@ -69,6 +68,7 @@ export function defaultPlugins(options: {
       parseMarkdown: parse,
       serializeMarkdown: serialize,
       resolveImageSource,
+      sourceBlockPresentations,
     }),
     syntaxHintsPlugin(),
     openLinkOnModClickPlugin(),

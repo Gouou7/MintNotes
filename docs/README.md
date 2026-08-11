@@ -14,6 +14,7 @@ Mint Notes documentation is organized by the task you are trying to complete. St
 | --- | --- | --- |
 | Understand the system design | [Architecture](ARCHITECTURE.md) | Runtime topology, local-first persistence, synchronization, browser/server storage, attachments, and portable data. |
 | Change the editor | [Editor architecture](EDITOR_ARCHITECTURE.md) | Canonical Markdown, one-way rendering, source coordinates, editor ownership, presentation-only state, and required regressions. |
+| Audit editor source fidelity | [Editor source-fidelity audit](EDITOR_SOURCE_FIDELITY_AUDIT.md) | Current compliance evidence, confirmed source-loss risks, target behavior, and the exact-string verification matrix. |
 | Set up or verify development | [Development guide](DEVELOPMENT.md) | Contributor requirements, project layout, module boundaries, local servers, and verification commands. |
 | Review trust and security boundaries | [Security model](SECURITY.md) | Threat model, key hierarchy, browser security, account isolation, data-loss controls, and operational requirements. |
 

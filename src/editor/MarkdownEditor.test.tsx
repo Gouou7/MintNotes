@@ -2,7 +2,7 @@ import { act, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditor, type Editor as EditorController } from "./core/lib";
-import { createCalloutExtension, focusCalloutMarker } from "./extensions/callout";
+import { createCalloutExtension } from "./extensions/callout";
 import { createRichSyntaxExtension } from "./extensions/richSyntax";
 import { I18nProvider } from "../i18n";
 import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
@@ -10,7 +10,6 @@ import { MarkdownEditor, type MarkdownEditorHandle } from "./MarkdownEditor";
 vi.mock("./core/lib", () => ({ createEditor: vi.fn() }));
 vi.mock("./extensions/callout", () => ({
   createCalloutExtension: vi.fn(() => ({ id: "mint-callout", createPlugins: () => [] })),
-  focusCalloutMarker: vi.fn(() => true)
 }));
 vi.mock("./extensions/richSyntax", () => ({
   createRichSyntaxExtension: vi.fn(() => ({ id: "mint-rich-syntax", createPlugins: () => [] }))
@@ -242,7 +241,7 @@ describe("MarkdownEditor live mode", () => {
     await act(async () => root.unmount());
   });
 
-  it("keeps frontmatter outside the live editor and canonicalizes callout changes", async () => {
+  it("keeps frontmatter outside the live editor without materializing callout syntax", async () => {
     const editor = {
       destroy: vi.fn(),
       focus: vi.fn(),
@@ -267,9 +266,9 @@ describe("MarkdownEditor live mode", () => {
       /></I18nProvider>
     ));
 
-    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe("> [!TIP]\n>\n> Body");
+    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe("> [!TIP]\n> Body");
     expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).not.toContain("==`");
-    act(() => editorChange?.("> [!TIP]\n>\n> Changed"));
+    act(() => editorChange?.("> [!TIP]\n> Changed"));
     expect(onChange).toHaveBeenCalledWith("---\nversion:\n---\n> [!TIP]\n> Changed");
     expect(container.textContent).toContain("Note properties");
 
@@ -298,12 +297,12 @@ describe("MarkdownEditor live mode", () => {
     await act(async () => root.render(render("> [!NOTE]\n> Body")));
     act(() => editorChange?.("> [!NOTE]"));
 
-    expect(onChange).toHaveBeenLastCalledWith("> [!NOTE]\n> ");
+    expect(onChange).toHaveBeenLastCalledWith("> [!NOTE]");
 
-    await act(async () => root.render(render("> [!NOTE]\n> ")));
+    await act(async () => root.render(render("> [!NOTE]")));
     expect(editor.setMarkdown).not.toHaveBeenCalled();
 
-    act(() => editorChange?.("> [!NOTE]\n>\n> Restored"));
+    act(() => editorChange?.("> [!NOTE]\n> Restored"));
     expect(onChange).toHaveBeenLastCalledWith("> [!NOTE]\n> Restored");
 
     await act(async () => root.unmount());
@@ -350,38 +349,13 @@ describe("MarkdownEditor live mode", () => {
     await act(async () => root.unmount());
   });
 
-  it("keeps the Callout frame in sync and makes only its header interactive", async () => {
+  it("passes a React Callout preview renderer into the presentation extension", async () => {
     const editor = {
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
     } as unknown as EditorController;
-    let height = 80;
-    let markerParagraph: HTMLParagraphElement | null = null;
-    let bodyParagraph: HTMLParagraphElement | null = null;
-    vi.mocked(createEditor).mockImplementation((host) => {
-      const blockquote = document.createElement("blockquote");
-      Object.defineProperty(blockquote, "getBoundingClientRect", {
-        value: () => ({
-          bottom: height,
-          height,
-          left: 0,
-          right: 320,
-          top: 0,
-          width: 320,
-          x: 0,
-          y: 0,
-          toJSON: () => ({})
-        })
-      });
-      markerParagraph = document.createElement("p");
-      markerParagraph.textContent = "[!NOTE]";
-      bodyParagraph = document.createElement("p");
-      bodyParagraph.textContent = "Body";
-      blockquote.append(markerParagraph, bodyParagraph);
-      host.append(blockquote);
-      return editor;
-    });
+    vi.mocked(createEditor).mockReturnValue(editor);
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -389,135 +363,23 @@ describe("MarkdownEditor live mode", () => {
     await act(async () => root.render(
       <MarkdownEditor markdown={"> [!NOTE]\n> Body"} mode="live" onChange={vi.fn()} />
     ));
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
-    expect(container.querySelector<HTMLElement>(".live-callout-overlay")?.style.height).toBe("50px");
-    expect(container.querySelector<HTMLElement>(".live-callout-surface")?.style.height).toBe("80px");
-
-    act(() => {
-      if (markerParagraph) markerParagraph.textContent = "[!NOTE] Custom title";
+    const extensionOptions = vi.mocked(createCalloutExtension).mock.calls[0]?.[0];
+    const preview = document.createElement("div");
+    let cleanup: void | (() => void);
+    await act(async () => {
+      cleanup = extensionOptions?.renderBlockquotePreview?.(
+        preview,
+        "> [!NOTE] Custom title\n> Body",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
-    expect(container.querySelector(".live-callout-overlay")?.getAttribute("aria-label")).toBe("Custom title");
-    expect(container.querySelector(".live-callout-overlay .callout-header strong")?.textContent).toBe("Custom title");
-
-    const title = container.querySelector<HTMLElement>(".live-callout-overlay .callout-header strong");
-    const icon = container.querySelector<HTMLElement>(".live-callout-overlay .callout-icon");
-    const overlay = container.querySelector<HTMLElement>(".live-callout-overlay");
-    if (!title?.firstChild || !icon || !overlay) throw new Error("Missing interactive Callout header");
-    Object.defineProperty(document, "caretPositionFromPoint", {
-      configurable: true,
-      value: vi.fn(() => ({ offsetNode: title.firstChild!, offset: 3 }))
-    });
-
-    act(() => title.dispatchEvent(new PointerEvent("pointerdown", {
-      bubbles: true,
-      button: 0,
-      cancelable: true,
-      clientX: 100,
-      clientY: 10
-    })));
-    expect(focusCalloutMarker).toHaveBeenLastCalledWith(editor, 0, 11);
-
-    act(() => icon.dispatchEvent(new PointerEvent("pointerdown", {
-      bubbles: true,
-      button: 0,
-      cancelable: true
-    })));
-    expect(focusCalloutMarker).toHaveBeenLastCalledWith(editor, 0, "[!NOTE] Custom title".length);
-
-    act(() => overlay.dispatchEvent(new PointerEvent("pointerdown", {
-      bubbles: true,
-      button: 0,
-      cancelable: true
-    })));
-    expect(focusCalloutMarker).toHaveBeenLastCalledWith(editor, 0, "[!NOTE] Custom title".length);
-    Reflect.deleteProperty(document, "caretPositionFromPoint");
-
-    height = 140;
-    act(() => {
-      bodyParagraph?.append(document.createTextNode("\nMore"));
-      window.dispatchEvent(new Event("resize"));
-    });
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
-    expect(container.querySelector<HTMLElement>(".live-callout-surface")?.style.height).toBe("140px");
-
-    height = 80;
-    act(() => {
-      bodyParagraph?.lastChild?.remove();
-      window.dispatchEvent(new Event("resize"));
-    });
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
-    expect(container.querySelector<HTMLElement>(".live-callout-surface")?.style.height).toBe("80px");
-
-    act(() => {
-      if (markerParagraph) markerParagraph.textContent = "[!NOTE";
-    });
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
-    expect(container.querySelector(".live-callout-overlay")).toBeNull();
+    expect(preview.querySelector(".markdown-callout.callout-note")).not.toBeNull();
+    expect(preview.querySelector(".callout-header strong")?.textContent).toBe("Custom title");
+    await act(async () => cleanup?.());
 
     await act(async () => root.unmount());
   });
 
-  it("moves an empty callout body back to its marker without deleting the block", async () => {
-    let editorChange: ((markdown: string) => void) | undefined;
-    const editor = {
-      destroy: vi.fn(),
-      focus: vi.fn(),
-      insertMarkdown: vi.fn(),
-      replaceMarkdown: vi.fn((markdown: string) => editorChange?.(markdown)),
-      setMarkdown: vi.fn()
-    } as unknown as EditorController;
-    let bodyParagraph: HTMLParagraphElement | null = null;
-    vi.mocked(createEditor).mockImplementation((host, options) => {
-      editorChange = options?.onChange;
-      const blockquote = document.createElement("blockquote");
-      const markerParagraph = document.createElement("p");
-      markerParagraph.textContent = "[!NOTE]";
-      bodyParagraph = document.createElement("p");
-      bodyParagraph.append(document.createElement("br"));
-      blockquote.append(markerParagraph, bodyParagraph);
-      host.append(blockquote);
-      return editor;
-    });
-    const onChange = vi.fn();
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-
-    await act(async () => root.render(
-      <MarkdownEditor
-        markdown={"Before\n\n> [!NOTE]\n> \n\nAfter"}
-        mode="live"
-        onChange={onChange}
-      />
-    ));
-
-    const range = document.createRange();
-    range.selectNodeContents(bodyParagraph!);
-    range.collapse(true);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-
-    const deleteEvent = new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true });
-    act(() => bodyParagraph?.dispatchEvent(deleteEvent));
-    expect(deleteEvent.defaultPrevented).toBe(false);
-    expect(editor.replaceMarkdown).not.toHaveBeenCalled();
-
-    const event = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
-    act(() => bodyParagraph?.dispatchEvent(event));
-
-    expect(event.defaultPrevented).toBe(true);
-    expect(onChange).not.toHaveBeenCalled();
-    expect(editor.replaceMarkdown).toHaveBeenCalledWith(
-      "Before\n\n> [!NOTE]\n\nAfter",
-      "Before\n\n> [!NOTE]".length
-    );
-    expect(editor.setMarkdown).not.toHaveBeenCalled();
-    expect(editor.insertMarkdown).not.toHaveBeenCalled();
-
-    await act(async () => root.unmount());
-  });
 });
 
 describe("MarkdownEditor source mode", () => {

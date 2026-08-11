@@ -22,13 +22,43 @@ describe("parser: block nodes", () => {
     expect(doc.child(2).attrs.level).toBe(6);
   });
 
-  test("blockquote wraps block content", () => {
-    const doc = parse("> quoted\n>\n> second");
+  test("blockquote keeps its complete authored source", () => {
+    const source = "> quoted\n>\n> second";
+    const doc = parse(source);
     expect(doc.childCount).toBe(1);
     const bq = doc.child(0);
     expect(bq.type).toBe(schema.nodes.blockquote);
-    expect(bq.childCount).toBe(2);
-    expect(bq.child(0).type).toBe(schema.nodes.paragraph);
+    expect(bq.textContent).toBe(source);
+    expect(bq.attrs.sourceEditing).toBe(false);
+    expect(serialize(doc)).toBe(source);
+  });
+
+  test("blockquote preserves authored prefixes, nesting, blanks, and fenced content", () => {
+    for (const source of [
+      ">quoted",
+      "> quoted",
+      " > indented once",
+      "  > indented twice",
+      "   > indented three times",
+      ">>nested",
+      "> > nested",
+      "> first\n>\n> second",
+      "> first\n> \n> second",
+      "> ```md\n> [!NOTE]\n> ```",
+    ]) {
+      const doc = parse(source);
+      expect(doc.firstChild?.type).toBe(schema.nodes.blockquote);
+      expect(doc.firstChild?.textContent).toBe(source);
+      expect(serialize(doc)).toBe(source);
+    }
+  });
+
+  test("blockquote nested in a list stores source relative to its list container", () => {
+    const doc = parse("- > first\n  > second");
+    const quote = doc.firstChild?.firstChild?.child(1);
+
+    expect(quote?.type).toBe(schema.nodes.blockquote);
+    expect(quote?.textContent).toBe("> first\n> second");
   });
 
   test("bullet list with items", () => {

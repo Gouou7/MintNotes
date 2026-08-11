@@ -29,10 +29,29 @@ const coreNodes: Record<string, NodeSpec> = {
 
   blockquote: {
     group: "block",
-    content: "block+",
+    content: "text*",
+    marks: "",
+    // The node contains authored multiline Markdown rather than rendered
+    // inline content. This makes DOM change parsing preserve native
+    // <div>/<br> line boundaries produced while editing an empty quote line.
+    code: true,
     defining: true,
-    parseDOM: [{ tag: "blockquote" }],
-    toDOM: () => ["blockquote", 0],
+    attrs: {
+      // Presentation-only. The complete authored quote source always stays
+      // in textContent; activating Live source never replaces the node.
+      sourceEditing: { default: false },
+    },
+    parseDOM: [{
+      tag: "pre[data-source-blockquote]",
+      preserveWhitespace: "full",
+      getAttrs: (el) => ({
+        sourceEditing: (el as HTMLElement).getAttribute("data-source-editing") === "1",
+      }),
+    }],
+    toDOM: (node) => ["pre", {
+      "data-source-blockquote": "1",
+      ...(node.attrs.sourceEditing ? { "data-source-editing": "1" } : {}),
+    }, ["code", 0]],
   },
 
   code_block: {

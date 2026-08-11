@@ -10,4 +10,6 @@ export type {
   EditorExtension,
   EditorExtensionCommand,
   EditorExtensionContext,
+  SourceBlockPresentation,
 } from "./extension";
+export { SOURCE_BLOCK_PRESENTATION_META } from "./extension";

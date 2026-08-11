@@ -29,11 +29,6 @@ export interface CalloutMarker {
   icon?: CalloutIcon;
 }
 
-export interface CalloutTitleSourceRange {
-  start: number;
-  end: number;
-}
-
 interface CalloutDefinition {
   kind: Exclude<CalloutKind, "custom">;
   aliases: string[];
@@ -63,9 +58,6 @@ const MARKER = /^\[!([a-z0-9_-]+)\]([+-]?)(?:[ \t]+([^\r\n]*))?$/i;
 // Accepted only to repair notes produced by the removed live-highlight workaround.
 const LEGACY_MATERIALIZED_MARKER = /^==`(\[![a-z0-9_-]+\][+-]?(?:[ \t]+[^\r\n]*)?)`=?=?$/i;
 const ESCAPED_MARKER = /^\\\[!([a-z0-9_-]+)\\\]([+-]?)(?:[ \t]+([^\r\n]*))?$/i;
-const ESCAPED_CALLOUT_LINE = /^([ \t]*)\\>[ \t]+\\\[!([a-z0-9_-]+)\\\]([+-]?)(?:[ \t]+([^\r\n]*))?$/i;
-const QUOTE_PREFIX = /^((?:[ \t]*>[ \t]?)+)(.*)$/;
-const FENCE = /^(`{3,}|~{3,})/;
 const ATTRIBUTE_BLOCK = /(?:^|[ \t]+)\{([^{}\r\n]*)\}[ \t]*$/;
 const ATTRIBUTE_ENTRY = /([a-z][a-z0-9_-]*)=([a-z0-9_-]+)/gi;
 const CALLOUT_COLORS = new Set<CalloutColor>(["gray", "blue", "cyan", "green", "purple", "amber", "red", "rose"]);
@@ -73,8 +65,6 @@ const CALLOUT_ICONS = new Set<CalloutIcon>([
   "note", "abstract", "info", "todo", "tip", "important", "success", "question",
   "warning", "caution", "failure", "danger", "bug", "example", "quote", "custom"
 ]);
-// Live-only text that keeps an otherwise empty body paragraph editable.
-const LIVE_EMPTY_BODY = "\u2060";
 
 export function calloutDefinition(rawType: string): { kind: CalloutKind; title: string } {
   const normalized = rawType.toLowerCase();
@@ -124,22 +114,6 @@ export function parseCalloutMarker(value: string): CalloutMarker | null {
   };
 }
 
-export function calloutTitleSourceRange(value: string): CalloutTitleSourceRange | null {
-  const leadingWhitespace = value.length - value.trimStart().length;
-  const candidate = value.trim();
-  const match = MARKER.exec(candidate);
-  const rawTitle = match?.[3];
-  if (!match || rawTitle === undefined) return null;
-
-  const trimmedTitle = rawTitle.trim();
-  if (!trimmedTitle) return null;
-  const visibleTitle = parseCalloutAppearance(trimmedTitle).title;
-  const rawTitleStart = candidate.indexOf(rawTitle, match[0].length - rawTitle.length);
-  if (rawTitleStart < 0) return null;
-  const start = leadingWhitespace + rawTitleStart + rawTitle.indexOf(trimmedTitle);
-  return { start, end: start + visibleTitle.length };
-}
-
 function parseCalloutAppearance(value: string): { title: string; color?: CalloutColor; icon?: CalloutIcon } {
   const block = ATTRIBUTE_BLOCK.exec(value);
   if (!block) return { title: value };
@@ -159,225 +133,6 @@ function parseCalloutAppearance(value: string): { title: string; color?: Callout
   }
   if (!consumed.length || consumed.join(" ") !== attributes.trim().replace(/\s+/g, " ")) return { title: value };
   return { title: value.slice(0, block.index).trimEnd(), color, icon };
-}
-
-interface QuoteLine {
-  prefix: string;
-  content: string;
-  depth: number;
-}
-
-function parseQuoteLine(line: string): QuoteLine | null {
-  const quote = QUOTE_PREFIX.exec(line);
-  if (!quote) return null;
-  return {
-    prefix: quote[1],
-    content: quote[2],
-    depth: [...quote[1]].filter((character) => character === ">").length
-  };
-}
-
-function blankQuoteLine(prefix: string): string {
-  return prefix.trimEnd();
-}
-
-function emptyQuoteBody(prefix: string): string {
-  return /[ \t]$/.test(prefix) ? prefix : `${prefix} `;
-}
-
-function canonicalMarker(match: RegExpExecArray, decodeTitle = false): string {
-  const rawTitle = decodeTitle && match[3] ? decodeLegacyTitle(match[3]) : match[3];
-  const title = rawTitle ? ` ${rawTitle}` : "";
-  return `[!${match[1]}]${match[2] ?? ""}${title}`;
-}
-
-function updateFence(content: string, fences: string[]): boolean {
-  const fence = FENCE.exec(content.trimStart());
-  if (!fence) return false;
-  const marker = fence[1][0];
-  const top = fences.at(-1);
-  if (top === marker) fences.pop();
-  else if (!top) fences.push(marker);
-  return true;
-}
-
-function stripLiveEmptyBody(content: string): string {
-  if (content.startsWith(LIVE_EMPTY_BODY)) return content.slice(LIVE_EMPTY_BODY.length);
-  if (content.startsWith("\u00a0")) return content.slice(1);
-  return content;
-}
-
-function materializeCalloutLines(markdown: string): string {
-  const eol = markdown.includes("\r\n") ? "\r\n" : "\n";
-  const lines = markdown.split(/\r?\n/);
-  const fences: string[] = [];
-  const output: string[] = [];
-  let pendingBody: { depth: number; prefix: string } | null = null;
-
-  for (const line of lines) {
-    const quote = parseQuoteLine(line);
-    if (pendingBody) {
-      if (!quote || quote.depth < pendingBody.depth) {
-        output.push(`${pendingBody.prefix}${LIVE_EMPTY_BODY}`);
-        pendingBody = null;
-      } else {
-        pendingBody = null;
-        if (!quote.content.trim()) {
-          output.push(`${quote.prefix}${LIVE_EMPTY_BODY}`);
-          continue;
-        }
-      }
-    }
-
-    if (!quote) {
-      output.push(line);
-      continue;
-    }
-    if (updateFence(quote.content, fences) || fences.length) {
-      output.push(line);
-      continue;
-    }
-
-    const legacyMaterialized = LEGACY_MATERIALIZED_MARKER.exec(quote.content.trim());
-    const marker = MARKER.exec(legacyMaterialized?.[1] ?? quote.content.trim());
-    if (!marker) {
-      output.push(line);
-      continue;
-    }
-
-    output.push(`${quote.prefix}${canonicalMarker(marker, Boolean(legacyMaterialized))}`);
-    // A quoted blank line makes the live editor parse the marker and body as separate
-    // paragraphs, so deleting the body cannot move the selection into the marker.
-    output.push(blankQuoteLine(quote.prefix));
-    pendingBody = { depth: quote.depth, prefix: quote.prefix };
-  }
-
-  if (pendingBody) output.push(`${pendingBody.prefix}${LIVE_EMPTY_BODY}`);
-  return output.join(eol);
-}
-
-function canonicalizeCalloutLines(markdown: string): string {
-  const eol = markdown.includes("\r\n") ? "\r\n" : "\n";
-  const lines = markdown.split(/\r?\n/);
-  const fences: string[] = [];
-  const output: string[] = [];
-  let pendingBody: { depth: number; prefix: string; separatorRemoved: boolean } | null = null;
-
-  for (const line of lines) {
-    let currentLine = line;
-    let quote = parseQuoteLine(currentLine);
-
-    if (!quote) {
-      const escapedCallout = ESCAPED_CALLOUT_LINE.exec(currentLine);
-      if (escapedCallout) {
-        const title = escapedCallout[4] ? ` ${escapedCallout[4]}` : "";
-        currentLine = `${escapedCallout[1]}> [!${escapedCallout[2]}]${escapedCallout[3] ?? ""}${title}`;
-        quote = parseQuoteLine(currentLine);
-      }
-    }
-
-    if (pendingBody) {
-      if (!pendingBody.separatorRemoved) {
-        if (quote && quote.depth === pendingBody.depth && !quote.content.trim()) {
-          pendingBody.separatorRemoved = true;
-          continue;
-        }
-        if (!quote || quote.depth < pendingBody.depth) {
-          output.push(emptyQuoteBody(pendingBody.prefix));
-        }
-        pendingBody = null;
-      } else {
-        if (!quote || quote.depth < pendingBody.depth) {
-          output.push(emptyQuoteBody(pendingBody.prefix));
-        } else {
-          currentLine = `${quote.prefix}${stripLiveEmptyBody(quote.content)}`;
-          quote = parseQuoteLine(currentLine);
-        }
-        pendingBody = null;
-      }
-    }
-
-    if (!quote) {
-      output.push(currentLine);
-      continue;
-    }
-    if (updateFence(quote.content, fences) || fences.length) {
-      output.push(currentLine);
-      continue;
-    }
-
-    const legacyMaterialized = LEGACY_MATERIALIZED_MARKER.exec(quote.content.trim());
-    const marker = MARKER.exec(legacyMaterialized?.[1] ?? quote.content.trim());
-    if (marker) {
-      output.push(`${quote.prefix}${canonicalMarker(marker, Boolean(legacyMaterialized))}`);
-      pendingBody = { depth: quote.depth, prefix: quote.prefix, separatorRemoved: false };
-      continue;
-    }
-
-    const escaped = ESCAPED_MARKER.exec(quote.content.trim());
-    if (escaped) {
-      const title = escaped[3] ? ` ${escaped[3]}` : "";
-      output.push(`${quote.prefix}[!${escaped[1]}]${escaped[2] ?? ""}${title}`);
-      continue;
-    }
-    output.push(currentLine);
-  }
-
-  if (pendingBody) output.push(emptyQuoteBody(pendingBody.prefix));
-  return output.join(eol);
-}
-
-export function materializeCalloutsForLive(markdown: string): string {
-  return materializeCalloutLines(markdown);
-}
-
-export function canonicalizeCalloutsFromLive(markdown: string): string {
-  return canonicalizeCalloutLines(markdown);
-}
-
-export interface CollapsedEmptyCallout {
-  markdown: string;
-  offset: number;
-}
-
-export function collapseEmptyCalloutBodyForMarkerEdit(
-  markdown: string,
-  calloutIndex: number
-): CollapsedEmptyCallout | null {
-  if (calloutIndex < 0) return null;
-  const eol = markdown.includes("\r\n") ? "\r\n" : "\n";
-  const lines = markdown.split(/\r?\n/);
-  const fences: string[] = [];
-  let currentCallout = 0;
-
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const quote = parseQuoteLine(lines[lineIndex]);
-    if (!quote) continue;
-    if (updateFence(quote.content, fences) || fences.length) continue;
-    if (!MARKER.test(quote.content.trim())) continue;
-    if (currentCallout !== calloutIndex) {
-      currentCallout += 1;
-      continue;
-    }
-
-    // Only collapse the exact separator and placeholder generated by
-    // materializeCalloutsForLive. Authored blank lines and body content must
-    // remain untouched.
-    if (
-      lines[lineIndex + 1] !== blankQuoteLine(quote.prefix)
-      || lines[lineIndex + 2] !== `${quote.prefix}${LIVE_EMPTY_BODY}`
-    ) return null;
-
-    const nextLines = [
-      ...lines.slice(0, lineIndex + 1),
-      ...lines.slice(lineIndex + 3)
-    ];
-    const nextMarkdown = nextLines.join(eol);
-    const offset = lines.slice(0, lineIndex + 1).join(eol).length;
-    return { markdown: nextMarkdown, offset };
-  }
-
-  return null;
 }
 
 interface MdNode {

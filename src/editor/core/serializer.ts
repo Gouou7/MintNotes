@@ -289,7 +289,23 @@ const coreBlockHandlers: Record<string, BlockHandler> = {
   },
 
   blockquote: (state, node) => {
-    state.wrapBlock("> ", null, node, () => state.renderBlockChildren(node));
+    // A source-backed blockquote contains the complete authored Markdown,
+    // including every `>` and authored space. Emit it verbatim; Live
+    // presentation must never synthesize quote prefixes.
+    state.tick("inner");
+    state.write();
+    for (const ch of node.textContent) {
+      state.tick("inner");
+      if (ch === "\n") {
+        state.out += "\n";
+        if (state.delim) state.out += state.delim;
+      } else {
+        state.out += ch;
+      }
+      state.advance(1);
+    }
+    state.tick("inner");
+    state.closeBlock(node);
   },
 
   code_block: (state, node) => {

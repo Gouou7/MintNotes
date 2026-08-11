@@ -35,6 +35,7 @@ function renderNode(n: Node): string {
   const el = n;
   const tag = el.tagName.toLowerCase();
   const list = el.classList;
+  if (el.hasAttribute("hidden")) return "";
 
   // Decoration widgets — PM also adds "ProseMirror-widget" to the class list,
   // so use classList.contains rather than a strict className comparison.
@@ -70,6 +71,19 @@ function renderNode(n: Node): string {
 
   const children = Array.from(el.childNodes).map(renderNode).join("");
 
+  // Source-backed quotes now use a pre/code editing surface. Recognize it
+  // before the fenced-code render case claims every <pre> element.
+  if (
+    tag === "pre"
+    && (el.hasAttribute("data-source-blockquote") || list.contains("source-blockquote-source"))
+  ) {
+    const sourceCode = el.querySelector("code");
+    const source = sourceCode
+      ? Array.from(sourceCode.childNodes).map(renderNode).join("")
+      : children;
+    return `<bq>${source}</bq>`;
+  }
+
   const featureCase = featureRenderCases[tag];
   if (featureCase) return featureCase(children, el);
 
@@ -94,12 +108,20 @@ function renderNode(n: Node): string {
       // paragraph whose text happens to be `---`.
       return "<hr/>";
     case "blockquote":
+      if (
+        el.hasAttribute("data-source-blockquote")
+        || list.contains("source-blockquote-source")
+      ) return `<bq>${children}</bq>`;
       // Same ambiguity fix as headings: a paragraph whose text starts
       // with `> ` would pretty-render identically to an actual
       // blockquote under the old `> ${line}` form. Wrap with <bq> and
       // join multi-block children by newline.
       return `<bq>${Array.from(el.children).map(renderNode).join("\n")}</bq>`;
     case "pre": {
+      if (
+        el.hasAttribute("data-source-blockquote")
+        || list.contains("source-blockquote-source")
+      ) return `<bq>${children}</bq>`;
       // <pre data-lang="ts"><code>text</code></pre>. Recurse through the
       // `<code>` child instead of reading textContent — textContent skips
       // zero-text widget spans (e.g. PM's play-caret), so we'd lose the

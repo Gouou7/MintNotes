@@ -15,6 +15,7 @@ import { parse } from "./parser";
 import { schema } from "./schema";
 import { serialize } from "./serializer";
 import type { EditorExtension } from "./extension";
+import { SOURCE_BLOCK_PRESENTATION_META } from "./extension";
 import { INLINE_PRESENTATION_META } from "./inline-parse";
 import { mapEquivalentOffset, preserveAuthoredSource } from "./sourcePatch";
 
@@ -103,7 +104,7 @@ export function createEditor(
         const beforeRendered = serialize(v.state.doc);
         const next = v.state.apply(tr);
         v.updateState(next);
-        if (tr.docChanged) {
+        if (tr.docChanged && !tr.getMeta(SOURCE_BLOCK_PRESENTATION_META)) {
           const afterRendered = serialize(next.doc);
           canonicalMarkdown = pendingCanonicalReplacement
             ?? preserveAuthoredSource(canonicalMarkdown, beforeRendered, afterRendered);

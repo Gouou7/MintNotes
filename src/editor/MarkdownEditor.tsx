@@ -1,38 +1,22 @@
 import {
   forwardRef,
   type ClipboardEvent as ReactClipboardEvent,
-  type CSSProperties,
   type DragEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   useImperativeHandle,
   useEffect,
-  useRef,
-  useState
+  useRef
 } from "react";
+import { createRoot } from "react-dom/client";
 import { createEditor, type Editor as EditorController } from "./core/lib";
 import "./core/styles/widgets.css";
 import "./core/styles/theme-typora.css";
-import {
-  createCalloutExtension,
-  focusCalloutMarker as focusCalloutMarkerInEditor,
-} from "./extensions/callout";
+import { createCalloutExtension } from "./extensions/callout";
 import { createRichSyntaxExtension } from "./extensions/richSyntax";
-import { useI18n } from "../i18n";
-import { CalloutHeader } from "./Callout";
-import {
-  calloutTitleSourceRange,
-  canonicalizeCalloutsFromLive,
-  collapseEmptyCalloutBodyForMarkerEdit,
-  materializeCalloutsForLive,
-  parseCalloutMarker,
-  type CalloutColor,
-  type CalloutIcon,
-  type CalloutKind
-} from "./callouts";
+import { I18nProvider, useI18n } from "../i18n";
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter, replaceFrontmatterBody } from "./frontmatter";
 import { canonicalizeMathBlocksFromLive, materializeMathBlocksForLive } from "./liveMathCodec";
+import { ReadOnlyMarkdown } from "./ReadOnlyMarkdown";
 import { renderMathInto, renderMermaidInto } from "./richRenderers";
 
 interface Props {
@@ -110,7 +94,6 @@ const SourceEditor = forwardRef<MarkdownEditorHandle, Props>(function SourceEdit
 
 const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), attachmentsPending = false, onImageInsert, onWikiLink, emptyHint }, ref) {
   const frontmatter = parseFrontmatter(markdown);
-  const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorController | null>(null);
   const changeRef = useRef(onChange);
@@ -121,7 +104,6 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
   const editorMarkdownRef = useRef(markdown);
   const renderedMarkdownRef = useRef(materializeLiveMarkdown(frontmatter.body));
   const wikiLinkRef = useRef(onWikiLink);
-  const [calloutOverlays, setCalloutOverlays] = useState<LiveCalloutOverlay[]>([]);
   changeRef.current = onChange;
   attachmentUrlsRef.current = attachmentUrls;
   attachmentsPendingRef.current = attachmentsPending;
@@ -139,7 +121,21 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
     const editor = createEditor(hostRef.current, {
       initialContent: renderedMarkdownRef.current,
       extensions: [
-        createCalloutExtension(),
+        createCalloutExtension({
+          renderBlockquotePreview: (container, source) => {
+            const root = createRoot(container);
+            root.render(
+              <I18nProvider>
+                <ReadOnlyMarkdown
+                  markdown={source}
+                  attachmentUrls={attachmentUrlsRef.current}
+                  onWikiLink={(target) => wikiLinkRef.current?.(target)}
+                />
+              </I18nProvider>
+            );
+            return () => root.unmount();
+          },
+        }),
         createRichSyntaxExtension({
           renderMath: (container, source) => renderMathInto(container, source),
           renderMathBlock: (container, source) => renderMathInto(container, source, true),
@@ -154,15 +150,13 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
           ?? (attachmentsPendingRef.current ? null : undefined);
       },
       onChange: (next) => {
-        const canonicalizedLiveBody = canonicalizeCalloutsFromLive(canonicalizeMathBlocksFromLive(next));
+        const canonicalizedLiveBody = canonicalizeMathBlocksFromLive(next);
         let canonicalBody = canonicalizedLiveBody;
         for (const [url, attachmentId] of attachmentUrlHistoryRef.current) {
           canonicalBody = canonicalBody.split(url).join(`webmd-attachment:${attachmentId}`);
         }
         const canonical = replaceFrontmatterBody(frontmatterRef.current, canonicalBody);
         const previousMarkdown = editorMarkdownRef.current;
-        // Track the reversible live representation rather than the core
-        // serializer output, which omits a trailing empty callout paragraph.
         renderedMarkdownRef.current = materializeLiveSyntax(canonicalizedLiveBody);
         if (canonical === previousMarkdown) return;
         editorMarkdownRef.current = canonical;
@@ -192,67 +186,6 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
     editorRef.current?.refreshPresentation?.();
   }, [attachmentUrls, attachmentsPending]);
 
-  useEffect(() => {
-    const host = hostRef.current;
-    const shell = shellRef.current;
-    if (!host || !shell) return;
-    let frame = 0;
-
-    const sync = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const shellRect = shell.getBoundingClientRect();
-        const overlays: LiveCalloutOverlay[] = [];
-        const selectionAnchor = document.getSelection()?.anchorNode ?? null;
-        let index = 0;
-        for (const blockquote of host.querySelectorAll<HTMLElement>("blockquote")) {
-          const firstParagraph = blockquote.firstElementChild instanceof HTMLParagraphElement
-            ? blockquote.firstElementChild
-            : null;
-          const firstLine = firstParagraph?.textContent?.split(/\r?\n/, 1)[0] ?? "";
-          const marker = parseCalloutMarker(firstLine);
-          if (!marker || !firstParagraph) continue;
-
-          const rect = blockquote.getBoundingClientRect();
-          const editingMarker = Boolean(selectionAnchor && firstParagraph.contains(selectionAnchor));
-          const calloutIndex = index++;
-          overlays.push({
-            key: `${calloutIndex}:${marker.rawType}:${marker.title}`,
-            calloutIndex,
-            kind: marker.kind,
-            title: marker.title,
-            markerText: firstLine,
-            color: marker.color,
-            icon: marker.icon,
-            editingMarker,
-            style: {
-              top: rect.top - shellRect.top,
-              left: rect.left - shellRect.left,
-              width: rect.width,
-              height: rect.height
-            }
-          });
-        }
-        setCalloutOverlays((current) => overlaysEqual(current, overlays) ? current : overlays);
-      });
-    };
-
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(host, { childList: true, subtree: true, characterData: true });
-    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
-    resizeObserver?.observe(host);
-    document.addEventListener("selectionchange", sync);
-    window.addEventListener("resize", sync);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      resizeObserver?.disconnect();
-      document.removeEventListener("selectionchange", sync);
-      window.removeEventListener("resize", sync);
-    };
-  }, []);
-
   const drop = async (event: DragEvent<HTMLDivElement>) => {
     const file = imageFileFromTransfer(event.dataTransfer);
     if (!file || !onImageInsert || !editorRef.current) return;
@@ -274,72 +207,6 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
     if (editorRef.current === editor) editor.insertMarkdown(insertion);
   };
 
-  const focusCalloutMarkerFromOverlay = (
-    event: ReactPointerEvent<HTMLDivElement>,
-    overlay: LiveCalloutOverlay
-  ) => {
-    if (!editorRef.current || event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    let markerOffset = overlay.markerText.length;
-    const target = event.target instanceof Element ? event.target.closest("strong") : null;
-    const titleRange = target && event.currentTarget.contains(target)
-      ? calloutTitleSourceRange(overlay.markerText)
-      : null;
-    if (target && titleRange) {
-      const titleOffset = textOffsetAtPoint(target, event.clientX, event.clientY);
-      markerOffset = Math.min(titleRange.end, titleRange.start + titleOffset);
-    }
-    focusCalloutMarkerInEditor(editorRef.current, overlay.calloutIndex, markerOffset);
-  };
-
-  const editEmptyCalloutMarker = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (
-      event.key !== "Backspace"
-      || event.nativeEvent.isComposing
-      || !editorRef.current
-    ) return;
-
-    const host = hostRef.current;
-    const selection = window.getSelection();
-    const anchor = selection?.anchorNode;
-    const anchorElement = anchor instanceof Element ? anchor : anchor?.parentElement;
-    const blockquote = anchorElement?.closest("blockquote");
-    if (!host || !selection?.isCollapsed || !anchorElement || !blockquote || !host.contains(blockquote)) return;
-
-    const markerParagraph = blockquote.firstElementChild instanceof HTMLParagraphElement
-      ? blockquote.firstElementChild
-      : null;
-    const markerLine = markerParagraph?.textContent?.split(/\r?\n/, 1)[0] ?? "";
-    if (!parseCalloutMarker(markerLine)) return;
-
-    const bodyElements = Array.from(blockquote.children).slice(1) as HTMLElement[];
-    if (!bodyElements.some((element) => element === anchorElement || element.contains(anchorElement))) return;
-    const hasStructuredBody = bodyElements.some((element) => (
-      element.matches("blockquote, hr, ol, pre, table, ul")
-      || Boolean(element.querySelector("blockquote, hr, img, ol, pre, table, ul"))
-    ));
-    const bodyText = bodyElements.map((element) => element.textContent ?? "").join("");
-    if (hasStructuredBody || bodyText.replace(/[\s\u00a0\u2060]/g, "")) return;
-
-    const liveCallouts = Array.from(host.querySelectorAll<HTMLElement>("blockquote")).filter((candidate) => {
-      const paragraph = candidate.firstElementChild instanceof HTMLParagraphElement
-        ? candidate.firstElementChild
-        : null;
-      const firstLine = paragraph?.textContent?.split(/\r?\n/, 1)[0] ?? "";
-      return Boolean(parseCalloutMarker(firstLine));
-    });
-    const calloutIndex = liveCallouts.indexOf(blockquote as HTMLElement);
-    const renderedMarkdown = materializeLiveMarkdown(frontmatterRef.current.body);
-    const collapsed = collapseEmptyCalloutBodyForMarkerEdit(renderedMarkdown, calloutIndex);
-    if (!collapsed) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    editorRef.current.replaceMarkdown(collapsed.markdown, collapsed.offset);
-  };
-
   const changeProperties = (next: string) => {
     if (next === editorMarkdownRef.current) return;
     editorMarkdownRef.current = next;
@@ -348,46 +215,19 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
   };
 
   return (
-    <div ref={shellRef} className="live-editor-document">
+    <div className="live-editor-document">
       {frontmatter.status !== "absent" && <FrontmatterProperties markdown={markdown} editable onChange={changeProperties} />}
       <div
         ref={hostRef}
         className={`markdown-editor-host${emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? " is-empty" : ""}`}
         data-empty-hint={emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? emptyHint : undefined}
-        onKeyDownCapture={editEmptyCalloutMarker}
         onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
         onDrop={(event) => void drop(event)}
         onPaste={(event) => void paste(event)}
       />
-      <div className="live-callout-overlays">
-        {calloutOverlays.map((overlay) => <div className="live-callout-overlay-group" key={overlay.key}>
-          <div className={`live-callout-surface callout-${overlay.kind}${overlay.color ? ` callout-color-${overlay.color}` : ""}`} style={overlay.style} aria-hidden="true" />
-          <div
-            className={`live-callout-overlay callout-${overlay.kind}${overlay.color ? ` callout-color-${overlay.color}` : ""}${overlay.editingMarker ? " is-marker-editing" : ""}`}
-            style={{ ...overlay.style, height: 50 }}
-            role="note"
-            aria-label={overlay.title}
-            onPointerDown={(event) => focusCalloutMarkerFromOverlay(event, overlay)}
-          >
-            <CalloutHeader kind={overlay.kind} title={overlay.title} icon={overlay.icon} />
-          </div>
-        </div>)}
-      </div>
     </div>
   );
 });
-
-interface LiveCalloutOverlay {
-  key: string;
-  calloutIndex: number;
-  kind: CalloutKind;
-  title: string;
-  markerText: string;
-  color?: CalloutColor;
-  icon?: CalloutIcon;
-  editingMarker: boolean;
-  style: CSSProperties;
-}
 
 function materializeLiveMarkdown(markdown: string): string {
   return materializeLiveSyntax(markdown);
@@ -405,51 +245,5 @@ function imageFileFromTransfer(transfer: Pick<DataTransfer, "files" | "items">):
 }
 
 function materializeLiveSyntax(markdown: string): string {
-  return materializeMathBlocksForLive(materializeCalloutsForLive(markdown));
-}
-
-function overlaysEqual(left: LiveCalloutOverlay[], right: LiveCalloutOverlay[]): boolean {
-  return left.length === right.length && left.every((entry, index) => {
-    const other = right[index];
-    return entry.key === other?.key
-      && entry.calloutIndex === other.calloutIndex
-      && entry.kind === other.kind
-      && entry.title === other.title
-      && entry.markerText === other.markerText
-      && entry.color === other.color
-      && entry.icon === other.icon
-      && entry.editingMarker === other.editingMarker
-      && entry.style.top === other.style.top
-      && entry.style.left === other.style.left
-      && entry.style.width === other.style.width
-      && entry.style.height === other.style.height;
-  });
-}
-
-function textOffsetAtPoint(element: Element, clientX: number, clientY: number): number {
-  const ownerDocument = element.ownerDocument as Document & {
-    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-    caretRangeFromPoint?: (x: number, y: number) => Range | null;
-  };
-  const caretPosition = ownerDocument.caretPositionFromPoint?.(clientX, clientY);
-  const offsetNode = caretPosition?.offsetNode;
-  const offset = caretPosition?.offset;
-  if (offsetNode && offset !== undefined && element.contains(offsetNode)) {
-    return textOffsetWithin(element, offsetNode, offset);
-  }
-
-  const caretRange = ownerDocument.caretRangeFromPoint?.(clientX, clientY);
-  if (caretRange && element.contains(caretRange.startContainer)) {
-    return textOffsetWithin(element, caretRange.startContainer, caretRange.startOffset);
-  }
-
-  const rect = element.getBoundingClientRect();
-  return clientX <= rect.left ? 0 : element.textContent?.length ?? 0;
-}
-
-function textOffsetWithin(element: Element, node: Node, offset: number): number {
-  const range = element.ownerDocument.createRange();
-  range.selectNodeContents(element);
-  range.setEnd(node, offset);
-  return range.toString().length;
+  return materializeMathBlocksForLive(markdown);
 }
