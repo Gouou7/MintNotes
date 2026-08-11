@@ -5,7 +5,7 @@ interface DocumentSaveQueueOptions {
   isActive: () => boolean;
   getDocument: (objectId: string) => OpenDocument | undefined;
   upsertDocument: (document: OpenDocument) => void;
-  persistDocument: (document: OpenDocument, isCurrent: () => boolean) => Promise<void>;
+  persistDocument: (document: OpenDocument, isCurrent: () => boolean) => Promise<OpenDocument>;
   onPersisted: () => void;
 }
 
@@ -52,11 +52,15 @@ export function useDocumentSaveQueue(options: DocumentSaveQueueOptions) {
       return;
     }
     const attempt = options.persistDocument(current, () => options.getDocument(objectId) === current)
-      .then(() => {
+      .then((persisted) => {
         const latest = options.getDocument(objectId);
         const active = pending.current.get(objectId);
         if (active !== state) return;
-        if (latest === current || !latest?.dirty) {
+        // Persistence may replace `current` with a normalized object (for
+        // example, with its durable updatedAt/base revision) while it remains
+        // dirty until the server acknowledges it. That replacement is the
+        // successful result of this save, not a newer edit to save again.
+        if (latest === current || latest === persisted || !latest?.dirty) {
           pending.current.delete(objectId);
         } else {
           state.retryCount = 0;

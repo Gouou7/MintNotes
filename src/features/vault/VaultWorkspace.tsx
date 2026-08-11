@@ -565,7 +565,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     getDocument: (objectId) => documentIndexRef.current.get(objectId),
     upsertDocument,
     persistDocument: async (document, isCurrent) => {
-      await persistObject(document, { commitState: isCurrent });
+      return persistObject(document, { commitState: isCurrent });
     },
     onPersisted: () => requestPush("editor")
   });
