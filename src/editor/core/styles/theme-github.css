@@ -28,12 +28,10 @@
 .ProseMirror h4,
 .ProseMirror h5,
 .ProseMirror h6 {
-  margin-top: 24px;
-  margin-bottom: 16px;
+  margin: 0;
   font-weight: 600;
   line-height: 1.25;
 }
-.ProseMirror > :first-child { margin-top: 0; }
 .ProseMirror h1 {
   font-size: 2em;
   padding-bottom: 0.3em;
@@ -49,12 +47,10 @@
 .ProseMirror h5 { font-size: 0.875em; }
 .ProseMirror h6 { font-size: 0.85em; color: #59636e; }
 .ProseMirror pre[data-source-block][data-source-kind^="heading-"] {
-  margin-top: 24px;
-  margin-bottom: 16px;
+  margin: 0;
   font-weight: 600;
   line-height: 1.25;
 }
-.ProseMirror > pre[data-source-block][data-source-kind^="heading-"]:first-child { margin-top: 0; }
 .ProseMirror pre[data-source-block][data-source-kind="heading-1"] {
   padding-bottom: 0.3em;
   border-bottom: 1px solid #d8dee4;
@@ -71,8 +67,7 @@
 .ProseMirror pre[data-source-block][data-source-kind="heading-6"] { font-size: 0.85em; color: #59636e; }
 
 /* ─── paragraphs / br ─────────────────────────────────────────────── */
-.ProseMirror p { margin: 0 0 16px; white-space: break-spaces; }
-.ProseMirror p:last-child { margin-bottom: 0; }
+.ProseMirror p { margin: 0; white-space: break-spaces; }
 
 /* ─── links ──────────────────────────────────────────────────────── */
 .ProseMirror a {
@@ -99,7 +94,7 @@
   line-height: 1.45;
   background: #f6f8fa;
   padding: 16px;
-  margin: 0 0 16px;
+  margin: 0;
   border-radius: 6px;
   overflow: auto;
   word-wrap: normal;
@@ -116,7 +111,7 @@
 
 /* ─── blockquote ─────────────────────────────────────────────────── */
 .ProseMirror blockquote {
-  margin: 0 0 16px;
+  margin: 0;
   padding: 0 1em;
   color: #59636e;
   border-left: 0.25em solid #d8dee4;
@@ -127,14 +122,14 @@
 /* ─── lists ──────────────────────────────────────────────────────── */
 .ProseMirror ul,
 .ProseMirror ol {
-  margin: 0 0 16px;
+  margin: 0;
   padding-left: 2em;
 }
 .ProseMirror ul ul,
 .ProseMirror ul ol,
 .ProseMirror ol ul,
 .ProseMirror ol ol { margin-bottom: 0; }
-.ProseMirror li + li { margin-top: 0.25em; }
+.ProseMirror li + li { margin-top: 0; }
 .ProseMirror li > p { margin-bottom: 0; }
 .ProseMirror li[data-source-gap-before] {
   margin-top: calc(var(--source-gap-before) * 1.5em);
@@ -144,11 +139,12 @@
 .ProseMirror hr {
   height: 0.25em;
   padding: 0;
-  margin: 24px 0;
+  margin: 0;
   background: #d8dee4;
   border: 0;
 }
-.ProseMirror .hr-node-view { padding: 24px 0; }
+.ProseMirror .hr-node-view { min-height: 1.5em; display: flex; align-items: center; padding: 0; }
+.ProseMirror .hr-node-view > hr { width: 100%; }
 
 /* ─── tables (cell + header styling — layout is in widgets.css) ──── */
 .ProseMirror table th,

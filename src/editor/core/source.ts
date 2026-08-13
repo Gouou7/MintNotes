@@ -4,6 +4,8 @@ export const SOURCE_FROM_ATTR = "sourceFrom";
 export const SOURCE_TO_ATTR = "sourceTo";
 export const SOURCE_TEXT_ATTR = "sourceText";
 export const SOURCE_FINGERPRINT_ATTR = "sourceFingerprint";
+/** Presentation-only minimum block height captured before source activation. */
+export const SOURCE_LAYOUT_HEIGHT_ATTR = "sourceLayoutHeight";
 
 export interface SourceRange {
   readonly from: SourceOffset;

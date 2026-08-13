@@ -79,11 +79,8 @@
   overflow: hidden;
 }
 .ProseMirror pre[data-source-gap-structural] br.ProseMirror-trailingBreak { display: none; }
-/* The source-gap row owns paragraph separation whenever it is present.
- * Remove themed block margins on its two neighbors so the same authored
- * blank line is not counted once by Markdown spacing and again by the gap. */
-.ProseMirror > :has(+ pre[data-source-gap]:not([data-source-gap-structural])) { margin-bottom: 0; }
-.ProseMirror > pre[data-source-gap]:not([data-source-gap-structural]) + * { margin-top: 0; }
+/* Source-gap rows are the only Live-mode block separators. Theme margins
+ * must not add a second, non-authored gap around them. */
 .ProseMirror .hr-node-view {
   box-sizing: border-box;
   width: 100%;
@@ -99,6 +96,8 @@
   color: #b0b0b0;
   font-weight: normal;
   font-style: normal;
+  line-height: inherit;
+  vertical-align: baseline;
   user-select: none;
 }
 .ProseMirror pre.cb-source-editing .syntax-hint {
@@ -108,13 +107,15 @@
   color: #b0b0b0;
   font-style: italic;
   font-weight: normal;
+  line-height: inherit;
+  vertical-align: baseline;
   user-select: none;
 }
 /* Delim char is present in the doc text but visually absent when the
  * cursor is outside the mark's surrounding span. PM pos still tracks
  * it; arrow keys may briefly land on a hidden delim and the char
  * becomes visible as soon as the cursor enters the span. */
-.ProseMirror .syntax-hidden { font-size: 0; }
+.ProseMirror .syntax-hidden { font-size: 0; line-height: 0; vertical-align: baseline; }
 
 /* HTML comment — wraps the entire `<!-- ... -->` source. The chars
  * stay visible (no decoration hides them); the wrapper just dims so
@@ -165,7 +166,7 @@
 /* ─── reference link def — structured editable block ─────────────── */
 .ProseMirror ref-def {
   display: block;
-  margin: 4px 0;
+  margin: 0;
   font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #444;
 }
@@ -208,7 +209,7 @@
   background: #fbf6e8;
   color: #444;
   padding: 10px 14px;
-  margin: 8px 0 16px;
+  margin: 0;
   border-left: 3px solid #b58900;
   border-radius: 4px;
 }
@@ -218,7 +219,7 @@
   border: 1px solid #e3e3e3;
   border-radius: 6px;
   padding: 8px 14px;
-  margin: 8px 0;
+  margin: 0;
   background: #fafafa;
   font-size: 0.95em;
 }
@@ -358,7 +359,7 @@
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  margin: 0 0 16px;
+  margin: 0;
 }
 .ProseMirror table th,
 .ProseMirror table td {
@@ -453,6 +454,8 @@
 /* Canonical-source activation for delimiters that rich nodes cannot expose as
  * native caret positions. The text is real editable content, never a widget. */
 .ProseMirror pre[data-source-block] {
+  box-sizing: border-box;
+  margin: 0;
   font-family: inherit;
   line-height: inherit;
   color: inherit;

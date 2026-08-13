@@ -462,7 +462,19 @@ function topLevelSourceRanges(tokens: readonly Token[], source: string): SourceB
     const [fromLine, toLine] = token.map;
     if (toLine <= fromLine) continue;
     const from = starts[fromLine] ?? source.length;
-    const lastLineStart = starts[toLine - 1] ?? source.length;
+    // markdown-it includes trailing blank lines in some container maps,
+    // notably lists. Those rows are not represented by the rich block and
+    // therefore belong to a top-level source_gap instead of the block's
+    // authored snapshot. Keep internal blank lines because a later nonblank
+    // line still belongs to the same container.
+    let lastContentLine = toLine - 1;
+    while (lastContentLine > fromLine) {
+      const candidateStart = starts[lastContentLine] ?? source.length;
+      const candidateEnd = contentEndOfLine(source, candidateStart);
+      if (source.slice(candidateStart, candidateEnd).trim().length > 0) break;
+      lastContentLine -= 1;
+    }
+    const lastLineStart = starts[lastContentLine] ?? source.length;
     const to = contentEndOfLine(source, lastLineStart);
     const previous = ranges.at(-1);
     if (previous?.from === from && previous.to === to) continue;

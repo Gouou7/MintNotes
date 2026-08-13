@@ -4,6 +4,7 @@ import { collectMarks, collectNodes } from "./features/index";
 import {
   SOURCE_FINGERPRINT_ATTR,
   SOURCE_FROM_ATTR,
+  SOURCE_LAYOUT_HEIGHT_ATTR,
   SOURCE_TEXT_ATTR,
   SOURCE_TO_ATTR,
 } from "./source";
@@ -98,18 +99,33 @@ const coreNodes: Record<string, NodeSpec> = {
     defining: true,
     attrs: {
       kind: { default: "block" },
+      [SOURCE_LAYOUT_HEIGHT_ATTR]: { default: null },
     },
     parseDOM: [{
       tag: "pre[data-source-block]",
       preserveWhitespace: "full",
       getAttrs: (el) => ({
         kind: (el as HTMLElement).getAttribute("data-source-kind") ?? "block",
+        [SOURCE_LAYOUT_HEIGHT_ATTR]: (() => {
+          const value = Number.parseFloat(
+            (el as HTMLElement).getAttribute("data-source-layout-height") ?? "",
+          );
+          return Number.isFinite(value) && value > 0 ? value : null;
+        })(),
       }),
     }],
-    toDOM: (node) => ["pre", {
-      "data-source-block": "1",
-      "data-source-kind": node.attrs.kind as string,
-    }, ["code", 0]],
+    toDOM: (node) => {
+      const sourceLayoutHeight = Number(node.attrs[SOURCE_LAYOUT_HEIGHT_ATTR]);
+      const hasReservedHeight = Number.isFinite(sourceLayoutHeight) && sourceLayoutHeight > 0;
+      return ["pre", {
+        "data-source-block": "1",
+        "data-source-kind": node.attrs.kind as string,
+        ...(hasReservedHeight ? {
+          "data-source-layout-height": String(sourceLayoutHeight),
+          style: `min-height: ${sourceLayoutHeight}px`,
+        } : {}),
+      }, ["code", 0]];
+    },
   },
 
   heading: {

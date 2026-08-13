@@ -550,6 +550,144 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
+  const blockGapFixtures = [
+    ["heading", "# First"],
+    ["bullet list", "- first"],
+    ["task list", "- [ ] first"],
+    ["fenced code", "```txt\nfirst\n```"],
+    ["blockquote", "> first"],
+    ["table", "| a |\n| --- |\n| b |"],
+    ["horizontal rule", "---"],
+  ] as const;
+
+  it.each(blockGapFixtures)(
+    "keeps source-authored rows as the only gap after a %s block",
+    (_name, firstBlock) => {
+      for (const [separator, expectedRows] of [
+        ["\n", 0],
+        ["\n\n", 1],
+        ["\n\n\n", 2],
+        ["\n \t\n", 1],
+        ["\r\n\r\n", 1],
+        ["\r\n\r\n\r\n", 2],
+      ] as const) {
+        const host = document.createElement("div");
+        document.body.append(host);
+        const markdown = `${firstBlock}${separator}# Second`;
+        const editor = createMintEditor(host, { initialContent: markdown });
+        const gap = host.querySelector<HTMLElement>(".ProseMirror > pre[data-source-gap]");
+        const visibleRows = gap?.hasAttribute("data-source-gap-structural")
+          ? 0
+          : (gap?.querySelectorAll("br[data-source-gap-eol]").length ?? 0) + 1;
+
+        expect(gap).not.toBeNull();
+        expect(visibleRows).toBe(expectedRows);
+        expect(editor.getMarkdown()).toBe(markdown);
+
+        editor.setSelectionOffset(markdown.length);
+        expect(host.querySelector("pre[data-source-block]")?.textContent).toBe("# Second");
+        expect(editor.getMarkdown()).toBe(markdown);
+        editor.destroy();
+        host.remove();
+      }
+    },
+  );
+
+  it.each([
+    ["heading", "### Heading", ".ProseMirror > h3"],
+    ["bullet list", "- item", ".ProseMirror > ul"],
+    ["table", "| a |\n| --- |\n| b |", ".ProseMirror > table"],
+    ["TOC", "[TOC]", ".ProseMirror > .toc"],
+  ] as const)(
+    "carries the rendered %s height into transient source editing",
+    (_name, syntax, selector) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const prefix = "before\n\n";
+      const markdown = `${prefix}${syntax}\n\nafter`;
+      const editor = createEditor(host, {
+        initialContent: markdown,
+        onChange: (next) => changes.push(next),
+      });
+      const rendered = host.querySelector<HTMLElement>(selector);
+      if (!rendered) throw new Error(`Missing rendered ${selector}`);
+      Object.defineProperty(rendered, "getBoundingClientRect", {
+        configurable: true,
+        value: () => ({ height: 73.256 }),
+      });
+
+      editor.setSelectionOffset(prefix.length + 1);
+      const source = host.querySelector<HTMLElement>("pre[data-source-block]");
+      expect(source?.dataset.sourceLayoutHeight).toBe("73.26");
+      expect(source?.style.minHeight).toBe("73.26px");
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(changes).toEqual([]);
+
+      editor.setSelectionOffset(0);
+      expect(host.querySelector("pre[data-source-block]")).toBeNull();
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(changes).toEqual([]);
+      editor.destroy();
+    },
+  );
+
+  it.each([
+    ["emphasis", "*em*", 2, "*"],
+    ["strong emphasis", "**strong**", 3, "**"],
+    ["highlight", "==mark==", 3, "=="],
+    ["strikeout", "~~strike~~", 3, "~~"],
+    ["inline code", "`code`", 2, "`"],
+    ["Markdown link", "[link](https://example.test)", 2, "["],
+  ] as const)(
+    "reveals %s delimiters without changing canonical Markdown",
+    (_name, syntax, caretInSyntax, openingDelimiter) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const prefix = "before ";
+      const markdown = `${prefix}${syntax} after`;
+      const editor = createMintEditor(host, {
+        initialContent: markdown,
+        onChange: (next) => changes.push(next),
+      });
+
+      editor.setSelectionOffset(0);
+      expect(Array.from(host.querySelectorAll(".syntax-hidden"))
+        .some((element) => element.textContent === openingDelimiter)).toBe(true);
+
+      editor.setSelectionOffset(prefix.length + caretInSyntax);
+      expect(Array.from(host.querySelectorAll(".syntax-hint"))
+        .some((element) => element.textContent === openingDelimiter)).toBe(true);
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(changes).toEqual([]);
+
+      editor.setSelectionOffset(0);
+      expect(Array.from(host.querySelectorAll(".syntax-hidden"))
+        .some((element) => element.textContent === openingDelimiter)).toBe(true);
+      editor.destroy();
+    },
+  );
+
+  it("reveals a WikiLink in place without changing canonical Markdown", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const markdown = "before [[Guide|the guide]] after";
+    const editor = createMintEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+    });
+
+    expect(host.querySelector(".live-wikilink-widget")).not.toBeNull();
+    editor.setSelectionOffset(markdown.indexOf("Guide") + 1);
+    expect(host.querySelector(".live-wikilink-widget")).toBeNull();
+    expect(host.textContent).toContain("[[Guide|the guide]]");
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+    editor.destroy();
+  });
+
   it.each([1, 2, 3, 4, 5, 6] as const)(
     "labels an activated level-%s heading source with its original heading level",
     (level) => {
@@ -1118,7 +1256,7 @@ describe("Mint editor core public controller", () => {
     editor.setSelectionOffset(secondItemFrom + 2);
     expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
     expect(editor.getSelectionOffset()).toBe(listTo + 1);
-    expect(host.querySelector("pre[data-source-block]")).not.toBeNull();
+    expect(host.querySelector("pre[data-source-block]")).toBeNull();
     expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
     expect(editor.getSelectionOffset()).toBe(listTo + 2);
     expect(pressNavigationKey(host, "ArrowDown")).toBe(true);

@@ -3,6 +3,7 @@ import type { Node as PMNode } from "prosemirror-model";
 import {
   SOURCE_FINGERPRINT_ATTR,
   SOURCE_FROM_ATTR,
+  SOURCE_LAYOUT_HEIGHT_ATTR,
   SOURCE_TEXT_ATTR,
   SOURCE_TO_ATTR,
 } from "./source";
@@ -12,6 +13,7 @@ const PRESENTATION_ATTRS = new Set([
   SOURCE_TO_ATTR,
   SOURCE_TEXT_ATTR,
   SOURCE_FINGERPRINT_ATTR,
+  SOURCE_LAYOUT_HEIGHT_ATTR,
   "sourceEditing",
 ]);
 

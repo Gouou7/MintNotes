@@ -81,4 +81,21 @@ describe("source-backed whitespace gaps", () => {
       expect(serialize(parse(markdown))).toBe(markdown);
     },
   );
+
+  it.each([
+    "- first\n\n# second",
+    "- first\n\n\n# second",
+    "- first\n \t\n# second",
+    "- first\r\n\r\n# second",
+  ])("keeps trailing list whitespace in a source gap for %j", (markdown) => {
+    const doc = parse(markdown);
+    const list = doc.content.content.find((node) => node.type.name === "bullet_list");
+    const gap = doc.content.content.find((node) => node.type.name === "source_gap");
+
+    expect(list?.attrs[SOURCE_TEXT_ATTR]).toBe("- first");
+    expect(gap?.attrs[SOURCE_TEXT_ATTR]).toBe(
+      markdown.slice("- first".length, markdown.indexOf("# second")),
+    );
+    expect(serialize(doc)).toBe(markdown);
+  });
 });

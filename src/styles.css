@@ -207,10 +207,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-editor-host .ProseMirror pre[data-source-gap] { min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; line-height: inherit; white-space: pre-wrap; tab-size: inherit; }
 .readonly-markdown .markdown-softbreak-paragraph { white-space: break-spaces; }
 .markdown-editor-host .ProseMirror pre { box-sizing: border-box; padding: 16px 18px; line-height: 1.55; }
-.markdown-editor-host .ProseMirror pre[data-source-block] { margin: 0 0 1em; padding: 0; overflow: visible; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; color: var(--text); font-family: inherit; line-height: inherit; word-wrap: break-word; }
+.markdown-editor-host .ProseMirror pre[data-source-block] { margin: 0; padding: 0; overflow: visible; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; color: var(--text); font-family: inherit; line-height: inherit; word-wrap: break-word; }
 .markdown-editor-host .ProseMirror pre[data-source-block] > code { padding: 0; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; color: inherit; font: inherit; white-space: inherit; }
-.markdown-editor-host .ProseMirror pre[data-source-block][data-source-kind^="heading-"] { margin: 1.6em 0 .8em; font-weight: 600; line-height: 1.3; color: var(--text-strong); }
-.markdown-editor-host .ProseMirror > pre[data-source-block][data-source-kind^="heading-"]:first-child { margin-top: 0; }
+.markdown-editor-host .ProseMirror pre[data-source-block][data-source-kind^="heading-"] { margin: 0; font-weight: 600; line-height: 1.3; color: var(--text-strong); }
 .markdown-editor-host .ProseMirror pre[data-source-block][data-source-kind="heading-6"] { color: var(--muted); }
 .markdown-editor-host .ProseMirror pre:not(.cb-source-editing)[data-lang] { padding-right: 72px; }
 .markdown-editor-host .ProseMirror pre code { background: transparent; color: inherit; }
@@ -309,7 +308,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-callout > .callout-content:empty { margin-top: 0; }
 
 .markdown-editor-host { position: relative; z-index: 1; }
-.markdown-editor-host .source-blockquote-node { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; margin: 0 0 1em; color: var(--text); }
+.markdown-editor-host .source-blockquote-node { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; margin: 0; color: var(--text); }
 .markdown-editor-host .source-blockquote-preview, .markdown-editor-host .source-blockquote-source { min-width: 0; grid-area: 1 / 1; }
 .markdown-editor-host .source-blockquote-node > [hidden] { display: block; visibility: hidden; pointer-events: none; }
 .markdown-editor-host .source-blockquote-preview > .readonly-markdown { width: 100%; min-height: 0; margin: 0; padding: 0; font-family: inherit; font-size: inherit; line-height: inherit; }
@@ -324,7 +323,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-editor-host .live-markdown-escape-hidden { font-size: 0; line-height: 0; color: transparent; }
 .markdown-editor-host .live-inline-math-source, .markdown-editor-host .live-wikilink-source { font-size: 0; line-height: 0; color: transparent; }
 .live-inline-math-widget { display: inline-block; max-width: 100%; padding: 0 .08em; vertical-align: middle; pointer-events: none; }
-.live-math-block-widget, .live-mermaid-widget { display: block; width: 100%; margin: 1.15em 0; cursor: text; }
+.live-math-block-widget, .live-mermaid-widget { display: block; width: 100%; margin: 0; cursor: text; }
 .markdown-editor-host .live-math-block-source.is-live-syntax-rendered,
 .markdown-editor-host .live-mermaid-source.is-live-syntax-rendered { display: none; }
 .live-math-block-widget { overflow-x: auto; padding: 14px 18px; border-radius: 8px; background: var(--surface-input); text-align: center; }

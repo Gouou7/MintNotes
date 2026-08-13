@@ -23,6 +23,7 @@ import {
   replaceSourceRange,
   SOURCE_FINGERPRINT_ATTR,
   SOURCE_FROM_ATTR,
+  SOURCE_LAYOUT_HEIGHT_ATTR,
   SOURCE_TEXT_ATTR,
   SOURCE_TO_ATTR,
   type SourceTransaction,
@@ -105,6 +106,7 @@ export function createEditor(
           && name !== SOURCE_TO_ATTR
           && name !== SOURCE_TEXT_ATTR
           && name !== SOURCE_FINGERPRINT_ATTR
+          && name !== SOURCE_LAYOUT_HEIGHT_ATTR
           && name !== "sourceEditing"
         )),
       );
@@ -227,8 +229,16 @@ export function createEditor(
     }
     const sourceBlockType = schema.nodes.source_block;
     if (!sourceBlockType) return false;
+    const renderedDom = view.nodeDOM(range.pos);
+    const renderedHeight = renderedDom instanceof HTMLElement
+      ? renderedDom.getBoundingClientRect().height
+      : 0;
+    const sourceLayoutHeight = Number.isFinite(renderedHeight) && renderedHeight > 0
+      ? Math.round(renderedHeight * 100) / 100
+      : null;
     const base = sourceBlockType.createChecked({
       kind: range.presentationKind,
+      [SOURCE_LAYOUT_HEIGHT_ATTR]: sourceLayoutHeight,
       [SOURCE_FROM_ATTR]: range.from,
       [SOURCE_TO_ATTR]: range.to,
       [SOURCE_TEXT_ATTR]: range.source,
