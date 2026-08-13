@@ -8,7 +8,9 @@ import {
 } from "prosemirror-view";
 
 import { leaveLineDraft } from "../block-draft";
+import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
 import { parseFencedCodeSource } from "../fenced-code-source";
+import { selectionOutsideBlock } from "../source-navigation";
 import type { FeatureSpec } from "./_types";
 
 // A fenced code node always contains its complete Markdown source, including
@@ -387,7 +389,7 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
   }
 
   const boundary = direction < 0 ? blockPos : blockPos + node.nodeSize;
-  const outside = Selection.findFrom(state.doc.resolve(boundary), direction, true);
+  const outside = selectionOutsideBlock(state, blockPos, node, direction);
   const tr = state.tr;
   if (outside) {
     tr.setSelection(outside);
@@ -399,6 +401,7 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
   } else {
     return false;
   }
+  tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
   view.dispatch(tr);
   return true;
 }
@@ -445,6 +448,7 @@ function fencedCodeSourcePlugin(): Plugin {
           { ...item.node.attrs, lang: item.lang, sourceEditing: item.sourceEditing },
         );
       }
+      tr.setSelection(Selection.fromJSON(tr.doc, newState.selection.toJSON()));
       return tr;
     },
     props: {

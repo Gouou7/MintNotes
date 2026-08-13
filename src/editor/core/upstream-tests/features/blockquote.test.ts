@@ -9,6 +9,17 @@ import { createEditor } from "../../editor-api";
 
 runFeatureCases(blockquoteSpecs);
 
+function pressArrow(host: HTMLElement, key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight"): boolean {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    code: key,
+    bubbles: true,
+    cancelable: true,
+  });
+  host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 test("Backspace before the first quote delimiter moves to the previous source line", () => {
   const view = fakeView(setup("before\n\n> quoted"));
   let quotePos = -1;
@@ -49,6 +60,59 @@ test("Delete traverses the authored quote prefix instead of deleting a visual bl
 
   expect(editor.getMarkdown()).toBe(" quoted");
   expect(host.querySelector(".ProseMirror > p")?.textContent).toBe(" quoted");
+  editor.destroy();
+  host.remove();
+});
+
+test("ArrowUp and ArrowDown move by authored quote lines and leave at the edges", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const markdown = "before\n\n> one\n> longer\n\nafter";
+  const quoteFrom = markdown.indexOf("> one");
+  const editor = createEditor(host, { initialContent: markdown });
+
+  editor.setSelectionOffset(quoteFrom + 2);
+  expect(pressArrow(host, "ArrowDown")).toBe(true);
+  expect(editor.getSelectionOffset()).toBe(quoteFrom + "> one\n".length + 2);
+
+  expect(pressArrow(host, "ArrowDown")).toBe(true);
+  expect(editor.getSelectionOffset()).toBeGreaterThan(
+    quoteFrom + "> one\n> longer".length,
+  );
+  expect(host.querySelector(".source-blockquote-node.is-source-editing")).toBeNull();
+
+  editor.setSelectionOffset(quoteFrom + "> one\n> longer".length);
+  expect(pressArrow(host, "ArrowUp")).toBe(true);
+  expect(editor.getSelectionOffset()).toBe(quoteFrom + "> one".length);
+
+  expect(pressArrow(host, "ArrowUp")).toBe(true);
+  expect(editor.getSelectionOffset()).toBeLessThan(quoteFrom);
+  expect(host.querySelector(".source-blockquote-node.is-source-editing")).toBeNull();
+
+  expect(editor.getMarkdown()).toBe(markdown);
+  editor.destroy();
+  host.remove();
+});
+
+test("ArrowLeft and ArrowRight leave an active quote at its authored edges", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const markdown = "before\n\n> quote\n\nafter";
+  const quoteFrom = markdown.indexOf("> quote");
+  const quoteTo = quoteFrom + "> quote".length;
+  const editor = createEditor(host, { initialContent: markdown });
+
+  editor.setSelectionOffset(quoteFrom);
+  expect(pressArrow(host, "ArrowLeft")).toBe(true);
+  expect(editor.getSelectionOffset()).toBeLessThan(quoteFrom);
+  expect(host.querySelector(".source-blockquote-node.is-source-editing")).toBeNull();
+
+  editor.setSelectionOffset(quoteTo);
+  expect(pressArrow(host, "ArrowRight")).toBe(true);
+  expect(editor.getSelectionOffset()).toBeGreaterThan(quoteTo);
+  expect(host.querySelector(".source-blockquote-node.is-source-editing")).toBeNull();
+
+  expect(editor.getMarkdown()).toBe(markdown);
   editor.destroy();
   host.remove();
 });

@@ -59,6 +59,20 @@ async function typeNativeText(host: HTMLElement, text: string): Promise<void> {
   }
 }
 
+function pressNavigationKey(
+  host: HTMLElement,
+  key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight",
+): boolean {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    code: key,
+    bubbles: true,
+    cancelable: true,
+  });
+  host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 afterEach(() => {
   document.body.replaceChildren();
 });
@@ -370,6 +384,52 @@ describe("Mint editor core public controller", () => {
       editor.destroy();
     },
   );
+
+  it("keeps the native Live text surface mounted while ordinary typing advances the caret", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, { initialContent: "plain" });
+    editor.setSelectionOffset("plain".length);
+    const paragraph = host.querySelector(".ProseMirror > p");
+
+    await typeNativeText(host, " text");
+
+    expect(host.querySelector(".ProseMirror > p")).toBe(paragraph);
+    expect(editor.getMarkdown()).toBe("plain text");
+    expect(editor.getSelectionOffset()).toBe("plain text".length);
+    editor.destroy();
+  });
+
+  it("keeps an activated source-backed surface mounted until its structure changes", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, { initialContent: "# Heading" });
+    editor.setSelectionOffset("# Heading".length);
+    const sourceBlock = host.querySelector("pre[data-source-block]");
+
+    await typeNativeText(host, " text");
+
+    expect(host.querySelector("pre[data-source-block]")).toBe(sourceBlock);
+    expect(editor.getMarkdown()).toBe("# Heading text");
+    expect(editor.getSelectionOffset()).toBe("# Heading text".length);
+    editor.destroy();
+  });
+
+  it("advances canonical positions across repeated native input in a derived list", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const initial = "- first\n- second";
+    const editor = createEditor(host, { initialContent: initial });
+    editor.setSelectionOffset(initial.length);
+    const list = host.querySelector(".ProseMirror > ul");
+
+    await typeNativeText(host, " repeated");
+
+    expect(host.querySelector(".ProseMirror > ul")).toBe(list);
+    expect(editor.getMarkdown()).toBe(`${initial} repeated`);
+    expect(editor.getSelectionOffset()).toBe(`${initial} repeated`.length);
+    editor.destroy();
+  });
 
   it.each(INVALID_SOURCE_FIDELITY_STRINGS)(
     "keeps valid neighbors rendered around the smallest literal fallback for %j",
@@ -919,6 +979,161 @@ describe("Mint editor core public controller", () => {
 
     expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(markdown);
     expect(host.querySelector(".source-blockquote-source")?.hasAttribute("hidden")).toBe(false);
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+    editor.destroy();
+  });
+
+  it("moves freely through quote and Callout boundaries in a mixed Live document", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const markdown = [
+      "# Title(cursor)",
+      "",
+      "# Title",
+      "",
+      "dd ",
+      "",
+      "*Italic*==heghlight==~~d elete~~**Bold**`code`",
+      "",
+      "",
+      "- 1",
+      "- 3",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "- [ ] 1 ",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "```sh",
+      "",
+      "code block",
+      "",
+      "```",
+      "",
+      "",
+      "> quote",
+      "",
+      "",
+      "",
+      "> [!note]",
+      "> callout",
+    ].join("\n");
+    const quoteFrom = markdown.indexOf("> quote");
+    const quoteTo = quoteFrom + "> quote".length;
+    const calloutFrom = markdown.indexOf("> [!note]");
+    const calloutFirstLineLength = "> [!note]".length;
+    const editor = createMintEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+    });
+
+    editor.setSelectionOffset(quoteTo);
+    expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).toBeNull();
+    expect(editor.getSelectionOffset()).toBe(quoteTo + 1);
+    expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(quoteTo + 2);
+    expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(quoteTo + 3);
+    expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(calloutFrom);
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
+
+    editor.setSelectionOffset(calloutFrom + 3);
+    expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(calloutFrom + calloutFirstLineLength + 1 + 3);
+
+    editor.setSelectionOffset(calloutFrom);
+    expect(pressNavigationKey(host, "ArrowLeft")).toBe(true);
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).toBeNull();
+    expect(editor.getSelectionOffset()).toBe(calloutFrom - 1);
+
+    expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(calloutFrom - 2);
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).toBeNull();
+
+    expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(calloutFrom - 3);
+    expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(quoteTo);
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
+
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+    editor.destroy();
+  });
+
+  it("traverses list source edges and vertical list/code boundaries", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const markdown = [
+      "before",
+      "",
+      "- 1",
+      "- 3",
+      "",
+      "",
+      "```sh",
+      "",
+      "code block",
+      "",
+      "```",
+      "",
+      "after",
+    ].join("\n");
+    const listFrom = markdown.indexOf("- 1");
+    const secondItemFrom = markdown.indexOf("- 3");
+    const listTo = secondItemFrom + "- 3".length;
+    const codeFrom = markdown.indexOf("```sh");
+    const codeTo = markdown.indexOf("```", codeFrom + 3) + 3;
+    const editor = createEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+    });
+
+    editor.setSelectionOffset(listFrom + 2);
+    expect(host.querySelector("pre[data-source-block]")).not.toBeNull();
+    expect(pressNavigationKey(host, "ArrowLeft")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(listFrom + 1);
+    expect(pressNavigationKey(host, "ArrowLeft")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(listFrom);
+    expect(pressNavigationKey(host, "ArrowLeft")).toBe(true);
+    expect(editor.getSelectionOffset()).toBeLessThan(listFrom);
+    expect(host.querySelector("pre[data-source-block]")).toBeNull();
+
+    editor.setSelectionOffset(listFrom + 2);
+    expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
+    expect(editor.getSelectionOffset()).toBeLessThan(listFrom);
+    expect(host.querySelector("pre[data-source-block]")).toBeNull();
+
+    editor.setSelectionOffset(secondItemFrom + 2);
+    expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(listTo + 1);
+    expect(host.querySelector("pre[data-source-block]")).not.toBeNull();
+    expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(listTo + 2);
+    expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+    expect(host.querySelector("pre[data-source-block]")).toBeNull();
+
+    editor.setSelectionOffset(codeFrom + 3);
+    expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
+    expect(editor.getSelectionOffset()).toBeLessThan(codeFrom);
+    expect(host.querySelector("pre[data-source-editing='1']")).toBeNull();
+
+    editor.setSelectionOffset(codeTo);
+    expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+    expect(editor.getSelectionOffset()).toBeGreaterThan(codeTo);
+    expect(host.querySelector("pre[data-source-editing='1']")).toBeNull();
+
     expect(editor.getMarkdown()).toBe(markdown);
     expect(changes).toEqual([]);
     editor.destroy();

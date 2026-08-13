@@ -5,9 +5,11 @@ import {
   sinkListItem,
   splitListItem,
 } from "prosemirror-schema-list";
-import { Selection, TextSelection, type Command } from "prosemirror-state";
-import type { NodeType } from "prosemirror-model";
+import { Plugin, Selection, TextSelection, type Command } from "prosemirror-state";
+import type { Node as PMNode, NodeType } from "prosemirror-model";
 
+import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
+import { selectionOutsideBlock } from "../source-navigation";
 import type { FeatureSpec } from "./_types";
 
 // ── Custom commands for Typora-style 3-step staircase exit ────────────────
@@ -277,6 +279,56 @@ export function backspaceJumpIntoPrevList(): Command {
   };
 }
 
+function outerListAtSelection(state: import("prosemirror-state").EditorState): {
+  node: PMNode;
+  pos: number;
+} | null {
+  const $from = state.selection.$from;
+  for (let depth = 1; depth <= $from.depth; depth += 1) {
+    const node = $from.node(depth);
+    if (node.type.name === "bullet_list" || node.type.name === "ordered_list") {
+      return { node, pos: $from.before(depth) };
+    }
+  }
+  return null;
+}
+
+function listBoundaryNavigationPlugin(): Plugin {
+  return new Plugin({
+    props: {
+      handleKeyDown(view, event) {
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
+        if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
+        const { state } = view;
+        if (!state.selection.empty || !state.selection.$from.parent.isTextblock) return false;
+        const list = outerListAtSelection(state);
+        if (!list) return false;
+
+        const direction = event.key === "ArrowUp" ? -1 : 1;
+        if (!view.endOfTextblock(direction < 0 ? "up" : "down", state)) return false;
+        const edge = Selection.findFrom(
+          state.doc.resolve(
+            direction < 0 ? list.pos + 1 : list.pos + list.node.nodeSize - 1,
+          ),
+          direction,
+          true,
+        );
+        if (!edge || edge.$from.parent !== state.selection.$from.parent) return false;
+
+        const outside = selectionOutsideBlock(state, list.pos, list.node, direction);
+        if (!outside) return false;
+        view.dispatch(
+          state.tr
+            .setSelection(outside)
+            .setMeta(SOURCE_BLOCK_PRESENTATION_META, true)
+            .scrollIntoView(),
+        );
+        return true;
+      },
+    },
+  });
+}
+
 export const list: FeatureSpec = {
   name: "bullet_list",
 
@@ -324,5 +376,7 @@ export const list: FeatureSpec = {
       Backspace: backspaceJumpIntoPrevList(),
     };
   },
+
+  plugins: () => [listBoundaryNavigationPlugin()],
 
 };

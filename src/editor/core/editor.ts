@@ -14,6 +14,7 @@ import { schema } from "./schema";
 import { manualEscapeDecorationPlugin } from "./canonical-markdown";
 import type { EditorExtension } from "./extension";
 import { extensionPresentationPlugin } from "./presentation";
+import { sourceGapNavigationPlugin } from "./source-navigation";
 
 // Open `<a>` links on Cmd/Ctrl+click. Inside contenteditable, a plain
 // click moves the caret instead of navigating — opting in to the
@@ -71,6 +72,7 @@ export function defaultPlugins(options: {
     manualEscapeDecorationPlugin(),
     ...extensions.flatMap((extension) => extension.createPlugins?.({ schema }) ?? []),
     normalizeInlinePlugin({ resolveImageSource }),
+    sourceGapNavigationPlugin(),
     // Feature-contributed plugins sit after normalize (so block-draft
     // watchers see the post-normalize doc) and before syntaxHints (so any
     // extra decorations merge into PM's decoration pipeline naturally).

@@ -7,6 +7,7 @@ import type { SourceBlockPresentation } from "../extension";
 import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
 import { INLINE_PRESENTATION_META } from "../inline-parse";
 import { SOURCE_FROM_ATTR } from "../source";
+import { selectionOutsideBlock } from "../source-navigation";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
 import type { FeaturePluginContext, FeatureSpec } from "./_types";
 
@@ -142,6 +143,102 @@ function activateSource(
   tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
   view.dispatch(tr.scrollIntoView());
   if (focusView) view.focus();
+  return true;
+}
+
+function siblingBlockquote(
+  state: EditorView["state"],
+  direction: -1 | 1,
+): { pos: number; node: PMNode } | null {
+  const { selection } = state;
+  if (!selection.empty || selection.$from.depth < 1) return null;
+  const $from = selection.$from;
+  const parentPos = $from.before();
+  const $parent = state.doc.resolve(parentPos);
+  const index = $parent.index();
+  if (direction < 0) {
+    if (index === 0) return null;
+    const node = $parent.parent.child(index - 1);
+    return node.type.name === "blockquote"
+      ? { pos: parentPos - node.nodeSize, node }
+      : null;
+  }
+
+  const current = $parent.parent.child(index);
+  const node = $parent.parent.maybeChild(index + 1);
+  return node?.type.name === "blockquote"
+    ? { pos: parentPos + current.nodeSize, node }
+    : null;
+}
+
+function adjacentBlockquote(
+  state: EditorView["state"],
+  direction: -1 | 1,
+): { pos: number; node: PMNode } | null {
+  const { selection } = state;
+  if (!selection.empty) return null;
+  const $from = selection.$from;
+  const atBoundary = direction < 0
+    ? $from.parentOffset === 0
+    : $from.parentOffset === $from.parent.content.size;
+  return atBoundary ? siblingBlockquote(state, direction) : null;
+}
+
+function moveOutsideBlockquote(view: EditorView, direction: -1 | 1): boolean {
+  const { state } = view;
+  const selected = selectedBlockquote(state);
+  if (!selected) return false;
+  const outside = selectionOutsideBlock(
+    state,
+    selected.pos,
+    selected.node,
+    direction,
+  );
+  if (!outside) return false;
+  view.dispatch(
+    state.tr
+      .setSelection(outside)
+      .setMeta(SOURCE_BLOCK_PRESENTATION_META, true)
+      .scrollIntoView(),
+  );
+  return true;
+}
+
+function moveBlockquoteSourceVertically(view: EditorView, direction: -1 | 1): boolean {
+  const { state } = view;
+  const { selection } = state;
+  if (
+    !selection.empty
+    || selection.$from.parent.type.name !== "blockquote"
+    || selection.$from.parent.attrs.sourceEditing !== true
+  ) return false;
+
+  const text = selection.$from.parent.textContent;
+  const offset = selection.$from.parentOffset;
+  const lineStart = text.lastIndexOf("\n", offset - 1) + 1;
+  const column = offset - lineStart;
+  let targetOffset: number | null = null;
+
+  if (direction < 0 && lineStart > 0) {
+    const previousEnd = lineStart - 1;
+    const previousStart = text.lastIndexOf("\n", previousEnd - 1) + 1;
+    targetOffset = previousStart + Math.min(column, previousEnd - previousStart);
+  } else if (direction > 0) {
+    const currentEnd = text.indexOf("\n", lineStart);
+    if (currentEnd >= 0) {
+      const nextStart = currentEnd + 1;
+      const nextBreak = text.indexOf("\n", nextStart);
+      const nextEnd = nextBreak >= 0 ? nextBreak : text.length;
+      targetOffset = nextStart + Math.min(column, nextEnd - nextStart);
+    }
+  }
+
+  if (targetOffset === null) return moveOutsideBlockquote(view, direction);
+  const blockPos = selection.$from.before();
+  view.dispatch(state.tr.setSelection(TextSelection.create(
+    state.doc,
+    blockPos + 1 + targetOffset,
+  )).scrollIntoView());
   return true;
 }
 
@@ -432,10 +529,56 @@ function blockquotePlugin(
         tr.setNodeMarkup(pos, undefined, { ...node.attrs, sourceEditing: shouldEdit });
       });
       if (!tr.docChanged) return null;
+      // setNodeMarkup uses a replace-around mapping even though this update
+      // changes attributes only. Preserve the selection from newState
+      // explicitly so leaving a quote is not mapped back into its source.
+      tr.setSelection(Selection.fromJSON(tr.doc, newState.selection.toJSON()));
       tr.setMeta("addToHistory", false);
       return tr;
     },
     props: {
+      handleKeyDown(view, event) {
+        if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
+          return false;
+        }
+        if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
+        const { state } = view;
+        const { selection } = state;
+        if (!selection.empty) return false;
+        const $from = selection.$from;
+
+        if (
+          $from.parent.type.name === "blockquote"
+          && $from.parent.attrs.sourceEditing === true
+        ) {
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+            return moveBlockquoteSourceVertically(view, event.key === "ArrowUp" ? -1 : 1);
+          }
+          if (event.key === "ArrowLeft" && $from.parentOffset === 0) {
+            return moveOutsideBlockquote(view, -1);
+          }
+          if (
+            event.key === "ArrowRight"
+            && $from.parentOffset === $from.parent.content.size
+          ) return moveOutsideBlockquote(view, 1);
+          return false;
+        }
+
+        const direction = event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : 1;
+        let adjacent = adjacentBlockquote(state, direction);
+        if (
+          !adjacent
+          && (event.key === "ArrowUp" || event.key === "ArrowDown")
+          && $from.parent.isTextblock
+          && view.endOfTextblock(event.key === "ArrowUp" ? "up" : "down", state)
+        ) adjacent = siblingBlockquote(state, direction);
+        if (!adjacent) return false;
+        return activateSource(
+          view,
+          adjacent.pos,
+          direction < 0 ? adjacent.node.content.size : 0,
+        );
+      },
       handleDOMEvents: {
         focus(view) {
           const selected = selectedBlockquote(view.state);
