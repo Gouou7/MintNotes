@@ -806,7 +806,9 @@ describe("Mint editor core public controller", () => {
       expect(down.defaultPrevented).toBe(true);
       ruleRow.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
-      const source = host.querySelector<HTMLParagraphElement>("p.hr-draft");
+      const source = host.querySelector<HTMLElement>(
+        "pre[data-source-block][data-source-kind='horizontal_rule'] > code",
+      );
       expect(source?.textContent).toBe(delimiter);
       expect(editor.getMarkdown()).toBe(delimiter);
       editor.destroy();
@@ -823,7 +825,9 @@ describe("Mint editor core public controller", () => {
     if (!editable || !ruleRow) throw new Error("Missing live horizontal rule");
 
     ruleRow.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    const source = host.querySelector<HTMLParagraphElement>("p.hr-draft");
+    const source = host.querySelector<HTMLElement>(
+      "pre[data-source-block][data-source-kind='horizontal_rule'] > code",
+    );
     if (!source) throw new Error("Missing revealed horizontal rule source");
     source.textContent = "--";
     const range = document.createRange();
@@ -853,7 +857,9 @@ describe("Mint editor core public controller", () => {
       cancelable: true,
     }));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const lineSource = lineHost.querySelector<HTMLParagraphElement>("p.hr-draft");
+    const lineSource = lineHost.querySelector<HTMLElement>(
+      "pre[data-source-block][data-source-kind='horizontal_rule'] > code",
+    );
     if (!lineSource) throw new Error("Missing second revealed horizontal rule source");
     const lineRange = document.createRange();
     lineRange.selectNodeContents(lineSource);
@@ -896,7 +902,10 @@ describe("Mint editor core public controller", () => {
       bubbles: true,
       cancelable: true,
     }));
-    expect(lineHost.querySelector("p.hr-draft")?.textContent).toBe("---");
+    const restoredSource = lineHost.querySelector(
+      "pre[data-source-block][data-source-kind='horizontal_rule'] > code",
+    ) ?? lineHost.querySelector("p.hr-draft");
+    expect(restoredSource?.textContent).toBe("---");
     lineEditor.destroy();
   });
 
@@ -1274,6 +1283,107 @@ describe("Mint editor core public controller", () => {
 
     expect(editor.getMarkdown()).toBe(markdown);
     expect(changes).toEqual([]);
+    editor.destroy();
+  });
+
+  it.each([
+    ["structural separator", "\n", 1],
+    ["one blank row", "\n\n", 2],
+    ["two blank rows", "\n\n\n", 3],
+  ] as const)(
+    "activates the next heading on the first key that reaches it across a %s",
+    (_name, separator, pressesToTarget) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const markdown = `# First${separator}# Second\nplain`;
+      const secondFrom = markdown.indexOf("# Second");
+      const editor = createEditor(host, {
+        initialContent: markdown,
+        onChange: (next) => changes.push(next),
+      });
+
+      editor.setSelectionOffset("# First".length);
+      const plainBefore = Array.from(host.querySelectorAll("p"))
+        .find((node) => node.textContent === "plain");
+      const secondHeading = Array.from(host.querySelectorAll<HTMLElement>("h1"))
+        .find((node) => node.textContent === "Second");
+      let heightReads = 0;
+      if (secondHeading) Object.defineProperty(secondHeading, "getBoundingClientRect", {
+        configurable: true,
+        value: () => {
+          heightReads += 1;
+          return { height: 41.25 };
+        },
+      });
+
+      for (let index = 0; index < pressesToTarget; index += 1) {
+        expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+      }
+
+      const active = host.querySelector<HTMLElement>("pre[data-source-block]");
+      expect(active?.textContent).toBe("# Second");
+      expect(active?.style.minHeight).toBe("41.25px");
+      expect(heightReads).toBeLessThanOrEqual(1);
+      expect(host.querySelector("h1")?.textContent).toBe("First");
+      expect(Array.from(host.querySelectorAll("p"))
+        .find((node) => node.textContent === "plain")).toBe(plainBefore);
+      expect(editor.getSelectionOffset()).toBeGreaterThanOrEqual(secondFrom);
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(changes).toEqual([]);
+
+      expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
+      expect(editor.getSelectionOffset()).toBe(secondFrom - 1);
+      expect(host.querySelector("pre[data-source-block]")?.textContent).not.toBe("# Second");
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(changes).toEqual([]);
+      editor.destroy();
+    },
+  );
+
+  it("reveals inline delimiters when an arrow reaches the styled source span", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const markdown = "x *em* y";
+    const editor = createEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+    });
+
+    editor.setSelectionOffset(markdown.indexOf(" y"));
+    expect(pressNavigationKey(host, "ArrowLeft")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(markdown.indexOf(" y") - 1);
+    expect(Array.from(host.querySelectorAll(".syntax-hint"))
+      .some((node) => node.textContent === "*")).toBe(true);
+
+    editor.setSelectionOffset(0);
+    expect(Array.from(host.querySelectorAll(".syntax-hidden"))
+      .some((node) => node.textContent === "*")).toBe(true);
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+    editor.destroy();
+  });
+
+  it("keeps ordinary arrow navigation inside a table on the rich cell path", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "| a | b |\n| --- | --- |\n| c | d |";
+    const editor = createEditor(host, { initialContent: markdown });
+    const firstCellText = host.querySelector("th")?.firstChild;
+    if (!firstCellText) throw new Error("Missing table cell text");
+    const selection = document.getSelection();
+    const range = document.createRange();
+    range.setStart(firstCellText, 0);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new Event("selectionchange"));
+
+    expect(pressNavigationKey(host, "ArrowRight")).toBe(false);
+    expect(host.querySelector("pre[data-source-block]")).toBeNull();
+    expect(host.querySelector("table")).not.toBeNull();
+    expect(editor.getMarkdown()).toBe(markdown);
     editor.destroy();
   });
 

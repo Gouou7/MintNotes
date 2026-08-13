@@ -7,7 +7,7 @@ import type { SourceBlockPresentation } from "../extension";
 import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
 import { INLINE_PRESENTATION_META } from "../inline-parse";
 import { SOURCE_FROM_ATTR } from "../source";
-import { selectionOutsideBlock } from "../source-navigation";
+import { markLiveNavigation, selectionOutsideBlock } from "../source-navigation";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
 import type { FeaturePluginContext, FeatureSpec } from "./_types";
 
@@ -134,14 +134,14 @@ function activateSource(
   const node = view.state.doc.nodeAt(pos);
   if (!node || node.type.name !== "blockquote") return false;
   const sourceOffset = Math.max(0, Math.min(offset, node.content.size));
-  const tr = view.state.tr.setNodeMarkup(pos, undefined, {
-    ...node.attrs,
-    sourceEditing: true,
-  });
-  tr.setSelection(TextSelection.create(tr.doc, pos + 1 + sourceOffset));
-  tr.setMeta("addToHistory", false);
-  tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
-  view.dispatch(tr.scrollIntoView());
+  const tr = view.state.tr.setSelection(
+    TextSelection.create(view.state.doc, pos + 1 + sourceOffset),
+  );
+  const sourceFrom = Number(node.attrs.sourceFrom);
+  view.dispatch(markLiveNavigation(tr, {
+    ...(Number.isInteger(sourceFrom) ? { anchor: sourceFrom + sourceOffset, head: sourceFrom + sourceOffset } : {}),
+    scroll: true,
+  }));
   if (focusView) view.focus();
   return true;
 }
@@ -196,10 +196,12 @@ function moveOutsideBlockquote(view: EditorView, direction: -1 | 1): boolean {
   );
   if (!outside) return false;
   view.dispatch(
-    state.tr
+    markLiveNavigation(state.tr
       .setSelection(outside)
-      .setMeta(SOURCE_BLOCK_PRESENTATION_META, true)
-      .scrollIntoView(),
+      .setMeta(SOURCE_BLOCK_PRESENTATION_META, true), {
+      direction,
+      scroll: true,
+    }),
   );
   return true;
 }

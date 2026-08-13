@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fixed Live direction-key navigation occasionally pausing at a block boundary or moving into a styled block without revealing its Markdown source. Pointer, keyboard, and programmatic movement now synchronize presentation from the same final source position, restore only the blocks that changed activation, and preserve rich table cell navigation.
 - Fixed Live headings, lists, code blocks, quotes, tables, horizontal rules, and inline Markdown changing line height or collapsing their rendered footprint when source syntax was revealed. Top-level block gaps now come only from authored blank lines, including trailing blank rows after lists.
 - Fixed edited notes repeatedly re-entering the local persistence queue after a successful durable save, which continuously replaced the synchronization outbox generation and could leave the application showing **Syncing…** indefinitely.
 - Fixed encrypted images in Live mode remaining in a broken-source state after switching away from a note and back. Asynchronously restored Blob URLs now refresh only the presentation layer without changing canonical Markdown, undo history, focus, or caret position.

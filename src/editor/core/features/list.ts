@@ -9,7 +9,7 @@ import { Plugin, Selection, TextSelection, type Command } from "prosemirror-stat
 import type { Node as PMNode, NodeType } from "prosemirror-model";
 
 import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
-import { selectionOutsideBlock } from "../source-navigation";
+import { markLiveNavigation, selectionOutsideBlock } from "../source-navigation";
 import type { FeatureSpec } from "./_types";
 
 // ── Custom commands for Typora-style 3-step staircase exit ────────────────
@@ -318,10 +318,12 @@ function listBoundaryNavigationPlugin(): Plugin {
         const outside = selectionOutsideBlock(state, list.pos, list.node, direction);
         if (!outside) return false;
         view.dispatch(
-          state.tr
+          markLiveNavigation(state.tr
             .setSelection(outside)
-            .setMeta(SOURCE_BLOCK_PRESENTATION_META, true)
-            .scrollIntoView(),
+            .setMeta(SOURCE_BLOCK_PRESENTATION_META, true), {
+            direction,
+            scroll: true,
+          }),
         );
         return true;
       },

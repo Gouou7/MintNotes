@@ -10,7 +10,7 @@ import {
 import { leaveLineDraft } from "../block-draft";
 import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
 import { parseFencedCodeSource } from "../fenced-code-source";
-import { selectionOutsideBlock } from "../source-navigation";
+import { markLiveNavigation, selectionOutsideBlock } from "../source-navigation";
 import type { FeatureSpec } from "./_types";
 
 // A fenced code node always contains its complete Markdown source, including
@@ -54,19 +54,27 @@ function activateSource(view: EditorView, pos: number, target: SourceTarget): bo
     const offset = "edge" in target
       ? target.edge === "open" ? 0 : node.content.size
       : Math.min(Math.max(0, target.bodyOffset), node.content.size);
-    view.dispatch(
+    const sourceFrom = Number(node.attrs.sourceFrom);
+    view.dispatch(markLiveNavigation(
       view.state.tr.setSelection(TextSelection.create(view.state.doc, pos + 1 + offset)),
-    );
+      {
+        ...(Number.isInteger(sourceFrom) ? { anchor: sourceFrom + offset, head: sourceFrom + offset } : {}),
+        scroll: true,
+      },
+    ));
     (view as EditorView & { focus?: () => void }).focus?.();
     return true;
   }
 
   const offset = sourceOffset(node, target);
-  const tr = view.state.tr
-    .setNodeMarkup(pos, undefined, { ...node.attrs, sourceEditing: true })
-    .setMeta("addToHistory", false);
-  tr.setSelection(TextSelection.create(tr.doc, pos + 1 + offset));
-  view.dispatch(tr);
+  const tr = view.state.tr.setSelection(
+    TextSelection.create(view.state.doc, pos + 1 + offset),
+  );
+  const sourceFrom = Number(node.attrs.sourceFrom);
+  view.dispatch(markLiveNavigation(tr, {
+    ...(Number.isInteger(sourceFrom) ? { anchor: sourceFrom + offset, head: sourceFrom + offset } : {}),
+    scroll: true,
+  }));
   (view as EditorView & { focus?: () => void }).focus?.();
   return true;
 }
@@ -402,7 +410,11 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
     return false;
   }
   tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
-  view.dispatch(tr);
+  const navigation = markLiveNavigation(tr, {
+    direction,
+    scroll: true,
+  });
+  view.dispatch(tr.docChanged ? navigation.scrollIntoView() : navigation);
   return true;
 }
 

@@ -7,7 +7,7 @@
 // can also call `editor.toggleSource()` directly.
 
 import type { Node as PMNode } from "prosemirror-model";
-import { EditorState, TextSelection } from "prosemirror-state";
+import { EditorState, TextSelection, type Transaction } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 
 import { defaultPlugins } from "./editor";
@@ -30,7 +30,12 @@ import {
 } from "./source";
 import { SOURCE_TRANSACTION_META, transactionSourceEffect } from "./source-transaction";
 import { liveSourceKeyTransaction } from "./live-source-commands";
-import { selectionOutsideBlock, verticalSourceOffset } from "./source-navigation";
+import {
+  LIVE_NAVIGATION_META,
+  markLiveNavigation,
+  verticalSourceOffset,
+  type LiveNavigationIntent,
+} from "./source-navigation";
 
 export interface EditorOptions {
   /** Initial markdown the editor opens with. Defaults to empty. */
@@ -97,6 +102,17 @@ export function createEditor(
   const sourceUndo: SourceHistoryEntry[] = [];
   const sourceRedo: SourceHistoryEntry[] = [];
   const SOURCE_HISTORY_LIMIT = 500;
+  type LiveSourceRange = {
+    pos: number;
+    from: number;
+    to: number;
+    source: string;
+    kind: string;
+    presentationKind: string;
+  };
+  const blockHeightCache = new Map<string, number>();
+  let blockHeightFrame: number | null = null;
+  let blockResizeObserver: ResizeObserver | null = null;
 
   function structureSignatureForDocument(doc: PMNode): string {
     const visit = (node: PMNode): unknown => {
@@ -175,17 +191,14 @@ export function createEditor(
     if (stack.length > SOURCE_HISTORY_LIMIT) stack.shift();
   }
 
-  function sourceRangeAtOffset(offset: number): {
-    pos: number;
-    from: number;
-    to: number;
-    source: string;
-    kind: string;
-    presentationKind: string;
-  } | null {
-    let found: ReturnType<typeof sourceRangeAtOffset> = null;
-    let gapFallback: ReturnType<typeof sourceRangeAtOffset> = null;
-    view.state.doc.forEach((node, pos) => {
+  function sourceRangeAtOffsetInDocument(
+    doc: PMNode,
+    offset: number,
+    direction?: -1 | 1,
+  ): LiveSourceRange | null {
+    const blocks: LiveSourceRange[] = [];
+    const gaps: LiveSourceRange[] = [];
+    doc.forEach((node, pos) => {
       const from = node.attrs[SOURCE_FROM_ATTR];
       const to = node.attrs[SOURCE_TO_ATTR];
       const source = node.attrs[SOURCE_TEXT_ATTR];
@@ -198,64 +211,217 @@ export function createEditor(
       ) {
         const presentationKind = node.type.name === "heading"
           ? `heading-${String(node.attrs.level ?? 1)}`
-          : node.type.name;
+          : node.type.name === "source_block"
+            ? String(node.attrs.kind ?? "block")
+            : node.type.name;
         const candidate = { pos, from, to, source, kind: node.type.name, presentationKind };
-        // A gap and either neighboring block share their source boundary.
-        // Prefer the real block there so a structural line ending activates
-        // the heading/paragraph edge instead of exposing a phantom gap row.
-        if (node.type.name === "source_gap") gapFallback ??= candidate;
-        else found ??= candidate;
+        if (node.type.name === "source_gap") gaps.push(candidate);
+        else blocks.push(candidate);
       }
     });
-    return found ?? gapFallback;
+    const interior = blocks.find((range) => range.from < offset && offset < range.to);
+    if (interior) return interior;
+    if (direction === 1) {
+      const starting = blocks.find((range) => range.from === offset);
+      if (starting) return starting;
+    } else if (direction === -1) {
+      const ending = [...blocks].reverse().find((range) => range.to === offset);
+      if (ending) return ending;
+    }
+    // A gap and either neighboring block share their source boundary. Prefer
+    // a real block there so a structural newline never becomes a phantom row.
+    return blocks[0] ?? gaps[0] ?? null;
   }
 
-  function activateSourceBoundary(offset: number): boolean {
-    const range = sourceRangeAtOffset(offset);
-    if (!range || ["paragraph", "source_gap", "source_block"].includes(range.kind)) return false;
-    if (range.kind === "blockquote" || range.kind === "code_block") {
-      const node = view.state.doc.nodeAt(range.pos);
-      if (!node) return false;
-      const tr = view.state.tr.setNodeMarkup(range.pos, undefined, {
-        ...node.attrs,
-        sourceEditing: true,
+  function blockHeightKey(range: Pick<LiveSourceRange, "from" | "to" | "source">): string {
+    return `${range.from}:${range.to}:${range.source}`;
+  }
+
+  function scheduleBlockHeightCache(): void {
+    if (blockHeightFrame !== null || typeof requestAnimationFrame !== "function") return;
+    blockHeightFrame = requestAnimationFrame(() => {
+      blockHeightFrame = null;
+      if (!view?.dom.isConnected) return;
+      view.state.doc.forEach((node, pos) => {
+        if (
+          node.type.name === "source_block"
+          || (["blockquote", "code_block"].includes(node.type.name)
+            && node.attrs.sourceEditing === true)
+        ) return;
+        const from = Number(node.attrs[SOURCE_FROM_ATTR]);
+        const to = Number(node.attrs[SOURCE_TO_ATTR]);
+        const source = node.attrs[SOURCE_TEXT_ATTR];
+        if (!Number.isInteger(from) || !Number.isInteger(to) || typeof source !== "string") return;
+        const dom = view.nodeDOM(pos);
+        if (!(dom instanceof HTMLElement)) return;
+        const height = dom.getBoundingClientRect().height;
+        if (Number.isFinite(height) && height > 0) {
+          blockHeightCache.set(`${from}:${to}:${source}`, Math.round(height * 100) / 100);
+        }
       });
-      const localOffset = Math.max(0, Math.min(offset - range.from, node.content.size));
-      tr.setSelection(TextSelection.create(tr.doc, range.pos + 1 + localOffset));
-      tr.setMeta("addToHistory", false);
-      tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
-      view.dispatch(tr);
-      return true;
-    }
-    const sourceBlockType = schema.nodes.source_block;
-    if (!sourceBlockType) return false;
+    });
+  }
+
+  function renderedHeightForRange(range: LiveSourceRange): number | null {
+    const cached = blockHeightCache.get(blockHeightKey(range));
+    if (cached !== undefined) return cached;
     const renderedDom = view.nodeDOM(range.pos);
     const renderedHeight = renderedDom instanceof HTMLElement
       ? renderedDom.getBoundingClientRect().height
       : 0;
-    const sourceLayoutHeight = Number.isFinite(renderedHeight) && renderedHeight > 0
-      ? Math.round(renderedHeight * 100) / 100
-      : null;
+    if (!Number.isFinite(renderedHeight) || renderedHeight <= 0) return null;
+    const rounded = Math.round(renderedHeight * 100) / 100;
+    blockHeightCache.set(blockHeightKey(range), rounded);
+    return rounded;
+  }
+
+  function canonicalNodeForRange(from: number, to: number): PMNode | null {
+    let found: PMNode | null = null;
+    canonicalPositionDocument.forEach((node) => {
+      if (
+        found === null
+        && node.attrs[SOURCE_FROM_ATTR] === from
+        && node.attrs[SOURCE_TO_ATTR] === to
+      ) found = node;
+    });
+    return found;
+  }
+
+  function sourceBlockForRange(range: LiveSourceRange, layoutHeight: number | null): PMNode | null {
+    const sourceBlockType = schema.nodes.source_block;
+    if (!sourceBlockType) return null;
     const base = sourceBlockType.createChecked({
       kind: range.presentationKind,
-      [SOURCE_LAYOUT_HEIGHT_ATTR]: sourceLayoutHeight,
+      [SOURCE_LAYOUT_HEIGHT_ATTR]: layoutHeight,
       [SOURCE_FROM_ATTR]: range.from,
       [SOURCE_TO_ATTR]: range.to,
       [SOURCE_TEXT_ATTR]: range.source,
     }, range.source ? schema.text(range.source) : undefined);
-    const sourceBlock = sourceBlockType.createChecked({
+    return sourceBlockType.createChecked({
       ...base.attrs,
       [SOURCE_FINGERPRINT_ATTR]: sourceFingerprint(base),
     }, base.content);
-    const tr = view.state.tr.replaceWith(
-      range.pos,
-      range.pos + view.state.doc.nodeAt(range.pos)!.nodeSize,
-      sourceBlock,
-    );
-    const target = range.pos + 1 + Math.max(0, Math.min(offset - range.from, range.source.length));
-    tr.setSelection(TextSelection.create(tr.doc, target));
+  }
+
+  function sourceBlockKindIsEligible(kind: string, activateTable: boolean): boolean {
+    if (["paragraph", "source_gap", "source_block"].includes(kind)) return false;
+    if (kind === "table" && !activateTable) return false;
+    return true;
+  }
+
+  function synchronizeLivePresentation(
+    state: EditorState,
+    sourceSelection: { anchor: number; head: number },
+    intent: LiveNavigationIntent = {},
+  ): Transaction | null {
+    const direction = intent.direction;
+    const targetBefore = sourceRangeAtOffsetInDocument(state.doc, sourceSelection.head, direction);
+    const keepCurrentSourceBlock = targetBefore?.kind === "source_block";
+    const targetHeight = targetBefore
+      && targetBefore.kind !== "source_block"
+      && sourceBlockKindIsEligible(targetBefore.kind, intent.activateTable === true)
+      && !["blockquote", "code_block"].includes(targetBefore.kind)
+      ? renderedHeightForRange(targetBefore)
+      : null;
+    const tr = state.tr;
+    let presentationChanged = false;
+
+    const activeSourceBlocks: Array<{ pos: number; node: PMNode }> = [];
+    tr.doc.forEach((node, pos) => {
+      if (node.type.name === "source_block") activeSourceBlocks.push({ pos, node });
+    });
+    for (const active of activeSourceBlocks.reverse()) {
+      const from = Number(active.node.attrs[SOURCE_FROM_ATTR]);
+      const to = Number(active.node.attrs[SOURCE_TO_ATTR]);
+      if (
+        keepCurrentSourceBlock
+        && Number.isInteger(from)
+        && Number.isInteger(to)
+        && from <= sourceSelection.head
+        && sourceSelection.head <= to
+      ) continue;
+      const canonical = canonicalNodeForRange(from, to);
+      if (!canonical) continue;
+      tr.replaceWith(active.pos, active.pos + active.node.nodeSize, canonical);
+      presentationChanged = true;
+    }
+
+    const editingBlocks: Array<{ pos: number; node: PMNode }> = [];
+    tr.doc.forEach((node, pos) => {
+      if (
+        ["blockquote", "code_block"].includes(node.type.name)
+        && node.attrs.sourceEditing === true
+      ) editingBlocks.push({ pos, node });
+    });
+    for (const active of editingBlocks.reverse()) {
+      const from = Number(active.node.attrs[SOURCE_FROM_ATTR]);
+      const to = Number(active.node.attrs[SOURCE_TO_ATTR]);
+      if (
+        Number.isInteger(from)
+        && Number.isInteger(to)
+        && from <= sourceSelection.head
+        && sourceSelection.head <= to
+      ) continue;
+      tr.setNodeMarkup(active.pos, undefined, { ...active.node.attrs, sourceEditing: false });
+      presentationChanged = true;
+    }
+
+    const target = sourceRangeAtOffsetInDocument(tr.doc, sourceSelection.head, direction);
+    if (target && sourceBlockKindIsEligible(target.kind, intent.activateTable === true)) {
+      const targetNode = tr.doc.nodeAt(target.pos);
+      if (targetNode && ["blockquote", "code_block"].includes(target.kind)) {
+        if (targetNode.attrs.sourceEditing !== true) {
+          tr.setNodeMarkup(target.pos, undefined, { ...targetNode.attrs, sourceEditing: true });
+          presentationChanged = true;
+        }
+      } else if (targetNode && target.kind !== "source_block") {
+        const sourceBlock = sourceBlockForRange(target, targetHeight);
+        if (sourceBlock) {
+          tr.replaceWith(target.pos, target.pos + targetNode.nodeSize, sourceBlock);
+          presentationChanged = true;
+        }
+      }
+    }
+
+    const explicitSelection = intent.anchor !== undefined || intent.head !== undefined;
+    if (!presentationChanged && !explicitSelection && intent.scroll !== true) return null;
+    if (presentationChanged || explicitSelection) {
+      const positions = SourcePositionMap.fromDocument(tr.doc, canonicalMarkdown);
+      const anchor = Math.max(0, Math.min(intent.anchor ?? sourceSelection.anchor, canonicalMarkdown.length));
+      const head = Math.max(0, Math.min(intent.head ?? sourceSelection.head, canonicalMarkdown.length));
+      const selectedRange = sourceRangeAtOffsetInDocument(tr.doc, head, direction);
+      const headAffinity = direction === -1 || selectedRange?.to === head ? "left" : "right";
+      const anchorAffinity = anchor === head ? headAffinity : "left";
+      const anchorPosition = positions.sourceToDocument(anchor, anchorAffinity);
+      const headPosition = positions.sourceToDocument(head, headAffinity);
+      try {
+        tr.setSelection(TextSelection.create(tr.doc, anchorPosition, headPosition));
+      } catch {
+        tr.setSelection(TextSelection.near(tr.doc.resolve(headPosition), direction ?? 1));
+      }
+    }
     tr.setMeta("addToHistory", false);
     tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
+    if (intent.scroll !== false) tr.scrollIntoView();
+    return tr;
+  }
+
+  function activateSourceBoundary(
+    offset: number,
+    options: { activateTable?: boolean; scroll?: boolean } = {},
+  ): boolean {
+    const clamped = Math.max(0, Math.min(offset, canonicalMarkdown.length));
+    const positions = sourcePositionMapForState(view.state);
+    const position = positions.sourceToDocument(clamped, "right");
+    const tr = markLiveNavigation(
+      view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(position))),
+      {
+        anchor: clamped,
+        head: clamped,
+        activateTable: options.activateTable,
+        scroll: options.scroll ?? true,
+      },
+    );
     view.dispatch(tr);
     return true;
   }
@@ -272,22 +438,40 @@ export function createEditor(
       direction,
     );
     if (targetOffset !== null) {
+      const sourceFrom = Number(node.attrs[SOURCE_FROM_ATTR]);
+      const targetSource = Number.isInteger(sourceFrom) ? sourceFrom + targetOffset : undefined;
       view.dispatch(
-        state.tr
+        markLiveNavigation(state.tr
           .setSelection(TextSelection.create(state.doc, blockPos + 1 + targetOffset))
-          .setMeta(SOURCE_BLOCK_PRESENTATION_META, true)
-          .scrollIntoView(),
+          .setMeta(SOURCE_BLOCK_PRESENTATION_META, true), {
+          ...(targetSource !== undefined ? { anchor: targetSource, head: targetSource } : {}),
+          direction,
+          scroll: true,
+        }),
       );
       return true;
     }
 
-    const outside = selectionOutsideBlock(state, blockPos, node, direction);
-    if (!outside) return false;
+    const sourceFrom = Number(node.attrs[SOURCE_FROM_ATTR]);
+    if (!Number.isInteger(sourceFrom)) return false;
+    const targetSource = direction < 0
+      ? sourceFrom - 1
+      : sourceFrom + node.textContent.length + 1;
+    if (targetSource < 0 || targetSource > canonicalMarkdown.length) return false;
+    const targetPosition = sourcePositionMapForState(state).sourceToDocument(
+      targetSource,
+      direction < 0 ? "left" : "right",
+    );
+    const outside = TextSelection.near(state.doc.resolve(targetPosition), direction);
     view.dispatch(
-      state.tr
+      markLiveNavigation(state.tr
         .setSelection(outside)
-        .setMeta(SOURCE_BLOCK_PRESENTATION_META, true)
-        .scrollIntoView(),
+        .setMeta(SOURCE_BLOCK_PRESENTATION_META, true), {
+        anchor: targetSource,
+        head: targetSource,
+        direction,
+        scroll: true,
+      }),
     );
     return true;
   }
@@ -394,18 +578,17 @@ export function createEditor(
               && editedParent.attrs.sourceEditing === true
             )
           );
-        const next = v.state.apply(tr);
-        v.updateState(next);
+        let next = v.state.apply(tr);
+        let reparseRequest: { selection: number; reactivate: boolean } | null = null;
         if (tr.docChanged && !tr.getMeta(SOURCE_BLOCK_PRESENTATION_META)) {
           const effect = transactionSourceEffect(tr, beforeCanonical);
           if (effect.kind === "source") {
             const changed = applyCanonicalTransaction(effect.transaction, beforeSelection);
             if (changed && effect.reparseDerivedDocument) {
-              reparsePresentation(
-                next,
-                effect.transaction.selection.head,
-                editedSourcePresentation,
-              );
+              reparseRequest = {
+                selection: effect.transaction.selection.head,
+                reactivate: editedSourcePresentation,
+              };
             }
           } else if (effect.kind === "unsupported") {
             // Undo/redo may replay a group of presentation and source steps
@@ -423,27 +606,24 @@ export function createEditor(
             }
           }
         }
-        const currentState = v.state;
-        let hasActivatedSourceBlock = false;
-        currentState.doc.descendants((node) => {
-          if (node.type.name === "source_block") hasActivatedSourceBlock = true;
-        });
-        const selectionInsideSourceBlock = currentState.selection.$head.parent.type.name === "source_block";
-        if (hasActivatedSourceBlock && !selectionInsideSourceBlock) {
-          const sourceSelection = sourcePositionMapForState(currentState)
-            .documentToSource(currentState.selection.head, "right");
-          reparsePresentation(currentState, sourceSelection);
-          return;
+        const intent = tr.getMeta(LIVE_NAVIGATION_META) as LiveNavigationIntent | undefined;
+        const shouldSynchronizeSelection = !tr.docChanged
+          && (tr.selectionSet || intent !== undefined)
+          && (!tr.getMeta(SOURCE_BLOCK_PRESENTATION_META) || intent !== undefined);
+        if (shouldSynchronizeSelection) {
+          const mapped = sourceSelectionForState(next);
+          const sourceSelection = {
+            anchor: intent?.anchor ?? mapped.anchor,
+            head: intent?.head ?? mapped.head,
+          };
+          const synchronization = synchronizeLivePresentation(next, sourceSelection, intent);
+          if (synchronization) next = next.apply(synchronization);
         }
-        if (
-          !hasActivatedSourceBlock
-          && !tr.docChanged
-          && !tr.getMeta(SOURCE_BLOCK_PRESENTATION_META)
-        ) {
-          const sourceSelection = sourcePositionMapForState(currentState)
-            .documentToSource(currentState.selection.head, "right");
-          const range = sourceRangeAtOffset(sourceSelection);
-          if (range?.kind !== "table") activateSourceBoundary(sourceSelection);
+        v.updateState(next);
+        scheduleBlockHeightCache();
+        if (reparseRequest) {
+          reparsePresentation(next, reparseRequest.selection, reparseRequest.reactivate);
+          scheduleBlockHeightCache();
         }
       },
       handleKeyDown(_view, event) {
@@ -511,48 +691,38 @@ export function createEditor(
           || event.altKey
         ) return false;
         const current = view.state.selection;
+        for (let depth = current.$head.depth; depth > 0; depth -= 1) {
+          if (current.$head.node(depth).type.name === "table") return false;
+        }
         const positions = sourcePositionMapForState(view.state);
         const direction = event.key === "ArrowLeft" ? -1 : 1;
-        const head = positions.documentToSource(
-          current.head,
-          direction < 0 ? "right" : "left",
-        );
+        const selection = sourceSelectionForState(view.state);
+        const head = selection.head;
         const target = Math.max(0, Math.min(head + direction, canonicalMarkdown.length));
-        if (
-          current.empty
-          && !event.shiftKey
-          && current.$head.parent.type.name === "source_block"
-        ) {
-          const sourceFrom = Number(current.$head.parent.attrs[SOURCE_FROM_ATTR]);
-          const sourceTo = Number(current.$head.parent.attrs[SOURCE_TO_ATTR]);
-          const targetPosition = Number.isInteger(sourceFrom)
-            && Number.isInteger(sourceTo)
-            && target >= sourceFrom
-            && target <= sourceTo
-            ? current.$head.before() + 1 + target - sourceFrom
-            : positions.sourceToDocument(target, direction < 0 ? "left" : "right");
-          view.dispatch(
-            view.state.tr
-              .setSelection(TextSelection.create(view.state.doc, targetPosition))
-              .setMeta(SOURCE_BLOCK_PRESENTATION_META, true)
-              .scrollIntoView(),
-          );
-          event.preventDefault();
-          return true;
-        }
-        if (positions.hasExactSourceBoundary(target)) return false;
-        const anchor = positions.documentToSource(current.anchor);
-        if (!activateSourceBoundary(target)) return false;
-        if (event.shiftKey) {
-          const activated = SourcePositionMap.fromDocument(view.state.doc, canonicalMarkdown);
-          const anchorPosition = activated.sourceToDocument(anchor, "left");
-          const headPosition = activated.sourceToDocument(target, "right");
-          view.dispatch(view.state.tr.setSelection(TextSelection.create(
-            view.state.doc,
+        if (target === head) return false;
+        const anchor = event.shiftKey ? selection.anchor : target;
+        const anchorPosition = positions.sourceToDocument(anchor, "left");
+        const headPosition = positions.sourceToDocument(target, direction < 0 ? "left" : "right");
+        let navigation = view.state.tr;
+        try {
+          navigation = navigation.setSelection(TextSelection.create(
+            navigation.doc,
             anchorPosition,
             headPosition,
-          )));
+          ));
+        } catch {
+          if (event.shiftKey) return false;
+          navigation = navigation.setSelection(TextSelection.near(
+            navigation.doc.resolve(headPosition),
+            direction,
+          ));
         }
+        view.dispatch(markLiveNavigation(navigation, {
+          anchor,
+          head: target,
+          direction,
+          scroll: true,
+        }));
         event.preventDefault();
         return true;
       },
@@ -632,7 +802,9 @@ export function createEditor(
   function rebuild(md: string): void {
     view.destroy();
     editorHost.innerHTML = "";
+    blockHeightCache.clear();
     view = buildView(md);
+    scheduleBlockHeightCache();
   }
 
   // Resize the source textarea to its content height. Called on every
@@ -766,14 +938,7 @@ export function createEditor(
       sourceTextarea.setSelectionRange(clamped, clamped);
       return;
     }
-    activateSourceBoundary(clamped);
-    const position = Math.min(
-      sourcePositionMapForState(view.state).sourceToDocument(clamped, "right"),
-      view.state.doc.content.size,
-    );
-    try {
-      view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(position))).scrollIntoView());
-    } catch {}
+    activateSourceBoundary(clamped, { activateTable: true, scroll: true });
   }
 
   function runExtensionCommand<Result>(command: string, input?: unknown): Result | undefined {
@@ -851,6 +1016,11 @@ export function createEditor(
   });
 
   view = buildView(canonicalMarkdown);
+  if (typeof ResizeObserver !== "undefined") {
+    blockResizeObserver = new ResizeObserver(() => scheduleBlockHeightCache());
+    blockResizeObserver.observe(editorHost);
+  }
+  scheduleBlockHeightCache();
 
   return {
     getMarkdown(): string {
@@ -908,6 +1078,10 @@ export function createEditor(
     },
     destroy(): void {
       window.removeEventListener("keydown", onKey);
+      blockResizeObserver?.disconnect();
+      if (blockHeightFrame !== null && typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(blockHeightFrame);
+      }
       view.destroy();
       wrap.remove();
     },

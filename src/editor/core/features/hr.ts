@@ -4,6 +4,7 @@ import type { EditorView } from "prosemirror-view";
 
 import { leaveLineDraft } from "../block-draft";
 import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
+import { markLiveNavigation } from "../source-navigation";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
 import type { FeatureSpec } from "./_types";
 
@@ -99,12 +100,13 @@ function makeHrNodeView(schema: Schema) {
       if (!current || current.type !== schema.nodes.horizontal_rule) return;
 
       const markup = (current.attrs.markup as string) || "---";
-      const paragraph = schema.nodes.paragraph!.create(current.attrs, schema.text(markup));
-      const tr = view.state.tr.replaceWith(pos, pos + current.nodeSize, paragraph);
-      tr.setSelection(TextSelection.create(tr.doc, pos + 1 + markup.length));
-      tr.setMeta(hrRevealKey, pos);
-      tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
-      view.dispatch(tr.scrollIntoView());
+      const tr = view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos));
+      const sourceFrom = Number(current.attrs.sourceFrom);
+      const sourceOffset = Number.isInteger(sourceFrom) ? sourceFrom + markup.length : undefined;
+      view.dispatch(markLiveNavigation(tr, {
+        ...(sourceOffset !== undefined ? { anchor: sourceOffset, head: sourceOffset } : {}),
+        scroll: true,
+      }));
       view.focus();
     };
 
@@ -163,7 +165,15 @@ function makeHrInteractionPlugin(schema: Schema): Plugin {
       tr.setSelection(TextSelection.create(tr.doc, pos + 1 + offset));
       tr.setMeta(hrRevealKey, pos);
       tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
-      return tr.scrollIntoView();
+      const sourceFrom = Number(current.attrs.sourceFrom);
+      const sourceOffset = Number.isInteger(sourceFrom)
+        ? sourceFrom + offset
+        : undefined;
+      return markLiveNavigation(tr.scrollIntoView(), {
+        ...(sourceOffset !== undefined ? { anchor: sourceOffset, head: sourceOffset } : {}),
+        direction: enteredFromBefore ? 1 : -1,
+        scroll: true,
+      });
     },
     props: {
       nodeViews: {

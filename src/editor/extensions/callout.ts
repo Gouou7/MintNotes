@@ -8,6 +8,7 @@ import type {
   SourceBlockPresentation,
 } from "../core/lib";
 import { SOURCE_BLOCK_PRESENTATION_META } from "../core/lib";
+import { markLiveNavigation } from "../core/source-navigation";
 import { parseCalloutMarker, type CalloutMarker } from "../callouts";
 
 const focusMarkerCommand = "mint.callout.focus-marker";
@@ -120,7 +121,14 @@ export function createCalloutExtension(
           tr.setSelection(TextSelection.create(tr.doc, marker.from + offset));
           tr.setMeta("addToHistory", false);
           tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
-          view.dispatch(tr.scrollIntoView());
+          const sourceFrom = Number(node.attrs.sourceFrom);
+          const sourceOffset = Number.isInteger(sourceFrom)
+            ? sourceFrom + marker.from - marker.nodePos - 1 + offset
+            : undefined;
+          view.dispatch(markLiveNavigation(tr.scrollIntoView(), {
+            ...(sourceOffset !== undefined ? { anchor: sourceOffset, head: sourceOffset } : {}),
+            scroll: true,
+          }));
           view.focus();
           return true;
         } catch {

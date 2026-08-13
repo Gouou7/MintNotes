@@ -1,9 +1,28 @@
 import type { Node as PMNode } from "prosemirror-model";
 import { Plugin, Selection, TextSelection } from "prosemirror-state";
-import type { EditorState } from "prosemirror-state";
+import type { EditorState, Transaction } from "prosemirror-state";
 
 import { SOURCE_BLOCK_PRESENTATION_META } from "./extension";
-import { SOURCE_TEXT_ATTR } from "./source";
+import { SOURCE_FROM_ATTR, SOURCE_TEXT_ATTR, SOURCE_TO_ATTR } from "./source";
+
+export const LIVE_NAVIGATION_META = "live-source-navigation";
+
+export interface LiveNavigationIntent {
+  readonly anchor?: number;
+  readonly head?: number;
+  readonly direction?: -1 | 1;
+  readonly scroll?: boolean;
+  /** Explicit controller positioning may activate a table source block. */
+  readonly activateTable?: boolean;
+}
+
+export function markLiveNavigation<T extends Transaction>(
+  transaction: T,
+  intent: LiveNavigationIntent = {},
+): T {
+  transaction.setMeta(LIVE_NAVIGATION_META, intent);
+  return transaction;
+}
 
 export function selectionOutsideBlock(
   state: EditorState,
@@ -85,22 +104,35 @@ export function sourceGapNavigationPlugin(): Plugin {
           const target = lines[targetIndex]!;
           const column = Math.max(0, Math.min(offset - line.from, line.to - line.from));
           const targetOffset = target.from + Math.min(column, target.to - target.from);
+          const sourceFrom = Number(gap.attrs[SOURCE_FROM_ATTR]);
+          const targetSource = Number.isInteger(sourceFrom) ? sourceFrom + targetOffset : undefined;
           view.dispatch(
-            state.tr
+            markLiveNavigation(state.tr
               .setSelection(TextSelection.create(state.doc, gapPos + 1 + targetOffset))
-              .setMeta(SOURCE_BLOCK_PRESENTATION_META, true)
-              .scrollIntoView(),
+              .setMeta(SOURCE_BLOCK_PRESENTATION_META, true), {
+              ...(targetSource !== undefined ? { anchor: targetSource, head: targetSource } : {}),
+              direction,
+              scroll: true,
+            }),
           );
           return true;
         }
 
         const outside = selectionOutsideBlock(state, gapPos, gap, direction);
         if (!outside) return false;
+        const sourceBoundary = Number(gap.attrs[
+          direction < 0 ? SOURCE_FROM_ATTR : SOURCE_TO_ATTR
+        ]);
         view.dispatch(
-          state.tr
+          markLiveNavigation(state.tr
             .setSelection(outside)
-            .setMeta(SOURCE_BLOCK_PRESENTATION_META, true)
-            .scrollIntoView(),
+            .setMeta(SOURCE_BLOCK_PRESENTATION_META, true), {
+            ...(Number.isInteger(sourceBoundary)
+              ? { anchor: sourceBoundary, head: sourceBoundary }
+              : {}),
+            direction,
+            scroll: true,
+          }),
         );
         return true;
       },
