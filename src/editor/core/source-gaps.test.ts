@@ -61,4 +61,24 @@ describe("source-backed whitespace gaps", () => {
     });
     expect(renderedBreaks).toBe(visibleBreaks);
   });
+
+  it.each(["# first\n# second", "# first\r\n# second"])(
+    "marks the sole line ending between adjacent blocks as structural for %j",
+    (markdown) => {
+      const gap = parse(markdown).content.content.find((node) => node.type.name === "source_gap");
+
+      expect(gap?.attrs.structuralOnly).toBe(true);
+      expect(serialize(parse(markdown))).toBe(markdown);
+    },
+  );
+
+  it.each(["# first\n\n# second", "# first\n \n# second"])(
+    "keeps an authored blank row between blocks visible for %j",
+    (markdown) => {
+      const gap = parse(markdown).content.content.find((node) => node.type.name === "source_gap");
+
+      expect(gap?.attrs.structuralOnly).toBe(false);
+      expect(serialize(parse(markdown))).toBe(markdown);
+    },
+  );
 });

@@ -37,6 +37,28 @@ function createMintEditor(
   });
 }
 
+async function typeNativeText(host: HTMLElement, text: string): Promise<void> {
+  for (const character of text) {
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    const surface = editable?.querySelector<HTMLElement>(
+      "pre[data-source-block] > code, p:last-child",
+    );
+    if (!editable || !surface) throw new Error("Missing active Live text surface");
+    surface.textContent = `${surface.textContent ?? ""}${character}`;
+    const range = document.createRange();
+    range.selectNodeContents(surface);
+    range.collapse(false);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    editable.dispatchEvent(new InputEvent("input", {
+      inputType: "insertText",
+      data: character,
+      bubbles: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 afterEach(() => {
   document.body.replaceChildren();
 });
@@ -328,6 +350,27 @@ describe("Mint editor core public controller", () => {
     },
   );
 
+  it.each(["*", "+", "-", "1.", "1)"])(
+    "keeps incomplete list candidate %j literal while native typing continues",
+    async (marker) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host);
+
+      await typeNativeText(host, marker);
+      expect(editor.getMarkdown()).toBe(marker);
+      expect(host.querySelector(".ProseMirror > p")?.textContent).toBe(marker);
+      expect(host.querySelector(".ProseMirror > ul, .ProseMirror > ol")).toBeNull();
+      expect(host.querySelector("pre[data-source-block]")).toBeNull();
+
+      await typeNativeText(host, "a");
+      expect(editor.getMarkdown()).toBe(`${marker}a`);
+      expect(host.querySelector(".ProseMirror > p")?.textContent).toBe(`${marker}a`);
+      expect(host.querySelector(".ProseMirror > ul, .ProseMirror > ol")).toBeNull();
+      editor.destroy();
+    },
+  );
+
   it.each(INVALID_SOURCE_FIDELITY_STRINGS)(
     "keeps valid neighbors rendered around the smallest literal fallback for %j",
     (invalid) => {
@@ -411,6 +454,58 @@ describe("Mint editor core public controller", () => {
     expect(blank.getMarkdown()).toBe("a\n\n\nb");
     blank.destroy();
   });
+
+  it("does not present the structural line ending between adjacent headings as a blank row", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "# First\n# Second";
+    const editor = createEditor(host, { initialContent: markdown });
+    const gap = host.querySelector<HTMLElement>("pre[data-source-gap]");
+
+    expect(gap?.dataset.sourceGapStructural).toBe("1");
+    expect(gap?.querySelector("br.ProseMirror-trailingBreak")).not.toBeNull();
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.setSelectionOffset("# First\n".length);
+    expect(editor.getSelectionOffset()).toBe("# First\n".length);
+    expect(host.querySelector<HTMLElement>("pre[data-source-block]")?.dataset.sourceKind)
+      .toBe("heading-1");
+    expect(host.querySelector("pre[data-source-block]")?.textContent).toBe("# Second");
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it("displays every authored blank row between bullet items", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "- one\n\n\n- two\n\n- three";
+    const editor = createEditor(host, { initialContent: markdown });
+    const items = host.querySelectorAll<HTMLElement>(".ProseMirror > ul > li");
+
+    expect(items).toHaveLength(3);
+    expect(items[0]?.hasAttribute("data-source-gap-before")).toBe(false);
+    expect(items[1]?.dataset.sourceGapBefore).toBe("2");
+    expect(items[1]?.style.getPropertyValue("--source-gap-before")).toBe("2");
+    expect(items[2]?.dataset.sourceGapBefore).toBe("1");
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it.each([1, 2, 3, 4, 5, 6] as const)(
+    "labels an activated level-%s heading source with its original heading level",
+    (level) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const markdown = `${"#".repeat(level)} Heading`;
+      const editor = createEditor(host, { initialContent: markdown });
+
+      editor.setSelectionOffset(markdown.length);
+
+      expect(host.querySelector("pre[data-source-block]")?.getAttribute("data-source-kind"))
+        .toBe(`heading-${level}`);
+      expect(editor.getMarkdown()).toBe(markdown);
+      editor.destroy();
+    },
+  );
 
   it("applies Enter as one canonical source transaction and reparses the Live view", () => {
     const host = document.createElement("div");
@@ -681,6 +776,7 @@ describe("Mint editor core public controller", () => {
     expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
     expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(">\n>");
     expect(editor.getMarkdown()).toBe(">\n>");
+    expect(editor.getSelectionOffset()).toBe(">\n>".length);
     expect(changes.at(-1)).toBe(">\n>");
     expect(editor.getMarkdown()).not.toContain("\\>");
 
@@ -1000,6 +1096,8 @@ describe("Mint editor core public controller", () => {
       initialContent: initial,
       onChange: (next) => changes.push(next),
     });
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) throw new Error("Missing Live editor root");
     expect(focusCalloutMarker(editor, 0)).toBe(true);
 
     let source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
@@ -1018,11 +1116,12 @@ describe("Mint editor core public controller", () => {
       cancelable: true,
     });
 
-    source.dispatchEvent(insert);
+    editable.dispatchEvent(insert);
 
     expect(insert.defaultPrevented).toBe(true);
     expect(editor.getMarkdown()).toBe(inserted);
     expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(inserted);
+    expect(editor.getSelectionOffset()).toBe(insertAt + "test".length);
 
     source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
     text = source?.firstChild;
@@ -1041,14 +1140,44 @@ describe("Mint editor core public controller", () => {
         bubbles: true,
         cancelable: true,
       });
-      source.dispatchEvent(remove);
+      editable.dispatchEvent(remove);
       expect(remove.defaultPrevented).toBe(true);
+      expect(editor.getSelectionOffset()).toBe(deleteFrom + 3 - index);
     }
 
     expect(editor.getMarkdown()).toBe(initial);
     expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(initial);
     expect(changes.at(0)).toBe(inserted);
     expect(changes.at(-1)).toBe(initial);
+    editor.destroy();
+  });
+
+  it("keeps the canonical caret stable while a quote prefix becomes invalid", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createMintEditor(host, { initialContent: "> quote" });
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    editor.setSelectionOffset(1);
+    const source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
+    const text = source?.firstChild;
+    if (!editable || !source || !text) throw new Error("Missing active quote source");
+    const range = document.createRange();
+    range.setStart(text, 1);
+    range.collapse(true);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+
+    const remove = new InputEvent("beforeinput", {
+      inputType: "deleteContentBackward",
+      bubbles: true,
+      cancelable: true,
+    });
+    editable.dispatchEvent(remove);
+
+    expect(remove.defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe(" quote");
+    expect(editor.getSelectionOffset()).toBe(0);
+    expect(host.querySelector(".ProseMirror > p")?.textContent).toBe(" quote");
     editor.destroy();
   });
 

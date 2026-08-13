@@ -37,6 +37,18 @@
 .ProseMirror h4 { font-size: 1.05em; }
 .ProseMirror h5 { font-size: 1em; }
 .ProseMirror h6 { font-size: 0.95em; color: #666; }
+.ProseMirror pre[data-source-block][data-source-kind^="heading-"] {
+  margin: 1.6em 0 0.8em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.ProseMirror > pre[data-source-block][data-source-kind^="heading-"]:first-child { margin-top: 0; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-1"] { font-size: 1.75em; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-2"] { font-size: 1.45em; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-3"] { font-size: 1.2em; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-4"] { font-size: 1.05em; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-5"] { font-size: 1em; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-6"] { font-size: 0.95em; color: #666; }
 
 /* ─── paragraphs ─────────────────────────────────────────────────── */
 .ProseMirror p { margin: 0 0 1em; white-space: break-spaces; }
@@ -104,6 +116,9 @@
 .ProseMirror ol ul,
 .ProseMirror ol ol { margin-bottom: 0; }
 .ProseMirror li > p { margin-bottom: 0; }
+.ProseMirror li[data-source-gap-before] {
+  margin-top: calc(var(--source-gap-before) * 1.7em);
+}
 
 /* ─── horizontal rule ────────────────────────────────────────────── */
 .ProseMirror hr {

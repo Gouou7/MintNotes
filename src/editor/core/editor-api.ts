@@ -112,8 +112,8 @@ export function createEditor(
     presentationKind: string;
   } | null {
     let found: ReturnType<typeof sourceRangeAtOffset> = null;
+    let gapFallback: ReturnType<typeof sourceRangeAtOffset> = null;
     view.state.doc.forEach((node, pos) => {
-      if (found) return;
       const from = node.attrs[SOURCE_FROM_ATTR];
       const to = node.attrs[SOURCE_TO_ATTR];
       const source = node.attrs[SOURCE_TEXT_ATTR];
@@ -127,18 +127,34 @@ export function createEditor(
         const presentationKind = node.type.name === "heading"
           ? `heading-${String(node.attrs.level ?? 1)}`
           : node.type.name;
-        found = { pos, from, to, source, kind: node.type.name, presentationKind };
+        const candidate = { pos, from, to, source, kind: node.type.name, presentationKind };
+        // A gap and either neighboring block share their source boundary.
+        // Prefer the real block there so a structural line ending activates
+        // the heading/paragraph edge instead of exposing a phantom gap row.
+        if (node.type.name === "source_gap") gapFallback ??= candidate;
+        else found ??= candidate;
       }
     });
-    return found;
+    return found ?? gapFallback;
   }
 
   function activateSourceBoundary(offset: number): boolean {
     const range = sourceRangeAtOffset(offset);
-    if (
-      !range
-      || ["paragraph", "source_gap", "source_block", "blockquote", "code_block"].includes(range.kind)
-    ) return false;
+    if (!range || ["paragraph", "source_gap", "source_block"].includes(range.kind)) return false;
+    if (range.kind === "blockquote" || range.kind === "code_block") {
+      const node = view.state.doc.nodeAt(range.pos);
+      if (!node) return false;
+      const tr = view.state.tr.setNodeMarkup(range.pos, undefined, {
+        ...node.attrs,
+        sourceEditing: true,
+      });
+      const localOffset = Math.max(0, Math.min(offset - range.from, node.content.size));
+      tr.setSelection(TextSelection.create(tr.doc, range.pos + 1 + localOffset));
+      tr.setMeta("addToHistory", false);
+      tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
+      view.dispatch(tr);
+      return true;
+    }
     const sourceBlockType = schema.nodes.source_block;
     if (!sourceBlockType) return false;
     const base = sourceBlockType.createChecked({
@@ -252,16 +268,27 @@ export function createEditor(
       dispatchTransaction(tr) {
         const beforeCanonical = canonicalMarkdown;
         const beforeSelection = sourceSelectionForState(v.state);
-        const editedSourceBlock = tr.docChanged
-          && v.state.selection.$head.parent.type.name === "source_block";
+        const editedParent = v.state.selection.$head.parent;
+        const editedSourcePresentation = tr.docChanged
+          && (
+            editedParent.type.name === "source_block"
+            || (
+              ["blockquote", "code_block"].includes(editedParent.type.name)
+              && editedParent.attrs.sourceEditing === true
+            )
+          );
         const next = v.state.apply(tr);
         v.updateState(next);
         if (tr.docChanged && !tr.getMeta(SOURCE_BLOCK_PRESENTATION_META)) {
           const effect = transactionSourceEffect(tr, beforeCanonical);
           if (effect.kind === "source") {
             const changed = applyCanonicalTransaction(effect.transaction, beforeSelection);
-            if (changed && (effect.reparseDerivedDocument || editedSourceBlock)) {
-              reparsePresentation(next, effect.transaction.selection.head, editedSourceBlock);
+            if (changed && (effect.reparseDerivedDocument || editedSourcePresentation)) {
+              reparsePresentation(
+                next,
+                effect.transaction.selection.head,
+                editedSourcePresentation,
+              );
             }
           } else if (effect.kind === "unsupported") {
             // Undo/redo may replay a group of presentation and source steps

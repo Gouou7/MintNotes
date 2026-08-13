@@ -24,11 +24,24 @@ const coreNodes: Record<string, NodeSpec> = {
     marks: "",
     code: true,
     defining: true,
+    attrs: {
+      // A single line ending between adjacent Markdown blocks is only their
+      // structural separator. It remains source-addressable but must not
+      // create an editable blank row in Live presentation.
+      structuralOnly: { default: false },
+    },
     parseDOM: [{
       tag: "pre[data-source-gap]",
       preserveWhitespace: "full",
+      getAttrs: (el) => ({
+        structuralOnly: (el as HTMLElement).hasAttribute("data-source-gap-structural"),
+      }),
     }],
-    toDOM: () => ["pre", { "data-source-gap": "1", "aria-hidden": "true" }, ["code", 0]],
+    toDOM: (node) => ["pre", {
+      "data-source-gap": "1",
+      ...(node.attrs.structuralOnly ? { "data-source-gap-structural": "1" } : {}),
+      "aria-hidden": "true",
+    }, ["code", 0]],
   },
 
   // Line-ending characters inside a source gap need stable document
@@ -207,8 +220,29 @@ const coreNodes: Record<string, NodeSpec> = {
   list_item: {
     content: "paragraph block*",
     defining: true,
-    parseDOM: [{ tag: "li" }],
-    toDOM: () => ["li", 0],
+    attrs: {
+      // Presentation-only count of authored blank rows immediately before
+      // this item. CommonMark keeps blank-line-separated bullets in one list,
+      // so the derived list tree needs this hint to display those rows rather
+      // than visually collapsing every item together.
+      sourceGapBefore: { default: 0 },
+    },
+    parseDOM: [{
+      tag: "li",
+      getAttrs: (el) => ({
+        sourceGapBefore: Number.parseInt(
+          (el as HTMLElement).getAttribute("data-source-gap-before") ?? "0",
+          10,
+        ) || 0,
+      }),
+    }],
+    toDOM: (node) => {
+      const sourceGapBefore = Math.max(0, Number(node.attrs.sourceGapBefore) || 0);
+      return ["li", sourceGapBefore > 0 ? {
+        "data-source-gap-before": String(sourceGapBefore),
+        style: `--source-gap-before: ${sourceGapBefore}`,
+      } : {}, 0];
+    },
   },
 
   text: { group: "inline" },

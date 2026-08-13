@@ -28,6 +28,7 @@ const md: MarkdownIt = new MarkdownIt("commonmark", { html: false });
 for (const plugin of collectMdItPlugins()) md.use(plugin);
 
 const LITERAL_FENCE_SENTINEL = "\uE000";
+const INCOMPLETE_BLOCK_CHARACTERS = new Set(["*", "+", "-", ".", ")", "="]);
 
 type SourceLine = { text: string; from: number };
 
@@ -42,6 +43,66 @@ function sourceLines(source: string): SourceLine[] {
     from = source[to] === "\r" && source[to + 1] === "\n" ? to + 2 : to + 1;
   }
   return lines;
+}
+
+/**
+ * markdown-it accepts an empty list marker at end-of-line (`*`, `+`, `-`,
+ * `1.`, `1)`) and one-character Setext underlines. Mint Notes deliberately
+ * keeps those spellings literal until the user types the required list space
+ * or the third Setext underline character. Protecting only the candidate
+ * punctuation gives the parser the desired transient shape without changing
+ * source length, line maps, or the canonical authored string.
+ */
+function protectIncompleteBlockCandidates(source: string): {
+  parserSource: string;
+  restoration: ReadonlyMap<string, string>;
+} {
+  // Offsets throughout the editor are UTF-16 code-unit offsets. `split("")`
+  // intentionally follows that model; code-point iteration would shift a
+  // later candidate whenever an astral character appears earlier in source.
+  const characters = source.split("");
+  const sentinels = new Map<string, string>();
+  const restoration = new Map<string, string>();
+  let nextSentinel = 0xE001;
+  const sentinelFor = (character: string): string | null => {
+    const existing = sentinels.get(character);
+    if (existing) return existing;
+    while (nextSentinel <= 0xF8FF) {
+      const candidate = String.fromCharCode(nextSentinel++);
+      if (source.includes(candidate) || restoration.has(candidate)) continue;
+      sentinels.set(character, candidate);
+      restoration.set(candidate, character);
+      return candidate;
+    }
+    return null;
+  };
+  let changed = false;
+  for (const line of sourceLines(source)) {
+    if (!/^( {0,3})(?:[*+-]|\d+[.)]|={1,2}|-{1,2})$/.test(line.text)) continue;
+    for (let index = 0; index < line.text.length; index += 1) {
+      const character = line.text[index]!;
+      if (!INCOMPLETE_BLOCK_CHARACTERS.has(character)) continue;
+      const sentinel = sentinelFor(character);
+      if (!sentinel) continue;
+      characters[line.from + index] = sentinel;
+      changed = true;
+    }
+  }
+  return {
+    parserSource: changed ? characters.join("") : source,
+    restoration,
+  };
+}
+
+function restoreProtectedCharacters(
+  text: string,
+  restoration: ReadonlyMap<string, string>,
+): string {
+  let restored = text.replaceAll(LITERAL_FENCE_SENTINEL, "`");
+  for (const [sentinel, character] of restoration) {
+    restored = restored.replaceAll(sentinel, character);
+  }
+  return restored;
 }
 
 function recoverableBlockLine(line: string): boolean {
@@ -159,6 +220,8 @@ export class ParserState {
   private stack: Frame[] = [{ type: schema.nodes.doc, attrs: null, content: [] }];
   private marks: readonly Mark[] = Mark.none;
 
+  constructor(private readonly protectedCharacterRestoration: ReadonlyMap<string, string> = new Map()) {}
+
   private top(): Frame {
     return this.stack[this.stack.length - 1]!;
   }
@@ -170,7 +233,7 @@ export class ParserState {
   addText(text: string): void {
     if (!text) return;
     this.top().content.push(schema.text(
-      text.replaceAll(LITERAL_FENCE_SENTINEL, "`"),
+      restoreProtectedCharacters(text, this.protectedCharacterRestoration),
       this.marks,
     ));
   }
@@ -267,7 +330,12 @@ function blockquoteCloseIndex(tokens: Token[], openIndex: number): number {
   return openIndex;
 }
 
-function handleBlock(state: ParserState, token: Token, src: string): void {
+function handleBlock(
+  state: ParserState,
+  token: Token,
+  src: string,
+  listItemSourceGapBefore = 0,
+): void {
   const { nodes } = schema;
   switch (token.type) {
     case "paragraph_open":
@@ -306,7 +374,7 @@ function handleBlock(state: ParserState, token: Token, src: string): void {
       state.closeNode();
       return;
     case "list_item_open":
-      state.openNode(nodes.list_item);
+      state.openNode(nodes.list_item, { sourceGapBefore: listItemSourceGapBefore });
       return;
     case "list_item_close":
       state.closeNode();
@@ -443,6 +511,9 @@ function sourceGapNode(
 ): PMNode {
   const node = schema.nodes.source_gap.createChecked(
     {
+      structuralOnly: from > 0
+        && to < fullSourceLength
+        && /^(?:\r\n|\r|\n)$/.test(source),
       [SOURCE_FROM_ATTR]: from,
       [SOURCE_TO_ATTR]: to,
       [SOURCE_TEXT_ATTR]: source,
@@ -531,8 +602,13 @@ export interface ParseOptions {
 }
 
 export function parse(src: string, options: ParseOptions = {}): PMNode {
-  const tokens = md.parse(protectRecoverableUnclosedFences(src), {});
-  const state = new ParserState();
+  const protectedSource = protectIncompleteBlockCandidates(
+    protectRecoverableUnclosedFences(src),
+  );
+  const tokens = md.parse(protectedSource.parserSource, {});
+  const state = new ParserState(protectedSource.restoration);
+  const lines = sourceLines(src);
+  const listHasItem: boolean[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
     if (token.type === "blockquote_open") {
@@ -544,7 +620,22 @@ export function parse(src: string, options: ParseOptions = {}): PMNode {
       index = blockquoteCloseIndex(tokens, index);
       continue;
     }
-    handleBlock(state, token, src);
+    if (token.type === "bullet_list_open" || token.type === "ordered_list_open") {
+      listHasItem.push(false);
+    }
+    let listItemSourceGapBefore = 0;
+    if (token.type === "list_item_open" && listHasItem.at(-1) === true && token.map) {
+      for (let line = token.map[0] - 1; line >= 0 && !lines[line]!.text.trim(); line -= 1) {
+        listItemSourceGapBefore += 1;
+      }
+    }
+    handleBlock(state, token, src, listItemSourceGapBefore);
+    if (token.type === "list_item_open" && listHasItem.length > 0) {
+      listHasItem[listHasItem.length - 1] = true;
+    }
+    if (token.type === "bullet_list_close" || token.type === "ordered_list_close") {
+      listHasItem.pop();
+    }
   }
   let doc = state.finish();
   for (const f of collectParserPostProcessors()) doc = f(doc);

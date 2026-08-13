@@ -35,6 +35,8 @@ Newline presentation follows these rules without rewriting the source:
 
 The first case remains a soft Markdown line break: it must not be rewritten as two trailing spaces, `<br>`, or an empty paragraph. In all three cases, Source, Live, Reading, save, and reopen preserve the exact canonical string. LF and CRLF inputs remain distinguishable until an explicit, user-authorized line-ending conversion is implemented.
 
+A source-gap containing only the single line ending required between two adjacent block tokens is structural rather than a blank row. Live mode keeps that line ending source-addressable at the neighboring block boundaries, but its derived gap element is zero-size, non-interactive, and hides ProseMirror's synthetic trailing break. It therefore contributes neither visual height nor an independent caret row. Any additional line ending or whitespace-only line remains a visible editable source-gap row.
+
 Conformance is enforced by exact-string parser/controller tests, every-offset source mapping tests, structured local-edit and boundary matrices, renderer-failure and reopen lifecycle tests, and release-level multi-viewport interaction checks. A derived representation is never acceptable evidence by itself.
 
 ## One-way data flow
@@ -64,7 +66,10 @@ Reading mode parses canonical Markdown without creating an editable copy. Render
 - A Live blockquote node owns the complete authored quote source, including every `>`, authored space, blank quoted line, nested quote prefix, and fenced region. Its inactive preview and active source editor are two presentations of that same node; activating it changes only transient presentation state.
 - The inactive blockquote preview and active source surface share one layout footprint. Switching presentation must preserve authored line breaks and must not cause the surrounding document to reflow merely because editing was activated.
 - The active blockquote source uses a preformatted `pre > code` editing surface. If a browser temporarily represents an edited empty line with `div` or `br` children, the node view converts those DOM boundaries back to authored newlines before they can enter the ProseMirror document.
+- Because browsers may target `beforeinput` at the outer contenteditable host rather than the nested `code` element, the blockquote node view captures supported insert/delete input at the editor root, verifies that the DOM selection belongs to its active source surface, and emits one explicit minimal canonical source transaction. That transaction carries the resulting source selection; a structure-changing reparse must reactivate the resulting Quote/Callout or literal fallback at that same canonical offset.
 - An edit that changes a block boundary reparses canonical Markdown immediately. For fenced blocks, the first valid closing fence defines the block and every later authored fence remains available to the parser.
+- Heading source activation retains the rendered heading level's typography and layout footprint; activation reveals authored delimiters but does not turn the row into a visually distinct code block.
+- CommonMark may keep blank-line-separated items in one derived list. Each derived list item therefore carries only a presentation count of the consecutive authored blank rows before it, allowing Live mode to display those rows without splitting the list or rewriting its exact top-level source snapshot. The count is never authoritative document state.
 - Each Live transaction patches only its changed canonical range. Unedited entities, escapes, link titles, delimiters, and other equivalent authored spellings remain byte-for-byte unchanged.
 
 ## Ownership boundaries

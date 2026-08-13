@@ -74,6 +74,87 @@ describe("parser: block nodes", () => {
     expect(li.child(0).textContent).toBe("a");
   });
 
+  test.each([
+    ["- one\n- two", 0],
+    ["- one\n\n- two", 1],
+    ["- one\n\n\n- two", 2],
+    ["- one\r\n \r\n\t\r\n- two", 2],
+  ] as const)("retains authored list-item spacing for %j", (markdown, gapBefore) => {
+    const doc = parse(markdown);
+    const list = doc.firstChild;
+
+    expect(list?.type).toBe(schema.nodes.bullet_list);
+    expect(list?.child(0).attrs.sourceGapBefore).toBe(0);
+    expect(list?.child(1).attrs.sourceGapBefore).toBe(gapBefore);
+    expect(serialize(parseMarkdown(markdown))).toBe(markdown);
+  });
+
+  test("retains authored spacing independently inside nested lists", () => {
+    const doc = parse("- outer\n  - nested one\n\n  - nested two\n- sibling");
+    const outer = doc.firstChild;
+    const nested = outer?.child(0).child(1);
+
+    expect(nested?.type).toBe(schema.nodes.bullet_list);
+    expect(nested?.child(0).attrs.sourceGapBefore).toBe(0);
+    expect(nested?.child(1).attrs.sourceGapBefore).toBe(1);
+    expect(outer?.child(1).attrs.sourceGapBefore).toBe(0);
+  });
+
+  test("retains authored spacing between ordered-list items", () => {
+    const markdown = "1. one\n\n\n2. two";
+    const doc = parseMarkdown(markdown);
+    const list = doc.firstChild;
+
+    expect(list?.type).toBe(schema.nodes.ordered_list);
+    expect(list?.child(1).attrs.sourceGapBefore).toBe(2);
+    expect(serialize(doc)).toBe(markdown);
+  });
+
+  test.each(["*", "+", "-", "1.", "1)"])(
+    "keeps incomplete list candidate %j as literal paragraph source",
+    (markdown) => {
+      const doc = parseMarkdown(markdown);
+      expect(doc.firstChild?.type).toBe(schema.nodes.paragraph);
+      expect(doc.firstChild?.textContent).toBe(markdown);
+      expect(serialize(doc)).toBe(markdown);
+    },
+  );
+
+  test.each(["Title\n=", "Title\n==", "Title\n-", "Title\n--"])(
+    "keeps short Setext candidate %j literal until the third underline",
+    (markdown) => {
+      const doc = parseMarkdown(markdown);
+      expect(doc.firstChild?.type).toBe(schema.nodes.paragraph);
+      expect(doc.firstChild?.textContent).toBe(markdown);
+      expect(serialize(doc)).toBe(markdown);
+    },
+  );
+
+  test("protects an incomplete marker at its UTF-16 source offset after astral text", () => {
+    const markdown = "😀 title\n\n*";
+    const doc = parseMarkdown(markdown);
+    expect(doc.lastChild?.type).toBe(schema.nodes.paragraph);
+    expect(doc.lastChild?.textContent).toBe("*");
+    expect(serialize(doc)).toBe(markdown);
+  });
+
+  test("does not reinterpret user-authored private-use characters as protected syntax", () => {
+    const markdown = "\uE001\uE002\uE003\uE004\uE005\uE006\n\n*";
+    const doc = parseMarkdown(markdown);
+    expect(serialize(doc)).toBe(markdown);
+    expect(doc.lastChild?.type).toBe(schema.nodes.paragraph);
+    expect(doc.lastChild?.textContent).toBe("*");
+  });
+
+  test.each(["* ", "+ ", "- ", "1. ", "1) "])(
+    "recognizes completed list candidate %j after its required space",
+    (markdown) => {
+      const doc = parseMarkdown(markdown);
+      expect([schema.nodes.bullet_list, schema.nodes.ordered_list]).toContain(doc.firstChild?.type);
+      expect(serialize(doc)).toBe(markdown);
+    },
+  );
+
   test("ordered list carries start attr", () => {
     const doc = parse("3. a\n4. b");
     const ol = doc.child(0);

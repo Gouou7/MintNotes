@@ -48,6 +48,27 @@
 .ProseMirror h4 { font-size: 1em; }
 .ProseMirror h5 { font-size: 0.875em; }
 .ProseMirror h6 { font-size: 0.85em; color: #59636e; }
+.ProseMirror pre[data-source-block][data-source-kind^="heading-"] {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.ProseMirror > pre[data-source-block][data-source-kind^="heading-"]:first-child { margin-top: 0; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-1"] {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #d8dee4;
+  font-size: 2em;
+}
+.ProseMirror pre[data-source-block][data-source-kind="heading-2"] {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #d8dee4;
+  font-size: 1.5em;
+}
+.ProseMirror pre[data-source-block][data-source-kind="heading-3"] { font-size: 1.25em; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-4"] { font-size: 1em; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-5"] { font-size: 0.875em; }
+.ProseMirror pre[data-source-block][data-source-kind="heading-6"] { font-size: 0.85em; color: #59636e; }
 
 /* ─── paragraphs / br ─────────────────────────────────────────────── */
 .ProseMirror p { margin: 0 0 16px; white-space: break-spaces; }
@@ -115,6 +136,9 @@
 .ProseMirror ol ol { margin-bottom: 0; }
 .ProseMirror li + li { margin-top: 0.25em; }
 .ProseMirror li > p { margin-bottom: 0; }
+.ProseMirror li[data-source-gap-before] {
+  margin-top: calc(var(--source-gap-before) * 1.5em);
+}
 
 /* ─── horizontal rule ────────────────────────────────────────────── */
 .ProseMirror hr {

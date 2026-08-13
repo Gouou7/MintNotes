@@ -65,11 +65,25 @@
 }
 .ProseMirror pre[data-source-gap] > code { font: inherit; white-space: inherit; }
 .ProseMirror [data-source-gap-hidden] { display: none; }
+.ProseMirror pre[data-source-gap-structural] {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ProseMirror pre[data-source-gap-structural] > code {
+  display: block;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+.ProseMirror pre[data-source-gap-structural] br.ProseMirror-trailingBreak { display: none; }
 /* The source-gap row owns paragraph separation whenever it is present.
  * Remove themed block margins on its two neighbors so the same authored
  * blank line is not counted once by Markdown spacing and again by the gap. */
-.ProseMirror > :has(+ pre[data-source-gap]) { margin-bottom: 0; }
-.ProseMirror > pre[data-source-gap] + * { margin-top: 0; }
+.ProseMirror > :has(+ pre[data-source-gap]:not([data-source-gap-structural])) { margin-bottom: 0; }
+.ProseMirror > pre[data-source-gap]:not([data-source-gap-structural]) + * { margin-top: 0; }
 .ProseMirror .hr-node-view {
   box-sizing: border-box;
   width: 100%;
@@ -438,24 +452,27 @@
 
 /* Canonical-source activation for delimiters that rich nodes cannot expose as
  * native caret positions. The text is real editable content, never a widget. */
-pre[data-source-block] {
+.ProseMirror pre[data-source-block] {
+  font-family: inherit;
+  line-height: inherit;
+  color: inherit;
+  background: transparent;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  word-wrap: break-word;
   white-space: break-spaces;
   overflow-wrap: anywhere;
 }
-pre[data-source-block] > code {
+.ProseMirror pre[data-source-block] > code {
   font: inherit;
   color: inherit;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  white-space: inherit;
 }
-pre[data-source-block][data-source-kind^="heading-"] {
-  font-weight: 650;
-}
-pre[data-source-block][data-source-kind="heading-1"] { font-size: 2em; }
-pre[data-source-block][data-source-kind="heading-2"] { font-size: 1.5em; }
-pre[data-source-block][data-source-kind="heading-3"] { font-size: 1.25em; }
-pre[data-source-block][data-source-kind="heading-4"] { font-size: 1.1em; }
-pre[data-source-block][data-source-kind="heading-5"] { font-size: 1em; }
-pre[data-source-block][data-source-kind="heading-6"] { font-size: .9em; }
-
 .live-comment-source,
 .live-comment-widget {
   display: none;

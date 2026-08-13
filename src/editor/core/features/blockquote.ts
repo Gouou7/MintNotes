@@ -6,6 +6,7 @@ import type { EditorView, NodeView } from "prosemirror-view";
 import type { SourceBlockPresentation } from "../extension";
 import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
 import { INLINE_PRESENTATION_META } from "../inline-parse";
+import { SOURCE_FROM_ATTR } from "../source";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
 import type { FeaturePluginContext, FeatureSpec } from "./_types";
 
@@ -80,6 +81,33 @@ function sourceOffsetFromDomPoint(
   } catch {
     return null;
   }
+}
+
+function changedSourceRange(before: string, after: string): {
+  from: number;
+  to: number;
+  insert: string;
+} {
+  let from = 0;
+  while (from < before.length && from < after.length && before[from] === after[from]) from += 1;
+  let beforeTo = before.length;
+  let afterTo = after.length;
+  while (
+    beforeTo > from
+    && afterTo > from
+    && before[beforeTo - 1] === after[afterTo - 1]
+  ) {
+    beforeTo -= 1;
+    afterTo -= 1;
+  }
+  return { from, to: beforeTo, insert: after.slice(from, afterTo) };
+}
+
+function quoteStructureSignature(source: string): string {
+  return source
+    .split(/\r\n|\r|\n/)
+    .map((line) => /^(?: {0,3}>[\t ]?)+/.test(line) ? "quote" : "plain")
+    .join("|");
 }
 
 function selectedBlockquote(state: EditorView["state"]): {
@@ -179,7 +207,11 @@ class BlockquoteView implements NodeView {
     this.preview = preview;
     this.sourceSurface = source;
     preview.addEventListener("mousedown", this.onPreviewMouseDown);
-    sourceCode.addEventListener("beforeinput", this.onSourceBeforeInput);
+    // Browsers target `beforeinput` at the outer contenteditable host even
+    // when the DOM selection lives in this NodeView. Capture it at the view
+    // root so source-position edits run before native DOM mutation can move
+    // the caret or create browser-specific div/br wrappers.
+    view.dom.addEventListener("beforeinput", this.onSourceBeforeInput, true);
     this.applyNode(node);
   }
 
@@ -205,6 +237,8 @@ class BlockquoteView implements NodeView {
     const node = this.view.state.doc.nodeAt(pos);
     if (!node || node.type.name !== "blockquote") return;
 
+    const previousSource = node.textContent;
+    if (source === previousSource) return;
     const fallback = Math.max(0, this.view.state.selection.head - pos - 1);
     const text = source ? this.view.state.schema.text(source) : undefined;
     const tr = this.view.state.tr.replaceWith(
@@ -220,11 +254,29 @@ class BlockquoteView implements NodeView {
       pos + 1 + nextAnchor,
       pos + 1 + nextHead,
     ));
+    const sourceFrom = Number(node.attrs[SOURCE_FROM_ATTR]);
+    if (Number.isInteger(sourceFrom) && sourceFrom >= 0) {
+      const edit = changedSourceRange(previousSource, source);
+      tr.setMeta(SOURCE_TRANSACTION_META, {
+        edits: [{
+          from: sourceFrom + edit.from,
+          to: sourceFrom + edit.to,
+          insert: edit.insert,
+        }],
+        selection: {
+          anchor: sourceFrom + nextAnchor,
+          head: sourceFrom + nextHead,
+        },
+        origin: edit.insert.length === 0 ? "delete" : "input",
+        reparseDerivedDocument: quoteStructureSignature(previousSource)
+          !== quoteStructureSignature(source),
+      });
+    }
     this.view.dispatch(tr);
   }
 
   private onSourceBeforeInput = (event: InputEvent): void => {
-    if (event.isComposing || !event.cancelable) return;
+    if (!this.node.attrs.sourceEditing || event.isComposing || !event.cancelable) return;
     const { anchor, head } = this.sourceSelectionOffsets();
     if (anchor == null || head == null) return;
     const from = Math.min(anchor, head);
@@ -346,7 +398,7 @@ class BlockquoteView implements NodeView {
 
   destroy(): void {
     this.preview.removeEventListener("mousedown", this.onPreviewMouseDown);
-    this.contentDOM.removeEventListener("beforeinput", this.onSourceBeforeInput);
+    this.view.dom.removeEventListener("beforeinput", this.onSourceBeforeInput, true);
     this.destroyPreview?.();
   }
 }
