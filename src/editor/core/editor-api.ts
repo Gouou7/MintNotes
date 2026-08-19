@@ -29,6 +29,7 @@ import {
   type SourceTransaction,
 } from "./source";
 import { SOURCE_TRANSACTION_META, transactionSourceEffect } from "./source-transaction";
+import { SourceComposition } from "./source-composition";
 import { liveSourceKeyTransaction } from "./live-source-commands";
 import {
   LIVE_NAVIGATION_META,
@@ -40,7 +41,7 @@ import {
 export interface EditorOptions {
   /** Initial markdown the editor opens with. Defaults to empty. */
   initialContent?: string;
-  /** Fired on every document transaction; arg is the current markdown. Raw, no debounce. */
+  /** Fired for each committed canonical source change. One IME composition is one change. */
   onChange?: (md: string) => void;
   /** Fired when the editor surface (rendered or source) gains focus. */
   onFocus?: () => void;
@@ -113,6 +114,13 @@ export function createEditor(
   const blockHeightCache = new Map<string, number>();
   let blockHeightFrame: number | null = null;
   let blockResizeObserver: ResizeObserver | null = null;
+  let compositionFinalizeTimer: ReturnType<typeof setTimeout> | null = null;
+  let presentationRefreshPending = false;
+  let pendingComposition: {
+    source: SourceComposition;
+    baseStructureSignature: string;
+    reparseRequested: boolean;
+  } | null = null;
 
   function structureSignatureForDocument(doc: PMNode): string {
     const visit = (node: PMNode): unknown => {
@@ -161,7 +169,20 @@ export function createEditor(
     pendingDerivedStructure = null;
   }
 
+  function prepareDerivedStructureForTransaction(transaction: SourceTransaction): boolean {
+    const nextSource = new CanonicalSource(canonicalMarkdown).apply(transaction).source.value;
+    if (nextSource === canonicalMarkdown) return false;
+    const analysis = pendingDerivedStructure?.source === nextSource
+      ? pendingDerivedStructure
+      : { source: nextSource, ...analyzeDerivedStructure(nextSource) };
+    pendingDerivedStructure = analysis;
+    return analysis.signature !== canonicalStructureSignature;
+  }
+
   function sourcePositionMapForState(state: EditorState): SourcePositionMap {
+    if (pendingComposition) {
+      return SourcePositionMap.fromDocument(state.doc, pendingComposition.source.source);
+    }
     let hasActiveSourcePresentation = false;
     state.doc.descendants((node) => {
       if (
@@ -493,7 +514,11 @@ export function createEditor(
     repair.setMeta("addToHistory", false);
     repair.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
     view.updateState(state.apply(repair));
-    if (reactivateSource) activateSourceBoundary(sourceSelection);
+    // A reparse caused by an authored edit must keep the caret on that exact
+    // source range, including tables. Tables stay on their rich-cell path for
+    // ordinary navigation, but an edit that just created or changed one must
+    // not strand the DOM caret in the rebuilt projection.
+    if (reactivateSource) activateSourceBoundary(sourceSelection, { activateTable: true });
   }
 
   function applyCanonicalTransaction(
@@ -522,6 +547,54 @@ export function createEditor(
       anchor: positions.documentToSource(state.selection.anchor, "left"),
       head: positions.documentToSource(state.selection.head, "right"),
     };
+  }
+
+  function beginComposition(): void {
+    if (compositionFinalizeTimer !== null) {
+      clearTimeout(compositionFinalizeTimer);
+      compositionFinalizeTimer = null;
+    }
+    if (pendingComposition) finalizeComposition();
+    pendingComposition = {
+      source: new SourceComposition(canonicalMarkdown, sourceSelectionForState(view.state)),
+      baseStructureSignature: canonicalStructureSignature,
+      reparseRequested: false,
+    };
+  }
+
+  function finalizeComposition(): void {
+    if (compositionFinalizeTimer !== null) {
+      clearTimeout(compositionFinalizeTimer);
+      compositionFinalizeTimer = null;
+    }
+    const composition = pendingComposition;
+    if (!composition) return;
+    const analysis = analyzeDerivedStructure(composition.source.source);
+    const reparseDerivedDocument = composition.reparseRequested
+      || composition.baseStructureSignature !== analysis.signature;
+    const transaction = composition.source.transaction(reparseDerivedDocument);
+    pendingDerivedStructure = { source: composition.source.source, ...analysis };
+    pendingComposition = null;
+    const changed = applyCanonicalTransaction(transaction, composition.source.baseSelection);
+    if (changed && reparseDerivedDocument) {
+      reparsePresentation(view.state, transaction.selection.head, true);
+    }
+    if (presentationRefreshPending && !inSource) {
+      presentationRefreshPending = false;
+      view.dispatch(view.state.tr.setMeta(INLINE_PRESENTATION_META, true));
+    }
+    scheduleBlockHeightCache();
+  }
+
+  function scheduleCompositionFinalization(): void {
+    if (compositionFinalizeTimer !== null) clearTimeout(compositionFinalizeTimer);
+    // ProseMirror flushes a final pending DOM mutation in a microtask after
+    // compositionend. A timer lets that exact, composition-tagged transaction
+    // enter the buffer before the canonical source is committed.
+    compositionFinalizeTimer = setTimeout(() => {
+      compositionFinalizeTimer = null;
+      finalizeComposition();
+    }, 0);
   }
 
   function applyAndRenderCanonicalTransaction(transaction: SourceTransaction): boolean {
@@ -567,7 +640,9 @@ export function createEditor(
     const v: EditorView = new EditorView(editorHost, {
       state,
       dispatchTransaction(tr) {
-        const beforeCanonical = canonicalMarkdown;
+        const compositionId = tr.getMeta("composition") as number | undefined;
+        if (compositionId !== undefined && !pendingComposition) beginComposition();
+        const beforeCanonical = pendingComposition?.source.source ?? canonicalMarkdown;
         const beforeSelection = sourceSelectionForState(v.state);
         const editedParent = v.state.selection.$head.parent;
         const editedSourcePresentation = tr.docChanged
@@ -583,18 +658,29 @@ export function createEditor(
         if (tr.docChanged && !tr.getMeta(SOURCE_BLOCK_PRESENTATION_META)) {
           const effect = transactionSourceEffect(tr, beforeCanonical);
           if (effect.kind === "source") {
-            const changed = applyCanonicalTransaction(effect.transaction, beforeSelection);
-            if (changed && effect.reparseDerivedDocument) {
-              reparseRequest = {
-                selection: effect.transaction.selection.head,
-                reactivate: editedSourcePresentation,
-              };
+            if (pendingComposition) {
+              pendingComposition.source.apply(effect.transaction);
+              pendingComposition.reparseRequested ||= effect.reparseDerivedDocument === true;
+            } else {
+              const reparseDerivedDocument = effect.reparseDerivedDocument === true
+                || prepareDerivedStructureForTransaction(effect.transaction);
+              const changed = applyCanonicalTransaction(effect.transaction, beforeSelection);
+              if (changed && reparseDerivedDocument) {
+                reparseRequest = {
+                  selection: effect.transaction.selection.head,
+                  reactivate: editedSourcePresentation
+                    || !["command", "external"].includes(effect.transaction.origin),
+                };
+              }
             }
           } else if (effect.kind === "unsupported") {
             // Undo/redo may replay a group of presentation and source steps
             // without their original transaction metadata. Recover only when
             // every resulting top-level node still proves an unchanged exact
             // authored snapshot; otherwise fail closed.
+            if (pendingComposition) {
+              throw new Error("IME composition changed the document without an exact canonical source transaction");
+            }
             const historySource = authoredDocumentSource(next.doc);
             if (historySource === null) {
               throw new Error("Editor transaction changed the document without a canonical source transaction");
@@ -607,7 +693,12 @@ export function createEditor(
           }
         }
         const intent = tr.getMeta(LIVE_NAVIGATION_META) as LiveNavigationIntent | undefined;
-        const shouldSynchronizeSelection = !tr.docChanged
+        if (pendingComposition && tr.selectionSet) {
+          pendingComposition.source.setSelection(sourceSelectionForState(next));
+        }
+        const shouldSynchronizeSelection = !pendingComposition
+          && compositionId === undefined
+          && !tr.docChanged
           && (tr.selectionSet || intent !== undefined)
           && (!tr.getMeta(SOURCE_BLOCK_PRESENTATION_META) || intent !== undefined);
         if (shouldSynchronizeSelection) {
@@ -627,6 +718,7 @@ export function createEditor(
         }
       },
       handleKeyDown(_view, event) {
+        if (event.isComposing || event.keyCode === 229) return false;
         const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
         const mod = isMac ? event.metaKey : event.ctrlKey;
         if (
@@ -729,6 +821,14 @@ export function createEditor(
       handleDOMEvents: {
         focus: () => { options.onFocus?.(); return false; },
         blur: () => { options.onBlur?.(); return false; },
+        compositionstart: () => {
+          beginComposition();
+          return false;
+        },
+        compositionend: () => {
+          scheduleCompositionFinalization();
+          return false;
+        },
         copy: (_view, event) => {
           const selection = sourceSelectionForState(view.state);
           if (selection.anchor === selection.head || !event.clipboardData) return false;
@@ -755,6 +855,10 @@ export function createEditor(
         },
       },
       handleTextInput(_view, fromPosition, toPosition, text) {
+        // Keep ProseMirror's native transaction during composition. Its
+        // composition metadata and browser-derived selection are required to
+        // preserve the active IME text node across candidate updates.
+        if (pendingComposition || _view.composing) return false;
         const positions = sourcePositionMapForState(view.state);
         const from = positions.documentToSource(fromPosition, "right");
         const to = positions.documentToSource(toPosition, "left");
@@ -876,6 +980,7 @@ export function createEditor(
   }
 
   function insertMarkdown(markdown: string, offset?: number): void {
+    if (pendingComposition) finalizeComposition();
     const current = inSource ? sourceTextarea.value : canonicalMarkdown;
     const insertionOffset = Math.max(0, Math.min(offset ?? renderedCursorToMdOffset(), current.length));
     const applied = replaceSourceRange(
@@ -907,6 +1012,7 @@ export function createEditor(
   }
 
   function replaceMarkdown(markdown: string, offset?: number): void {
+    if (pendingComposition) finalizeComposition();
     const markdownOffset = Math.max(0, Math.min(offset ?? markdown.length, markdown.length));
     const current = inSource ? sourceTextarea.value : canonicalMarkdown;
     if (markdown === current) {
@@ -933,6 +1039,7 @@ export function createEditor(
   }
 
   function setSelectionOffset(offset: number): void {
+    if (pendingComposition) finalizeComposition();
     const clamped = Math.max(0, Math.min(offset, canonicalMarkdown.length));
     if (inSource) {
       sourceTextarea.setSelectionRange(clamped, clamped);
@@ -942,6 +1049,7 @@ export function createEditor(
   }
 
   function runExtensionCommand<Result>(command: string, input?: unknown): Result | undefined {
+    if (pendingComposition) finalizeComposition();
     if (inSource) return undefined;
     for (const extension of options.extensions ?? []) {
       const handler = extension.commands?.[command];
@@ -951,6 +1059,7 @@ export function createEditor(
   }
 
   function enterSource(): void {
+    if (pendingComposition) finalizeComposition();
     const md = canonicalMarkdown;
     const mdCursor = renderedCursorToMdOffset();
     sourceTextarea.value = md;
@@ -1027,6 +1136,7 @@ export function createEditor(
       return inSource ? sourceTextarea.value : canonicalMarkdown;
     },
     setMarkdown(md: string): void {
+      if (pendingComposition) finalizeComposition();
       if (md !== canonicalMarkdown) {
         sourceUndo.length = 0;
         sourceRedo.length = 0;
@@ -1058,7 +1168,9 @@ export function createEditor(
       setSelectionOffset(offset);
     },
     refreshPresentation(): void {
-      if (!inSource) {
+      if (pendingComposition) {
+        presentationRefreshPending = true;
+      } else if (!inSource) {
         view.dispatch(view.state.tr.setMeta(INLINE_PRESENTATION_META, true));
       }
     },
@@ -1077,6 +1189,8 @@ export function createEditor(
       else view.focus();
     },
     destroy(): void {
+      if (pendingComposition) finalizeComposition();
+      if (compositionFinalizeTimer !== null) clearTimeout(compositionFinalizeTimer);
       window.removeEventListener("keydown", onKey);
       blockResizeObserver?.disconnect();
       if (blockHeightFrame !== null && typeof cancelAnimationFrame === "function") {

@@ -22,13 +22,13 @@ Mint Notes 是一个轻量、自托管、多用户的 Markdown 笔记 PWA。它�
 
 以 `docs/README.md` 作为面向用户的文档索引。实施更改时，只读取与当前更改相关的文档，并使用下表作为路由入口。
 
-| 需求或更改 | 首先阅读 | 行为变化时更新 |
+| 需求或更改 | 首先阅读 | 变更时处理 |
 | --- | --- | --- |
 | 产品摘要、支持的功能、要求或快速开始 | `README.md` | `README.md`；保持面向用户且简洁。 |
 | 账户设置、编辑器模式、文件树操作、附件、同步状态、导入／导出、回收站或 PWA 使用 | `docs/USER_GUIDE.md` | `docs/USER_GUIDE.md`；若具有显著外部影响，还要更新 README 中对应的功能或限制。 |
 | 贡献者设置、项目结构、验证命令或实现边界 | `docs/DEVELOPMENT.md` | `docs/DEVELOPMENT.md`；长期维护路由变化时也更新本文件。 |
 | 运行时拓扑、本地优先写入路径、同步、IndexedDB／SQLite 职责或附件流程 | `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE.md`；边界变化时还要审查 `docs/SECURITY.md`。 |
-| 规范 Markdown、解析器／序列化器行为、实时渲染、源码坐标、光标／删除语义或编辑器扩展 | `docs/EDITOR_ARCHITECTURE.md` | `docs/EDITOR_ARCHITECTURE.md`；仅在用户可见行为变化时更新 `docs/USER_GUIDE.md`。 |
+| 规范 Markdown、解析器／序列化器行为、实时渲染、源码坐标、光标／删除语义或编辑器扩展 | `docs/EDITOR_ARCHITECTURE.md` | 必须遵循该原则文档；除非用户明确要求修改编辑器架构原则，否则不得编辑它。用户可见行为变化时更新 `docs/USER_GUIDE.md`。 |
 | 威胁模型、密钥层级、AAD、元数据暴露、Cookie、CSP 或账户隔离 | `docs/SECURITY.md` | `docs/SECURITY.md`；安全声明必须与可执行代码和测试一致。 |
 | Docker、环境变量、反向代理、账户初始化、生产检查或架构版本升级 | `docs/DEPLOYMENT.md` | `docs/DEPLOYMENT.md`、`.env.example` 和 `docker-compose.yml`；必要时审查 README 快速开始。 |
 | 在线备份、保留策略、恢复演练、WAL 行为或灾难恢复 | `docs/BACKUP_AND_RESTORE.md` | `docs/BACKUP_AND_RESTORE.md`；架构／存储变化时也要审查部署与架构文档。 |
@@ -36,15 +36,15 @@ Mint Notes 是一个轻量、自托管、多用户的 Markdown 笔记 PWA。它�
 | 应用发布或多平台 Docker 镜像发布 | `docs/DOCKER_IMAGE_RELEASE.md` | 保持 CHANGELOG、Git 标签、注入的构建版本、镜像标签和发布验证步骤一致；`package.json` 不是发布版本来源。 |
 | 仓库特有的 Agent 约束和反复出现的实现陷阱 | `AGENTS.md` | 仅用持久项目知识更新本文件，不记录一次性任务历史或通用 Agent 行为。 |
 
-文档冲突时，按以下证据顺序判断：实现代码、自动化测试、构建／部署配置、`AGENTS.md`，最后是面向用户的文档。不要只因过时声明已存在于 README 中就继续保留。
+判断当前描述性事实时，按以下证据顺序判断：实现代码、自动化测试、构建／部署配置、`AGENTS.md`，最后是面向用户的文档。不要只因过时声明已存在于 README 中就继续保留。`docs/EDITOR_ARCHITECTURE.md` 中由本文件保护的规范性设计原则属于发布门槛，不能仅因当前实现不同而自动失效。
 
 ## 更改影响路由
 
 - 更改加密、认证、持久化、同步、数据库架构、附件所有权、清除行为或 Service Worker 生命周期前，阅读 `docs/ARCHITECTURE.md`、`docs/SECURITY.md` 和 `docs/DEVELOPMENT.md` 中的相关部分。
-- 更改解析器、序列化器、编辑器事务、装饰、节点视图、光标映射、删除行为或模式切换前，阅读 `docs/EDITOR_ARCHITECTURE.md`。将其中不可协商的不变量视为发布门槛。
+- 更改解析器、序列化器、编辑器事务、装饰、节点视图、光标映射、删除行为或模式切换前，阅读并遵循 `docs/EDITOR_ARCHITECTURE.md`。将其中的设计原则视为发布门槛；如果需求与原则冲突，先向用户说明并请求决定，不得自行修改原则文档。
 - 公共 API 路由、环境变量、部署命令、数据目录或端口变化时，必须按实际影响同步检查 `.env.example`、`docker-compose.yml`、`README.md` 和 `docs/DEPLOYMENT.md`。
 - 可移植导入／导出格式变化时，必须一起检查 `docs/USER_GUIDE.md`、`docs/ARCHITECTURE.md`、备份指南和兼容性说明。
-- 用户可见行为变化时，必须在同一次更改中更新用户指南。不改变行为的内部算法应记录在架构或开发文档中，而不是 README。
+- 用户可见行为变化时，必须在同一次更改中更新用户指南。不改变行为的内部算法按需记录在开发文档或代码注释中，而不是 README；不得因此修改编辑器架构原则。
 - 新增服务器可见元数据、网络源、分析、CDN 脚本、远程字体、原始 HTML 或可执行嵌入时，必须明确审查安全模型和 CSP。
 
 ## 模块职责
@@ -103,11 +103,10 @@ Mint Notes 是一个轻量、自托管、多用户的 Markdown 笔记 PWA。它�
 
 ## 编辑器与 PWA 约束
 
-- **发布阻断级编辑器不变量：**实时模式必须将规范 Markdown 字符串视为唯一可编辑文档模型。渲染可以隐藏或样式化作者输入的语法，但解析、验证、渲染、焦点／选区变化、模式切换及其他非编辑生命周期工作均为只读。除非输入、粘贴／拖放、选区删除或明确且可撤销的源码命令改变内容，否则每个作者输入的字符——包括开头、块间和末尾空行，LF／CRLF 行尾，以及纯空白行中的空格或制表符——都必须逐字节保留。光标移动、选择、Backspace 和 Delete 都基于作者源码位置；改变结构的编辑必须立即重新解析，并且不得合成、删除、移动、裁剪或规范化无关源码。无效或未完成语法应在最小受影响范围内保持字面形式。
-- 将 `src/editor/core/` 视为 Mint Notes 自有、衍生自 `typora-web` 0.3.1 的核心。直接修改其 TypeScript 源码，保留 `UPSTREAM.md` 和 `LICENSE.typora-web`，并使用精确字符串往返测试覆盖解析器、序列化器、输入事务和控制器更改，包括空白与行尾回归；仅有解析树等价还不够。
-- `src/editor/core/` 不得导入 Mint Notes 编辑器扩展。扩展模块只能通过声明的 `EditorExtension` 生命周期使用 ProseMirror；React 视图和其他应用模块使用控制器及类型化扩展辅助函数，绝不得接收编辑器视图。核心与扩展更改必须保留规范 Markdown，且不得在已保存笔记中暴露私有显示语法。明确支持的安全 `<br>` 硬换行写法仍是可移植核心功能；Obsidian 注释和 WikiLink 嵌入仍是产品扩展。
-- 新增产品特有实时渲染器时，必须使用只含声明的 `EditorExtension.presentations` 项，并按语法类型分离。它们可以接收作者输入的精确源码切片，但不能接收编辑器视图；核心负责装饰、部件生命周期、选区激活和渲染器失败回退。底层插件与原始命令 Hook 仅用于迁移兼容，不得用于新的呈现类型。
-- 遵循 `docs/EDITOR_ARCHITECTURE.md` 中的规范契约。源码保真行为必须由精确字符串、源码位置、生命周期、渲染器回退和交互回归测试保护，而不是在特定功能文档中重复描述。
+- **发布阻断级编辑器原则：**规范 Markdown 字符串是唯一权威、可提交、可持久化的文档模型，也是所有编辑操作的唯一内容目标。编辑器产生的内容变化必须通过准确、原子的源码事务提交；解析、派生结构、DOM 和展示状态不得反向覆盖规范源码，输入与本地提交不得等待网络。
+- 将 `src/editor/core/` 视为 Mint Notes 自有、衍生自 `typora-web` 0.3.1 的核心。直接修改其 TypeScript 源码，并保留 `UPSTREAM.md` 和 `LICENSE.typora-web`。核心更改必须用针对性测试证明规范源码和事务效果，不能只证明解析树等价。
+- `src/editor/core/` 不得导入 Mint Notes 产品扩展。新展示通过受限的声明式扩展契约接入，不得接收原始编辑器视图或直接修改文档；修改源码的扩展能力必须返回类型化源码事务。遗留底层 Hook 仅用于迁移，不得用于新功能。
+- 所有编辑器功能变更必须遵循 `docs/EDITOR_ARCHITECTURE.md`。仅实现、修复、优化或重构功能时不得编辑该原则文档；若需求与原则冲突，必须先请求用户作出架构决定。只有用户明确要求修改编辑器架构原则时，才能更新该文档。
 - 已解密附件 Blob URL 只存在于内存中，并且必须在笔记变化或保险库锁定时撤销。
 - PWA 更新必须经过现有用户确认路径，避免在未保存编辑过渡期间激活新构建包。
 - 界面符号必须使用 `lucide-react` 的显式命名导入，并通过 `src/components/AppIcon.tsx` 渲染。不得使用命名空间／动态图标查找、图标字体、CDN 资源、Emoji 或文本字形替代应用控件。

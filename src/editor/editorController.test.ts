@@ -17,6 +17,20 @@ interface MintPresentationOptions {
   onWikiLink?: (target: string) => void;
 }
 
+function activeLiveTextSurface(editable: HTMLElement): HTMLElement | null {
+  const structured = editable.querySelector<HTMLElement>("pre[data-source-block] > code")
+    ?? editable.querySelector<HTMLElement>(
+      ".source-blockquote-node.is-source-editing .source-blockquote-source-code",
+    )
+    ?? editable.querySelector<HTMLElement>("pre.cb-source-editing > code")
+    ?? editable.querySelector<HTMLElement>(
+      "pre[data-source-gap]:not([data-source-gap-structural]) > code",
+    );
+  if (structured) return structured;
+  const lastBlock = editable.lastElementChild;
+  return lastBlock instanceof HTMLElement && lastBlock.tagName === "P" ? lastBlock : null;
+}
+
 function createMintEditor(
   host: HTMLElement,
   options: EditorOptions & { presentations?: MintPresentationOptions } = {},
@@ -40,9 +54,7 @@ function createMintEditor(
 async function typeNativeText(host: HTMLElement, text: string): Promise<void> {
   for (const character of text) {
     const editable = host.querySelector<HTMLElement>(".ProseMirror");
-    const surface = editable?.querySelector<HTMLElement>(
-      "pre[data-source-block] > code, p:last-child",
-    );
+    const surface = editable ? activeLiveTextSurface(editable) : null;
     if (!editable || !surface) throw new Error("Missing active Live text surface");
     surface.textContent = `${surface.textContent ?? ""}${character}`;
     const range = document.createRange();
@@ -57,6 +69,58 @@ async function typeNativeText(host: HTMLElement, text: string): Promise<void> {
     }));
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
+}
+
+async function composeNativeText(host: HTMLElement, candidates: readonly string[]): Promise<void> {
+  const editable = host.querySelector<HTMLElement>(".ProseMirror");
+  const surface = editable ? activeLiveTextSurface(editable) : null;
+  if (!editable || !surface) throw new Error("Missing active Live text surface");
+  const prefix = surface.textContent ?? "";
+  editable.dispatchEvent(new CompositionEvent("compositionstart", {
+    bubbles: true,
+    data: "",
+  }));
+  for (const candidate of candidates) {
+    surface.textContent = prefix + candidate;
+    const range = document.createRange();
+    range.selectNodeContents(surface);
+    range.collapse(false);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    editable.dispatchEvent(new CompositionEvent("compositionupdate", {
+      bubbles: true,
+      data: candidate,
+    }));
+    editable.dispatchEvent(new InputEvent("input", {
+      inputType: "insertCompositionText",
+      data: candidate,
+      bubbles: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  editable.dispatchEvent(new CompositionEvent("compositionend", {
+    bubbles: true,
+    data: candidates.at(-1) ?? "",
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function deleteNativeLastCharacter(host: HTMLElement): Promise<void> {
+  const editable = host.querySelector<HTMLElement>(".ProseMirror");
+  const surface = editable ? activeLiveTextSurface(editable) : null;
+  if (!editable || !surface) throw new Error("Missing active Live text surface");
+  surface.textContent = (surface.textContent ?? "").slice(0, -1);
+  const range = document.createRange();
+  range.selectNodeContents(surface);
+  range.collapse(false);
+  document.getSelection()?.removeAllRanges();
+  document.getSelection()?.addRange(range);
+  editable.dispatchEvent(new InputEvent("input", {
+    inputType: "deleteContentBackward",
+    data: null,
+    bubbles: true,
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function pressNavigationKey(
@@ -397,6 +461,278 @@ describe("Mint editor core public controller", () => {
     expect(host.querySelector(".ProseMirror > p")).toBe(paragraph);
     expect(editor.getMarkdown()).toBe("plain text");
     expect(editor.getSelectionOffset()).toBe("plain text".length);
+    editor.destroy();
+  });
+
+  it("keeps a heading marker visible and the DOM caret on its active source line", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const editor = createEditor(host, { onChange: (next) => changes.push(next) });
+    editor.focus();
+
+    await typeNativeText(host, "#");
+
+    const sourceBlock = host.querySelector<HTMLElement>("pre[data-source-block]");
+    expect(sourceBlock?.textContent).toBe("#");
+    expect(sourceBlock?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+    expect(editor.getMarkdown()).toBe("#");
+    expect(editor.getSelectionOffset()).toBe(1);
+
+    await typeNativeText(host, " ");
+    await composeNativeText(host, ["b", "biao", "标", "标题"]);
+
+    expect(host.querySelector("pre[data-source-block]")).toBe(sourceBlock);
+    expect(sourceBlock?.textContent).toBe("# 标题");
+    expect(sourceBlock?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+    expect(editor.getMarkdown()).toBe("# 标题");
+    expect(editor.getSelectionOffset()).toBe("# 标题".length);
+    expect(changes).toEqual(["#", "# ", "# 标题"]);
+    editor.destroy();
+  });
+
+  it.each([
+    ["heading", "#", "pre[data-source-block][data-source-kind='heading-1'] > code"],
+    ["bullet list", "- ", "pre[data-source-block][data-source-kind='bullet_list'] > code"],
+    ["ordered list", "1. ", "pre[data-source-block][data-source-kind='ordered_list'] > code"],
+    ["task list", "- [ ] ", "pre[data-source-block][data-source-kind='bullet_list'] > code"],
+    ["blockquote", ">", ".source-blockquote-node.is-source-editing .source-blockquote-source-code"],
+    ["fenced code", "```", "pre.cb-source-editing > code"],
+    ["horizontal rule", "---", "pre[data-source-block][data-source-kind='horizontal_rule'] > code"],
+    ["TOC", "[TOC]", "pre[data-source-block][data-source-kind='toc'] > code"],
+    ["reference definition", "[ref]: https://example.test", "pre[data-source-gap] > code"],
+  ] as const)(
+    "keeps a newly typed %s marker and its DOM caret on the same authored source line",
+    async (_name, markdown, selector) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const editor = createEditor(host, { onChange: (next) => changes.push(next) });
+      editor.focus();
+
+      await typeNativeText(host, markdown);
+
+      const source = host.querySelector<HTMLElement>(selector);
+      expect(source?.textContent).toBe(markdown);
+      expect(source?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(editor.getSelectionOffset()).toBe(markdown.length);
+      expect(changes.at(-1)).toBe(markdown);
+      editor.destroy();
+    },
+  );
+
+  it.each([
+    ["heading", "#", "标题"],
+    ["horizontal rule", "---", "x"],
+    ["TOC", "[TOC]", "x"],
+  ] as const)(
+    "keeps text and caret aligned when IME confirmation invalidates a %s candidate",
+    async (_name, marker, confirmed) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host);
+      editor.focus();
+
+      await typeNativeText(host, marker);
+      await composeNativeText(host, ["z", confirmed]);
+
+      const expected = marker + confirmed;
+      const paragraph = host.querySelector<HTMLElement>(".ProseMirror > p");
+      expect(paragraph?.textContent).toBe(expected);
+      expect(paragraph?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+      expect(editor.getMarkdown()).toBe(expected);
+      expect(editor.getSelectionOffset()).toBe(expected.length);
+      editor.destroy();
+    },
+  );
+
+  it("keeps an IME-created structure marker and its DOM caret together after confirmation", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const editor = createEditor(host, { onChange: (next) => changes.push(next) });
+    editor.focus();
+
+    await composeNativeText(host, ["＃", "#"]);
+
+    const source = host.querySelector<HTMLElement>(
+      "pre[data-source-block][data-source-kind='heading-1'] > code",
+    );
+    expect(source?.textContent).toBe("#");
+    expect(source?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+    expect(editor.getMarkdown()).toBe("#");
+    expect(editor.getSelectionOffset()).toBe(1);
+    expect(changes).toEqual(["#"]);
+    editor.destroy();
+  });
+
+  it.each([
+    ["heading", "#", ""],
+    ["bullet list", "- ", "-"],
+    ["ordered list", "1. ", "1."],
+    ["blockquote", ">", ""],
+    ["fenced code", "```", "``"],
+    ["horizontal rule", "---", "--"],
+    ["TOC", "[TOC]", "[TOC"],
+  ] as const)(
+    "keeps text and caret aligned when Backspace invalidates a %s candidate",
+    async (_name, marker, expected) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host);
+      editor.focus();
+      await typeNativeText(host, marker);
+
+      host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Backspace",
+        code: "Backspace",
+        bubbles: true,
+        cancelable: true,
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const paragraph = host.querySelector<HTMLElement>(".ProseMirror > p");
+      expect(paragraph?.textContent).toBe(expected);
+      expect(paragraph?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+      expect(editor.getMarkdown()).toBe(expected);
+      expect(editor.getSelectionOffset()).toBe(expected.length);
+      editor.destroy();
+    },
+  );
+
+  it.each([
+    ["heading", "#x", "#", "pre[data-source-block][data-source-kind='heading-1'] > code"],
+    ["horizontal rule", "---x", "---", "pre[data-source-block][data-source-kind='horizontal_rule'] > code"],
+    ["TOC", "[TOC]x", "[TOC]", "pre[data-source-block][data-source-kind='toc'] > code"],
+  ] as const)(
+    "reparses a %s formed by a native mobile-style deletion without losing its caret",
+    async (_name, initial, expected, selector) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host, { initialContent: initial });
+      editor.setSelectionOffset(initial.length);
+      editor.focus();
+
+      await deleteNativeLastCharacter(host);
+
+      const source = host.querySelector<HTMLElement>(selector);
+      expect(source?.textContent).toBe(expected);
+      expect(source?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+      expect(editor.getMarkdown()).toBe(expected);
+      expect(editor.getSelectionOffset()).toBe(expected.length);
+      editor.destroy();
+    },
+  );
+
+  it.each([
+    ["heading", "#", ""],
+    ["bullet list", "- ", "-"],
+    ["blockquote", ">", ""],
+    ["fenced code", "```", "``"],
+    ["horizontal rule", "---", "--"],
+    ["TOC", "[TOC]", "[TOC"],
+  ] as const)(
+    "reparses a %s invalidated by a native mobile-style deletion without losing its caret",
+    async (_name, initial, expected) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host, { initialContent: initial });
+      editor.setSelectionOffset(initial.length);
+      editor.focus();
+
+      await deleteNativeLastCharacter(host);
+
+      const paragraph = host.querySelector<HTMLElement>(".ProseMirror > p");
+      expect(paragraph?.textContent).toBe(expected);
+      expect(paragraph?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+      expect(editor.getMarkdown()).toBe(expected);
+      expect(editor.getSelectionOffset()).toBe(expected.length);
+      editor.destroy();
+    },
+  );
+
+  it("keeps a pasted table's exact source and caret together after structural reparse", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "| A | B |\n| --- | --- |\n| 一 | 二 |";
+    const editor = createEditor(host);
+    editor.focus();
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) throw new Error("Missing Live editor root");
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { getData: (type: string) => type === "text/plain" ? markdown : "" },
+    });
+
+    editable.dispatchEvent(event);
+
+    const source = host.querySelector<HTMLElement>(
+      "pre[data-source-block][data-source-kind='table'] > code",
+    );
+    expect(event.defaultPrevented).toBe(true);
+    expect(source?.textContent).toBe(markdown);
+    expect(source?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(editor.getSelectionOffset()).toBe(markdown.length);
+
+    await composeNativeText(host, ["b", "biaoti", "标题"]);
+
+    expect(host.querySelector("pre[data-source-block] > code")).toBe(source);
+    expect(source?.textContent).toBe(markdown + "标题");
+    expect(source?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+    expect(editor.getMarkdown()).toBe(markdown + "标题");
+    expect(editor.getSelectionOffset()).toBe((markdown + "标题").length);
+    editor.destroy();
+  });
+
+  it("commits changing Chinese IME candidates once without replacing the Live text surface", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const editor = createEditor(host, {
+      initialContent: "开始",
+      onChange: (next) => changes.push(next),
+    });
+    editor.setSelectionOffset("开始".length);
+    const paragraph = host.querySelector(".ProseMirror > p");
+
+    await composeNativeText(host, ["n", "ni", "你", "你好"]);
+
+    expect(host.querySelector(".ProseMirror > p")).toBe(paragraph);
+    expect(editor.getMarkdown()).toBe("开始你好");
+    expect(editor.getSelectionOffset()).toBe("开始你好".length);
+    expect(changes).toEqual(["开始你好"]);
+
+    host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(editor.getMarkdown()).toBe("开始");
+    editor.destroy();
+  });
+
+  it("keeps Chinese IME composition stable inside an activated Markdown source block", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const initial = "# 标题";
+    const editor = createEditor(host, {
+      initialContent: initial,
+      onChange: (next) => changes.push(next),
+    });
+    editor.setSelectionOffset(initial.length);
+    const sourceBlock = host.querySelector("pre[data-source-block]");
+
+    await composeNativeText(host, ["z", "zhong", "中", "中文"]);
+
+    expect(host.querySelector("pre[data-source-block]")).toBe(sourceBlock);
+    expect(editor.getMarkdown()).toBe(`${initial}中文`);
+    expect(editor.getSelectionOffset()).toBe(`${initial}中文`.length);
+    expect(changes).toEqual([`${initial}中文`]);
     editor.destroy();
   });
 
