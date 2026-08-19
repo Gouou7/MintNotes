@@ -1,23 +1,19 @@
-# Editor core provenance
+# 编辑器核心来源
 
-The Mint Notes live Markdown editor core was derived from
-[`Yuyz0112/typora-web`](https://github.com/Yuyz0112/typora-web) at commit
-`7d2ed21904cbd30923e2b905415b842b5e35b713` (the `0.3.1` release commit).
+Mint Notes 实时 Markdown 编辑器核心衍生自
+[`Yuyz0112/typora-web`](https://github.com/Yuyz0112/typora-web) 的提交
+`7d2ed21904cbd30923e2b905415b842b5e35b713`（`0.3.1` 发布提交）。
 
-The imported source is licensed under the MIT License. The original license
-is retained in `LICENSE.typora-web`, and its notice is also included in the
-application's distributed third-party notices.
+导入的源代码采用 MIT 许可证。原始许可证保存在 `LICENSE.typora-web` 中，
+其声明也包含在应用随附的第三方声明中。
 
-Mint Notes maintains this source as its in-repository ProseMirror/Markdown
-core. Project-specific core changes include canonical Markdown escape
-handling, delayed blockquote conversion, a generic extension contract, and a
-stable controller that does not expose the underlying ProseMirror view.
-Callout and Math/Mermaid/WikiLink behavior lives in sibling modules under
-`src/editor/extensions/` and is injected into the core. Future changes must
-preserve the canonical Markdown and editor-boundary constraints documented in
-the root `AGENTS.md` and `docs/DEVELOPMENT.md`.
+Mint Notes 将这份源代码作为仓库内的 ProseMirror／Markdown 核心维护。
+项目特有的核心改动包括规范 Markdown 转义处理、延迟块引用转换、通用扩展契约，
+以及不暴露底层 ProseMirror 视图的稳定控制器。Callout 和
+Math／Mermaid／WikiLink 行为位于 `src/editor/extensions/` 下的同级模块中，
+并注入核心。后续更改必须遵守根目录 `AGENTS.md` 和 `docs/DEVELOPMENT.md`
+中记录的规范 Markdown 与编辑器边界约束。
 
-The upstream behavior specs and test harness are retained in `specs/` and
-`upstream-tests/`, adapted only to the repository's Vitest runner and local
-module paths. Mint-specific invariants have additional tests beside the core
-and in `src/editor/`.
+上游行为规范和测试框架保留在 `specs/` 与 `upstream-tests/` 中，
+只针对仓库的 Vitest 运行器和本地模块路径进行了适配。Mint 特有的不变量
+在核心旁及 `src/editor/` 中另有补充测试。

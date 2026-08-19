@@ -1,60 +1,46 @@
-# Build and publish Docker images locally
+# 在本地构建并发布 Docker 镜像
 
-[Documentation index](README.md)
+[文档索引](README.md)
 
-This guide is for Mint Notes maintainers who manually build and publish the
-official `gouou7/mint-notes` image from a local workstation. It builds one
-multi-platform image for `linux/amd64` and `linux/arm64`, tags it with the
-version derived from the current Git tag and with `latest`, and pushes both
-tags to Docker Hub.
+本指南面向从本地工作站手动构建并发布官方 `gouou7/mint-notes` 镜像的 Mint Notes 维护者。流程会构建一个同时支持 `linux/amd64` 和 `linux/arm64` 的多平台镜像，使用从当前 Git 标签派生的版本和 `latest` 标记，并把两个标签推送到 Docker Hub。
 
-This workflow publishes an image; it does not replace the
-[production deployment](DEPLOYMENT.md), upgrade, backup, or restore
-procedures. Build only from a clean, reviewed release commit.
+该工作流用于发布镜像，不能替代[生产部署](DEPLOYMENT.md)、升级、备份或恢复流程。只能从干净、已审查的发布提交构建。
 
-> The repository also contains a Tag-triggered GitHub Actions publisher at
-> `.github/workflows/release-docker.yml`. Do not use both publication paths for
-> the same release. This guide assumes that automated publisher is not enabled
-> or configured for the release being published manually.
+> 仓库还包含由标签触发的 GitHub Actions 发布器 `.github/workflows/release-docker.yml`。同一版本不得同时使用两条发布路径。本指南假定本次手动发布未启用或配置自动发布器。
 
-## Version source
+## 版本来源
 
-The current exact Git tag is the sole application release version. For a tag
-such as `v0.4.0`, the local build derives `0.4.0` and uses it for:
+当前准确 Git 标签是应用发布版本的唯一来源。例如标签 `v0.4.0` 会派生 `0.4.0`，用于：
 
-- the version shown under **Settings > About**;
-- the OCI `org.opencontainers.image.version` label;
-- the immutable Docker tag `gouou7/mint-notes:0.4.0`;
-- the floating Docker tag `gouou7/mint-notes:latest`.
+- **设置 > 关于**中显示的版本；
+- OCI `org.opencontainers.image.version` 标签；
+- 不可变 Docker 标签 `gouou7/mint-notes:0.4.0`；
+- 浮动 Docker 标签 `gouou7/mint-notes:latest`。
 
-`package.json` intentionally keeps the private-package placeholder version
-`0.0.0`; it is not an application release record. An ordinary source build
-displays `development` unless `APP_VERSION` is provided explicitly.
+`package.json` 有意保留私有包占位版本 `0.0.0`；它不是应用发布记录。普通源码构建显示 `development`，除非显式提供 `APP_VERSION`。
 
-Do not change any of the following merely because the application version
-increases:
+不要仅因应用版本增加就更改以下值：
 
-- `server/database.ts` database schema version;
-- IndexedDB/Dexie versions under `src/storage/`;
-- object, history, attachment, key-envelope, or encryption versions;
-- workspace, import/export, or portable payload schema versions;
-- the imported editor-core provenance or its direct ProseMirror/Markdown dependencies;
-- `docker-compose.yml` or the `/data` layout.
+- `server/database.ts` 中的数据库架构版本；
+- `src/storage/` 下的 IndexedDB／Dexie 版本；
+- 对象、历史、附件、密钥信封或加密版本；
+- 工作区、导入／导出或可移植负载架构版本；
+- 导入编辑器核心的来源或其直接 ProseMirror／Markdown 依赖；
+- `docker-compose.yml` 或 `/data` 布局。
 
-Those values describe compatibility or data formats and require their own
-implementation, migration, security review, tests, and documentation.
+这些值描述兼容性或数据格式，需要各自的实现、迁移、安全审查、测试和文档。
 
-## Local prerequisites
+## 本地前置条件
 
-Install or provide:
+安装或准备：
 
-- Node.js 22 or newer;
-- the pnpm version declared by `package.json`;
-- Docker Engine or Docker Desktop;
-- Docker Buildx with QEMU/binfmt support for `linux/amd64` and `linux/arm64`;
-- a Docker Hub account with write access to `gouou7/mint-notes`.
+- Node.js 22 或更高版本；
+- `package.json` 声明的 pnpm 版本；
+- Docker Engine 或 Docker Desktop；
+- 支持 `linux/amd64` 和 `linux/arm64` 的 QEMU／binfmt Docker Buildx；
+- 对 `gouou7/mint-notes` 有写权限的 Docker Hub 账户。
 
-Confirm the local tools and daemon:
+确认本地工具与守护进程：
 
 ```bash
 node --version
@@ -63,15 +49,14 @@ docker version
 docker buildx version
 ```
 
-On macOS, Docker Desktop normally includes Buildx and emulation support. A
-Colima installation should be started with binfmt enabled:
+macOS 上，Docker Desktop 通常包含 Buildx 和模拟支持。Colima 应在启用 binfmt 的情况下启动：
 
 ```bash
 colima start --runtime docker --cpus 4 --memory 8 --disk 100 --binfmt
 docker context use colima
 ```
 
-Create a container-backed builder once:
+一次性创建容器驱动构建器：
 
 ```bash
 MINT_BUILDER="mint-notes-release"
@@ -84,7 +69,7 @@ docker buildx create \
 docker buildx inspect --bootstrap
 ```
 
-For later releases, select the existing builder:
+后续发布选择现有构建器：
 
 ```bash
 MINT_BUILDER="mint-notes-release"
@@ -93,23 +78,19 @@ docker buildx use "$MINT_BUILDER"
 docker buildx inspect --bootstrap
 ```
 
-The inspection output must list both `linux/amd64` and `linux/arm64`. Do not
-publish a partial `latest` image if either platform is unavailable.
+检查输出必须同时列出 `linux/amd64` 和 `linux/arm64`。任一平台不可用时，都不得发布不完整的 `latest` 镜像。
 
-## Prepare the release commit and tag
+## 准备发布提交与标签
 
-Use a stable semantic version such as `0.4.0`. Move the relevant entries from
-`[Unreleased]` in `CHANGELOG.md` into a dated heading, leaving `[Unreleased]`
-at the top:
+使用 `0.4.0` 之类稳定语义版本。把 `CHANGELOG.md` 中 `[未发布]` 的相关条目移到带日期标题下，并在顶部保留 `[未发布]`：
 
 ```markdown
-## [Unreleased]
+## [未发布]
 
 ## [0.4.0] - 2026-07-26
 ```
 
-Commit all reviewed release contents and the CHANGELOG, then create an
-annotated local tag:
+提交全部已审查发布内容和变更日志，再创建带注解的本地标签：
 
 ```bash
 MINT_VERSION="0.4.0"
@@ -121,12 +102,9 @@ git commit -m "chore(release): prepare ${MINT_VERSION}"
 git tag -a "v${MINT_VERSION}" -m "Release Mint Notes ${MINT_VERSION}"
 ```
 
-If the release includes other reviewed files, stage them deliberately. The
-tagged commit must already contain the CHANGELOG entry; changes committed after
-the tag are not part of that release.
+如果发布包含其他已审查文件，请有意暂存。带标签的提交必须已经包含变更日志条目；标签之后提交的变化不属于该版本。
 
-Resolve the build values from the exact tag rather than typing the version into
-the build commands:
+从准确标签解析构建值，不要在构建命令中手输版本：
 
 ```bash
 MINT_TAG="$(git describe --tags --exact-match)"
@@ -139,12 +117,11 @@ test -z "$(git status --short)"
 test "$MINT_TAG" = "v${MINT_VERSION}"
 ```
 
-The validation script accepts stable `vMAJOR.MINOR.PATCH` tags only and
-requires the matching dated CHANGELOG heading.
+验证脚本只接受稳定 `vMAJOR.MINOR.PATCH` 标签，并要求变更日志中存在匹配的带日期标题。
 
-## Run the release checks
+## 运行发布检查
 
-Run the full checks with the derived version injected into the browser build:
+把派生版本注入浏览器构建，并运行完整检查：
 
 ```bash
 pnpm install --frozen-lockfile
@@ -156,12 +133,11 @@ pnpm test:smoke
 docker compose config
 ```
 
-Do not continue if any command fails.
+任何命令失败都不得继续。
 
-## Build and smoke-test the local image
+## 构建并冒烟测试本地镜像
 
-Build the workstation's native platform and load it into the local Docker image
-store:
+构建工作站原生平台并加载到本地 Docker 镜像存储：
 
 ```bash
 docker buildx build \
@@ -174,7 +150,7 @@ docker buildx build \
   .
 ```
 
-Run the image on a disposable local port:
+在一次性本地端口运行镜像：
 
 ```bash
 docker run --rm --detach \
@@ -191,12 +167,9 @@ docker logs mint-notes-release-check
 docker rm --force mint-notes-release-check
 ```
 
-The expected health response is `{"ok":true}`. Also open
-`http://localhost:18787` and complete a short browser smoke test covering
-registration or login, vault unlock, note editing, refresh, and an image
-attachment.
+预期健康响应为 `{"ok":true}`。还应打开 `http://localhost:18787`，完成简短浏览器冒烟测试，覆盖注册或登录、保险库解锁、笔记编辑、刷新和图片附件。
 
-Confirm the local image labels:
+确认本地镜像标签：
 
 ```bash
 docker image inspect "$MINT_IMAGE:${MINT_VERSION}-local" \
@@ -205,32 +178,28 @@ docker image inspect "$MINT_IMAGE:${MINT_VERSION}-local" \
   --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 ```
 
-The outputs must equal `$MINT_VERSION` and `$MINT_REVISION`.
+输出必须分别等于 `$MINT_VERSION` 和 `$MINT_REVISION`。
 
-## Push the source commit and Git tag
+## 推送源码提交与 Git 标签
 
-Make the exact source used for the image available before publishing the
-container:
+发布容器前，先让镜像所用的准确源码可用：
 
 ```bash
 git push origin main
 git push origin "$MINT_TAG"
 ```
 
-If the Tag-triggered GitHub Actions publisher remains enabled and configured,
-the second command starts it. In that case, stop here and let automation own
-the registry publication instead of running the manual push below.
+如果由标签触发的 GitHub Actions 发布器仍已启用并配置，第二条命令会启动它。此时在这里停止，让自动化负责镜像仓库发布，不要再执行下方手动推送。
 
-## Build and push the multi-platform image
+## 构建并推送多平台镜像
 
-Authenticate interactively. Prefer a Docker Hub access token or browser/device
-flow instead of entering a password directly in shell history:
+交互式认证。建议使用 Docker Hub 访问令牌或浏览器／设备流程，不要把密码直接写入 Shell 历史：
 
 ```bash
 docker login
 ```
 
-Build both target platforms and push the exact version and `latest` tags:
+构建两个目标平台，并推送准确版本与 `latest` 标签：
 
 ```bash
 docker buildx build \
@@ -245,38 +214,27 @@ docker buildx build \
   .
 ```
 
-Do not combine a multi-platform build with `--load`; the local Docker image
-store can load only one platform at a time. `--push` publishes the manifest and
-both platform-specific images directly from the Buildx builder.
+不要把多平台构建与 `--load` 结合；本地 Docker 镜像存储一次只能加载一个平台。`--push` 会直接从 Buildx 构建器发布清单和两个平台镜像。
 
-## Verify the published image
+## 验证已发布镜像
 
-Inspect both registry tags:
+检查两个镜像仓库标签：
 
 ```bash
 docker buildx imagetools inspect "$MINT_IMAGE:$MINT_VERSION"
 docker buildx imagetools inspect "$MINT_IMAGE:latest"
 ```
 
-Both outputs must list `linux/amd64` and `linux/arm64`, and both tags must
-resolve to the image just built. Record the Git commit, Git tag, image version
-tag, and registry digest in the release notes.
+两个输出都必须列出 `linux/amd64` 和 `linux/arm64`，并且两个标签都要指向刚构建的镜像。在发布说明中记录 Git 提交、Git 标签、镜像版本标签和镜像仓库摘要。
 
-Deploy the immutable version tag to a test environment and follow the
-[deployment acceptance checks](DEPLOYMENT.md#deployment-acceptance-checks).
-Production deployments should pin the exact version or registry digest rather
-than relying on `latest`.
+把不可变版本标签部署到测试环境，并执行[部署验收检查](DEPLOYMENT.md#部署验收检查)。生产部署应固定准确版本或镜像仓库摘要，而不是依赖 `latest`。
 
-## Recover from a failed publication
+## 从发布失败中恢复
 
-- If the build fails before publication completes, fix the cause and rerun the
-  same build only when no public version image was created.
-- Do not move an already pushed Git tag to another commit.
-- If a version tag is already public but contains invalid application code, do
-  not silently replace or delete it. Publish a corrected patch version so
-  existing deployments remain traceable.
-- If only `latest` must be moved back urgently, repoint it to a previously
-  verified immutable image without rebuilding:
+- 如果构建在发布完成前失败，修复原因；只有未创建公开版本镜像时，才能重新执行相同构建。
+- 不得把已经推送的 Git 标签移到另一提交。
+- 如果版本标签已经公开但包含无效应用代码，不要静默替换或删除。发布修正补丁版本，让现有部署保持可追溯。
+- 如果只需紧急回退 `latest`，无需重新构建，可把它重新指向之前已验证的不可变镜像：
 
 ```bash
 MINT_IMAGE="gouou7/mint-notes"
@@ -288,13 +246,11 @@ docker buildx imagetools create \
 docker buildx imagetools inspect "$MINT_IMAGE:latest"
 ```
 
-Moving `latest` does not roll back a running deployment automatically. Follow
-the backup and upgrade boundaries in the [deployment guide](DEPLOYMENT.md) and
-[backup and restore guide](BACKUP_AND_RESTORE.md).
+移动 `latest` 不会自动回滚正在运行的部署。请遵循[部署指南](DEPLOYMENT.md)和[备份与恢复指南](BACKUP_AND_RESTORE.md)中的备份与升级边界。
 
-## Official tool references
+## 官方工具参考
 
-- [Docker multi-platform builds](https://docs.docker.com/build/building/multi-platform/)
-- [`docker buildx build` reference](https://docs.docker.com/reference/cli/docker/buildx/build/)
-- [`docker buildx imagetools` reference](https://docs.docker.com/reference/cli/docker/buildx/imagetools/)
-- [`docker login` reference](https://docs.docker.com/reference/cli/docker/login/)
+- [Docker 多平台构建](https://docs.docker.com/build/building/multi-platform/)
+- [`docker buildx build` 参考](https://docs.docker.com/reference/cli/docker/buildx/build/)
+- [`docker buildx imagetools` 参考](https://docs.docker.com/reference/cli/docker/buildx/imagetools/)
+- [`docker login` 参考](https://docs.docker.com/reference/cli/docker/login/)

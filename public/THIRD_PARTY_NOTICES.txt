@@ -1,9 +1,9 @@
-Mint Notes third-party notices
+Mint Notes 第三方声明
 
 typora-web
 ==========
 
-The Mint Notes live Markdown editor core is derived from typora-web.
+Mint Notes 实时 Markdown 编辑器核心衍生自 typora-web。
 
 MIT License
 
@@ -46,8 +46,7 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-Some Lucide icons are derived from the Feather project and are covered by the
-following MIT License.
+部分 Lucide 图标衍生自 Feather 项目，并受以下 MIT 许可证约束。
 
 The MIT License (MIT)
 

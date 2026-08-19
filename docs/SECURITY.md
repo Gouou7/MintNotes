@@ -1,139 +1,128 @@
-# Security model
+# 安全模型
 
-[Documentation index](README.md)
+[文档索引](README.md)
 
-## Protected assets
+## 受保护资产
 
-The application is designed to keep note titles, Markdown, tags, custom history names, note lock state, folder names, folder structure, derived outlines, active/open note identifiers, active editor mode, sidebar visibility state, attachment names, MIME types, attachment keys, and attachment bytes confidential from the server at rest.
+应用旨在让服务器无法获知静态存储中的笔记标题、Markdown、标签、自定义历史名称、笔记锁定状态、文件夹名称与结构、派生大纲、活动／已打开笔记标识符、活动编辑器模式、侧栏可见状态、附件名称、MIME 类型、附件密钥和附件字节。
 
-The server necessarily observes usernames, display names, roles, account status, a random vault-envelope context and its version, trash/history-retention preferences, history capture frequency and enablement, whether encrypted avatar, legacy workspace, or history records exist, random note/history IDs, history capture times and capture kinds, the history protection bit, protected-history relationships to random attachment UUIDs, avatar/legacy-workspace/history ciphertext sizes and update times, random user/content/session/endpoint IDs, an ephemeral random synchronization-client ID, the reserved legacy workspace object ID, ciphertext sizes, object counts, revisions, synchronization times, browser/device summaries, IP addresses, login counts and activity times, remembered status, and access patterns. These protected attachment references deliberately reveal random-ID relationships so server cleanup can preserve ciphertext without learning attachment names, MIME types, bytes, keys, or the custom history name. SSE notifications expose only a user-scoped change cursor to the authenticated browser and do not carry object IDs or ciphertext. Current clients do not send active/open note identifiers, editor mode, or sidebar state to the server; these fields remain in per-user device-local preferences. Opaque legacy workspace records may remain on the server during rolling upgrades but are ignored by current clients. The server also does not receive historical titles, Markdown, tags, custom history names, note lock state, attachment names or bytes, the avatar image, or avatar MIME type in plaintext. Users can view their own trusted-endpoint and encrypted note-history metadata; administrators can view account identity, status, object count, and aggregate ciphertext storage usage. Inactive endpoint metadata is bounded: a user may remove it immediately, and the server removes it automatically after 30 days.
+服务器必然可以观察用户名、显示名称、角色、账户状态、随机保险库信封上下文及其版本、回收站／历史保留偏好、历史捕获频率与启用状态、是否存在加密头像／旧工作区／历史记录、随机笔记／历史 ID、历史捕获时间与类型、历史保护位、受保护历史与随机附件 UUID 的关系、头像／旧工作区／历史密文大小与更新时间、随机用户／内容／会话／端点 ID、临时随机同步客户端 ID、保留的旧工作区对象 ID、密文大小、对象数、修订、同步时间、浏览器／设备摘要、IP 地址、登录次数与活动时间、记住状态和访问模式。受保护附件引用有意暴露随机 ID 关系，使服务器清理可以保留密文，而无需了解附件名称、MIME 类型、字节、密钥或自定义历史名称。SSE 通知只向已认证浏览器暴露用户作用域的变更游标，不携带对象 ID 或密文。
 
-## Operational logging boundary
+当前客户端不会把活动／已打开笔记标识符、编辑器模式或侧栏状态发给服务器；这些字段保留在每用户、设备本地偏好中。滚动升级期间，不透明旧工作区记录可能留在服务器上，但会被当前客户端忽略。服务器也不会收到历史标题、Markdown、标签、自定义历史名称、笔记锁定状态、附件名称／字节、头像图片或头像 MIME 类型的明文。用户可查看自己的可信端点和加密笔记历史元数据；管理员可查看账户身份、状态、对象数量和汇总密文存储用量。非活动端点元数据有界：用户可以立即删除，服务器会在 30 天后自动删除。
 
-The server writes structured operational events to stdout only. Production uses
-JSON and development uses readable text; there is no browser log-ingestion
-endpoint, application log file, SQLite log table, or application-managed
-retention. Operators must protect and expire collected logs separately.
+## 运维日志边界
 
-API completion logs contain a server-generated request ID, HTTP method,
-parameterized route, status code, and duration. Selected security and lifecycle
-events add outcome categories, counts, or short references produced by a keyed
-HMAC with a random in-memory process salt. These references permit correlation
-only during one process lifetime and change after restart.
+服务器只向 stdout 写入结构化运维事件。生产环境使用 JSON，开发环境使用易读文本；不存在浏览器日志摄取端点、应用日志文件、SQLite 日志表或应用管理的保留策略。运维人员必须单独保护并定期清理收集到的日志。
 
-Logs must not contain raw URLs or query strings, IP addresses, usernames,
-display names, complete internal IDs, request or response headers, cookies,
-bodies, authentication or recovery secrets, activation codes, encryption keys,
-ciphertext, nonces, attachment bytes, or client plaintext. Typed event fields,
-request-log suppression, route templates, and logger redaction provide layered
-enforcement. Request IDs and the remaining timing, status, event, count, and
-anonymous-reference metadata are still sensitive and may reveal access patterns.
+API 完成日志包含服务器生成的请求 ID、HTTP 方法、参数化路由、状态码和耗时。选定安全与生命周期事件会附加结果类别、计数或短引用；短引用使用带随机内存进程盐的密钥 HMAC 生成，只能在一次进程生命周期内关联，重启后会变化。
 
-## Threats covered by the design
+日志不得包含原始 URL 或查询字符串、IP 地址、用户名、显示名称、完整内部 ID、请求／响应标头、Cookie、正文、认证或恢复秘密、激活码、加密密钥、密文、nonce、附件字节或客户端明文。类型化事件字段、请求日志抑制、路由模板和日志器脱敏提供分层保护。请求 ID 以及剩余的时间、状态、事件、计数与匿名引用元数据仍属敏感信息，可能暴露访问模式。
 
-- Theft of the SQLite database or an application backup.
-- Direct inspection of stored data by an operator.
-- Ciphertext corruption or rebinding to another user/object/revision.
-- Cross-account API access using a guessed object ID.
-- Accidental overwrite, deletion, interrupted uploads, and ordinary network failure.
+## 设计覆盖的威胁
 
-## Threats outside the browser-only E2EE boundary
+- SQLite 数据库或应用备份被盗。
+- 运维人员直接检查已存储数据。
+- 密文损坏，或重新绑定到其他用户／对象／修订。
+- 使用猜测的对象 ID 跨账户访问 API。
+- 意外覆盖、删除、上传中断和普通网络故障。
 
-- An actively compromised server can replace the JavaScript application and capture a password or unlocked key.
-- Malware, a hostile browser extension, or physical access to an unlocked device can read plaintext.
-- Note locking prevents accidental client-side edits and trash operations; it is not authentication, server authorization, or protection against a malicious or outdated client.
-- History protection is a retention guard against normal deletion and cleanup paths, not protection from account deletion, deleting a deployment volume, restoring an older backup, or a malicious administrator/client.
-- Malware or hostile same-origin JavaScript can use a directly wrapped device credential while its browser profile remains trusted. With a local PIN configured, it can attempt PIN guesses against the stored authenticated ciphertext or use the current unlocked tab's short-lived refresh envelope; a short PIN is not a defense against an attacker who controls the origin or browser profile.
-- A user-created plaintext export is outside the encrypted storage boundary.
-- Traffic metadata and ciphertext sizes are not hidden.
+## 浏览器端端到端加密边界之外的威胁
 
-The UI and documentation must not claim protection against these cases.
+- 已被主动攻陷的服务器可以替换 JavaScript 应用并捕获密码或已解锁密钥。
+- 恶意软件、敌对浏览器扩展或对已解锁设备的物理访问可以读取明文。
+- 笔记锁定只能防止客户端意外编辑和回收站操作；它不是认证、服务器授权，也不能防御恶意或过时客户端。
+- 历史保护只是正常删除与清理路径的保留守卫，不能防止账户删除、部署卷删除、旧备份恢复或恶意管理员／客户端。
+- 恶意软件或同源恶意 JavaScript 可以在浏览器配置文件仍受信任时使用直接包装的设备凭据。配置本地 PIN 后，攻击者可以离线猜测已存储认证密文的 PIN，或使用当前已解锁标签页的短期刷新信封；短 PIN 无法防御控制来源或浏览器配置文件的攻击者。
+- 用户创建的明文导出不在加密存储边界内。
+- 流量元数据和密文大小不会隐藏。
 
-## Key hierarchy
+UI 和文档不得声称能够抵御以上情况。
 
-The intended key hierarchy is:
+## 密钥层级
+
+预期密钥层级如下：
 
 ```text
-master password + per-user salt
-  -> Argon2id root key
-      -> domain-separated authentication secret
-      -> domain-separated vault wrapping key
+主密码 + 每用户盐
+  -> Argon2id 根密钥
+      -> 领域分离的认证秘密
+      -> 领域分离的保险库包装密钥
 
-random vault key
-  -> encrypted by vault wrapping key for normal unlock
-  -> encrypted by an independent recovery key for recovery
-  -> optionally encrypted by a non-exportable browser device key for online refresh recovery
-      -> when a PIN exists, the device envelope is encrypted again by an Argon2id-derived PIN wrapping key
-  -> encrypts user objects with Web Crypto AES-256-GCM and random nonces
-  -> encrypts attachment manifests containing independent random attachment keys
+随机保险库密钥
+  -> 由保险库包装密钥加密，用于正常解锁
+  -> 由独立恢复密钥加密，用于恢复
+  -> 可选地由不可导出的浏览器设备密钥加密，用于在线刷新恢复
+      -> 存在 PIN 时，设备信封再次由 Argon2id 派生的 PIN 包装密钥加密
+  -> 使用 Web Crypto AES-256-GCM 和随机 nonce 加密用户对象
+  -> 加密包含独立随机附件密钥的附件清单
 
-random attachment key
-  -> encrypts immutable 1 MiB attachment chunks with per-chunk nonces
+随机附件密钥
+  -> 使用每分块 nonce 加密不可变的 1 MiB 附件分块
 ```
 
-The server receives an authentication secret but never receives the password, root key, wrapping key, recovery key, device key, device-wrapped vault credential, or plaintext vault key. The server stores a slow hash of the authentication secret.
+服务器会收到认证秘密，但绝不会收到密码、根密钥、包装密钥、恢复密钥、设备密钥、设备包装的保险库凭据或明文保险库密钥。服务器存储认证秘密的慢速哈希。
 
-Vault-key envelope AAD is versioned. Legacy accounts use their normalized username in the v1 AAD until they change that username. New accounts use an independent random v2 envelope context. A username change always requires the current authentication secret. To retain the recovery key, it also requires the current recovery authentication secret; the unlocked browser rewraps both envelopes under v2 AAD without changing either verifier. If the recovery key is unavailable, the browser may instead generate and display a replacement after online master-password reauthentication. Only after the user confirms that replacement is stored does the server atomically change the username, context, both ciphertexts, and recovery verifier; abandoning the dialog does not invalidate the old key. Other sessions and endpoints are revoked so a stale client cannot continue with the previous account identity. Note, history, attachment, and device-unlock encryption stays bound to the immutable user ID and is not rewritten.
+保险库密钥信封 AAD 带版本。旧账户在修改用户名之前使用规范化用户名作为 v1 AAD；新账户使用独立随机 v2 信封上下文。修改用户名始终需要当前认证秘密。若要保留恢复密钥，还需当前恢复认证秘密；已解锁浏览器会在 v2 AAD 下重新包装两个信封，但不更改验证器。如果恢复密钥不可用，浏览器可以在在线重新验证主密码后生成并显示替代密钥。只有用户确认已保存替代密钥后，服务器才原子更改用户名、上下文、两个密文和恢复验证器；放弃对话框不会使旧密钥失效。其他会话与端点会被撤销，防止过期客户端继续使用旧账户身份。笔记、历史、附件和设备解锁加密仍绑定到不可变用户 ID，无需重写。
 
-The device-unlock key is a non-exportable AES-256-GCM `CryptoKey` stored by the browser in IndexedDB. The inner device ciphertext is authenticated with the user ID. A remembered credential may also hold a versioned last-server-verified user and endpoint snapshot whose IDs must match the credential and whose endpoint must still be marked remembered. This cached identity exists only to route and label local restoration; it cannot authorize a server request. Without a PIN, eligible remembered devices use the stored key to unlock during offline cold startup. This is a convenience boundary rather than hardware-backed authentication: anyone controlling the trusted browser profile or malicious same-origin code can ask the stored key to decrypt.
+设备解锁密钥是浏览器存储在 IndexedDB 中、不可导出的 AES-256-GCM `CryptoKey`。内部设备密文使用用户 ID 认证。已记住凭据还可以保存带版本的最近经服务器验证用户与端点快照；二者 ID 必须与凭据匹配，且端点仍标记为已记住。该缓存身份只用于本地恢复路由与标签，不能授权服务器请求。没有 PIN 时，符合条件的已记住设备可用存储密钥离线冷启动解锁。这是便利边界，不是硬件认证：控制受信任浏览器配置文件或同源代码者可以要求存储密钥解密。
 
-When a PIN is configured, the browser derives a separate wrapping key with Argon2id and HMAC domain separation, then AES-GCM encrypts the complete inner device envelope with AAD binding it to the user, endpoint, and PIN-envelope version. IndexedDB does not retain directly device-decryptable PIN-protected ciphertext. An eligible offline cold start may route to the PIN lock screen from the cached verified identity, but neither the tab refresh envelope nor a cross-tab session grant may unlock it; only the correct local PIN can. After a successful PIN or master-password unlock, the current tab may keep a second device-wrapped vault envelope and last-activity timestamp in `sessionStorage`; it contains no plaintext vault key or PIN-derived key and is accepted only after server-session verification on a navigation reported as `reload` before the configured inactivity interval expires. Manual lock, inactivity lock, logout, invalid-session handling, and non-reload startup clear or reject that envelope. This preserves an unlocked state across an ordinary verified refresh while requiring PIN entry on ordinary application startup. Browser session restoration is implementation-dependent, so restart detection remains best effort. AES-GCM authentication replaces the former standalone verifier for new credentials. Legacy verifier records are blocked from automatic restoration and upgrade only after the entered PIN is verified.
+配置 PIN 后，浏览器使用 Argon2id 与 HMAC 领域分离派生独立包装密钥，再用 AES-GCM 加密完整内部设备信封；AAD 将其绑定到用户、端点和 PIN 信封版本。IndexedDB 不保留可由设备直接解密的受 PIN 保护密文。符合条件的离线冷启动可以根据缓存身份进入 PIN 锁屏，但标签页刷新信封和跨标签页会话授权都不能解锁；只能输入正确本地 PIN。PIN 或主密码解锁成功后，当前标签页可以在 `sessionStorage` 中保留第二个设备包装保险库信封和上次活动时间戳；其中不含明文保险库密钥或 PIN 派生密钥，并且只在服务器会话已验证、导航报告为 `reload` 且未超过配置的不活动间隔时接受。手动锁定、不活动锁定、登出、无效会话处理和非重新加载启动都会清除或拒绝该信封。浏览器会话恢复依赖具体实现，因此重启检测只能尽力而为。新凭据由 AES-GCM 认证代替旧独立验证器；旧验证器记录不能自动恢复，只会在输入的 PIN 验证成功后升级。
 
-The PIN envelope improves the application lock boundary but does not turn a short PIN into a high-entropy secret. Anyone able to copy or repeatedly operate on browser storage can attempt guesses offline, and client-side failure counters can be rolled back. Five failed attempts delete local trust and request endpoint revocation as an online damage-control measure, not as a cryptographic brute-force guarantee. Locally restored trust has no additional expiry. A confirmed `401`, endpoint mode downgrade, identity mismatch, or damaged credential deletes local trust and locks the vault; encrypted objects and pending outboxes remain so the same account can recover them after signing in. Confirmed logout additionally deletes all current-user encrypted objects, attachment chunks, outboxes, cursors, and preferences from the browser. If its server request fails, only the pending endpoint-revocation record is recreated.
+PIN 信封改善应用锁定边界，但不会让短 PIN 变成高熵秘密。能够复制或反复操作浏览器存储者可以离线猜测，客户端失败计数也可能回滚。五次失败会删除本地信任并请求在线撤销端点，这只是损害控制措施，不是密码学暴力破解保证。本地恢复的信任没有额外到期时间。确认的 `401`、端点模式降级、身份不匹配或凭据损坏会删除本地信任并锁定保险库；加密对象和待处理发件箱仍会保留，供同一账户重新登录后恢复。确认登出还会从浏览器删除当前用户的所有加密对象、附件分块、发件箱、游标和偏好；若服务器请求失败，只重新创建待处理端点撤销记录。
 
-The browser derives a 32-byte Argon2id root through the bundled `hash-wasm` implementation. The current KDF profile uses three iterations, 64 MiB of memory, and one lane; its parameters and random salt are stored per account so a future profile can be versioned. Purpose-specific keys are then derived with Web Crypto HMAC-SHA-256. A cross-worker integration test verifies that registration, normal unlock, recovery unlock, and encrypted document round-trips remain stable across fresh Worker instances.
+浏览器通过内置 `hash-wasm` 实现派生 32 字节 Argon2id 根。当前 KDF 配置使用三次迭代、64 MiB 内存和一条 lane；参数与随机盐按账户存储，便于未来版本化。随后使用 Web Crypto HMAC-SHA-256 派生用途专属密钥。跨 Worker 集成测试验证注册、正常解锁、恢复解锁和加密文档往返在新 Worker 实例间保持稳定。
 
-Every encrypted object uses a fresh 96-bit nonce and authenticates the user ID, object ID, object type, encryption version, and intended revision as AES-GCM additional data.
+每个加密对象使用全新 96 位 nonce，并把用户 ID、对象 ID、对象类型、加密版本和预期修订作为 AES-GCM 附加数据认证。
 
-Every note-history snapshot also uses a fresh 96-bit nonce in a separate AAD domain. It authenticates the user ID, note ID, history ID, capture time, capture kind, history schema, and encryption version. The encrypted payload contains the title, Markdown, tags, attachment IDs, and source update time. Rebinding any server-visible history field causes decryption to fail.
+每个笔记历史快照也在独立 AAD 领域使用全新 96 位 nonce，认证用户 ID、笔记 ID、历史 ID、捕获时间、捕获类型、历史架构和加密版本。加密负载包含标题、Markdown、标签、附件 ID 和来源更新时间。重新绑定任何服务器可见历史字段都会导致解密失败。
 
-History metadata uses a second fresh 96-bit nonce and a distinct AAD domain binding the user ID, note ID, history ID, capture time, metadata schema, and encryption version. Its payload contains the optional custom name and complete attachment-ID set. This allows rename and protection changes without re-encrypting the full snapshot. Cross-user, cross-note, cross-history, cross-time rebinding and ciphertext tampering fail authentication.
+历史元数据使用第二个全新 96 位 nonce 和不同 AAD 领域，绑定用户 ID、笔记 ID、历史 ID、捕获时间、元数据架构和加密版本。其负载包含可选自定义名称和完整附件 ID 集合，因此重命名和保护状态更改无需重新加密完整快照。跨用户、笔记、历史、时间重新绑定或密文篡改都会认证失败。
 
-Every attachment chunk uses a fresh 96-bit nonce and authenticates the user ID, attachment UUID, chunk index, total chunk count, and encryption version. A plaintext SHA-256 digest is kept only inside encrypted metadata and is checked after reassembly. SVG is not rendered; supported raster formats are detected from file signatures rather than filename extensions.
+每个附件分块使用全新 96 位 nonce，认证用户 ID、附件 UUID、分块索引、分块总数和加密版本。明文 SHA-256 摘要只保存在加密元数据中，并在重组后校验。不渲染 SVG；支持的栅格格式根据文件签名而不是扩展名检测。
 
-## Web security
+## Web 安全
 
-- Production requires HTTPS.
-- Production sessions and endpoint identifiers use separate opaque random values in `Secure`, `HttpOnly`, `SameSite=Strict` cookies. Only their hashes are stored in SQLite. An endpoint identifier cannot authenticate a request by itself.
-- Logging out revokes all sessions for the current endpoint and, after an explicit confirmation, discards every current-account browser record including unsynchronized changes. It does not delete server-synchronized content or another local user's rows. Password recovery and account disabling revoke every endpoint; password changes revoke other endpoints. Remote logout is scoped to the authenticated user, cannot target the current endpoint, and is allowed only after its server-recorded first-trusted time is 24 hours old. Repeated login does not reset that time.
-- Remembered sessions have a rolling long-lived cookie; ordinary sessions use a session cookie and the configured server TTL. An eligible remembered credential may unlock its local cache while the server is unreachable, but all network capabilities remain disabled until `/api/auth/me` confirms the same remembered endpoint. Remote revocation and cookie loss therefore take effect on the next successful connection attempt, not while the device remains offline. Browser storage cleanup terminates local trust immediately.
-- Immediate permanent deletion requires an authenticated session, an explicit client-side confirmation, a synchronized tombstone, and the server-side user scope derived from that session.
-- Browser CSRF resistance relies on `SameSite=Strict` cookies plus exact `Origin` validation. Production and any deployment with `APP_ORIGIN` configured reject a state-changing request when the header is absent or mismatched. `APP_ORIGIN` must therefore match the public browser origin exactly.
-- Markdown does not execute raw HTML or scriptable embeds.
-- KaTeX and Mermaid execute only from the reviewed local application bundle. Mermaid uses strict rendering, removes event handlers and external resource references from generated SVG, and displays the result as a non-interactive Blob image. It does not add a CDN, remote font, frame, or new network origin.
-- The application uses a restrictive Content Security Policy and no runtime CDN scripts.
-- The CSP allows `'wasm-unsafe-eval'` only so the bundled Argon2id module can compile; JavaScript `'unsafe-eval'` remains disabled.
-- Login, registration, invitation, and recovery endpoints are rate limited.
-- Sensitive material is excluded from logs and error reports.
-- Synchronization event streams are bound to the authenticated user and session, are closed on revocation or account disabling, and are periodically revalidated while open.
+- 生产环境必须使用 HTTPS。
+- 生产会话与端点标识符在 `Secure`、`HttpOnly`、`SameSite=Strict` Cookie 中使用相互独立的不透明随机值。SQLite 只存储其哈希。端点标识符本身不能认证请求。
+- 登出会撤销当前端点的所有会话，并在明确确认后丢弃当前账户的全部浏览器记录，包括未同步更改。它不会删除服务器已同步内容或另一本地用户的数据。密码恢复和账户禁用撤销所有端点；密码更改撤销其他端点。远程登出限定为已认证用户，不能针对当前端点，并且仅在服务器记录的首次信任时间已满 24 小时后允许。重复登录不会重置该时间。
+- 已记住会话使用滚动长期 Cookie；普通会话使用会话 Cookie 和配置的服务器 TTL。服务器不可达时，符合条件的已记住凭据可以解锁本地缓存，但在 `/api/auth/me` 确认同一已记住端点前，所有网络能力保持禁用。因此远程撤销和 Cookie 丢失会在下一次成功连接时生效，而不是设备离线期间。清理浏览器存储会立即终止本地信任。
+- 立即永久删除需要已认证会话、明确客户端确认、已同步墓碑，以及从该会话派生的服务器用户作用域。
+- 浏览器 CSRF 防护依赖 `SameSite=Strict` Cookie 与精确 `Origin` 验证。生产环境及配置了 `APP_ORIGIN` 的部署会拒绝标头缺失或不匹配的状态更改请求，因此 `APP_ORIGIN` 必须与公共浏览器源完全一致。
+- Markdown 不执行原始 HTML 或可执行嵌入。
+- KaTeX 和 Mermaid 只从已审查的本地应用包运行。Mermaid 使用严格渲染，移除生成 SVG 中的事件处理器和外部资源引用，并把结果显示为不可交互 Blob 图片；不会引入 CDN、远程字体、frame 或新网络源。
+- 应用使用严格的内容安全策略，不使用运行时 CDN 脚本。
+- CSP 仅为内置 Argon2id 模块编译允许 `'wasm-unsafe-eval'`；JavaScript `'unsafe-eval'` 仍禁用。
+- 登录、注册、邀请和恢复端点有速率限制。
+- 日志和错误报告不包含敏感材料。
+- 同步事件流绑定到已认证用户与会话，在撤销或账户禁用时关闭，并在打开期间定期重新验证。
 
-## Account isolation
+## 账户隔离
 
-Authorization derives user identity exclusively from the server session. Request bodies and URLs never choose the authorization scope. Unknown and cross-user object IDs return indistinguishable not-found responses.
+授权用户身份只从服务器会话派生。请求正文和 URL 从不选择授权作用域。未知对象 ID 与跨用户对象 ID 返回不可区分的未找到响应。
 
-The first account bootstraps the administrator role. The empty-database check and account insert run in one SQLite `BEGIN IMMEDIATE` transaction, so concurrent registration requests can assign this bootstrap role only once. Administrators may create one-time account activations, disable accounts, permanently delete another account after master-password and username confirmation, or inspect ciphertext storage usage, but cannot decrypt user data. Deletion is scoped to the exact target user and cascades through that user's server records; self-deletion and deletion of the last administrator are rejected. Each invited user creates their password, recovery key, and vault key in their own browser. Account disabling is reversible and does not erase ciphertext.
+第一个账户初始化管理员角色。空数据库检查和账户插入在一个 SQLite `BEGIN IMMEDIATE` 事务中运行，因此并发注册只能分配一次该初始化角色。管理员可以创建一次性账户激活、禁用账户、在验证主密码和用户名后永久删除另一账户，或检查密文存储用量，但不能解密用户数据。删除严格限定到目标用户并级联其服务器记录；拒绝自删除和删除最后一名管理员。每位受邀用户在自己的浏览器中创建密码、恢复密钥和保险库密钥。账户禁用可逆，不会擦除密文。
 
-## Data-loss controls
+## 数据丢失防护
 
-- Local encrypted copy before network upload.
-- Durable retry outbox.
-- Failed local encryption or IndexedDB commits remain in the unlocked in-memory retry queue with bounded backoff, and ordinary locking waits for durability instead of clearing the only plaintext generation. A completely unwritable browser storage subsystem cannot provide crash durability without violating the no-plaintext-persistence boundary, so the UI keeps a critical warning visible and never reports that generation as saved.
-- Pull cursors commit only with successfully authenticated and locally applied pages; remote purge cannot remove pending object, chunk, or history queues, and concurrent document edits are preserved as conflict copies first.
-- Per-object decryption failure isolation: one invalid ciphertext cannot hide other readable notes. Failed local ciphertext and pending edits remain untouched, and remote ciphertext must authenticate before replacing a known-good local copy. Suppressing a repeated warning stores only a local fingerprint for that exact failed revision and does not delete the ciphertext.
-- Append-only server revisions.
-- Independent encrypted note history with retention, quota, clear markers, generation-safe local-first creation/metadata retry storage, and protected-row/attachment retention. Protected history blocks individual deletion, bulk history clearing, scheduled history cleanup, and physical purge of its owning note and referenced attachments. User-visible history deletion never removes synchronization revisions.
-- Tombstone deletion and trash restoration.
-- Encrypted note-lock metadata blocks current clients from editing a protected note or trashing a selection containing it, including recursive folder selections.
-- Attachment tombstones follow their owning note. Physical removal occurs after the configured retention period or after an explicit confirmation for a manual purge.
-- Exportable plaintext Markdown and consistent server backups.
-- Consistent SQLite online backups and documented restore drills.
+- 网络上传前保存本地加密副本。
+- 使用持久重试发件箱。
+- 本地加密或 IndexedDB 提交失败时，数据留在已解锁内存重试队列中并按有界退避重试；普通锁定会等待持久化，而不是清除唯一明文代次。浏览器存储完全不可写时，若不违反禁止持久明文边界就无法保证崩溃持久性，因此 UI 会持续显示严重警告，绝不把该代次报告为已保存。
+- 拉取游标只与成功认证并在本地应用的页面一起提交；远程清除不能移除待处理对象、分块或历史队列，并发文档编辑会先保留为冲突副本。
+- 按对象隔离解密失败：一个无效密文不能隐藏其他可读笔记。失败的本地密文与待处理编辑保持不动；远程密文必须认证成功后才能替换已知良好本地副本。忽略重复警告只存储该失败修订的本地指纹，不会删除密文。
+- 服务器修订只追加。
+- 提供独立加密笔记历史，含保留、配额、清除标记、代次安全的本地优先创建／元数据重试存储，以及受保护行／附件保留。受保护历史阻止单项删除、批量清空、定期历史清理，以及物理清除所属笔记和引用附件。用户可见历史删除绝不删除同步修订。
+- 使用墓碑删除和回收站恢复。
+- 加密笔记锁定元数据阻止当前客户端编辑受保护笔记，或把包含它的选区移入回收站，包括递归文件夹选区。
+- 附件墓碑跟随所属笔记。物理删除发生在配置保留期结束后，或手动清除明确确认后。
+- 支持可导出的明文 Markdown 和一致的服务器备份。
+- 使用一致的 SQLite 在线备份和已记录的恢复演练。
 
-Recovery-key rotation creates a fresh random recovery key in the Crypto Worker, updates only its server-side verifier and vault-key envelope after master-password verification, and invalidates the previous recovery key. The plaintext recovery key is displayed once and is not persisted. Its download URL remains valid through the browser click task, and the result surface cannot be dismissed until the user explicitly confirms that the replacement was copied or downloaded.
+恢复密钥轮换会在加密 Worker 中创建全新随机恢复密钥；验证主密码后，只更新服务器端验证器与保险库密钥信封，并使旧恢复密钥失效。明文恢复密钥只显示一次，不持久保存。其下载 URL 在浏览器点击任务期间保持有效；用户明确确认替代密钥已复制或下载前，结果界面不能关闭。
 
-## Operational requirements
+## 运维要求
 
-- Serve a reviewed, pinned build over HTTPS and protect the host and reverse proxy from unauthorized code changes.
-- Keep `.env`, SQLite backups, reverse-proxy logs, and host snapshots access-controlled even though note payloads are encrypted.
-- Test account recovery and backup restoration on a separate deployment; the existence of a backup file is not proof that users can decrypt it.
-- Treat Markdown ZIP exports as plaintext. They must not be uploaded to an untrusted backup target without independent encryption.
-- Do not add analytics, remote fonts, CDN scripts, new network origins, raw HTML, or scriptable embeds without revisiting this threat model and the Content Security Policy.
+- 通过 HTTPS 提供经过审查、固定版本的构建，并保护主机和反向代理免受未经授权的代码更改。
+- 即使笔记负载已加密，也要对 `.env`、SQLite 备份、反向代理日志和主机快照实施访问控制。
+- 在独立部署中测试账户恢复和备份恢复；存在备份文件不代表用户能够解密它。
+- 将 Markdown ZIP 导出视为明文。未经独立加密，不得上传到不受信任的备份目标。
+- 新增分析、远程字体、CDN 脚本、新网络源、原始 HTML 或可执行嵌入前，必须重新审查本威胁模型和内容安全策略。

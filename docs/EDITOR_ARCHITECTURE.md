@@ -1,135 +1,135 @@
-# Editor architecture
+# 编辑器架构
 
-[Documentation index](README.md)
+[文档索引](README.md)
 
-This document is the canonical engineering reference for Mint Notes editor behavior. User-facing syntax and interactions belong in the [user guide](USER_GUIDE.md); repository ownership and commands belong in the [development guide](DEVELOPMENT.md).
+本文档是 Mint Notes 编辑器行为的权威工程参考。面向用户的语法和交互请参阅[用户指南](USER_GUIDE.md)；仓库职责和命令请参阅[开发指南](DEVELOPMENT.md)。
 
-## Non-negotiable invariant
+## 不可协商的不变量
 
-> Live mode must treat the canonical Markdown source as its editable document model. Rendering may hide or style authored syntax through decorations or node views, but entering or leaving a rendered structure must not swap in rendered-only content or change source-backed document positions. Cursor movement, selection, Backspace, and Delete operate the authored source; structure-changing edits reparse canonical Markdown immediately and must not synthesize, delete, or relocate a user's delimiters.
+> 实时模式必须将规范 Markdown 源码作为其可编辑文档模型。渲染可以通过装饰或节点视图隐藏作者输入的语法或设置其样式，但进入或离开渲染结构时，不得换入只供渲染的内容，也不得改变基于源码的文档位置。光标移动、选区、Backspace 和 Delete 都作用于作者输入的源码；改变结构的编辑必须立即重新解析规范 Markdown，并且不得合成、删除或移动用户的分隔符。
 
-This is a release-blocking architecture invariant, not a presentation preference. Source, Live, and Reading modes are views of the same canonical Markdown. A mode switch, selection change, parser normalization, or renderer lifecycle event must never silently rewrite it.
+这是会阻断发布的架构不变量，而不是展示偏好。源码、实时和阅读模式都是同一规范 Markdown 的视图。模式切换、选区变化、解析器规范化或渲染器生命周期事件绝不能静默重写它。
 
-## Source and whitespace fidelity
+## 源码与空白保真
 
-Canonical Markdown is authoritative at the string level, not merely at the level of an equivalent parse tree. Every authored character is significant document data, including leading blank lines, blank lines between blocks, trailing blank lines, line-ending style, and spaces or tabs on otherwise blank lines. In this document, “blank line” includes an empty line and a line containing only spaces or tabs.
+规范 Markdown 在字符串层面具有权威性，而不仅仅是在等价解析树层面。作者输入的每个字符都是重要文档数据，包括开头空行、块间空行、末尾空行、行尾风格，以及纯空白行中的空格或制表符。本文所说的“空行”既包括空白长度为零的行，也包括只含空格或制表符的行。
 
-Loading, saving, focusing, blurring, changing a selection, switching modes, validating, parsing, reparsing, rendering, and recovering from a render failure are read-only operations. None of them may trim the document, collapse or expand newlines, normalize line endings, remove whitespace-only lines, or invoke a serializer as a source replacement. They must not emit `onChange` when the canonical string is unchanged.
+加载、保存、获得焦点、失去焦点、更改选区、切换模式、验证、解析、重新解析、渲染和从渲染失败中恢复均为只读操作。它们不得裁剪文档、折叠或扩展换行、规范化行尾、移除纯空白行，也不得调用序列化器替换源码。规范字符串未改变时，它们不得触发 `onChange`。
 
-Only the following user-authorized operations may change canonical Markdown:
+只有以下经用户授权的操作可以更改规范 Markdown：
 
-- typing and input-method composition;
-- pasting or dropping content;
-- deleting a selection or using source-position Backspace/Delete;
-- an explicit user command with a documented source transformation, one undoable transaction, and a selection/cursor mapping defined against the resulting source.
+- 输入和输入法组合；
+- 粘贴或拖放内容；
+- 删除选区，或使用基于源码位置的 Backspace／Delete；
+- 具有已记录源码转换、单个可撤销事务，以及基于结果源码定义的选区／光标映射的显式用户命令。
 
-Parsing may recognize structure, but the parse tree, rendered DOM, node-view state, and serializer output are derived representations. They must never replace canonical Markdown merely because they are structurally equivalent. Valid syntax is rendered over its original source range. Invalid or incomplete syntax falls back to literal source display in the smallest affected range; the editor must not complete, delete, relocate, or otherwise repair authored characters.
+解析可以识别结构，但解析树、渲染后的 DOM、节点视图状态和序列化器输出都是派生表示。不能只因结构等价就让它们替换规范 Markdown。有效语法在原始源码范围上渲染。无效或未完成语法应在最小受影响范围内回退为源码字面显示；编辑器不得补全、删除、移动或以其他方式修复作者输入的字符。
 
-Newline presentation follows these rules without rewriting the source:
+换行展示遵循以下规则，不重写源码：
 
-| Canonical source | Markdown meaning | Live presentation | Reading presentation |
+| 规范源码 | Markdown 含义 | 实时模式展示 | 阅读模式展示 |
 | --- | --- | --- | --- |
-| `a\nb` | One paragraph with one authored soft line break. | Display the authored line break. | Display the authored line break. |
-| `a\n\nb` | Two paragraphs. | Display two paragraphs. | Display two paragraphs. |
-| `a\n\n\nb` | Two paragraphs with one additional authored blank line. | Display every authored blank line. | May collapse additional visual height to standard paragraph spacing. |
+| `a\nb` | 一个段落，含一个作者输入的软换行。 | 显示该换行。 | 显示该换行。 |
+| `a\n\nb` | 两个段落。 | 显示两个段落。 | 显示两个段落。 |
+| `a\n\n\nb` | 两个段落，另有一个作者输入的空行。 | 显示每个作者输入的空行。 | 可以把额外视觉高度折叠为标准段落间距。 |
 
-The first case remains a soft Markdown line break: it must not be rewritten as two trailing spaces, `<br>`, or an empty paragraph. In all three cases, Source, Live, Reading, save, and reopen preserve the exact canonical string. LF and CRLF inputs remain distinguishable until an explicit, user-authorized line-ending conversion is implemented.
+第一种情况仍是 Markdown 软换行：不得改写为两个尾随空格、`<br>` 或空段落。在这三种情况下，源码、实时、阅读、保存和重新打开都要保留准确的规范字符串。在实现明确且经用户授权的行尾转换前，LF 与 CRLF 输入保持可区分。
 
-A source-gap containing only the single line ending required between two adjacent block tokens is structural rather than a blank row. Live mode keeps that line ending source-addressable at the neighboring block boundaries, but its derived gap element is zero-size, non-interactive, and hides ProseMirror's synthetic trailing break. It therefore contributes neither visual height nor an independent caret row. Any additional line ending or whitespace-only line remains a visible editable source-gap row.
+如果两个相邻块令牌之间的源码间隙只包含必需的单个行尾，那么它是结构性间隙，而不是空白行。实时模式使该行尾仍可在相邻块边界按源码寻址，但其派生间隙元素大小为零、不可交互，并隐藏 ProseMirror 合成的尾随换行。因此，它既不贡献视觉高度，也不形成独立光标行。任何额外行尾或纯空白行仍是可见、可编辑的源码间隙行。
 
-Live mode derives all vertical separation between top-level Markdown blocks from those source gaps. Themes may style a block's own typography, border, or internal padding, but they must not add external margins that look like unauthored blank rows. A structural line ending contributes no empty row; the two line endings in `a\n\nb` contribute one body-line-height row; every additional empty or whitespace-only line contributes one more body-line-height row. A trailing blank line included by a parser container map, such as a list map, is split back into the top-level source gap because it is not rendered by that container.
+实时模式从这些源码间隙派生顶层 Markdown 块之间的全部垂直间隔。主题可以设置块自身的排版、边框或内边距，但不得增加看起来像未经作者输入空行的外边距。结构性行尾不产生空行；`a\n\nb` 中的两个行尾产生一行正文行高；之后每个额外空行或纯空白行再增加一行正文行高。解析器容器映射（例如列表映射）包含的尾随空行必须拆回顶层源码间隙，因为该容器不会渲染它。
 
-Conformance is enforced by exact-string parser/controller tests, every-offset source mapping tests, structured local-edit and boundary matrices, renderer-failure and reopen lifecycle tests, and release-level multi-viewport interaction checks. A derived representation is never acceptable evidence by itself.
+符合性由精确字符串解析器／控制器测试、每个偏移的源码映射测试、结构化本地编辑与边界矩阵、渲染器失败与重新打开生命周期测试，以及发布级多视口交互检查强制保证。仅有派生表示绝不能作为充分证据。
 
-## One-way data flow
+## 单向数据流
 
 ```text
-canonical Markdown
-  -> parser
-  -> source-backed ProseMirror document
-  -> decorations and node views
-  -> rendered Live presentation
+规范 Markdown
+  -> 解析器
+  -> 基于源码的 ProseMirror 文档
+  -> 装饰与节点视图
+  -> 渲染后的实时模式展示
 
-source-position transaction
-  -> changed canonical range
-  -> authored-source patch
-  -> canonical Markdown
-  -> application state, encryption, IndexedDB, history, sync, export
+源码位置事务
+  -> 改变的规范范围
+  -> 作者源码补丁
+  -> 规范 Markdown
+  -> 应用状态、加密、IndexedDB、历史、同步、导出
 ```
 
-Reading mode parses canonical Markdown without creating an editable copy. Rendered DOM, node-view text, Blob URLs, measurement nodes, and other presentation state never flow back into persistence.
+阅读模式解析规范 Markdown，不创建可编辑副本。渲染后的 DOM、节点视图文本、Blob URL、测量节点和其他展示状态绝不反向进入持久化流程。
 
-## Source coordinates and structural edits
+## 源码坐标与结构编辑
 
-- Selections and commands map to canonical source offsets. The workspace carries that offset across Source/Live remounts.
-- Decorations may hide authored delimiters visually, but the delimiters retain stable editable positions.
-- Entering or leaving a rendered structure reveals or hides presentation only; it does not replace a source-backed node with rendered-body-only content.
-- Backspace and Delete traverse and edit authored syntax in source order. They must not jump across hidden syntax or delete an entire rendered structure as a visual unit. At the absolute left edge of a source-backed block, Backspace moves to the previous editable source position (or does nothing at document start); it never deletes the delimiter to the caret's right. Delete remains the command that may remove that right-hand delimiter.
-- A Live blockquote node owns the complete authored quote source, including every `>`, authored space, blank quoted line, nested quote prefix, and fenced region. Its inactive preview and active source editor are two presentations of that same node; activating it changes only transient presentation state.
-- The inactive blockquote preview and active source surface share one layout footprint. Switching presentation must preserve authored line breaks and must not cause the surrounding document to reflow merely because editing was activated.
-- The active blockquote source uses a preformatted `pre > code` editing surface. If a browser temporarily represents an edited empty line with `div` or `br` children, the node view converts those DOM boundaries back to authored newlines before they can enter the ProseMirror document.
-- Because browsers may target `beforeinput` at the outer contenteditable host rather than the nested `code` element, the blockquote node view captures supported insert/delete input at the editor root, verifies that the DOM selection belongs to its active source surface, and emits one explicit minimal canonical source transaction. That transaction carries the resulting source selection; a structure-changing reparse must reactivate the resulting Quote/Callout or literal fallback at that same canonical offset.
-- An active Quote or Callout handles unmodified direction keys against authored source positions rather than relying on browser traversal of its nested `pre > code` DOM. ArrowUp and ArrowDown preserve the authored line column, clamping only on a shorter target line; at the first or last authored line they leave the block when an editable source position exists outside it. ArrowLeft and ArrowRight leave from the corresponding absolute source edge. When the neighboring source gap contains visible authored blank rows, the exit selection lands on the nearest visible row rather than either zero-width boundary line ending, and subsequent vertical keys visit those rows one at a time before entering an adjacent Quote or Callout. Presentation-only attribute updates must restore the pre-update selection explicitly because ProseMirror's attribute replacement mapping may otherwise pull an outside boundary selection back into the block.
-- Unmodified direction keys use canonical source positions at every source-backed block boundary. When ProseMirror positions are shared by a block edge and its first text position, horizontal movement resolves the ambiguity in the direction of travel, so ArrowLeft from list-item text visits the authored space and marker before leaving the list. ArrowUp and ArrowDown move by authored lines inside active source-backed blocks, leave from the first or last line, and visit visible source-gap rows one at a time. Lists, fenced code, Quote, and Callout use the same outside-block selection rule; presentation-only attribute updates must restore the pre-update selection so they cannot pull the caret back across a boundary.
-- Pointer, keyboard, and controller navigation all resolve a final canonical source selection before synchronizing Live presentation. A navigation intent is distinct from the presentation-only transaction marker: custom block and source-gap movement must still activate the text structure reached by that selection. Leaving one source-backed block and entering another restores and activates only those blocks in one editor-state update, preserves unrelated DOM nodes, and performs at most one final scroll. Inline delimiters reveal only when the final source selection lies inside their own authored span.
-- An edit that changes a block boundary reparses canonical Markdown immediately. For fenced blocks, the first valid closing fence defines the block and every later authored fence remains available to the parser.
-- Ordinary text input that leaves the derived node structure unchanged updates the active source-backed ProseMirror surface in place. It must not replace the full document or remount the active source surface per character; only a structural signature change may trigger the immediate reparse and source-offset selection restoration path.
-- Heading source activation retains the rendered heading level's typography and layout footprint; activation reveals authored delimiters but does not turn the row into a visually distinct code block.
-- Source-backed headings, lists, tasks, tables, horizontal rules, reference definitions, TOC blocks, and similar text structures retain their pre-activation vertical footprint. A rich block that must be replaced by an editable `source_block` uses a transient cache of stable rendered border-box heights, with one direct measurement only when no cached value exists. That value is excluded from fingerprints, serialization, history, `onChange`, and canonical Markdown. Delimiter exposure may move text horizontally and may naturally rewrap at the current viewport width, but changing only the selection must not alter margins, padding, line-height, or authored blank-row height.
-- CommonMark may keep blank-line-separated items in one derived list. Each derived list item therefore carries only a presentation count of the consecutive authored blank rows before it, allowing Live mode to display those rows without splitting the list or rewriting its exact top-level source snapshot. The count is never authoritative document state.
-- Each Live transaction patches only its changed canonical range. Unedited entities, escapes, link titles, delimiters, and other equivalent authored spellings remain byte-for-byte unchanged.
+- 选区和命令映射到规范源码偏移。工作区在源码／实时模式重新挂载时携带该偏移。
+- 装饰可以在视觉上隐藏作者输入的分隔符，但分隔符保留稳定可编辑位置。
+- 进入或离开渲染结构只显示或隐藏展示，不会把基于源码的节点替换为只包含渲染正文的内容。
+- Backspace 和 Delete 按源码顺序遍历和编辑作者输入的语法。它们不得跳过隐藏语法，也不得把整个渲染结构作为视觉单元删除。在基于源码块的绝对左边缘，Backspace 移到前一个可编辑源码位置（位于文档开头时则不执行操作）；它绝不删除光标右侧的分隔符。Delete 才是可以移除右侧分隔符的命令。
+- 实时块引用节点拥有作者输入的完整引用源码，包括每个 `>`、作者输入的空格、引用空行、嵌套引用前缀和围栏区域。其非活动预览与活动源码编辑器是同一节点的两种展示；激活只改变临时展示状态。
+- 非活动块引用预览与活动源码表面共用同一布局占位。切换展示时必须保留作者输入的换行，不得仅因激活编辑而让周围文档重新排版。
+- 活动块引用源码使用预格式化的 `pre > code` 编辑表面。如果浏览器临时用 `div` 或 `br` 子元素表示编辑后的空行，节点视图应在这些 DOM 边界进入 ProseMirror 文档前将其转换回作者输入的换行。
+- 浏览器可能把 `beforeinput` 的目标设为外层 `contenteditable` 宿主，而不是嵌套的 `code` 元素。因此，块引用节点视图在编辑器根捕获受支持的插入／删除输入，验证 DOM 选区属于其活动源码表面，并发出一个明确、最小的规范源码事务。该事务携带结果源码选区；改变结构的重新解析必须在同一规范偏移重新激活结果 Quote／Callout 或字面回退。
+- 活动 Quote 或 Callout 根据作者源码位置处理无修饰方向键，不依赖浏览器遍历其嵌套 `pre > code` DOM。ArrowUp 和 ArrowDown 保留作者输入的行内列，仅在目标行更短时截短；位于作者源码首行或末行时，如果块外存在可编辑源码位置，则离开该块。ArrowLeft 和 ArrowRight 从对应的绝对源码边缘离开。相邻源码间隙含有可见的作者空行时，退出选区落到最近可见行，而不是任一零宽边界行尾；后续垂直方向键逐行访问这些行，再进入相邻 Quote 或 Callout。仅展示属性更新必须显式恢复更新前选区，因为 ProseMirror 的属性替换映射可能会把块外边界选区拉回块内。
+- 无修饰方向键在每个基于源码的块边界使用规范源码位置。ProseMirror 位置同时被块边缘及其首个文本位置共享时，水平移动按行进方向消除歧义，因此从列表项文本按 ArrowLeft 会先访问作者输入的空格和标记，再离开列表。ArrowUp 和 ArrowDown 在活动源码块内按作者输入的行移动，从首行或末行离开，并逐行访问可见源码间隙。列表、围栏代码、Quote 和 Callout 使用相同的块外选区规则；仅展示属性更新必须恢复更新前选区，避免把光标拉回边界另一侧。
+- 指针、键盘和控制器导航都先解析最终规范源码选区，再同步实时展示。导航意图不同于仅展示事务标记：自定义块和源码间隙移动仍必须激活该选区到达的文本结构。离开一个源码块并进入另一个时，在一次编辑器状态更新中只恢复和激活这两个块，保留无关 DOM 节点，且最多执行一次最终滚动。只有最终源码选区位于某行内分隔符自己的作者输入范围内时，该分隔符才显示。
+- 改变块边界的编辑会立即重新解析规范 Markdown。对于围栏块，第一个有效结束围栏定义该块，之后作者输入的所有围栏仍可供解析器处理。
+- 如果普通文本输入未改变派生节点结构，则原地更新活动的基于源码 ProseMirror 表面。不得每输入一个字符就替换完整文档或重新挂载活动源码表面；只有结构签名变化才能触发立即重新解析和源码偏移选区恢复路径。
+- 激活标题源码时，应保留渲染标题级别的排版和布局占位；激活会显示作者输入的分隔符，但不会把该行变成视觉上不同的代码块。
+- 基于源码的标题、列表、任务、表格、分隔线、引用定义、目录块及类似文本结构保留激活前的垂直占位。必须替换为可编辑 `source_block` 的富块使用稳定渲染边框盒高度的临时缓存，仅在无缓存值时直接测量一次。该值不进入指纹、序列化、历史、`onChange` 或规范 Markdown。显示分隔符可以让文本水平移动，也可以在当前视口宽度下自然重新换行，但只改变选区时不得改变外边距、内边距、行高或作者空行高度。
+- CommonMark 可能把由空行分隔的项目保留在一个派生列表中。因此，每个派生列表项仅携带其前连续作者空行数用于展示，让实时模式无需拆分列表或重写其准确顶层源码快照即可显示这些行。该计数绝不是权威文档状态。
+- 每个实时事务只修补改变的规范范围。未经编辑的实体、转义、链接标题、分隔符和其他等价作者写法必须逐字节保持不变。
 
-## Ownership boundaries
+## 职责边界
 
-| Module | Responsibility |
+| 模块 | 职责 |
 | --- | --- |
-| `src/editor/core/` | Canonical source transactions, explicit source-position mapping, derived parser/serializer, stable controller, and generic extension lifecycle. |
-| `src/editor/extensions/` | Product-specific Callout, Comment, Math, Mermaid, WikiLink/Embed, and similar Live presentations registered through `EditorExtension`. These syntax types remain independent extensions rather than one combined rich-syntax plugin. |
-| Other `src/editor/` modules | React adapter, Source mode, image-drop routing, read-only rendering, and outline extraction. |
-| Vault components | Store canonical Markdown and call typed editor/controller APIs; they never receive a ProseMirror view or rendered DOM as document data. |
+| `src/editor/core/` | 规范源码事务、显式源码位置映射、派生解析器／序列化器、稳定控制器和通用扩展生命周期。 |
+| `src/editor/extensions/` | 通过 `EditorExtension` 注册的产品特有 Callout、Comment、Math、Mermaid、WikiLink／Embed 及类似实时展示。不同语法类型保持为独立扩展，而不是一个合并的富语法插件。 |
+| `src/editor/` 中的其他模块 | React 适配器、源码模式、图片拖放路由、只读渲染和大纲提取。 |
+| 保险库组件 | 存储规范 Markdown 并调用类型化编辑器／控制器 API；绝不把 ProseMirror 视图或渲染后的 DOM 作为文档数据接收。 |
 
-The core must not import Mint Notes extensions. Extensions may use ProseMirror only through `EditorExtension`; React and vault modules use the stable controller or typed extension helpers.
+核心不得导入 Mint Notes 扩展。扩展只能通过 `EditorExtension` 使用 ProseMirror；React 与保险库模块使用稳定控制器或类型化扩展辅助函数。
 
-The controller applies edits through `CanonicalSource`/`SourceTransaction`. Ordinary inline `ReplaceStep` operations are mapped to exact source ranges; structure-changing commands either attach an explicit source transaction or use a narrowly defined inference such as paragraph splitting. A document-changing transaction with no canonical source effect is rejected. The removed `sourcePatch` heuristic and full-document serialization fallback must not be reintroduced.
+控制器通过 `CanonicalSource`／`SourceTransaction` 应用编辑。普通行内 `ReplaceStep` 操作映射到准确源码范围；改变结构的命令要么附加显式源码事务，要么使用段落拆分等严格限定的推断。没有规范源码效果的文档更改事务会被拒绝。不得重新引入已移除的 `sourcePatch` 启发式算法和完整文档序列化回退。
 
-The derived document stores exact top-level source ranges. Authored whitespace between parsed blocks is represented by source-gap blocks so leading, repeated, whitespace-only, and trailing lines have stable Live positions and exact line endings. Parsed structured blocks retain their authored source snapshot and a semantic fingerprint, allowing diagnostics and round-trip tests to emit unchanged spelling exactly while ensuring an edited structure cannot reuse a stale snapshot. Canonical state still lives only in the controller string; these attributes are derived metadata, not another editable model.
+派生文档存储准确的顶层源码范围。已解析块之间的作者空白由源码间隙块表示，使开头、重复、纯空白和末尾行都具有稳定实时位置和准确行尾。已解析结构块保留其作者源码快照与语义指纹，使诊断和往返测试能够准确输出未改动写法，同时确保已编辑结构无法重用过期快照。规范状态仍只存在于控制器字符串中；这些属性是派生元数据，不是另一种可编辑模型。
 
-## Extension and presentation architecture
+## 扩展与展示架构
 
-Core features and product extensions have deliberately different ownership:
+核心功能与产品扩展有意采用不同职责：
 
-- A core feature recognizes portable Markdown grammar, owns its exact source range and invalid-input fallback, and defines source-position editing semantics. Headings, lists, tables, blockquotes, and fenced code remain core features even when their inactive Live presentation is visually rich.
-- A product extension recognizes or renders optional Mint Notes behavior over source already owned by the core. Callouts decorate source-backed blockquotes, Mermaid decorates fenced code, Math decorates authored math ranges, and Comment and WikiLink/Embed decorate authored inline ranges. The explicitly supported `<br>` spelling is a core portable hard-break feature; arbitrary raw HTML remains disabled.
-- Reading mode has a separate React rendering adapter. It may share recognizers and rendering services with Live mode, but it does not mount a ProseMirror extension or create a second editable model.
+- 核心功能识别可移植 Markdown 语法，拥有其准确源码范围与无效输入回退，并定义源码位置编辑语义。标题、列表、表格、块引用和围栏代码仍是核心功能，即使它们的非活动实时展示在视觉上很丰富。
+- 产品扩展在核心已拥有的源码上识别或渲染可选 Mint Notes 行为。Callout 装饰基于源码的块引用，Mermaid 装饰围栏代码，Math 装饰作者输入的数学范围，Comment 和 WikiLink／Embed 装饰作者输入的行内范围。明确支持的 `<br>` 写法是核心可移植硬换行功能；任意原始 HTML 仍然禁用。
+- 阅读模式具有独立 React 渲染适配器。它可以与实时模式共享识别器和渲染服务，但不会挂载 ProseMirror 扩展或创建第二个可编辑模型。
 
-New product presentations use the declaration-only `EditorExtension.presentations` contract. An extension supplies exact source-local matches and a renderer; the core-owned presentation host creates ProseMirror decorations and widgets, activates source selection, runs cleanup, and falls back to literal authored source when a renderer fails. Declaration-only renderers do not receive an editor view and cannot dispatch a document transaction.
+新的产品展示使用只含声明的 `EditorExtension.presentations` 契约。扩展提供准确的源码局部匹配和渲染器；核心所属展示宿主创建 ProseMirror 装饰与部件、激活源码选区、运行清理，并在渲染器失败时回退为作者源码字面形式。只含声明的渲染器不会接收编辑器视图，也无法派发文档事务。
 
-Block presentations are exclusive. When more than one primary block presentation matches the same derived node, explicit priority selects the owner; equal-priority matches are a configuration error rather than registration-order behavior. Inline presentations must return ranges that exactly slice the source they claim. Selection entering a claimed range reveals the authored source without emitting `onChange`.
+块展示具有排他性。当多个主要块展示匹配同一派生节点时，由显式优先级选择所有者；优先级相同的匹配属于配置错误，不依赖注册顺序。行内展示必须返回准确切出其声明源码的范围。选区进入声明范围时显示作者源码，不触发 `onChange`。
 
-The low-level `createPlugins`, raw `EditorView` command, and source-block presentation hooks remain transitional compatibility surfaces for the existing source-backed Callout integration. New presentation types must not use them. A source-changing extension command must eventually return a canonical source transaction with an authorized range, selection mapping, and undo unit; it must never serialize a derived document to obtain replacement Markdown.
+底层 `createPlugins`、原始 `EditorView` 命令和源码块展示 Hook 仍是现有源码型 Callout 集成的过渡兼容界面。新展示类型不得使用它们。更改源码的扩展命令最终必须返回规范源码事务，其中包含授权范围、选区映射和撤销单元；绝不能通过序列化派生文档来获取替换 Markdown。
 
-## Presentation-only representations
+## 仅用于展示的表示
 
-- Callouts are detected from the authored lines of a source-backed blockquote. The Callout extension may decorate the block and provide a React preview renderer, but it does not materialize a rendered Callout as editable ProseMirror content and does not canonicalize the marker on exit.
-- Math, Mermaid, and WikiLink are separate declaration-only presentation extensions. Their renderer code receives authored source slices but no ProseMirror view; renderer mounting, failure fallback, selection activation, and cleanup remain core responsibilities.
-- Callouts round-trip their authored `> [!TYPE]` marker, including incomplete markers and equivalent quote-prefix spacing. No placeholder, word-joiner, highlight, backtick, or other private sentinel may reach canonical Markdown.
-- Multiline display math may use the reserved `mint-math` fenced language only inside the mounted Live editor. It must be canonicalized before application `onChange` and must never reach React document state, IndexedDB, history, synchronization, export, or the server.
-- Live serialization must not synthesize backslashes for punctuation, block starts, table cells, link titles, or image titles. Canonical backslashes are user-authored and remain preserved even when Live presentation hides them.
-- Mermaid SVG, decrypted attachment Blob URLs, and WikiLink lookup results are in-memory presentation artifacts. They are not Markdown and are never persisted as document content.
-- Live attachment images resolve their authored `webmd-attachment:` source through the core's presentation callback. Loading completion refreshes inline decorations only; it must not replace the ProseMirror document, reset undo history, or move the canonical-source selection.
-- Raw HTML and remote executable embeds remain disabled.
+- Callout 从基于源码块引用的作者输入行中检测。Callout 扩展可以装饰块并提供 React 预览渲染器，但不会把渲染后的 Callout 实体化为可编辑 ProseMirror 内容，也不会在退出时规范化标记。
+- Math、Mermaid 和 WikiLink 是独立的只含声明展示扩展。其渲染代码接收作者源码切片，但不接收 ProseMirror 视图；渲染器挂载、失败回退、选区激活和清理仍由核心负责。
+- Callout 往返保留作者输入的 `> [!TYPE]` 标记，包括未完成标记和等价引用前缀间距。占位符、单词连接符、高亮、反引号或其他私有哨兵都不得进入规范 Markdown。
+- 多行展示数学公式可以只在已挂载实时编辑器内使用保留的 `mint-math` 围栏语言。它必须在应用 `onChange` 前规范化，绝不能进入 React 文档状态、IndexedDB、历史、同步、导出或服务器。
+- 实时序列化不得为标点、块开头、表格单元格、链接标题或图片标题合成反斜杠。规范反斜杠由用户输入，即使实时展示隐藏它们也要保留。
+- Mermaid SVG、已解密附件 Blob URL 和 WikiLink 查找结果是内存展示产物。它们不是 Markdown，绝不作为文档内容持久化。
+- 实时附件图片通过核心的展示回调解析作者输入的 `webmd-attachment:` 源。加载完成时只刷新行内装饰；不得替换 ProseMirror 文档、重置撤销历史或移动规范源码选区。
+- 继续禁用原始 HTML 和远程可执行嵌入。
 
-## Required verification
+## 必需验证
 
-An editor-core or extension change is incomplete without focused regression coverage for every affected boundary:
+编辑器核心或扩展更改如果没有覆盖每个受影响边界的针对性回归测试，就不算完成：
 
-1. Every no-edit round trip preserves the exact Markdown string, not only an equivalent tree or normalized serialization. Coverage includes leading, inter-block, and trailing blank lines; whitespace-only lines; LF and CRLF; soft line breaks; and presence or absence of a final line ending.
-2. Loading, focusing, selection changes, preview activation, Source/Live/Reading switches, saving, and reopening preserve the exact string and do not emit `onChange` without a source edit.
-3. Real ProseMirror transactions change only the explicitly edited canonical range. Every untouched character, blank line, line ending, entity, escape, link title, delimiter, and equivalent Markdown spelling remains byte-for-byte unchanged.
-4. Cursor, selection, Backspace, Delete, and Enter operate source positions when syntax is visually hidden.
-5. Structural delimiter edits reparse immediately without synthesizing, deleting, or relocating later delimiters.
-6. Incomplete headings, quotes, Callouts, fences, tables, links, and Front Matter remain literal source in their smallest affected ranges.
-7. `a\nb`, `a\n\nb`, and `a\n\n\nb` retain the newline semantics and mode-specific presentation defined above.
-8. Live-only representations are absent from `onChange`, encrypted objects, history, synchronization, and exports.
+1. 每次无编辑往返都要保留准确 Markdown 字符串，而不仅是等价树或规范化序列化。覆盖开头、块间和末尾空行；纯空白行；LF 与 CRLF；软换行；以及有无最终行尾。
+2. 加载、获得焦点、选区变化、预览激活、源码／实时／阅读切换、保存和重新打开都要保留准确字符串，并且不得在没有源码编辑时触发 `onChange`。
+3. 真实 ProseMirror 事务只改变明确编辑的规范范围。每个未触及字符、空行、行尾、实体、转义、链接标题、分隔符和等价 Markdown 写法必须逐字节保持不变。
+4. 语法在视觉上隐藏时，光标、选区、Backspace、Delete 和 Enter 仍按源码位置运行。
+5. 结构分隔符编辑立即重新解析，不合成、删除或移动后续分隔符。
+6. 未完成的标题、引用、Callout、围栏、表格、链接和 Front Matter 在最小受影响范围内保持源码字面形式。
+7. `a\nb`、`a\n\nb` 和 `a\n\n\nb` 保持上方定义的换行语义和特定模式展示。
+8. 仅实时模式表示不得出现在 `onChange`、加密对象、历史、同步或导出中。
 
-Run `pnpm typecheck` and `pnpm test` for every editor behavior change. Run `pnpm build` for lifecycle or extension integration changes, then identify any desktop, tablet, or mobile interaction that still requires manual verification.
+每次编辑器行为变化都运行 `pnpm typecheck` 和 `pnpm test`。生命周期或扩展集成变化时运行 `pnpm build`，然后指出仍需手动验证的桌面、平板或移动端交互。

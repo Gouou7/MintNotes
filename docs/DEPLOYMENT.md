@@ -1,42 +1,42 @@
-# Production deployment
+# 生产部署
 
-[Documentation index](README.md)
+[文档索引](README.md)
 
-Mint Notes runs as one non-root application container plus one persistent SQLite volume. Production access must use HTTPS because the browser handles passwords, recovery keys, vault keys, and plaintext notes while unlocked.
+Mint Notes 以一个非 root 应用容器和一个持久 SQLite 卷运行。生产访问必须使用 HTTPS，因为浏览器在解锁期间会处理密码、恢复密钥、保险库密钥和明文笔记。
 
-## Prerequisites
+## 前置条件
 
-- A server with Docker Engine and Docker Compose v2.
-- A DNS name pointing to the server.
-- An HTTPS reverse proxy with a valid certificate.
-- A protected location outside the application volume for backup copies.
+- 安装了 Docker Engine 和 Docker Compose v2 的服务器。
+- 指向该服务器的 DNS 名称。
+- 使用有效证书的 HTTPS 反向代理。
+- 位于应用卷之外、受保护的备份副本存放位置。
 
-The default Compose file publishes `127.0.0.1:8787` only. Keep this loopback binding and let the reverse proxy provide public access.
+默认 Compose 文件只发布 `127.0.0.1:8787`。请保持该回环绑定，由反向代理提供公共访问。
 
-## Configuration
+## 配置
 
-Copy the example and edit it before the first start:
+首次启动前复制示例并编辑：
 
 ```bash
 cp .env.example .env
 ```
 
-| Variable | Default | Purpose |
+| 变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `PUID` | `1000` | Non-zero numeric Linux user ID used to run the Compose container. Match the owner of the host-side data directory. |
-| `PGID` | `1000` | Non-zero numeric Linux group ID used to run the Compose container. Match the owner of the host-side data directory. |
-| `HOST` | `0.0.0.0` | Address used inside the container. Keep the default for Compose. |
-| `PORT` | `8787` | HTTP port used inside the container. The supplied Compose mapping expects `8787`. |
-| `LOG_LEVEL` | `info` | Minimum terminal log level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or `silent`. Invalid values stop startup. |
-| `APP_ORIGIN` | none | Exact browser origin allowed for state-changing requests, including scheme and non-default port. Required in production. |
-| `ALLOW_REGISTRATION` | `false` | Enables public registration after the first account. Administrator-created activation codes are unaffected. |
-| `MAX_ATTACHMENT_SIZE_MB` | `25` | Server-side encrypted attachment limit. The bundled browser client also has a 25 MiB limit; raising only this variable does not raise the client limit. |
-| `USER_STORAGE_QUOTA_MB` | `2048` | Per-user quota shared by encrypted object revisions and attachment chunks. |
-| `USER_HISTORY_QUOTA_MB` | `256` | Independent per-user quota for encrypted note-history snapshot and metadata ciphertext. Protected history still counts. |
-| `SESSION_TTL_HOURS` | `168` | Server lifetime of an ordinary, non-remembered login. Remembered endpoints use the application's rolling long-lived window. |
-| `TRUST_PROXY` | `false` | Trusts forwarded proxy information. Set to `true` only behind the controlled reverse proxy described below. |
+| `PUID` | `1000` | 运行 Compose 容器的非零 Linux 数字用户 ID。应与主机数据目录所有者一致。 |
+| `PGID` | `1000` | 运行 Compose 容器的非零 Linux 数字组 ID。应与主机数据目录所有者一致。 |
+| `HOST` | `0.0.0.0` | 容器内使用的地址。Compose 部署应保留默认值。 |
+| `PORT` | `8787` | 容器内 HTTP 端口。随附 Compose 映射要求使用 `8787`。 |
+| `LOG_LEVEL` | `info` | 最低终端日志级别：`trace`、`debug`、`info`、`warn`、`error`、`fatal` 或 `silent`。无效值会阻止启动。 |
+| `APP_ORIGIN` | 无 | 允许执行状态更改请求的准确浏览器源，包括协议和非默认端口。生产环境必填。 |
+| `ALLOW_REGISTRATION` | `false` | 第一个账户创建后是否允许公开注册。不影响管理员创建的激活码。 |
+| `MAX_ATTACHMENT_SIZE_MB` | `25` | 服务器端加密附件限制。内置浏览器客户端也有 25 MiB 限制；只提高此变量不会提高客户端限制。 |
+| `USER_STORAGE_QUOTA_MB` | `2048` | 加密对象修订与附件分块共用的每用户配额。 |
+| `USER_HISTORY_QUOTA_MB` | `256` | 加密笔记历史快照和元数据密文的独立每用户配额。受保护历史仍计入。 |
+| `SESSION_TTL_HOURS` | `168` | 普通未记住登录在服务器上的生命周期。已记住端点使用应用的滚动长期窗口。 |
+| `TRUST_PROXY` | `false` | 是否信任转发的代理信息。只有位于下述受控反向代理后方时才能设为 `true`。 |
 
-Recommended production values:
+推荐生产值：
 
 ```env
 PUID=1000
@@ -51,51 +51,30 @@ SESSION_TTL_HOURS=168
 TRUST_PROXY=true
 ```
 
-Do not put passwords, recovery keys, or encryption keys in `.env`; the service does not need them.
+不要把密码、恢复密钥或加密密钥写入 `.env`；服务不需要它们。
 
-## Server logs
+## 服务器日志
 
-The application writes logs only to the process terminal. Production emits one
-JSON object per line for Docker or another log collector; local development uses
-colored, single-line text. View recent container output with:
+应用只向进程终端写日志。生产环境每行输出一个 JSON 对象，供 Docker 或其他日志收集器处理；本地开发使用带颜色的单行文本。查看近期容器输出：
 
 ```bash
 docker compose logs --tail=100 notes
 ```
 
-At the default `info` level, each API completion is logged once together with
-high-value authentication, synchronization conflict, quota, administration,
-and maintenance events. Health checks and static assets are omitted. Set
-`LOG_LEVEL=debug` temporarily for high-frequency synchronization summaries, then
-return it to `info`. File rotation and retention belong to Docker or the host;
-Mint Notes does not create a log file or store logs in SQLite.
+默认 `info` 级别会为每次 API 完成记录一条日志，并记录高价值认证、同步冲突、配额、管理和维护事件。健康检查和静态资源不会记录。需要时可暂时设为 `LOG_LEVEL=debug` 查看高频同步摘要，之后应恢复为 `info`。文件轮换和保留由 Docker 或主机负责；Mint Notes 不创建日志文件，也不在 SQLite 中存储日志。
 
-Request records contain a server-generated request ID, HTTP method, parameterized
-route, status, and duration. Responses expose the same value in `X-Request-ID`.
-Logs intentionally omit raw URLs and query strings, IP addresses, usernames,
-display names, complete user/object/endpoint IDs, headers, cookies, bodies,
-ciphertext, nonces, and secrets. Treat the remaining operational metadata and
-anonymous per-process references as sensitive deployment data.
+请求记录包含服务器生成的请求 ID、HTTP 方法、参数化路由、状态和耗时。响应在 `X-Request-ID` 中暴露相同值。日志有意省略原始 URL 与查询字符串、IP 地址、用户名、显示名称、完整用户／对象／端点 ID、标头、Cookie、正文、密文、nonce 和秘密。剩余运维元数据及进程内匿名引用仍应视为敏感部署数据。
 
-The production image always stores the SQLite database, WAL files, and online
-backups under `/data`. Keep the container side of the volume mapping fixed at
-`/data`; change only its host-side path when selecting another storage location.
-The supplied Compose file runs the service as `${PUID}:${PGID}` and bind-mounts
-`./notes-data`. On Linux, create that directory with matching ownership before
-the first start:
+生产镜像始终把 SQLite 数据库、WAL 文件和在线备份存放在 `/data` 下。卷映射的容器侧必须固定为 `/data`；选择其他存储位置时只更改主机侧路径。随附 Compose 文件以 `${PUID}:${PGID}` 运行服务，并绑定挂载 `./notes-data`。在 Linux 上，首次启动前创建该目录并设置匹配所有权：
 
 ```bash
 mkdir -p notes-data
 sudo chown -R "$(id -u):$(id -g)" notes-data
 ```
 
-Set `PUID` to the output of `id -u` and `PGID` to the output of `id -g`. Existing
-deployments may use another dedicated account; in that case keep the directory
-and both variables aligned with that account. Do not make the directory
-world-writable or set either ID to `0`. On SELinux hosts, add the appropriate
-bind-mount relabel option such as `:Z` according to the host policy.
+将 `PUID` 设为 `id -u` 的输出，将 `PGID` 设为 `id -g` 的输出。已有部署可以使用其他专用账户；此时目录和两个变量都要与该账户一致。不得让目录全局可写，也不得把任一 ID 设为 `0`。在 SELinux 主机上，按主机策略添加适当的绑定挂载重标记选项，例如 `:Z`。
 
-## Start and verify the container
+## 启动并验证容器
 
 ```bash
 docker compose config
@@ -104,69 +83,67 @@ docker compose ps
 docker compose logs --tail=100 notes
 ```
 
-The supplied Compose file builds the current source checkout and tags the image with the name configured in `docker-compose.yml`.
+随附 Compose 文件会构建当前源码检出，并使用 `docker-compose.yml` 中配置的名称标记镜像。
 
-Maintainers building and publishing the official tag-derived multi-platform
-image locally should follow the separate
-[Docker image release guide](DOCKER_IMAGE_RELEASE.md).
+在本地构建并发布由官方标签派生的多平台镜像时，维护者应遵循独立的 [Docker 镜像发布指南](DOCKER_IMAGE_RELEASE.md)。
 
-The health endpoint is available to the host at `http://127.0.0.1:8787/api/health`. A healthy response is:
+主机可通过 `http://127.0.0.1:8787/api/health` 访问健康端点。健康响应为：
 
 ```json
 {"ok":true}
 ```
 
-## Reverse proxy
+## 反向代理
 
-The repository includes [`deploy/nginx.conf.example`](../deploy/nginx.conf.example). Replace the domain and certificate paths, then test Nginx before reloading it.
+仓库包含 [`deploy/nginx.conf.example`](../deploy/nginx.conf.example)。替换域名和证书路径，并在重新加载前测试 Nginx。
 
-The proxy must preserve the original host and scheme. `APP_ORIGIN` must equal the public URL users open. The supplied `client_max_body_size 4m` is sufficient because encrypted attachments are uploaded in approximately 1 MiB chunks rather than one large request.
+代理必须保留原始主机与协议。`APP_ORIGIN` 必须等于用户打开的公共 URL。随附的 `client_max_body_size 4m` 已足够，因为加密附件按约 1 MiB 分块上传，而不是一次上传完整大请求。
 
-`/api/sync/events` is a long-lived Server-Sent Events response. The supplied Nginx example disables buffering and caching for that exact path and uses a one-hour read/send timeout. Preserve those directives when adapting another reverse proxy; clients remain correct if the stream disconnects, but will use slower safety pulls until it reconnects.
+`/api/sync/events` 是长期保持的 Server-Sent Events 响应。随附 Nginx 示例会为该准确路径禁用缓冲与缓存，并使用一小时读／写超时。适配其他反向代理时应保留这些指令；流断开不会破坏客户端正确性，但重新连接前会使用较慢的安全拉取。
 
-Do not add runtime CDN scripts, analytics, remote fonts, or additional origins without reviewing the [security model](SECURITY.md) and updating the Content Security Policy.
+新增运行时 CDN 脚本、分析、远程字体或其他来源前，必须审查[安全模型](SECURITY.md)并更新内容安全策略。
 
-## Initialize accounts
+## 初始化账户
 
-1. Open the public HTTPS URL.
-2. Create the first account. It becomes the sole bootstrap administrator even when `ALLOW_REGISTRATION=false`; concurrent registration requests cannot receive a second bootstrap administrator role.
-3. Save the displayed recovery key before continuing.
-4. Leave public registration disabled unless it is intentionally required.
-5. To add users, open **Settings > Administrator settings**, create a 72-hour activation code, and send it to the intended user through a trusted channel. The user chooses their password and generates keys in their own browser.
+1. 打开公共 HTTPS URL。
+2. 创建第一个账户。即使 `ALLOW_REGISTRATION=false`，该账户也会成为唯一初始化管理员；并发注册请求不能获得第二个初始化管理员角色。
+3. 继续前保存显示的恢复密钥。
+4. 除非有意需要，否则保持关闭公开注册。
+5. 若要添加用户，打开**设置 > 管理员设置**，创建 72 小时有效的激活码，并通过可信渠道发送给目标用户。用户在自己的浏览器中选择密码并生成密钥。
 
-An administrator can disable an account and revoke its access without erasing data. Permanent deletion additionally requires the administrator's master password and exact target username, and removes only that user's records from the current server database.
+管理员可以禁用账户并撤销访问而不擦除数据。永久删除还需要管理员主密码和准确目标用户名，并且只移除当前服务器数据库中该用户的记录。
 
-## Deployment acceptance checks
+## 部署验收检查
 
-- HTTP redirects to HTTPS and the application origin matches `APP_ORIGIN`.
-- Registration bootstrap, login, lock, recovery-key reset, and password change work.
-- An uploaded profile avatar appears on another device only after browser-side decryption; the database contains only its opaque ciphertext envelope.
-- An ordinary login survives refresh but normally ends with the browser session; **Remember this device** survives restart subject to browser storage policy. Logout and remote revocation prevent restoration.
-- Trusted-endpoint history keeps one row per user/browser profile across repeated logins, updates login count and last-online time, enforces the 24-hour gate from first trust, and revokes all endpoint sessions remotely.
-- Local PIN setup/change/removal requires the master password; all inactivity-lock choices work, master-password fallback unlocks, and five failed PIN attempts remove local trust.
-- Trash defaults to 30-day retention, supports permanent retention, and requires explicit confirmation for immediate purge. Notes and attachments retained by protected history are skipped by scheduled purge and atomically reject manual purge.
-- Note history defaults to 10-minute active checkpoints and 90-day retention, enforces the independent history quota, decrypts custom names across devices, preserves protected versions during individual/bulk deletion and retention cleanup, and preserves synchronization across clear barriers.
-- A second administrator-created account cannot access the first account's opaque objects or attachment chunks.
-- Administrator deletion rejects an incorrect master password, self-deletion, and the last administrator; deleting a test user cascades only that user's records.
-- A note edited after network disconnection shows a local-save state and synchronizes after reconnection.
-- Two unlocked foreground clients receive remote changes through one SSE connection each; an idle client does not issue five-second synchronization requests, and the stream reconnects after a proxy or network interruption.
-- An encrypted image added on one device can be downloaded and verified on another device.
-- The PWA installs and its static shell opens without a network connection. Cold offline vault unlock is not yet supported.
-- `docker compose exec notes pnpm backup` completes and the copied database passes a restore drill.
+- HTTP 重定向到 HTTPS，应用源与 `APP_ORIGIN` 一致。
+- 注册初始化、登录、锁定、恢复密钥重置和密码更改正常工作。
+- 上传的头像只有在浏览器端解密后才会出现在另一设备；数据库只包含其不透明密文信封。
+- 普通登录可跨刷新保留，但通常随浏览器会话结束；**记住此设备**可在浏览器存储策略允许时跨重启保留。登出和远程撤销会阻止恢复。
+- 可信端点历史在重复登录间为每个用户／浏览器配置文件保留一行，更新登录次数和最后在线时间，执行从首次信任开始的 24 小时限制，并远程撤销端点的全部会话。
+- 本地 PIN 设置／更改／移除需要主密码；所有不活动锁定选项均正常，主密码回退可解锁，五次 PIN 失败会移除本地信任。
+- 回收站默认保留 30 天，支持永久保留，立即清除需要明确确认。受保护历史保留的笔记与附件会被定期清除跳过，并使手动清除原子失败。
+- 笔记历史默认每 10 分钟活动检查点和 90 天保留，执行独立历史配额；自定义名称可跨设备解密，受保护版本在单项／批量删除和保留清理期间得到保留，并跨清除屏障维持同步。
+- 第二个管理员创建的账户不能访问第一个账户的不透明对象或附件分块。
+- 管理员删除会拒绝错误主密码、自删除和删除最后一名管理员；删除测试用户只级联该用户记录。
+- 断网后编辑的笔记显示本地保存状态，并在重新联网后同步。
+- 两个已解锁前台客户端各通过一条 SSE 连接接收远程更改；空闲客户端不发出五秒同步请求，代理或网络中断后流会重新连接。
+- 一台设备添加的加密图片可在另一台设备下载并验证。
+- PWA 可安装，其静态外壳可离线打开。已记住设备可以冷启动并解锁本地缓存；受 PIN 保护的凭据仍要求输入 PIN，所有网络功能要等服务器会话重新验证后才恢复。
+- `docker compose exec notes pnpm backup` 可完成，复制的数据库通过恢复演练。
 
-## Upgrade and schema compatibility
+## 升级与架构兼容性
 
-The current application requires server schema v2 and the browser database `webmd-notes-v2`. It does not migrate the legacy pre-v2 schema.
+当前应用要求服务器架构 v2 和浏览器数据库 `webmd-notes-v2`，不会迁移旧版 v2 之前架构。
 
-Before replacing an older deployment:
+替换旧部署前：
 
-1. Export a complete Markdown ZIP from every account that must be preserved.
-2. Create and copy out a consistent SQLite online backup.
-3. Keep the old deployment and its backup unchanged until the new deployment is verified.
-4. Start this build with a fresh `/data` volume and import the portable exports.
+1. 从每个需要保留的账户导出完整 Markdown ZIP。
+2. 创建并复制出一致的 SQLite 在线备份。
+3. 在新部署验证完成前，保持旧部署及其备份不变。
+4. 使用全新 `/data` 卷启动此构建，并导入可移植导出。
 
-The service refuses to overwrite a detected legacy database automatically. Existing supported schema v2 databases receive additive trusted-endpoint, session-linkage, encrypted `profile_assets`, encrypted `note_history`, clear-marker tables, account history-setting columns, vault-envelope binding columns, optional encrypted history-metadata columns, a history protection column defaulting old rows to unprotected, and the protected-history attachment-reference table. Existing history ciphertext is not rewritten; old rows have no custom name and continue to display their localized capture time. The envelope columns default existing accounts to their compatible v1 username binding; no ciphertext changes during deployment. New accounts use v2 immediately, while an existing account migrates both vault-key envelopes only when its user changes the username. The endpoint migration deliberately revokes all pre-upgrade sessions once because historical rows cannot be reliably merged into browser profiles; users must log in again. User records, encrypted note objects, synchronization revisions, and attachments are otherwise unchanged. Create an online backup before upgrading as usual.
+服务拒绝自动覆盖检测到的旧版数据库。现有受支持 v2 数据库会增量获得可信端点、会话关联、加密 `profile_assets`、加密 `note_history`、清除标记表、账户历史设置列、保险库信封绑定列、可选加密历史元数据列、默认旧行为未保护的历史保护列，以及受保护历史附件引用表。现有历史密文不会重写；旧行没有自定义名称，继续显示本地化捕获时间。信封列默认让现有账户使用兼容 v1 用户名绑定；部署期间不改变密文。新账户立即使用 v2，现有账户只在用户修改用户名时迁移两个保险库密钥信封。端点迁移会有意撤销所有升级前会话一次，因为历史行无法可靠合并到浏览器配置文件；用户必须重新登录。用户记录、加密笔记对象、同步修订和附件保持不变。升级前应照常创建在线备份。
 
-Deploy the updated client and server together before relying on history protection. An older client does not understand encrypted history metadata or the protection workflow, while the server continues to accept its history creates as unprotected for compatibility. Rollback leaves the additive columns and tables intact, but an older server must not be used to perform retention or trash cleanup for data whose protection guarantees must be preserved.
+依赖历史保护前，请同时部署理解该功能的客户端与服务器。旧客户端不了解加密历史元数据或保护工作流；服务器为兼容仍会接受它创建的未保护历史。回滚会保留增量列和表，但如果数据保护保证必须维持，就不得让旧服务器执行保留或回收站清理。
 
-Deploy a client and server that both understand v1 and v2 vault-envelope bindings before enabling username changes. After any account is created with or migrated to v2, do not roll back to a build that only derives envelope AAD from the entered username; that build cannot unlock the v2 account. Restore the pre-upgrade online backup as a unit if a full rollback is required.
+启用用户名更改前，应部署同时理解 v1 与 v2 保险库信封绑定的客户端和服务器。任何账户创建为 v2 或迁移到 v2 后，都不得回滚到只根据输入用户名派生信封 AAD 的构建；该构建无法解锁 v2 账户。若需完整回滚，请把升级前在线备份作为整体恢复。

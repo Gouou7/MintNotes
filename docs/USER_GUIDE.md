@@ -1,102 +1,98 @@
-# User guide
+# 用户指南
 
-[Documentation index](README.md)
+[文档索引](README.md)
 
-This guide describes the behavior implemented by the current Mint Notes release. Deployment and server administration are covered separately in the [deployment guide](DEPLOYMENT.md).
+本指南描述当前 Mint Notes 版本已经实现的行为。部署与服务器管理请参阅[部署指南](DEPLOYMENT.md)。
 
-## Create or activate an account
+## 创建或激活账户
 
-Mint Notes supports English, Simplified Chinese, and Traditional Chinese. On first use, the login page checks the browser's preferred-language list and uses the first supported match; if none matches, it uses English. The language selector on the login page can instead follow the browser or select any supported language explicitly. This browser-local choice remains available before login.
+Mint Notes 支持英语、简体中文和繁体中文。首次使用时，登录页会读取浏览器首选语言列表并使用第一个受支持语言；若没有匹配项则使用英语。登录页语言选择器也可以跟随浏览器或明确选择任一支持语言。该浏览器本地选择在登录前仍可使用。
 
-The login page provides **Register** and **Forgot password** actions. The first account created on an empty server becomes the administrator even when public registration is disabled. The registration page identifies this one-time bootstrap case.
+登录页提供**注册**和**忘记密码**操作。空服务器上创建的第一个账户即使在公开注册关闭时也会成为管理员，注册页会说明这一仅发生一次的初始化情况。
 
-Later accounts use one of two paths:
+后续账户有两种创建方式：
 
-- Public registration, only when the server administrator enables it. The registration form also links to activation-code registration.
-- A 72-hour, one-time activation code created under **Settings > Administrator settings**. When public registration is disabled, **Register** opens this path directly and explains that an activation code must be requested from an administrator.
+- 服务器管理员启用公开注册后直接注册；注册表单也会链接到激活码注册。
+- 使用管理员在**设置 > 管理员设置**中创建、72 小时有效且只能使用一次的激活码。公开注册关闭时，**注册**会直接打开此路径，并提示向管理员索取激活码。
 
-Usernames are 3-48 characters and use lowercase letters, numbers, `.`, `_`, or `-`. A master password must contain at least 10 characters.
+用户名长度为 3–48 个字符，只能包含小写字母、数字、`.`、`_` 或 `-`。主密码至少 10 个字符。
 
-Account creation displays a recovery key once. Copying it reports whether the browser clipboard accepted the key, and a plaintext download is available as a fallback. Save the key in a password manager or another secure location, then explicitly confirm that it has been stored before entering the vault. The server cannot recreate the master password, recovery key, or vault key.
+创建账户时只显示一次恢复密钥。复制操作会报告浏览器剪贴板是否接受密钥，也可下载明文文件作为后备。请将密钥保存在密码管理器或其他安全位置，并明确确认已保存后再进入保险库。服务器无法重建主密码、恢复密钥或保险库密钥。
 
-Use **Forgot password** to reset a master password with the account's recovery key. Without that recovery key, the encrypted vault cannot be recovered.
+使用**忘记密码**和账户恢复密钥重置主密码。没有恢复密钥就无法恢复加密保险库。
 
-## Understand the layout
+## 了解界面布局
 
-Desktop uses three panes:
+桌面端使用三个窗格：
 
-- **Left:** application branding, pinned shortcuts above search, local search, compact new-note/new-folder controls plus a right-aligned collapse-all/current-note-location/sort group, and the active note/folder tree. The tree scrolls independently while the account identity, settings, and lock icon buttons remain in one anchored bottom row.
-- **Center:** note title, live/source/reading modes, note lock and image attachment actions, sidebar controls, and save/sync status.
-- **Right:** a tool panel with tabs for the outline generated from Markdown headings and the active note's encrypted version history.
+- **左侧：**应用品牌、搜索上方的固定快捷方式、本地搜索、新建笔记／文件夹按钮，以及右侧的全部折叠／当前笔记定位／排序按钮和笔记树。树独立滚动，账户身份、设置和锁定按钮固定在底部一行。
+- **中间：**笔记标题、实时／源码／阅读模式、笔记锁定与图片附件操作、侧栏控制，以及保存／同步状态。
+- **右侧：**工具面板，包含由 Markdown 标题生成的大纲和活动笔记的加密版本历史。
 
-All three panes scroll vertically on their own. On desktop, each sidebar meets the center pane at a single divider line; drag the wider invisible target around either line to resize that sidebar. When the window is too narrow to keep the right tool panel pinned but is still wider than a phone-sized layout, the right panel becomes a temporary drawer while the left directory remains pinned and can always be collapsed or reopened with its sidebar button. The active note, its Live/Source/Reading mode, the collapsed state and widths of both sidebars, and the selected Outline/History tab are remembered per user in that browser or installed PWA and are never synchronized. Returning on the same device restores that device's workspace; another browser profile or newly signed-in device starts with an empty editor until you open a note. In that empty state, the center toolbar keeps the same layout as an open note, while the mode, note-lock, and image controls remain visible but disabled. Clearing site data or confirming logout removes the remembered workspace. On phone-sized screens, both sidebars become temporary drawers opened from the editor toolbar, and each drawer uses its matching sidebar-collapse button to close. You can also swipe inward from the left screen edge to open the directory drawer or from the right screen edge to open the Outline/History drawer. In the directory drawer, one tap opens a note or expands or collapses a folder; the `…` action remains visible on touch devices without requiring a hover gesture. Selecting a history version closes the right drawer and shows the read-only preview in the center.
+三个窗格各自垂直滚动。桌面端可拖动中间窗格两侧分隔线周围的较宽隐形目标来调整侧栏宽度。窗口不足以固定右侧面板但仍宽于手机布局时，右侧变成临时抽屉，左侧目录保持固定并可随时折叠或重新打开。活动笔记、实时／源码／阅读模式、两侧栏的折叠状态与宽度，以及所选大纲／历史标签均按用户保存在当前浏览器或已安装 PWA 中，绝不同步。清除站点数据或确认登出会删除这些工作区偏好。
 
-Status and warning messages, including transient results from Settings and Administrator settings, appear as notifications in the upper-right corner below the top toolbar without changing the editor or modal layout. Progress and success notices disappear after four seconds, and routine warnings after seven seconds. Critical storage or conflict notices remain until closed manually. Persistent one-time results that must be copied or saved, such as recovery keys and activation codes, remain inside their settings section.
+手机尺寸下，两侧栏都是从编辑器工具栏打开的临时抽屉，也可从屏幕左右边缘向内滑动打开。目录抽屉中，单击会打开笔记或展开／折叠文件夹；触控设备始终显示 `…` 操作。选择历史版本会关闭右抽屉，并在中间显示只读预览。
 
-## Organize notes and folders
+状态和警告消息显示在顶部工具栏下方的右上角，不改变编辑器或模态框布局。进度／成功通知 4 秒后消失，普通警告 7 秒后消失；严重存储或冲突通知会保留到手动关闭。恢复密钥、激活码等必须复制或保存的一次性结果留在对应设置区内。
 
-Use the new-note or new-folder icon above the tree to create a root item. A new note opens with its complete default title selected in the title field, ready to replace by typing. Press Enter after naming the note to save the title and move focus directly into the editable Markdown body. A new folder opens an inline name field in the tree with its complete default name selected; press Enter or leave the field to save the name, or press Escape to keep the generated default. The same behavior applies when creating child items from a folder's contextual menu. The right-aligned collapse-all button immediately closes every expanded folder. The adjacent location button clears the current search, expands every ancestor folder, selects the active note, and scrolls its tree row into view. The sort icon opens the sorting choices.
+## 组织笔记和文件夹
 
-Creating a note opens it in **Live** mode even if the previously viewed note was in Source or Reading mode, so the new note is immediately editable. A verified empty account receives a welcome note in the interface language active during its first unlock.
+使用树上方的新建按钮创建根项目。新笔记会在标题栏中全选默认名称，可直接输入替换；按 Enter 保存标题并把焦点移入 Markdown 正文。新文件夹会在树中打开行内名称输入；按 Enter 或离开输入框保存，按 Escape 保留生成的默认名称。从文件夹上下文菜单创建子项时行为相同。
 
-Note and folder names share one namespace within each directory. Creating another unnamed note adds `2`, `3`, and so on to the localized **Untitled note** name; folders use the same numbering behavior starting with the localized **New folder** name. Importing, duplicating, and conflict-copy creation also select an available sibling name automatically. Renaming, moving, or restoring an item is blocked when it would create a duplicate name in the destination directory. Items in trash do not reserve their former names.
+全部折叠按钮会立即关闭每个展开文件夹。相邻定位按钮会清除搜索、展开活动笔记的全部祖先、选中并滚动到该行。排序按钮打开排序选项。
 
-Items can be dragged:
+新笔记总以**实时**模式打开，即使上一笔记使用源码或阅读模式。经验证为空的账户会按首次解锁时的界面语言收到欢迎笔记。
 
-- Drop a note or folder into the middle of a folder row to move it inside. The destination folder is highlighted while it is ready to accept the item.
-- In any sorting mode, drag near the upper or lower edge of a row to show a connected mint insertion marker for that row's parent directory.
-- In **Manual** sorting, dropping on the marker reorders siblings at that exact position. Dropping an item or selection back onto its current position leaves the order unchanged.
-- In A-Z, creation-time, or modification-time sorting, dropping on the marker can still change the parent folder, but the selected sort rule determines the item's final position.
+同一目录中的笔记和文件夹共用名称空间。重复创建未命名笔记会在本地化“无标题笔记”后依次添加 `2`、`3`；文件夹从本地化“新建文件夹”开始采用相同编号。导入、复制和冲突副本也会自动选择可用同级名称。若重命名、移动或恢复会在目标目录中造成重名，则操作被阻止。回收站项目不占用原名称。
 
-Click an item to select it. Hold `Ctrl` on Windows/Linux or `Command` on macOS while clicking to add or remove individual notes and folders from the selection. Hold `Shift` while clicking to select a continuous range in the currently visible tree order; collapsed descendants are not part of that range. Right-click any selected row to move, drag, pin, duplicate, export, or trash the selection as a batch. Pinned notes and folders also appear as shortcuts in the **Pinned** section above the file tree and can be unpinned from either location. Clicking any pinned shortcut expands its complete ancestor path and scrolls its regular tree row into view; a pinned note opens in the editor, while a pinned folder also expands itself. The original position and folder hierarchy do not change. When both a folder and one of its descendants are selected, recursive operations process that subtree only once. Opening, renaming, and creating children remain single-item actions.
+拖放规则：
 
-A folder cannot be moved into itself or one of its descendants.
+- 拖到文件夹行中部可移入文件夹，准备接收时目标会高亮。
+- 任何排序模式下，拖到行上／下边缘会显示属于该行父目录的薄荷色插入标记。
+- **手动**排序时，放到标记上会精确调整同级顺序；放回当前位置不改变顺序。
+- A–Z、创建时间或修改时间排序时，放到标记上仍可改变父目录，但最终位置由当前排序规则决定。
 
-Open the contextual menu with right-click or the `…` button. It provides open, rename, move, pin or unpin, create child, duplicate, export, and move-to-trash actions as applicable. Renaming a note or folder opens an inline name field on that item in the file tree instead of a browser dialog; press Enter or leave the field to save, or press Escape to cancel. Duplicating a folder recursively copies its descendants. Attached images receive new IDs and keys in a copied note.
+单击选择项目。在 Windows／Linux 上按 `Ctrl`、macOS 上按 `Command` 单击可增删单个项目；按 `Shift` 单击可选择当前可见树顺序中的连续范围，折叠的后代不在范围内。右键选中行可批量移动、拖动、固定、复制、导出或移入回收站。固定项目会同时出现在文件树上方的**已固定**区；单击快捷方式会展开完整祖先路径并滚动到原树行，笔记同时打开，文件夹同时展开。原位置和层级不变。文件夹与其后代同时选中时，递归操作只处理一次子树。
 
-Locked notes can still be moved normally, pinned, copied, exported, and opened from WikiLinks. A copied note is unlocked so it can be edited independently. A folder may still be renamed or moved when it contains locked notes, but neither the folder nor a larger batch containing it can be moved to trash until every locked descendant has been unlocked.
+文件夹不能移入自身或后代。通过右键或 `…` 打开上下文菜单，可按情况执行打开、重命名、移动、固定／取消固定、创建子项、复制、导出和移入回收站。重命名在树行内完成；Enter 或离开输入框保存，Escape 取消。复制文件夹会递归复制后代，复制笔记中的图片会获得新 ID 与密钥。
 
-## Edit Markdown
+锁定笔记仍可正常移动、固定、复制、导出和通过 WikiLink 打开。复制出的笔记会解锁，以便独立编辑。包含锁定笔记的文件夹仍可重命名或移动，但在全部锁定后代解锁前，该文件夹或包含它的批次不能移入回收站。
 
-The center toolbar provides three modes:
+## 编辑 Markdown
 
-- **Live:** Typora-style editing with Markdown rendered in place.
-- **Source:** edit the canonical Markdown text directly.
-- **Reading:** render the current Markdown without editing controls.
+中间工具栏提供三种模式：
 
-Markdown remains the canonical note format in every mode. Switching modes does not convert it to a proprietary document format. The right outline is generated from H1-H6 headings and never uploads as separate plaintext metadata.
+- **实时：**类 Typora 的就地 Markdown 渲染编辑。
+- **源码：**直接编辑规范 Markdown 文本。
+- **阅读：**渲染当前 Markdown，不显示编辑控件。
 
-Encrypted image attachments render in Live and Reading modes after their browser-local Blob URLs are ready. Switching away from a note revokes those temporary URLs; returning to it reloads the images in place without changing the Markdown or moving the Live-mode caret.
+Markdown 在所有模式中始终是规范笔记格式；切换模式不会转换为私有文档格式。右侧大纲从 H1–H6 标题生成，绝不会作为单独明文元数据上传。加密图片在其浏览器本地 Blob URL 就绪后显示于实时和阅读模式；离开笔记会撤销临时 URL，返回后原位重新加载，不更改 Markdown 或移动实时模式光标。
 
-In Reading mode and read-only historical previews, hover over a fenced code block to reveal its copy button in the upper-right corner. Select it to copy the complete code block. The button remains visible on touch devices and can also be reached with the keyboard.
+阅读模式和只读历史预览中，将指针悬停在围栏代码块上会在右上角显示复制按钮；触控设备始终可见，也可用键盘访问。空的实时或源码编辑器在首个可编辑行显示“开始写作…”提示，获得焦点后即消失；它只用于展示，绝不进入 Markdown、历史、IndexedDB、同步或导出。
 
-An empty Live or Source editor shows a **Start writing…** hint at the first editable line. The hint disappears as soon as the editor receives focus, keeping the insertion caret unobstructed, and is presentation only: it is never added to Markdown, history, IndexedDB, synchronization, or exports.
+使用图片操作左侧的锁定按钮，或单篇笔记上下文菜单中的**锁定笔记**，防止意外编辑或删除。锁定当前笔记会先本地保存待处理标题和正文，再以阅读模式显示，但不改变设备记住的底层模式。锁定期间实时、源码、标题、YAML 属性和“恢复为当前版本”不可用；图片按钮仍显示但禁用。仅改变锁定状态不会改变修改时间。文件树与固定快捷方式会显示小锁标记。
 
-Use the lock button immediately to the left of the image action, or **Lock note** in a single note's contextual menu, to protect it from accidental editing or deletion. Locking the current note saves pending title and editor changes locally first, then shows the note in Reading mode without changing this device's remembered Live/Source/Reading choice. Live and Source are disabled while the note is locked; the title, YAML properties, and **Restore as current** history action are also unavailable. The image action remains visible but disabled to keep the toolbar layout stable. Use the same toolbar or contextual-menu action to unlock it and restore the underlying device-local mode. Changing only the lock state does not change the note's modification time. The file tree and pinned shortcuts show a small lock badge on protected notes.
+笔记锁是加密、跨设备的客户端安全控件，不是密码保护或服务器授权规则，不需要 PIN 或主密码。远程锁定在笔记正处于活动状态时遵循活动笔记延迟规则，离开并重新打开后显示。
 
-The note lock is an encrypted, cross-device client-side safety control, not password protection or a server authorization rule. It does not require a PIN or master password. Updated clients synchronize it with the note; if a remote lock arrives while that note is actively open, the existing active-note deferral rule applies and the lock becomes visible after leaving and reopening the note.
+实时模式为每个作者输入空行保留一行正文高度，不在 Markdown 块间添加主题间距。仅用于分隔相邻块的单个行尾不形成空行或独立光标目标；普通段落间的两个行尾形成一个空行，之后每个额外空行或纯空白行再增加一行。该规则适用于标题、段落、列表、代码、引用、表格、分隔线等所有块。列表项之间的作者空行即使被 CommonMark 视为同一列表，也逐行可见。切换模式、保存或重新打开时，开头／末尾空行、纯空白行中的空格／制表符以及 LF／CRLF 行尾都保持不变。
 
-Live mode gives each authored blank line one editable body-height row and does not add theme spacing between Markdown blocks. A single line ending that merely separates adjacent blocks—for example, two consecutive heading lines—does not create a blank row or a separate caret target between them. The two line endings that separate ordinary Markdown paragraphs produce one blank row; each additional empty or whitespace-only line adds exactly one more row. The same rule applies between headings, paragraphs, lists, code blocks, quotes, tables, horizontal rules, and other blocks. Blank rows between bullet or numbered list items remain visible even when CommonMark treats those items as one list: one authored blank row adds one row of item spacing, two add two rows, and so on. Leading and trailing blank lines, spaces or tabs on otherwise blank lines, and LF or CRLF line endings remain unchanged when switching modes, saving, or reopening a note. Typing in a blank row immediately turns that row into normal Markdown content.
+Enter 写入一个作者行尾；在已有列表或引用中还写入下一行源码前缀，有序列表递增可见数字，新任务始终未勾选。在空列表／引用行按 Enter 会移除前缀并回到普通文本。Shift+Enter 在正文中写入 Markdown 硬换行，在列表项中写入缩进续行。Backspace 和 Delete 每次移除一个作者字符，包括跨空行和隐藏分隔符。列表项上的 Tab／Shift+Tab 写入或移除 Markdown 缩进，而不是只改变视觉边距。
 
-Enter inserts one authored line ending. In an established list or quote it also writes the next source prefix; an ordered list increments its visible source number, while a new task is always unchecked. Enter on an empty list or quote line removes that line's prefix and returns to ordinary text. Shift+Enter writes a Markdown hard break in prose and an indented continuation line inside a list item. Backspace and Delete remove one authored character at a time, including across blank lines and hidden delimiters. Tab and Shift+Tab on a list item write or remove Markdown indentation instead of applying a presentation-only margin.
+持续实时输入时，普通字符在活动行原位应用，视觉光标与规范 Markdown 插入偏移一起前进。只有编辑确实改变 Markdown 结构（例如完成或破坏标题、列表、引用、硬换行或围栏）时才重新解析。
 
-During continuous Live-mode typing, ordinary characters are applied to the active line in place, so the visible caret and canonical Markdown insertion offset advance together. Mint Notes reparses the rendered structure only when the edit actually changes Markdown structure, such as completing or breaking a heading, list, quote, hard break, or fence.
+实时模式方向键与源码模式遵循相同作者位置。鼠标点击和方向移动会解析同一最终 Markdown 位置，因此进入标题、列表、代码、引用、分隔线、目录或引用定义的第一下按键就会显示源码标记。列表项文本开头按 ArrowLeft 会逐字符访问作者输入的空格、列表符号／数字或任务标记。ArrowUp／ArrowDown 可从首／末列表项离开，块间作者空行各自是光标停靠点。行内强调、链接和代码只在最终光标位于自身源码范围内时显示分隔符。
 
-Direction keys in Live mode follow the same authored positions as Source mode. Mouse clicks and direction-key movement use the same final Markdown position, so the first key that enters a heading, list, code block, quote, horizontal rule, TOC, or reference definition immediately reveals that block's source markers; it does not require a second key press. At the start of a list item's text, ArrowLeft visits the authored space and `-`, `*`, `+`, number, or task marker one character at a time before leaving the list. ArrowUp from the first item and ArrowDown from the last item leave the list instead of becoming trapped; authored blank rows before the next block remain individual caret stops. Inline emphasis, links, and code reveal delimiters only when the resulting caret is inside that styled source span, not merely elsewhere on the same line. Tables retain their normal cell navigation unless an explicit source-position command opens the table source.
+标题输入开头 `#` 后立即采用对应级别的实时排版；进入已有标题时保留其准确字号、字重、行高、颜色和垂直占位，只以弱化语法颜色重新显示作者分隔符。列表、任务、表格、分隔线、引用定义、目录和其他源码结构也在不缩小区块、不改变内容样式或规范化等价写法的情况下显示原始分隔符。显示源码不会增加代码块背景、边框、轮廓、圆角、额外内边距或不同行高。单击任务复选框会在一个可撤销 Markdown 编辑中改变对应 `[ ]` 或 `[x]`。
 
-Headings adopt their level's Live typography as soon as the leading `#` run is typed. Entering an established heading keeps that level's exact font size, weight, line height, color, and vertical footprint; the only visual change is that the authored heading delimiters reappear in a muted syntax color. Entering a list, task, table, horizontal rule, reference definition, TOC, or other source-backed text structure likewise reveals its original delimiters without shrinking the block, changing the content style, or normalizing equivalent spellings. Revealing source does not add a code-block background, border, outline, rounded frame, extra padding, or a different line height around the active line. Inline emphasis, strong emphasis, strikeout, highlight, code, Markdown links, and WikiLinks follow the same line-height rule: delimiters hide while the caret is elsewhere and reappear over the same authored source range for editing. The additional delimiter width may move text horizontally or naturally wrap it at a narrow viewport. Images, formulas, and Mermaid diagrams retain their own natural rendered and source heights. Clicking a task checkbox changes the corresponding `[ ]` or `[x]` character in one undoable Markdown edit.
+安全的行内 HTML 写法 `<br>`（含 `<br/>`）在非活动时渲染为硬换行，选中时显示准确源码；其他原始 HTML 仍禁用。`%%comment%%` 形式的 Obsidian 注释（含多行）在非活动实时与阅读视图中隐藏，光标进入完整注释时显示源码；移除结束分隔符会立即让未完成文本恢复普通 Markdown 显示。
 
-The safe inline HTML spelling `<br>` (including `<br/>`) produces a rendered hard break while inactive and reveals its exact muted source when selected. Other raw HTML remains disabled. Obsidian comments written as `%%comment%%`, including multiline comments, are hidden in inactive Live and Reading views; moving the caret into a complete comment reveals the authored source for editing. Removing a closing delimiter immediately returns the incomplete text to normal Markdown display.
+行首输入 `>` 会立即进入基于源码的引用候选状态，不添加或改变字符。光标在块内时，实时模式显示完整源码，包括每个 `>`、空格、换行、引用空行、嵌套前缀和围栏；光标、Backspace 和 Delete 按顺序编辑这些字符。方向键按作者行与列移动，并能从首／末行和绝对源码边缘离开。相邻 Quote／Callout 之间的作者空行逐行停靠。活动源码没有引用条、Callout 框、背景、轮廓或圆角。块最左侧按 Backspace 会移到前一个可编辑位置，而不是删除右侧 `>`；位于文档开头则不执行操作，Delete 可以删除右侧 `>`。最终空引用行按 Enter 离开块。光标移走后显示稳定预览，点击预览可在最近源码行重新激活。需要字面 Markdown 特殊符号时，应自行输入反斜杠，例如 `\>`；实时模式可隐藏转义，但规范 Markdown 会跨重新加载保留它。
 
-In Live mode, a line-leading `>` immediately enters the source-backed quote candidate state without adding or changing any characters. Press Enter to add another line with the same authored quote prefix. While the caret is inside the block, Live mode exposes the complete source—including every `>`, space, line break, blank quoted line, nested prefix, and fence—so normal cursor movement, Backspace, and Delete edit those characters in order. ArrowUp and ArrowDown move through the authored quote lines at the same source column, clamping only when the target line is shorter, and leave the Quote or Callout from its first or last line when another editable position exists outside it. ArrowLeft and ArrowRight likewise leave from the block's absolute source edges. Authored blank rows between adjacent Quote or Callout blocks remain individual direction-key stops instead of being skipped or trapping the caret. The active source has no quote bar, Callout frame, background, outline, or rounded border. Typing, deleting, navigating, or making Quote/Callout syntax temporarily invalid preserves the same canonical-source caret position instead of moving focus to another line or block. At the far left of the block, Backspace moves to the previous editable line instead of removing the `>` to its right; at the start of the document it does nothing. Delete may remove the `>` to the caret's right. Press Enter on the final empty quoted line to leave the block. When the caret moves elsewhere, Live mode shows a stable rendered preview; click that preview to reveal the same source block with the caret at the nearest source line. Preview and source share the same reserved footprint, avoiding a document jump when editing is activated. The Live editor does not automatically insert backslashes before punctuation. To request a literal Markdown-significant symbol, type the backslash yourself in Live or Source mode—for example, `\>` displays as an ordinary `>` instead of starting a blockquote. Live mode hides that user-authored escape while the canonical Markdown retains it across reloads.
+实时模式中单击分隔线可显示其 `---`、`***` 或 `___` 源码并编辑。围栏代码块为起止围栏保留空间；非活动时隐藏围栏并在右上显示语言。单击或用方向键进入后，可编辑顶部 ```` ```lang ```` 和底部 ```` ``` ```` 行，垂直方向键依次访问围栏、空行和正文后离开，不会被困住。改变第一个有效结束围栏会立即重新解析；之后作者输入的围栏保持可供解析。
 
-In Live mode, click anywhere on a rendered horizontal-rule row to reveal its `---`, `***`, or `___` Markdown source with the caret at the end. Moving the caret into a horizontal rule with the arrow keys also reveals its source, placing the caret at the side from which you entered. You can then delete or edit the delimiter. Press Enter at the end to add a line after the rule; at the start, Enter inserts a line before it, and in the middle it splits the visible source at the caret. Moving the caret away from an unchanged delimiter renders it as a horizontal rule again.
+### 数学公式、图表与 WikiLink
 
-In Live mode, a fenced code block reserves space for its opening and closing fences so its height stays unchanged when the source appears. While the caret is elsewhere, the fences are hidden and the language appears in the upper-right corner. The hidden fences remain real editable Markdown rather than a separate rendered copy. Click anywhere in the block, or move the caret into it with the arrow keys, to reveal editable opening ```` ```lang ```` and closing ```` ``` ```` lines at the top and bottom edges. Entering from below places the caret on the closing fence; repeated ArrowUp presses then visit each code line and the opening fence before leaving the block. Entering from above follows the reverse order: ArrowDown visits the opening fence, blank and body lines, and closing fence, then leaves below it. The opening and closing fences therefore cannot trap vertical movement. Backspace at the start of the paragraph below likewise moves to the authored closing fence before it can delete code-body text, and Delete at the end of the preceding paragraph moves to the authored opening fence. On an otherwise empty code line, typing ```` ``` ```` immediately closes the block at that line and reparses all following text as Markdown. Any later fence remains exactly where it was and participates in that reparse; Mint Notes does not delete or relocate it. Press Enter at the end of an existing valid closing fence to leave the block and start a paragraph below it. A block with only an opening fence extends through the end of the note, including lines that otherwise look like headings or lists. Typing a closing-fence line inside it ends the block immediately. Removing a tick from the closing fence immediately makes it incomplete and reparses the following text as part of the now-unclosed code block. Mint Notes preserves that exact Markdown after saving and reopening instead of generating a replacement fence.
-
-### Math, diagrams, and WikiLinks
-
-Use `$...$` for inline KaTeX and `$$...$$` for display math. Display math may occupy one line or use opening and closing `$$` lines:
+行内 KaTeX 使用 `$...$`，展示公式使用 `$$...$$`。展示公式可以占一行，也可以使用独立的开始与结束 `$$` 行：
 
 ```markdown
 Euler's identity is $e^{i\pi} + 1 = 0$.
@@ -106,9 +102,9 @@ $$
 $$
 ```
 
-Live and Reading modes render the formula; Source mode always shows the canonical delimiters. Selecting an inline formula or activating a display formula reveals its editable source in Live mode. Math inside inline-code spans or fenced code blocks remains literal.
+实时和阅读模式会渲染公式；源码模式始终显示规范分隔符。选择行内公式或激活展示公式后，实时模式会显示其可编辑源码。行内代码或围栏代码块中的数学语法保持字面形式。
 
-Put Mermaid source in a fenced block whose language is `mermaid`:
+把 Mermaid 源码放入语言为 `mermaid` 的围栏块：
 
 ````markdown
 ```mermaid
@@ -118,9 +114,9 @@ flowchart LR
 ```
 ````
 
-The browser renders Mermaid locally. Activating a diagram in Live mode reveals its fenced source. Diagram links and scripts are not interactive, external resource references are removed, and a diagram that cannot be parsed remains available in Source mode.
+浏览器在本地渲染 Mermaid。实时模式激活图表时会显示围栏源码。图表链接和脚本不可交互，外部资源引用会移除；无法解析的图表仍可在源码模式中编辑。
 
-WikiLinks use `[[Note title]]`. Add `|Label` to choose the displayed text, use a folder path to disambiguate duplicate titles, and append `#Heading` to open a section. Prefix the link with `!` to render a source-backed embed label:
+WikiLink 使用 `[[笔记标题]]`。添加 `|标签` 可指定显示文字，使用文件夹路径可消除重名歧义，追加 `#标题` 可打开某一节。前置 `!` 会渲染基于源码的嵌入标签：
 
 ```markdown
 [[Setup]]
@@ -130,11 +126,11 @@ WikiLinks use `[[Note title]]`. Add `|Label` to choose the displayed text, use a
 ![[Setup|Embedded setup]]
 ```
 
-A title-only WikiLink prefers a note in the current folder, then another matching live note. A folder path starts at the vault root. Missing targets show a notice; Mint Notes does not create a note implicitly. WikiLinks remain ordinary portable Markdown text in exports, so tools without WikiLink support can still display their source.
+只有标题的 WikiLink 优先匹配当前文件夹中的笔记，再匹配其他同名活动笔记。文件夹路径从保险库根开始。目标缺失时只显示通知，不会隐式创建笔记。WikiLink 在导出中仍是普通可移植 Markdown 文本，不支持它的工具仍可显示源码。
 
-### Callouts
+### Callout
 
-Place an Obsidian-style callout marker on the first line of a blockquote:
+在块引用第一行放置 Obsidian 风格 Callout 标记：
 
 ```markdown
 > [!TIP]
@@ -144,22 +140,24 @@ Place an Obsidian-style callout marker on the first line of a blockquote:
 > This callout starts collapsed in Reading mode.
 ```
 
-Mint Notes recognizes every built-in Obsidian type and alias: Note; Abstract/Summary/TLDR; Info; Todo; Tip/Hint/Important; Success/Check/Done; Question/Help/FAQ; Warning/Caution/Attention; Failure/Fail/Missing; Danger/Error; Bug; Example; and Quote/Cite. Aliases use the same color and icon as their official type while keeping the alias as the default title, such as Important or Caution. Type names are case-insensitive. Unknown names use a neutral style so custom callouts remain readable. Add a space and text after the marker for a custom title—for example, `> [!TIP] Custom title`. In Live mode, click the rendered Callout to reveal the complete authored blockquote source. Clicking its header places the caret at the end of the first source line; clicking its body chooses the nearest source line. Moving the caret away restores the rendered icon, title, and body without rewriting the marker. A `+` suffix makes the callout collapsible and initially expanded; `-` makes it initially collapsed. Live mode keeps every Callout expanded so its Markdown remains editable. Reading mode and historical previews honor the requested fold state.
+Mint Notes 识别全部内置 Obsidian 类型和别名：Note；Abstract／Summary／TLDR；Info；Todo；Tip／Hint／Important；Success／Check／Done；Question／Help／FAQ；Warning／Caution／Attention；Failure／Fail／Missing；Danger／Error；Bug；Example；Quote／Cite。别名使用正式类型的颜色和图标，但保留自身默认标题，例如 Important 或 Caution。类型名不区分大小写；未知名称使用中性样式。标记后添加空格与文字可指定自定义标题，例如 `> [!TIP] Custom title`。
 
-An optional Mint Notes appearance block may follow the title:
+实时模式中单击渲染后的 Callout 会显示完整作者块引用源码；单击标题会把光标放到首个源码行末尾，单击正文则选择最近源码行。移走光标后恢复图标、标题和正文，不重写标记。后缀 `+` 表示可折叠且初始展开，`-` 表示初始折叠。实时模式始终展开，以便编辑 Markdown；阅读模式与历史预览遵循所请求折叠状态。
+
+标题后可以添加可选 Mint Notes 外观块：
 
 ```markdown
 > [!TIP]+ Deployment {color=purple icon=important}
 > Verify the backup before upgrading.
 ```
 
-`color` accepts `gray`, `blue`, `cyan`, `green`, `purple`, `amber`, `red`, or `rose`. `icon` accepts these Mint Notes icon identifiers: `note`, `abstract`, `info`, `todo`, `tip`, `important`, `success`, `question`, `warning`, `caution`, `failure`, `danger`, `bug`, `example`, `quote`, or `custom`. Invalid or unknown attribute blocks remain part of the visible title instead of being discarded. Other Markdown tools may show the `{...}` block as title text because these appearance attributes are a Mint Notes extension.
+`color` 接受 `gray`、`blue`、`cyan`、`green`、`purple`、`amber`、`red` 或 `rose`。`icon` 接受 `note`、`abstract`、`info`、`todo`、`tip`、`important`、`success`、`question`、`warning`、`caution`、`failure`、`danger`、`bug`、`example`、`quote` 或 `custom`。无效或未知属性块会作为可见标题保留，而不是丢弃。其他 Markdown 工具可能把 `{...}` 显示为标题文字，因为这些外观属性是 Mint Notes 扩展。
 
-Live mode edits Callout source with the same rules as any other blockquote. Enter continues the current authored quote prefix; Enter on the final empty quoted line exits the block, so a bodyless Callout may consist of only its marker line. Backspace and Delete traverse the literal prefixes and marker characters instead of deleting the rendered frame as one unit. If an edit makes the marker incomplete, such as `> [!CAUTION`, the Callout immediately degrades to an ordinary blockquote while preserving that exact source and its surrounding lines; retyping `]` restores the Callout presentation. Nested quote levels remain visible in source and are edited in authored order. Standard undo restores each source edit. Live editing never adds placeholders, word-joiners, highlight/backtick sentinels, synthesized quote prefixes, or backslash escapes.
+Callout 源码遵循普通块引用的全部编辑规则。Enter 续写当前引用前缀，在最后空引用行按 Enter 离开，因此无正文 Callout 可以只有标记行。Backspace／Delete 遍历字面前缀与标记字符，不会把渲染框整体删除。如果编辑使标记未完成，例如 `> [!CAUTION`，Callout 会立即退化为普通块引用，同时保留准确源码与周围行；重新输入 `]` 后恢复。嵌套引用层级按作者顺序显示和编辑。标准撤销会恢复每次源码编辑。实时编辑绝不会添加占位符、单词连接符、高亮／反引号哨兵、合成引用前缀或反斜杠转义。
 
-### YAML properties
+### YAML 属性
 
-Valid YAML frontmatter at the very top of a note appears as a properties panel in Live and Reading modes:
+笔记最开头的有效 YAML Front Matter 会在实时和阅读模式中显示为属性面板：
 
 ```yaml
 ---
@@ -171,152 +169,135 @@ tags:
 ---
 ```
 
-In Live mode, edit, rename, add, or remove top-level scalar properties and simple scalar lists directly in the panel. Boolean values use checkboxes, ISO dates use date inputs, and lists such as `tags` use value chips. Reading mode and historical previews show the same properties read-only. Source mode always exposes the complete original YAML.
+实时模式可直接编辑、重命名、新增或移除顶层标量属性和简单标量列表。布尔值使用复选框，ISO 日期使用日期输入，`tags` 等列表使用值标签。阅读模式与历史预览只读显示相同属性；源码模式始终显示完整原始 YAML。
 
-Nested objects, nested lists, multiline values, anchors, and aliases are shown read-only in the panel and must be edited in Source mode. Invalid YAML is preserved unchanged and shown with a source-editing notice. Notes without frontmatter do not show a properties panel. Mint Notes never evaluates template text such as `{{date}}` and does not automatically create or update `created` or `modified`.
+嵌套对象、嵌套列表、多行值、锚点和别名在面板中只读，必须在源码模式编辑。无效 YAML 保持不变，并显示源码编辑提示。没有 Front Matter 的笔记不显示属性面板。Mint Notes 不执行 `{{date}}` 等模板文字，也不会自动创建或更新 `created` 或 `modified`。
 
-On desktop, the left side of the status bar shows the active note's creation time, latest modification time, and local save or synchronization state. On phone-sized screens, it keeps only the save or synchronization state so the essential status remains readable without horizontal scrolling; creation and modification times remain available through the status tooltip on pointer-based browsers. Moving the caret or changing the selection without changing the title or Markdown does not update the modification time. The right side counts words with language-aware segmentation. Punctuation is excluded from the word count. The character count excludes whitespace but includes symbols.
+桌面端状态栏左侧显示活动笔记创建时间、最近修改时间以及本地保存／同步状态；手机只保留保存／同步状态，基于指针的浏览器可从提示中查看时间。只移动光标或改变选区不会更新修改时间。右侧使用语言感知分词统计字数；字数不含标点，字符数不含空白但包含符号。
 
-## Use note history
+## 使用笔记历史
 
-Open **History** in the right tool panel to browse the active note's saved versions. Versions are grouped by day. Select one to replace the center editor with a read-only historical preview; **Exit preview** returns to the current note without changing it.
+右侧工具面板的**历史**标签显示活动笔记的加密版本，按日期分组。选择版本会以只读历史预览替换中间编辑器；选择**退出预览**即可返回当前笔记且不改变内容。历史名称、笔记内容、标签和附件引用在浏览器中加密；服务器只能看到随机 ID、捕获时间／类型、保护位和密文大小等必要元数据。
 
-Automatic history is enabled by default. During an editing session Mint Notes saves the state before editing when the configured interval has elapsed, records checkpoints every 10 minutes by default during continuous editing, and records the final state after two minutes without content changes. Identical automatic content is not saved twice. **Save current version** always creates a complete manual snapshot, even when the content is unchanged or automatic history is disabled. Its initial name is the current local date and time, it starts protected, and its inline name field is focused with the complete name selected so it can be replaced immediately.
+自动历史默认启用。编辑会话中，如果配置间隔已到，会先保存编辑前状态；持续编辑默认每 10 分钟记录检查点，内容停止变化两分钟后记录最终状态。相同自动内容不会重复保存。**保存当前版本**始终创建完整手动快照，即使内容未变或自动历史已禁用；初始名称是当前本地日期时间，默认受保护，并自动聚焦且全选行内名称，方便立即替换。
 
-Each row shows its name, capture time, capture type, and pending-sync state. Existing versions and versions without a custom name display their localized capture time. Open the row's `…` menu to rename it, protect or unprotect it, or delete it. Rename accepts Enter or focus loss, Escape cancels, and blank names are rejected. Protected rows reuse the small lock badge shown on locked notes; protection is independent from locking the current note.
+每行显示名称、捕获时间、捕获类型和待同步状态。无自定义名称的已有版本显示本地化捕获时间。`…` 菜单可重命名、保护／取消保护或删除。重命名时 Enter 或失去焦点保存，Escape 取消，空名称会被拒绝。受保护行复用锁定笔记的小锁标记；历史保护与当前笔记锁相互独立。
 
-Automatic versions are thinned as they age: all are kept for 24 hours, then the newest version per hour through day 7, and the newest version per day afterward. Manual and pre-restore safety versions are not thinned. Unprotected versions remain subject to the account retention setting, which defaults to 90 days. Protected versions still consume the history quota but are excluded from thinning, retention cleanup, single-version deletion, and current-note or account-wide history clearing. Rename and protection changes are saved to the encrypted local database first and synchronize after reconnecting.
+自动版本会随时间稀疏：24 小时内全部保留；到第 7 天每小时保留最新一份；之后每天保留最新一份。手动和恢复前安全版本不稀疏。未保护版本遵循账户保留设置，默认 90 天。受保护版本仍占历史配额，但不受稀疏、保留清理、单项删除及当前笔记／全账户历史清空影响。重命名和保护变化先保存到加密本地数据库，重新联网后同步。
 
-Historical preview provides two restore actions:
+- **恢复为当前版本：**先把当前笔记保存为未保护的恢复前安全检查点，再把历史标题、Markdown、标签和附件引用写为普通本地优先新修订。文件夹位置、固定状态、创建时间和排序保持不变。可随后从该检查点的 `…` 菜单保护它。
+- **恢复为副本：**创建新的同级笔记，并为每个引用附件生成新 UUID 和加密密钥。原笔记不变；无法恢复全部附件时操作会停止。
 
-- **Restore as current:** first saves the current note as an unprotected pre-restore safety checkpoint, then writes the historical title, Markdown, tags, and attachment references as a normal new local-first revision. Folder position, favorite state, creation time, and ordering are preserved. You can protect that safety checkpoint afterward from its `…` menu.
-- **Restore as copy:** creates a new sibling note and gives every referenced attachment a new UUID and encryption key. The original note is unchanged. The operation stops if all referenced attachments cannot be recovered.
+删除单个未保护版本、清空当前笔记未保护历史和清空全账户未保护历史都需要在线连接及明确确认。清空前先同步待处理保护变化；服务器无法确认时会安全停止。笔记移入回收站仍保留历史。具有受保护历史的笔记及被其引用的附件，在相关快照取消保护前不能永久删除，自动回收站清理也会跳过。如果启用保护时附件已经缺失，Mint Notes 会保护可恢复文本和其余附件，但无法重建缺失字节。
 
-Deleting one unprotected version, clearing the current note's unprotected history, and clearing all unprotected account history require an online connection and explicit confirmation. A clear first synchronizes pending protection changes and stops safely if they cannot be confirmed by the server. Moving a note to trash keeps its history. A note with protected history, and an attachment referenced by protected history, cannot be permanently deleted until the relevant snapshots are unprotected; automatic trash cleanup skips them as well. If an attachment was already missing when protection was enabled, Mint Notes protects the recoverable text and remaining attachments but cannot reconstruct the missing bytes. Open **Settings > Note history** to disable automatic capture, select a 5/10/30/60-minute interval, choose a 7/30/90/180/365-day or permanent retention period, inspect encrypted history usage, or clear unprotected versions. The server enforces a separate 256 MiB per-user history quota by default.
+打开**设置 > 笔记历史**可禁用自动捕获，选择 5／10／30／60 分钟间隔，选择 7／30／90／180／365 天或永久保留，查看加密历史用量，或清空未保护版本。服务器默认执行独立的每用户 256 MiB 历史配额。
 
-## Add images
+## 添加图片
 
-Drop a supported image into the live or source editor to insert it at the drop position. You can also copy an image to the clipboard and paste it at the current cursor with `Ctrl+V` on Windows/Linux or `Command+V` on macOS. Ordinary text paste is unchanged. The image toolbar button provides a file-picker fallback.
+把受支持图片拖入实时或源码编辑器可在放置位置插入；也可以复制图片后，在 Windows／Linux 用 `Ctrl+V`、macOS 用 `Command+V` 粘贴到当前光标。普通文本粘贴行为不变，工具栏图片按钮提供文件选择后备。
 
-After local encryption finishes, an inserted image appears in the active note without requiring a refresh. Live mode updates the rendered image in place when its temporary Blob URL becomes available, preserving the active editor and caret. The image remains available when switching among Live, Source, and Reading modes; the temporary in-memory Blob URL used for display is never written into the canonical Markdown.
+本地加密完成后，图片无需刷新就会出现在活动笔记中。临时 Blob URL 就绪时，实时模式只原位更新图片，保留活动编辑器和光标。图片在实时、源码和阅读模式间切换时保持可用；用于显示的内存 Blob URL 绝不会写入规范 Markdown。
 
-Supported formats are PNG, JPEG, GIF, WebP, and AVIF. The browser verifies file signatures and rejects SVG. The bundled client limits each image to 25 MiB.
+支持 PNG、JPEG、GIF、WebP 和 AVIF。浏览器验证文件签名并拒绝 SVG，内置客户端限制每张图片为 25 MiB。每张图片在同步前使用独立随机密钥和 UUID 本地加密；其他设备只有打开所属笔记时才下载加密分块。已解密 Blob URL 只在活动笔记需要时存在于内存。
 
-Each image is encrypted locally with its own random key and UUID before synchronization. Other devices download encrypted chunks only when the owning note is opened. Decrypted Blob URLs exist only in memory while required by the active note.
+附件密文和上传发件箱会在 Markdown 引用插入前通过一个 IndexedDB 事务持久保存。同步先上传约 1 MiB 的加密分块，再上传清单和所属笔记。附件名称、MIME 类型、字节和密钥不会以明文发送到服务器。
 
-An attachment belongs to one note. Copying the note creates a separate encrypted attachment. Moving a note to trash also tombstones its attachments; restoring the note restores them.
+一份附件只属于一篇笔记。复制、冲突副本和“恢复为副本”会生成新附件 UUID 与密钥。无法完整恢复全部引用附件时，复制或导出会停止，而不是静默生成损坏结果。
 
-## Local save and synchronization
+## 本地保存与同步
 
-Editing never waits for a network request. After half a second without input, or at least once every five seconds during continuous typing, the browser encrypts the latest document and atomically writes both the encrypted object and a durable outbox entry to IndexedDB. If typing continues while that write is in progress, its completion does not replace the newer in-memory text or disturb the active Live editor caret. A failed local encryption or browser-database commit stays queued in the unlocked tab and retries automatically; ordinary locking waits for it rather than discarding the draft. Keep the tab open while a critical local-save warning is visible, because a browser crash cannot preserve data when its storage subsystem remains unwritable. Network uploads combine nearby changes and send the latest durable version after two seconds of inactivity or at least once every fifteen seconds during continuous editing. Once acknowledged, the server is the durable cross-device copy; the local encrypted store exists as a low-latency working cache and retry queue.
+输入立即更新内存；空闲 500 ms 后加密并原子写入 IndexedDB，最迟 5 秒达到本地持久性。上传默认防抖 2 秒，最长 15 秒组成批次。网络延迟不阻塞按键或本地保存。
 
-The status bar reports:
+- **已同步：**首次服务器检查已完成，且对象、附件分块或历史快照发件箱均为空。
+- **同步中：**最新更改已持久保存在加密本地存储中，正等待服务器确认、上传排队密文或拉取远程更改。
+- **同步错误 · 已保存到本地：**浏览器在线，但服务器请求失败或被拒绝。加密本地副本仍可用，应用会自动重试。
+- **离线 · 已保存到本地：**浏览器明确检测到设备离线。已解锁保险库可以继续编辑，重新联网后恢复同步。
 
-- **Synced:** the initial server check has completed and no local object, attachment chunk, or history snapshot remains in an outbox.
-- **Syncing:** the latest change is durable in encrypted local storage and is waiting for server acknowledgement, queued ciphertext is being uploaded, or remote changes are being pulled.
-- **Sync error · saved locally:** the browser is online but the server request failed or was rejected. The encrypted local copy remains available and the app retries automatically.
-- **Offline · saved locally:** the browser has explicitly detected that the device is offline. Editing can continue in the unlocked vault and synchronization resumes after reconnecting.
+本地加密或 IndexedDB 写入失败不是同步错误。界面会持续显示严重警告，也不会声称该代次已保存。普通锁定会等待待处理本地持久化；确认登出会明确丢弃尚未持久化定时器并删除当前用户完整本地数据。
 
-Local saving remains separate from network synchronization. While encryption and the atomic IndexedDB object/outbox write are in progress, the visible status does not change. After that durable write completes, it changes to **Syncing**. On pointer-based browsers, the status tooltip distinguishes local saving, waiting for the server, active network synchronization, an unreachable server, and an explicit offline condition. A local encryption or IndexedDB failure instead produces a persistent critical warning and never claims that the latest change was saved locally.
+两个设备从同一基础修订更新对象时，不按时间戳选胜者。服务器版本保留，本地冲突文档以本地化“冲突副本”后缀创建，附件具有独立 ID 和密钥。无法恢复完整附件图时，待处理本地版本和游标会保留重试，不创建不完整副本。
 
-Synchronization pulls remote changes at startup after unlock, after reconnecting, when the page becomes visible, and when the server sends a lightweight change notification. It no longer performs a complete synchronization every five seconds. While the unlocked page is visible, a five-minute safety check covers missed notifications; hidden and locked pages do not poll. Attachment chunks upload before their manifest and owning note update.
+单个对象无法通过解密／完整性检查时会被隔离，不中止整个保险库加载。其他可读笔记仍显示，原本地密文与待处理编辑保留，安全时尝试完整服务器拉取。持续警告中的**不再显示此版本**只记录准确对象修订与 nonce 指纹，不删除或修改密文；修订变化后会再次报告。不要清除站点数据，因为其中可能包含唯一待同步加密副本。
 
-Remote changes are applied to the local encrypted database in batches so a large update does not remove or redraw tree items one by one. A page cursor advances only after every retained change decrypts and commits locally; a failed change is retried instead of skipped. Workspace choices are device-local, so synchronization never switches the active note, editor mode, or sidebar state. If the currently edited note changes or is deleted on another device, Mint Notes keeps the current editor stable and shows a notification; the remote version appears after leaving the note, or the local draft is retained as a conflict copy when both devices edited it. Remote permanent deletion waits while any affected local object, attachment, or history operation remains pending. Pulling back the exact encrypted revision that this browser already uploaded and acknowledged advances synchronization silently and does not show an “updated on another device” notification.
+## 搜索与排序
 
-If one encrypted local or remote object cannot pass decryption and integrity checks, Mint Notes isolates that object instead of aborting the whole vault load. Other readable notes remain visible, the original local ciphertext and any pending edits are retained, and a full server pull is attempted when it is safe to do so. A new welcome note is created only after an online full pull confirms that the account is actually empty. The persistent local warning offers **Do not show this version again**; this records only the exact object revision and nonce in local preferences and does not delete or modify its ciphertext. A changed revision is reported again. Do not clear the site's browser data, because it may contain the only pending encrypted copy.
+搜索在本地解密标题和 Markdown 上运行。匹配后代会保留父文件夹，维持上下文；搜索词不会发到服务器。搜索框有内容时，右侧清除按钮可一次移除查询并恢复完整树。
 
-When two devices update the same object from the same base revision, Mint Notes does not choose a winner by timestamp. It retains the server version and creates a local note named with a localized **conflict copy** suffix for the conflicting document data. Attachments in that copy receive independent IDs and encryption keys, so deleting the original note cannot break the conflict copy. If every referenced attachment cannot currently be recovered, Mint Notes keeps the pending local version and synchronization cursor for retry instead of creating an incomplete copy.
+排序模式：
 
-## Search and sorting
+- **A–Z：**文件夹优先，其后按区域感知标题顺序。
+- **创建时间：**最新优先。
+- **修改时间：**最近更改优先。
+- **手动：**通过拖动明确控制同级顺序。
 
-Search runs locally over decrypted titles and Markdown. Matching descendants keep their parent folders visible so results retain context. Search terms are not sent to the server. When the search field contains text, use the clear button on its right to remove the entire query and restore the full tree.
+所选模式按用户记在当前浏览器中。
 
-Available sorting modes are:
+## 回收站与永久删除
 
-- **A-Z:** folders first, then locale-aware title order.
-- **Created:** newest first.
-- **Modified:** most recently changed first.
-- **Manual:** explicit sibling order controlled by dragging.
+移入回收站立即发生，无额外确认。锁定笔记不能移入回收站；任意深度包含锁定笔记的文件夹或多选会整体阻止。允许的文件夹会连同后代移动，附件跟随所属笔记。
 
-The selected mode is remembered per user in the current browser.
+在**设置 > 回收站**浏览原删除层级与时间。删除文件夹初始折叠并显示后代数量；可按标题搜索、筛选笔记／文件夹，并按最新删除、最早删除或名称排序。搜索与类型筛选会自动显示匹配嵌套项目的祖先路径，较长根列表分批显示。每个删除根项目可恢复；其更多操作菜单提供永久删除，两者均作用于该根及全部后代。
 
-## Trash and permanent deletion
+默认保留 30 天；可选择 7、30、90、180 或 365 天，或永久保留。设置立即保存，服务器每小时应用到已同步墓碑，其他设备收到清除事件后移除缓存。
 
-Moving an item to trash happens immediately without an extra confirmation. A locked note cannot be moved to trash. A folder or multi-item selection containing a locked note at any descendant depth is blocked as a whole until that note is unlocked. Moving an allowed folder includes its descendants; owned attachments follow their notes. Open **Settings > Trash** to browse the original deleted folder hierarchy and deletion times. Deleted folders start collapsed and show the number of descendants they contain; expand one folder at a time when you need to inspect its original hierarchy. Search by title, filter notes or folders, and sort by newest deletion, oldest deletion, or name. Search and type filters reveal the ancestor path of a matching nested item automatically. Long root lists are shown in batches. Restore appears on each deleted root, while permanent delete is available from its more-actions menu; both apply to that root and all of its descendants.
+**清空回收站**和单项**永久删除**都需要在线连接及第二次明确确认。包含受保护历史笔记或受保护历史引用附件的批次会整体拒绝；先取消所有相关快照保护。允许的清除会移除对象服务器历史与附件分块，无法撤销。既有服务器备份或明文导出仍可能包含数据。
 
-Trash is retained for 30 days by default. Under **Settings > Trash**, choose 7, 30, 90, 180, or 365 days, or retain trash permanently. The choice saves immediately. The server applies the selected policy hourly to synchronized tombstones; other devices remove their cached copies when they receive the purge event.
+## 导入与导出
 
-Use **Clear trash** or an item's **Permanently delete** action for immediate cleanup. Both require an online connection and a second explicit confirmation. A batch containing a note with protected history or an attachment referenced by protected history is rejected as a whole; unprotect every relevant snapshot before retrying. A confirmed allowed purge removes the object's server history and associated attachment chunks and cannot be undone.
+打开**设置 > 导入和导出**。
 
-Do not use permanent deletion as a substitute for retention management. A previously created server backup or plaintext export may still contain the data.
+### 导出
 
-## Import and export
+每次 Markdown 或 ZIP 导出都要求确认，因为内容是明文。无附件笔记导出为 `.md`；有附件笔记导出为 ZIP；文件夹只导出该子树；完整导出保留层级和空文件夹。图片写入 `_attachments/<uuid>.<ext>`，Markdown 链接改为可移植相对路径；`_export.json` 记录格式版本和原附件名称映射，便于无损重新导入。
 
-Open **Settings > Import and export**.
+导出在浏览器中解密。输出必须存放在可信或独立加密位置。附件无法恢复时导出会停止。锁定状态属于应用元数据而非 Markdown，导出不保留；导入笔记和显式副本初始均解锁。
 
-### Export
+### 导入
 
-Every Markdown or ZIP export asks for confirmation because its contents are plaintext.
+导入器接受 Markdown、文本和 ZIP；应用不限制源文件、单篇笔记条目或展开总数据大小，实际边界由浏览器内存与存储决定。保留 ZIP 文件夹结构和空目录。相对 Markdown 图片链接只有在文件存在、有效且不超过每图 25 MiB 时才转换为加密附件。
 
-- A note without attachments exports as one `.md` file.
-- A note with attachments exports as ZIP.
-- A folder exports only that subtree.
-- A complete export retains the folder hierarchy and empty folders.
-- Images are written under `_attachments/<uuid>.<ext>`, and Markdown links become portable relative paths.
-- `_export.json` records the format version and original attachment-name mapping for lossless re-import.
+导入器拒绝不安全路径遍历、重复压缩包路径、超过 4,000 个文件的压缩包和不支持的图片内容。
 
-Exports are decrypted in the browser. Markdown and ZIP output is plaintext and must be stored in a trusted or independently encrypted location. Export stops instead of silently creating an incomplete ZIP when an attachment cannot be recovered.
+## 设置与账户安全
 
-The lock state is application metadata rather than Markdown content, so Markdown and ZIP exports do not retain it. Imported notes and notes created from an explicit copy start unlocked.
+设置依次为**常规**、**安全**、**笔记历史**、**回收站**、**数据迁移**和**关于**；管理员之后还会看到**管理员设置**。除必须保存替代恢复密钥时外，可用关闭按钮或点击设置窗口外关闭。
 
-### Import
+**常规**顶部显示头像、显示名称和登录用户名。选择**编辑资料**后可上传／更换／移除头像，并分别更改显示名称和用户名。还可选择界面语言、主题和 12–24 px 应用文字大小；默认 14 px，可恢复默认。语言可跟随浏览器或明确选择英语、简体中文、繁体中文。语言、主题和字号立即保存在当前浏览器；每用户语言偏好也镜像到登录前选择器，不发送服务器。头像在浏览器中居中裁剪为 256×256 像素后加密，服务器只存加密资源。
 
-The importer accepts Markdown, text, and ZIP files without an application-level size limit for the source file, individual note entries, or total expanded data. Available browser memory and storage still determine the practical limit. ZIP folder structure and empty directories are retained. Relative Markdown image links are converted to encrypted attachments when their files are present, valid, and within the separate 25 MiB per-image attachment limit.
+修改登录用户名需要在线已验证会话与当前主密码，并在独立验证对话框中输入现有恢复密钥，或选择重置恢复密钥。重置路径会在提交前显示替代密钥，并要求确认已保存；提前关闭不会使旧用户名或恢复密钥失效。浏览器重新包装两个保险库密钥信封，无需重新加密笔记、附件或历史；服务器原子更新用户名、加密信封以及重置路径中的恢复验证器。其他设备会被登出，并需更新 Mint Notes 后再以新用户名登录。
 
-The importer rejects unsafe path traversal, duplicate archive paths, archives containing more than 4,000 files, and unsupported image contents.
+**安全**中，账户凭据一行集中显示**修改主密码**和**重置恢复密钥**。修改主密码会在对话框中要求当前和新密码，只重新包装保险库密钥，不重新加密每篇笔记；其他登录会话撤销，恢复密钥不变。
 
-## Settings and account security
+登录页默认不勾选**记住此设备**。未勾选时，会话 Cookie 属于当前浏览器会话；刷新可继续，新标签页只有在另一授权标签页授予访问时才能继续，且不能离线冷启动。勾选后，浏览器存储不可导出设备密钥、滚动长期会话，以及最近经服务器验证用户和端点的带版本快照。同一浏览器配置文件可以离线冷启动：无 PIN 时直接打开本地加密保险库，有 PIN 时显示 PIN 锁屏。清除站点数据会移除离线访问；Cookie 清除或远程撤销会在设备下次连接服务器时检测。
 
-The settings sections are ordered as **General**, **Security**, **Note history**, **Trash**, **Data migration**, and **About**, followed by **Administrator settings** for administrators. Each section has a distinct navigation symbol. Except while a replacement recovery key must be saved, close Settings with its close button or by clicking outside the Settings window.
+登录密码、PIN 解锁、主密码解锁、注册确认、密码恢复确认、PIN 设置或主密码更改字段中按 Enter 会执行主要确认。输入法组合、重复 keydown 或正在忙的表单不会重复提交。
 
-The top of **General** displays the current avatar, display name, and login username without a separate profile section. Choose **Edit profile** to reveal the avatar actions and separate display-name and username forms, each with its own change button; avatar actions are labeled **Upload avatar**, **Change avatar**, and **Remove avatar** as applicable. The same page also lets you select the interface language and theme and enter an application text size from 12 to 24 pixels. The default is 14 pixels; choose **Restore default** to return to it. Language can follow the browser or explicitly use English, Simplified Chinese, or Traditional Chinese. Language, theme, and text size save immediately in the current browser. Each user's language preference is kept with that user's device-local UI preferences and is also mirrored to the pre-login selector; it is not sent to the server. Avatar images are center-cropped to 256 by 256 pixels before browser-side encryption; the server stores only the encrypted profile asset.
+安全页列出可信浏览器端点而不是单个登录令牌。同一用户与浏览器配置文件重复登录会保留首次信任时间，并更新最近登录／在线时间、登录次数、IP 地址、记住状态和活动状态。当前端点必须已信任至少 24 小时才能远程登出其他活动端点；远程登出撤销该端点全部会话。已登出／过期端点可立即从列表移除，否则服务器在撤销或会话到期 30 天后自动删除。移除非活动记录不会删除同步笔记或该设备的浏览器本地数据。
 
-Changing the login username starts from **Edit profile**, then continues to a verification dialog instead of keeping password and recovery-key inputs on the settings page. An online verified session and the current master password are required. Enter the existing recovery key to keep it unchanged, or choose **Reset recovery key and continue** when it is unavailable. The reset path shows the replacement key before committing the change and requires explicit confirmation that it has been stored; closing the dialog before completion leaves the old username and recovery key valid. The browser rewraps both vault-key envelopes without re-encrypting notes, attachments, or history, then the server atomically changes the username, encrypted envelopes, and—only on the reset path—the recovery verifier. Other devices are signed out and must update Mint Notes before logging in with the new username. Existing accounts keep their compatible legacy envelope until their first username change; that change migrates the account to an immutable random envelope context so later username changes no longer make the cryptographic binding depend on the login name.
+PIN 至少四个字符，可含字母、数字和符号，设置／更改／移除都需重新输入主密码。移除 PIN 也会禁用自动锁定。PIN 仅留在本地，并在不可导出设备密钥层之外加密完整持久设备解锁信封；PIN 派生密钥从不持久化。已解锁标签页只在自己的浏览器会话中保存独立加密刷新信封，让普通刷新可以继续。短 PIN 可被离线猜测，若担心浏览器存储被盗，应使用较长本地口令。
 
-Under **Security**, the **Account credentials** row keeps the **Change master password** and **Reset recovery key** actions together without displaying password fields until an action is selected. Changing the master password opens a dialog for the current and replacement passwords, then rewraps the vault key rather than re-encrypting every note. Other login sessions are revoked, and the recovery key remains unchanged.
+存在 PIN 时，每次普通应用启动都需要输入，即使自动锁定关闭。自动锁定默认关闭，可设为 1、2、5、10、15、30 或 60 分钟；关闭自动锁定不会移除 PIN 或启动要求。五次连续失败会清除本地信任并请求撤销端点，但本地计数只是损害控制，不是防离线猜测的密码学保证。键盘、指针、触控、输入和滚动都会重置计时器，页面隐藏时间仍计入。
 
-The login page leaves **Remember this device** off by default. Without it, the session cookie belongs to the current browser session: refreshes can continue without another password, and a new tab can continue only while another authorized tab can grant it access. A non-remembered device cannot cold-start offline. With the option enabled, the browser stores a non-exportable device key, a rolling long-lived session, and a versioned snapshot of the most recently server-verified user and remembered endpoint. That snapshot permits offline cold startup on the same browser profile: a device without a local PIN opens its encrypted local vault directly, while a PIN-protected device shows the PIN lock screen. Older remembered credentials created before this support must complete one successful online restoration before they acquire the snapshot. Clearing site data removes offline access; clearing cookies or remotely revoking the endpoint is detected when the device next reaches the server.
+锁定会清除内存保险库密钥、PIN 派生密钥、解密设备信封、当前标签页刷新信封、明文文档和附件 Blob URL，但保留已认证端点、PIN 加密持久凭据、密文缓存和同步发件箱。锁屏显示当前账户显示名称，不保留或显示加密头像。刷新锁屏不能绕过 PIN。可用本地 PIN 解锁，服务器会话已验证时也可回退到主密码；离线恢复期间不能使用主密码。无 PIN 时点击锁定按钮会引导到**设置 > 安全 > 设置 PIN**。
 
-Press Enter in the login password, PIN unlock, master-password unlock, registration confirmation, password-recovery confirmation, PIN setup, or master-password-change fields to run that form's primary confirmation action. Input-method composition and repeated keydown events do not submit, and a busy form ignores additional Enter presses.
+**登出**只位于**设置 > 常规**底部，并要求二次确认。登出会永久删除该账户的全部浏览器本地数据，包括加密笔记／附件分块、未同步发件箱、本地偏好、PIN、设备凭据和临时授权状态，并撤销当前端点全部会话。服务器请求失败时，会在本地删除后重建待处理撤销并于下次在线启动重试。未同步更改无法恢复；服务器已同步内容不会删除，之后登录会重新下载。其他本地账户、共享登录前语言选择和 PWA 应用文件不会移除。
 
-The same section lists trusted browser endpoints rather than individual login tokens. Repeated login from the same user and browser profile preserves the first-trusted time and updates recent login, recent online time, login count, IP address, remembered status, and active state. A current endpoint must be trusted for at least 24 hours before it can sign out another active endpoint. Remote sign-out revokes every session belonging to that endpoint. Signed-out and expired endpoint records can be removed immediately from the list; otherwise the server deletes them automatically 30 days after revocation or session expiry. Removing an inactive record also removes its old server-side sessions, but does not delete any synchronized notes or browser-local data on that device.
+恢复密钥重置会先要求主密码；新密钥在对话框中保留复制和下载操作，直到选择**我已保存**。旧密钥立即失效，浏览器和服务器都不持久保存明文密钥。
 
-The **Security** section presents **Device PIN**, **Automatic locking**, **Login devices**, and **Change master password** in that order, followed by recovery-key controls. The PIN row shows only its current status and the available set, change, or remove actions; the master-password and new-PIN fields appear in a confirmation dialog only after an action is selected. Set a PIN of at least four characters independently after re-entering the master password; letters, numbers, and symbols are accepted. Removing it also requires the master password and disables automatic locking. The PIN stays local and encrypts the complete persistent device-unlock envelope after its non-exportable device-key layer. The PIN-derived key is never persisted. While an unlocked tab is running, it keeps a separate encrypted refresh envelope only in that tab's browser session so an ordinary refresh can continue without asking again. Legacy PIN-verifier credentials upgrade automatically after their next successful PIN unlock. Use a longer local passphrase when protection against browser-storage theft matters because a short PIN can be guessed offline. Resetting the recovery key invalidates the old key immediately, keeps the result dialog open, and disables the Settings close action until you copy or download the replacement and explicitly confirm that it is stored safely.
+管理员在**管理员设置 > 用户管理**中管理激活码与账户。禁用可逆。永久删除需要管理员主密码和准确目标用户名，不能删除当前管理员或最后一名管理员；它只移除该用户的服务器记录与加密内容，不触及其他用户。独立备份和用户浏览器已缓存的密文不在远程删除范围内。
 
-When a PIN is configured, each ordinary application launch requires it even if automatic locking is off. The PIN also supports manual locking. Automatic locking is an independent option: it is off by default and can be set to 1, 2, 5, 10, 15, 30, or 60 minutes after a PIN exists. Disabling automatic locking preserves both the PIN and the startup PIN requirement. Five consecutive failures clear local trust and request endpoint revocation, but the browser-local counter is damage control rather than a cryptographic defense against offline guessing. Keyboard, pointer, touch, input, and scrolling activity reset the timer; time spent on a hidden page still counts.
+## PWA 与离线行为
 
-Locking clears the in-memory vault key, PIN-derived key, decrypted device envelope, the current tab's encrypted refresh envelope, plaintext documents, and attachment Blob URLs but preserves the authenticated endpoint, PIN-encrypted persistent credential, ciphertext cache, and synchronization outbox. The lock screen shows the current account's display name without retaining or displaying its encrypted profile avatar. Refreshing a manually or automatically locked page cannot bypass the PIN. Use the lock button beside Settings to lock immediately; if this device has no PIN yet, the application directs you to **Settings > Security > Set PIN** first. Unlock with the local PIN when configured, or use the master password as a fallback only after the server session has been verified; the master-password option is unavailable during offline restoration. **Log out** is available only at the bottom of **Settings > General** and requires a second confirmation. Logout permanently deletes this account's complete local browser data, including encrypted notes and attachment chunks, unsynchronized outboxes, local preferences, PIN, device credential, and temporary authorization state. It also revokes all sessions for the current endpoint; if that request cannot reach the server, a browser-local pending revocation is recreated after local deletion and retried at the next online startup. Unsynchronized changes cannot be recovered; content already synchronized to the server is not deleted and downloads again after a later login. Other local accounts, the shared pre-login language choice, and PWA application files are not removed.
+通过 HTTPS 打开后，可从浏览器 PWA／安装菜单安装 Mint Notes。应用外壳会缓存以供离线启动。已记住设备可离线冷启动并先加载持久加密本地对象：无 PIN 时直接打开，有 PIN 时要求正确 PIN；未记住设备会提示离线访问不可用。
 
-If the password is lost, choose **Forgot password**, enter the username and saved recovery key, then set a new password. Complete a recovery drill before storing irreplaceable data.
+支持的 iPhone 和 iPad 上，已安装应用填满可用视口，包括底部安全区后的背景，同时让控件避开状态区和 Home 指示条。时间、连接指示、灵动岛和 Home 指示条仍由系统控制并保持可见。部分 iOS／WebKit 版本可能在主屏幕 Web 应用上方保留不透明条带，Mint Notes 无法绘制系统区域。安装外观变化的更新后应完全关闭并重新打开；若 iOS 保留旧安装元数据，可能需要移除后重新添加到主屏幕。
 
-The **Reset recovery key** action in **Settings > Security > Account credentials** opens a separate master-password dialog before creating a replacement recovery key. The new key remains in that dialog with copy and download actions until **I have saved it** is selected; the previous key stops working immediately and is never persisted by the browser or server.
+只有浏览器安装了已变化且等待激活的 Service Worker 时才显示应用更新提示。Mint Notes 会对部署内容生成指纹，同一服务器构建重启不会产生新版本。同一待处理版本的重复回调、刷新和重开会在 24 小时内抑制；真正不同的版本立即提示。只有状态栏显示最新编辑已保存到本地后才确认；确认会激活等待版本并重新加载。
 
-On smaller screens, Settings keeps its title and a single-row, horizontally scrollable tab bar above the independently scrolling section content. Each tab keeps its full label and icon without shrinking when a section contains more content.
+已安装应用保持设备视口缩放，双指缩放不会放大外壳；需要更大文字时使用**设置 > 常规**中的字号设置。
 
-The **About** section introduces Mint Notes as an AI-developed toy project focused on lightweight deployment, secure storage, simple use, responsive PWA layouts, end-to-end encryption, remote self-hosting, and familiar Markdown editing. It also shows the current application version and credits `typora-web` as the origin of the in-repository editor core and Lucide React as the interface icon library.
+普通在线刷新首先验证服务器会话。无 PIN 时，已授权浏览器会话可在本地恢复而不显示锁屏。有 PIN 时，已解锁标签页的普通刷新只有在可选不活动间隔未过期时才能使用标签页作用域刷新信封保持解锁；手动和不活动锁定会删除该信封。普通浏览器或安装应用启动即使离线也要求 PIN。
 
-Administrators manage activation codes and accounts under **Administrator settings > User management**, which separates **Add user** from **Existing users** so other administrator settings can be added independently. Disabling is reversible. Permanent deletion requires the administrator's master password and the exact target username, cannot target the current or last administrator, and removes that user's server database records and encrypted content without touching other users. Independent backups and ciphertext already cached in a user's browser are outside this remote deletion.
+本地恢复期间，状态栏报告更改已保存到本地；同步、服务器历史、未缓存附件下载、账户／设备控制、管理和服务器保留设置保持禁用。应用在重新联网、可见页面重新获得焦点以及可见期间每 30 秒重新验证。只有同一已记住端点验证成功后才启用网络工作，并先拉取再推送。`401`、端点不再标记为已记住或用户／端点不匹配会立即锁定保险库并删除本地信任，但保留加密缓存与发件箱，供同一账户重新登录后恢复。
 
-## PWA and offline behavior
-
-Install Mint Notes from the browser's PWA/install menu after opening it over HTTPS. The application shell is cached for offline startup. A remembered device can cold-start offline and load its durable encrypted local objects before any network work: without a PIN it opens directly, and with a PIN it requires the correct PIN. A non-remembered device shows that offline access is unavailable.
-
-On supported iPhones and iPads, the installed application fills the complete available viewport, including the background beneath the bottom safe area, while keeping controls clear of the status area and Home indicator. The time, connectivity indicators, Dynamic Island, and Home indicator remain system-owned and visible. Some iOS/WebKit releases may still reserve an opaque strip above Home Screen web applications; Mint Notes cannot draw into that system-owned area. After an application update that changes the installed appearance, fully close and reopen Mint Notes; removing and adding it to the Home Screen again may be necessary if iOS retains older installation metadata.
-
-An application-update prompt appears only when the browser has installed a changed Service Worker and is waiting to activate it. Mint Notes fingerprints the deployed Service Worker content, so restarting the same server build does not create a new version. Duplicate callbacks, refreshes, and reopenings for the same pending version are suppressed for 24 hours; a genuinely different deployed version prompts immediately. Confirm the prompt only after the status bar shows that the latest edit is saved locally. Confirmation activates the waiting version and reloads the application.
-
-The installed application keeps its interface at the device viewport scale. Two-finger pinch gestures do not zoom the application shell; use the text-size setting under **Settings > General** when larger interface text is required.
-
-A normal online refresh first verifies the server session. Without a local PIN, an already authorized browser session can restore locally without showing the lock screen. With a PIN configured, an unlocked tab's ordinary refresh may use its tab-scoped encrypted refresh envelope and stay unlocked only when the optional inactivity interval has not elapsed; manual lock and inactivity lock delete that envelope, so refreshing the lock screen still requires the PIN. An ordinary browser or installed-app launch requires the PIN even when offline. During locally restored operation, the status bar reports that changes are saved locally; synchronization, server history, uncached attachment downloads, account/device controls, administration, and server retention settings remain disabled. The application revalidates when connectivity returns, when the visible page regains focus, and every 30 seconds while visible. Only a successful check for the same remembered endpoint enables network work, which resumes by pulling before pushing. A `401`, endpoint no longer marked remembered, or user/endpoint mismatch immediately locks the vault and deletes local trust while retaining the encrypted cache and outboxes for recovery after the same account signs in again.
-
-Remembered-device offline trust has no additional local expiry. This improves availability but delays remote revocation until the device reconnects. Without a PIN, possession of the trusted browser profile is enough to ask its non-exportable device key to decrypt the local vault, so enable a PIN when physical access or browser-profile compromise is a concern.
+已记住设备的离线信任没有额外本地到期时间。这提高可用性，但会让远程撤销延迟到设备重新联网。无 PIN 时，持有受信任浏览器配置文件即可要求不可导出设备密钥解密本地保险库；如果担心物理访问或浏览器配置文件被攻陷，请启用 PIN。

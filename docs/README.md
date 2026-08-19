@@ -1,40 +1,40 @@
-# Documentation
+# 文档
 
-Mint Notes documentation is organized by the task you are trying to complete. Start with the guide for your role instead of reading every document in order.
+Mint Notes 文档按要完成的任务组织。请从与你的角色对应的指南开始，无需依次阅读所有文档。
 
-## Product and usage
+## 产品与使用
 
-| Goal | Canonical guide | Scope |
+| 目标 | 权威指南 | 范围 |
 | --- | --- | --- |
-| Use the application | [User guide](USER_GUIDE.md) | Accounts, editor modes, math, Mermaid, WikiLinks, Callouts, YAML properties, organization, history, attachments, synchronization, import/export, trash, settings, and PWA behavior. |
+| 使用应用 | [用户指南](USER_GUIDE.md) | 账户、编辑器模式、数学公式、Mermaid、WikiLink、Callout、YAML 属性、内容组织、历史、附件、同步、导入／导出、回收站、设置和 PWA 行为。 |
 
-## Engineering
+## 工程
 
-| Goal | Canonical guide | Scope |
+| 目标 | 权威指南 | 范围 |
 | --- | --- | --- |
-| Understand the system design | [Architecture](ARCHITECTURE.md) | Runtime topology, local-first persistence, synchronization, browser/server storage, attachments, and portable data. |
-| Change the editor | [Editor architecture](EDITOR_ARCHITECTURE.md) | Canonical Markdown, one-way rendering, source coordinates, editor ownership, presentation-only state, and required regressions. |
-| Set up or verify development | [Development guide](DEVELOPMENT.md) | Contributor requirements, project layout, module boundaries, local servers, and verification commands. |
-| Review trust and security boundaries | [Security model](SECURITY.md) | Threat model, key hierarchy, browser security, account isolation, data-loss controls, and operational requirements. |
+| 理解系统设计 | [系统架构](ARCHITECTURE.md) | 运行时拓扑、本地优先持久化、同步、浏览器／服务器存储、附件和可移植数据。 |
+| 修改编辑器 | [编辑器架构](EDITOR_ARCHITECTURE.md) | 规范 Markdown、单向渲染、源码坐标、编辑器职责、仅用于呈现的状态和必需的回归测试。 |
+| 配置或验证开发环境 | [开发指南](DEVELOPMENT.md) | 贡献者要求、项目结构、模块边界、本地服务器和验证命令。 |
+| 审查信任与安全边界 | [安全模型](SECURITY.md) | 威胁模型、密钥层级、浏览器安全、账户隔离、数据丢失防护和运维要求。 |
 
-## Operations and releases
+## 运维与发布
 
-| Goal | Canonical guide | Scope |
+| 目标 | 权威指南 | 范围 |
 | --- | --- | --- |
-| Deploy or upgrade a server | [Production deployment](DEPLOYMENT.md) | Environment variables, Docker, reverse proxy, account bootstrap, acceptance checks, and schema compatibility. |
-| Build and publish a Docker image | [Docker image release](DOCKER_IMAGE_RELEASE.md) | Tag-derived application versions, local release checks, manual multi-platform Buildx publishing, and registry verification. |
-| Back up or restore data | [Backup and restore](BACKUP_AND_RESTORE.md) | Online SQLite backups, retention, restore drills, and production replacement. |
+| 部署或升级服务器 | [生产部署](DEPLOYMENT.md) | 环境变量、Docker、反向代理、账户初始化、验收检查和架构版本兼容性。 |
+| 构建并发布 Docker 镜像 | [Docker 镜像发布](DOCKER_IMAGE_RELEASE.md) | 由标签派生的应用版本、本地发布检查、手动多平台 Buildx 发布和镜像仓库验证。 |
+| 备份或恢复数据 | [备份和恢复](BACKUP_AND_RESTORE.md) | SQLite 在线备份、保留策略、恢复演练和生产环境替换。 |
 
-## Repository-level documents
+## 仓库级文档
 
-- [Project overview and quick start](../README.md)
-- [简体中文项目说明](../README_zh.md)
-- [Changelog](../CHANGELOG.md)
-- [Repository instructions for coding agents](../AGENTS.md)
+- [项目概览与快速开始](../README.md)
+- [兼容链接：简体中文项目说明](../README_zh.md)
+- [变更日志](../CHANGELOG.md)
+- [编码 Agent 仓库说明](../AGENTS.md)
 
-## Documentation boundaries
+## 文档边界
 
-- `README.md` is the concise product entry point; detailed behavior belongs in the task guides above.
-- User-visible behavior belongs in the user guide. Editor invariants belong in the editor architecture guide; system topology, security, deployment, releases, and recovery stay in their respective canonical guides.
-- Cross-link to a canonical guide instead of copying long procedures into multiple files.
-- Keep commands, configuration names, limits, and compatibility claims aligned with the implementation and checked-in configuration.
+- `README.md` 是简洁的产品入口；行为细节应写入上方对应的任务指南。
+- 用户可见行为写入用户指南。编辑器不变量写入编辑器架构指南；系统拓扑、安全、部署、发布和恢复分别保留在各自的权威指南中。
+- 应链接到权威指南，不要在多个文件中复制冗长流程。
+- 命令、配置名称、限制和兼容性声明必须与实现及提交到仓库的配置保持一致。

@@ -1,45 +1,43 @@
 # Mint Notes
 
-English | [简体中文](README_zh.md)
+Mint Notes 是一款使用 AI 开发的玩具级项目。目标是提供轻量部署、安全存储、简单易用的笔记体验。本项目支持 PWA 自适应布局和端到端加密，你可以在远程服务器上自行托管笔记，并使用熟悉的 Markdown 语法进行编辑。
 
-Mint Notes is a toy-grade project developed with AI. It aims to provide a note-taking experience that is lightweight to deploy, secure to store, and simple to use. It supports responsive PWA layouts and end-to-end encryption, so you can self-host your notes on a remote server and edit them with familiar Markdown syntax.
-
-If you find a bug or have a feature suggestion, please submit an issue—or ask your AI agent to make the changes!
+如果你发现缺陷或有功能建议，请提交 Issue，或者让你的 AI Agent 帮你修改！
 
 
-## Features
+## 功能特性
 
-- **Local-first and end-to-end encrypted:** Input and local saves never wait for the network; titles, content, folders, and attachments are encrypted in the browser before synchronization.
-- **Markdown editing:** Typora-style live editing, source mode, reading mode, KaTeX math, Mermaid diagrams, WikiLinks, extensible Obsidian-style callouts, YAML properties, a live outline, and text statistics.
-- **Organization and history:** Folders, search, sorting, drag-and-drop, note locking, trash, and encrypted cross-device version history with custom names, protected snapshots, preview, and restore.
-- **Multi-user and device security:** Multi-user accounts with changeable login usernames, recovery keys, activation codes, remembered devices with offline cold-start access, optional PIN-encrypted local unlock credentials, automatic locking, and remote sign-out.
-- **Attachments and data migration:** Encrypted image attachments plus Markdown/ZIP import and export that preserve folder structure and attachment paths.
-- **PWA and multi-device synchronization:** Installable desktop, tablet, and mobile layouts with remembered-device offline startup and editing, deferred synchronization, themes, and multilingual interfaces.
-- **Lightweight self-hosting:** One Docker service backed by SQLite, with a consistent online-backup workflow.
+- **本地优先与端到端加密：**输入和本地保存无需等待网络；标题、正文、文件夹和附件在浏览器中加密后再同步。
+- **Markdown 编辑：**支持类 Typora 的实时编辑、源码模式、阅读模式、KaTeX 数学公式、Mermaid 图表、WikiLink、可扩展的 Obsidian 风格 Callout、YAML 属性、实时大纲和文本统计。
+- **组织与历史：**支持文件夹、搜索、排序、拖放、笔记锁定、回收站，以及可自定义名称、保护快照、预览和恢复的跨设备加密版本历史。
+- **多用户与设备安全：**支持多用户账户、修改登录用户名、恢复密钥、激活码、可离线冷启动的已记住设备、可选的 PIN 加密本机解锁凭据、自动锁定和远程登出。
+- **附件与数据迁移：**支持加密图片附件，以及保留文件夹结构和附件路径的 Markdown／ZIP 导入导出。
+- **PWA 与多设备同步：**提供可安装的桌面、平板和移动端布局，支持已记住设备离线启动与编辑、延迟同步、主题和多语言界面。
+- **轻量自托管：**仅需一个使用 SQLite 的 Docker 服务，并提供一致的在线备份流程。
 
-## Technology
+## 技术栈
 
-The browser application uses React, TypeScript, Vite, an in-repository ProseMirror editor core derived from `typora-web`, Web Crypto, and Dexie/IndexedDB.
+浏览器应用使用 React、TypeScript、Vite、由 `typora-web` 衍生并在仓库内维护的 ProseMirror 编辑器核心、Web Crypto 和 Dexie／IndexedDB。
 
-The server uses Fastify and SQLite.
+服务器使用 Fastify 和 SQLite。
 
-## Development
+## 开发
 
-Requirements:
+环境要求：
 
-- Node.js 22 or newer
-- pnpm 11 or newer
+- Node.js 22 或更高版本
+- pnpm 11 或更高版本
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:5173`. Vite proxies `/api` to the API server at `http://127.0.0.1:8787`. The first account becomes the administrator and receives a recovery key during registration.
+打开 `http://localhost:5173`。Vite 会将 `/api` 代理到 `http://127.0.0.1:8787` 的 API 服务器。第一个账户会成为管理员，并在注册时获得恢复密钥。
 
-See the [development guide](docs/DEVELOPMENT.md) for the project layout, verification commands, and test dependencies.
+有关项目结构、验证命令和测试依赖，请参阅[开发指南](docs/DEVELOPMENT.md)。
 
-## Docker quick start
+## Docker 快速开始
 
 ```bash
 cp .env.example .env
@@ -49,36 +47,36 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Before starting, set `APP_ORIGIN` in `.env` to the exact HTTPS origin users will open, such as `https://notes.example.com`.
+启动前，请在 `.env` 中将 `APP_ORIGIN` 设置为用户实际访问的完整 HTTPS 源，例如 `https://notes.example.com`。
 
-On Linux, set `PUID` and `PGID` to the non-zero numeric user and group IDs that own `./notes-data`—normally the output of `id -u` and `id -g`—so the non-root container can write its SQLite files.
+在 Linux 上，请将 `PUID` 和 `PGID` 设置为 `./notes-data` 所有者的非零数字用户 ID 和组 ID（通常分别为 `id -u` 和 `id -g` 的输出），以便非 root 容器能够写入 SQLite 文件。
 
-## First use
+## 首次使用
 
-1. Open the application and create the first account. It is always assigned the administrator role.
-2. Store the displayed recovery key in a password manager or a protected offline location. It is shown only during account creation.
-3. Keep public registration disabled unless it is intentionally required. Administrators can create activation codes under **Settings > Administrator settings**.
-4. Create and test both a plaintext Markdown ZIP export and an encrypted server backup before relying on the service.
+1. 打开应用并创建第一个账户。该账户始终会被赋予管理员角色。
+2. 将显示的恢复密钥保存在密码管理器或受保护的离线位置。恢复密钥只会在创建账户时显示一次。
+3. 除非确有需要，否则请保持关闭公开注册。管理员可以在**设置 > 管理员设置**中创建激活码。
+4. 在正式依赖此服务前，请分别创建并测试一次明文 Markdown ZIP 导出和加密服务器备份。
 
-The [user guide](docs/USER_GUIDE.md) covers editor modes, file-tree operations, attachments, synchronization states, account recovery, import/export, and safe deletion.
+[用户指南](docs/USER_GUIDE.md)涵盖编辑器模式、文件树操作、附件、同步状态、账户恢复、导入／导出和安全删除。
 
-## Documentation
+## 文档
 
-See the [documentation index](docs/README.md) to choose a guide by task.
+请从[文档索引](docs/README.md)按任务选择对应指南。
 
-- **Using Mint Notes:** [User guide](docs/USER_GUIDE.md)
-- **Operating Mint Notes:** [Production deployment](docs/DEPLOYMENT.md) and [backup and restore](docs/BACKUP_AND_RESTORE.md)
-- **Contributing:** [Development guide](docs/DEVELOPMENT.md), [editor architecture](docs/EDITOR_ARCHITECTURE.md), and the architecture and security references linked from the documentation index
+- **使用 Mint Notes：**[用户指南](docs/USER_GUIDE.md)
+- **运维 Mint Notes：**[生产部署](docs/DEPLOYMENT.md)与[备份和恢复](docs/BACKUP_AND_RESTORE.md)
+- **参与开发：**[开发指南](docs/DEVELOPMENT.md)、[编辑器架构](docs/EDITOR_ARCHITECTURE.md)，以及文档索引中的系统架构与安全资料
 
-## Acknowledgements
+## 致谢
 
-Thanks to the following open-source projects:
+感谢以下开源项目：
 
-- Editor core origin: [typora-web](https://github.com/Yuyz0112/typora-web)
-- Math renderer: [KaTeX](https://katex.org/)
-- Diagram renderer: [Mermaid](https://mermaid.js.org/)
-- Icon library: [Lucide React](https://lucide.dev/)
+- 编辑器核心来源：[typora-web](https://github.com/Yuyz0112/typora-web)
+- 数学公式渲染：[KaTeX](https://katex.org/)
+- 图表渲染：[Mermaid](https://mermaid.js.org/)
+- 图标库：[Lucide React](https://lucide.dev/)
 
-## License
+## 许可证
 
-Mint Notes is available under the [MIT License](LICENSE).
+Mint Notes 采用 [MIT 许可证](LICENSE)发布。

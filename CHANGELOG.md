@@ -1,293 +1,293 @@
-# Changelog
+# 变更日志
 
-All notable changes to Mint Notes are documented in this file.
+本文件记录 Mint Notes 的所有重要变化。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [Unreleased]
+## [未发布]
 
-### Added
+### 新增
 
-- Added privacy-preserving server terminal logs with readable development output, structured production JSON, configurable levels, request IDs, process-local anonymous references, and high-value lifecycle, authentication, synchronization, administration, quota, and maintenance events.
-- Added scalable trash browsing in Settings: deleted folders start collapsed with descendant counts, title search and type filters reveal matching ancestor paths, deletion-time and name sorting are independent from the file tree, and long root lists load in batches.
-- Added source-aware Live editing commands for Enter, Shift+Enter, Tab, and Shift+Tab, including list and quote continuation, ordered-list numbering, task creation, Markdown hard breaks, and source-level indentation changes.
-- Added Live and Reading presentations for safe inline `<br>` hard breaks, Obsidian comments, and WikiLink embeds, while keeping their authored Markdown portable and editable.
-- Added source-backed table controls for resizing, column alignment, and table deletion without discarding retained cell spellings or escaped pipes.
+- 新增隐私保护的服务器终端日志：开发环境使用易读输出，生产环境使用结构化 JSON，并支持可配置级别、请求 ID、进程本地匿名引用，以及高价值生命周期、认证、同步、管理、配额和维护事件。
+- 新增可扩展的设置内回收站浏览：删除文件夹初始折叠并显示后代数；标题搜索和类型筛选会显示匹配祖先路径；删除时间／名称排序独立于文件树；长根列表分批加载。
+- 新增感知源码的实时模式 Enter、Shift+Enter、Tab 和 Shift+Tab 命令，包括列表／引用续写、有序列表编号、任务创建、Markdown 硬换行和源码级缩进变化。
+- 新增安全行内 `<br>` 硬换行、Obsidian 注释和 WikiLink 嵌入的实时／阅读展示，同时保持作者 Markdown 可移植、可编辑。
+- 新增基于源码的表格调整宽度、列对齐和删除控件，不丢弃保留的单元格写法或转义竖线。
 
-### Changed
+### 变更
 
-- Refined deleted-item rows to match the file tree's compact borderless presentation, while keeping restore immediately available and moving permanent deletion into the more-actions menu.
-- Reworked Live blockquotes and Callouts as source-backed editor blocks. Activating a rendered preview now reveals the complete authored quote source—including prefixes, blank quoted lines, nested levels, and fenced content—within the same reserved layout footprint, while Callout rendering is provided through the editor extension lifecycle instead of a React overlay or private Markdown transformation.
-- Established exact Markdown string and whitespace fidelity as a release-blocking editor invariant, with a source-fidelity audit covering current normalization gaps, source-coordinate risks, invalid-syntax fallback, and the required cross-mode regression matrix.
-- Changed Live editing to keep source-level undo and redo independent from the derived ProseMirror view, while copy, cut, cursor movement, and delimiter activation continue to operate on canonical Markdown offsets.
-- Changed source-backed headings, lists, tasks, tables, reference definitions, and other structures to reveal their authored delimiters in place with muted syntax hints, preserving equivalent spellings and content styling as the caret moves.
+- 调整删除项目行，使其采用与文件树一致的紧凑无边框样式；恢复仍可直接使用，永久删除移入更多操作菜单。
+- 将实时块引用与 Callout 改造为基于源码的编辑器块。激活渲染预览会在相同预留占位中显示完整作者引用源码，包括前缀、引用空行、嵌套层级和围栏内容；Callout 渲染改由编辑器扩展生命周期提供，不再使用 React 覆盖层或私有 Markdown 转换。
+- 将准确 Markdown 字符串与空白保真确立为阻断发布的编辑器不变量，并审计现有规范化缺口、源码坐标风险、无效语法回退和必需跨模式回归矩阵。
+- 实时编辑的源码级撤销／重做与派生 ProseMirror 视图分离；复制、剪切、光标移动和分隔符激活继续使用规范 Markdown 偏移。
+- 标题、列表、任务、表格、引用定义等源码结构在原位显示作者分隔符和弱化语法提示，光标移动时保留等价写法与内容样式。
 
-### Fixed
+### 修复
 
-- Fixed Live direction-key navigation occasionally pausing at a block boundary or moving into a styled block without revealing its Markdown source. Pointer, keyboard, and programmatic movement now synchronize presentation from the same final source position, restore only the blocks that changed activation, and preserve rich table cell navigation.
-- Fixed Live headings, lists, code blocks, quotes, tables, horizontal rules, and inline Markdown changing line height or collapsing their rendered footprint when source syntax was revealed. Top-level block gaps now come only from authored blank lines, including trailing blank rows after lists.
-- Fixed edited notes repeatedly re-entering the local persistence queue after a successful durable save, which continuously replaced the synchronization outbox generation and could leave the application showing **Syncing…** indefinitely.
-- Fixed encrypted images in Live mode remaining in a broken-source state after switching away from a note and back. Asynchronously restored Blob URLs now refresh only the presentation layer without changing canonical Markdown, undo history, focus, or caret position.
-- Fixed editing or deleting an empty line inside a blockquote or Callout collapsing its lines into one sequence of repeated `>` prefixes. Enter, Backspace, and Delete now operate the authored quote source in order, including moving to the previous editable line from the block's left edge instead of removing the delimiter to the caret's right.
-- Fixed Live blockquotes and Callouts shifting surrounding content when switching between rendered preview and source editing.
-- Fixed ordinary paragraph gaps in Live mode being rendered as several extra editable rows. Authored blank lines now occupy only their intended visual rows, retain every LF/CRLF character and whitespace boundary, and reparse immediately when edited.
-- Fixed Live structural edits losing source spelling or caret context after list, task, heading, table, and inline-syntax changes; incomplete delimiters now fall back to literal source without silently normalizing neighboring content.
+- 修复实时方向键在块边界偶尔停顿，或进入样式块后不显示 Markdown 源码。指针、键盘和程序化移动现在从同一最终源码位置同步展示，只恢复激活状态变化的块，并保留富表格单元格导航。
+- 修复显示源码时实时标题、列表、代码块、引用、表格、分隔线和行内 Markdown 改变行高或折叠渲染占位。顶层块间隙现在只来自作者空行，包括列表后的尾随空行。
+- 修复已编辑笔记在持久保存成功后反复进入本地持久化队列，持续替换同步发件箱代次并可能让应用永久显示“同步中”。
+- 修复切换笔记后实时加密图片仍显示损坏来源。异步恢复的 Blob URL 现在只刷新展示层，不改变规范 Markdown、撤销历史、焦点或光标。
+- 修复在块引用／Callout 中编辑或删除空行会把多行折叠为连续 `>` 前缀。Enter、Backspace 和 Delete 现在按顺序作用于作者引用源码，并在块左边缘移到上一可编辑行，而非删除右侧分隔符。
+- 修复实时块引用／Callout 在预览与源码编辑间切换时移动周围内容。
+- 修复实时普通段落间隙被显示为多个额外可编辑行。作者空行只占预期视觉行，保留全部 LF／CRLF 与空白边界，并在编辑后立即重新解析。
+- 修复列表、任务、标题、表格和行内语法变化后实时结构编辑丢失源码写法或光标上下文；未完成分隔符现在回退为字面源码，不静默规范化相邻内容。
 
 ## [0.13.0] - 2026-08-11
 
-### Changed
+### 变更
 
-- Refined Settings actions: the logout control now appears only under **General**, the **Data migration** heading uses consistent wording, inactive login-device removal uses a neutral style, and administrator user actions now have matching status icons and spacing.
-- Split local-save retrying, synchronization pulls, purge safety, and outbox acknowledgement out of `VaultWorkspace` into focused controllers with explicit transactional boundaries.
-- Changed Live editing to retain canonical authored Markdown separately from its rendered ProseMirror view, preserving untouched source syntax and source-based caret positions across edits and mode switches.
-- Changed attachment staging so the encrypted manifest, every encrypted chunk, and their durable outbox entries are committed in one IndexedDB transaction before a Markdown reference can be inserted.
+- 优化设置操作：登出只出现在**常规**；**数据迁移**标题用词统一；非活动登录设备移除使用中性样式；管理员用户操作采用一致状态图标与间距。
+- 将本地保存重试、同步拉取、清除安全和发件箱确认从 `VaultWorkspace` 提取到具有明确事务边界的专用控制器。
+- 实时编辑将规范作者 Markdown 与渲染 ProseMirror 视图分开保留，在编辑和模式切换间保持未触及源码语法与源码光标位置。
+- 附件暂存改为在插入 Markdown 引用前，通过一个 IndexedDB 事务提交加密清单、全部加密分块及持久发件箱条目。
 
-### Fixed
+### 修复
 
-- Fixed installed iPadOS layouts stopping above the bottom safe area and leaving an empty strip; application backgrounds now fill the complete viewport while bottom controls remain inset from system UI.
-- Fixed both desktop sidebar resize tracks showing surface-colored gutters between the gray sidebars and white document pane; each boundary is now a single divider line with a wider invisible drag target.
-- Fixed Settings requiring the close button to dismiss the window; clicking outside the Settings window now closes it while recovery-key confirmation is not pending.
-- Fixed failed encryption or IndexedDB writes being able to strand the newest edit behind a debounce boundary. Failed generations now remain pending, retry with backoff, block normal locking and unloading, and keep the dirty state until a durable local copy exists.
-- Fixed synchronization cursors advancing past changes that could not be decrypted or safely applied, and added a full replay path when a server restored from an older backup reports a cursor behind the client.
-- Fixed remote purge and upload acknowledgement paths that could remove pending local documents, attachment data, history operations, or a newer object generation before a durable conflict or rebased outbox entry existed.
-- Fixed attachment downloads accepting inconsistent chunk indexes, totals, encryption versions, or attachment identities, and added grace-period cleanup for abandoned server-side chunks without a manifest.
-- Fixed protected history accepting missing or unrelated attachment references, and fixed history retention cleanup treating the same history identifier on different notes as one record.
-- Fixed recovery-key downloads revoking their Blob URL too early and allowed settings to close only after the newly generated key has been explicitly confirmed as saved.
+- 修复已安装 iPadOS 布局停在底部安全区上方留下空白条；背景现在填满完整视口，底部控件仍避开系统 UI。
+- 修复桌面两侧栏调整轨道在灰色侧栏与白色文档间显示底色沟槽；每个边界现在只有一条分隔线和更宽隐形拖动目标。
+- 修复设置只能用关闭按钮关闭；在没有待确认恢复密钥时，点击窗口外也会关闭。
+- 修复加密或 IndexedDB 写入失败可能让最新编辑滞留在防抖边界。失败代次继续待处理并退避重试，阻止普通锁定和卸载，并保持脏状态直到存在持久本地副本。
+- 修复同步游标越过无法解密或安全应用的更改，并为服务器从较旧备份恢复、游标落后客户端时新增完整重放路径。
+- 修复远程清除和上传确认可能在存在持久冲突或重设基线发件箱前移除待处理文档、附件、历史操作或较新对象代次。
+- 修复附件下载接受不一致分块索引、总数、加密版本或附件身份，并为没有清单的废弃服务器分块添加宽限期清理。
+- 修复受保护历史接受缺失／无关附件引用，以及历史保留清理把不同笔记上的相同历史 ID 当作同一记录。
+- 修复恢复密钥下载过早撤销 Blob URL；只有明确确认新密钥已保存后才允许关闭设置。
 
-### Security
+### 安全
 
-- Bound object, history, and attachment-chunk idempotency keys to their complete request targets and encrypted payloads, rejecting reuse with different content instead of silently replaying the earlier result.
-- Enforced the shared per-user storage quota across encrypted object revisions and attachment chunks, and reject state-changing requests with a missing or mismatched Origin whenever `APP_ORIGIN` is configured.
-- Validate protected attachment references against the authenticated user's live attachment manifests and prevent physical cleanup while any local object, chunk, history, or purge operation remains pending.
+- 将对象、历史和附件分块幂等键绑定到完整请求目标与加密负载；内容不同时拒绝重用，而不是静默重放旧结果。
+- 对加密对象修订和附件分块实施共享每用户存储配额；配置 `APP_ORIGIN` 后拒绝缺失或不匹配 Origin 的状态更改请求。
+- 对照已认证用户的活动附件清单验证受保护附件引用，并在任何本地对象、分块、历史或清除操作待处理时阻止物理清理。
 
 ## [0.12.0] - 2026-08-10
 
-### Changed
+### 变更
 
-- Reworked horizontal rules in Live mode so clicking the rendered rule or moving the caret into it reveals the original `---`, `***`, or `___` delimiter. The revealed source can be edited or deleted directly; pressing Enter at its start, middle, or end inserts a line before it, splits it, or creates a paragraph after it.
-- Reworked fenced code blocks in Live mode to keep their complete Markdown source directly editable. Inactive blocks hide the opening and closing fences and show the language in the upper-right; focusing a block reveals both fences in reserved rows without changing its height.
-- Improved fenced-code keyboard navigation so the caret enters through the nearest fence, moves through every source line in order, and reaches the opposite fence before leaving the block. Pressing Enter at the end of a valid closing fence now creates a paragraph below it.
-- Refined Live-mode code blocks with a rounded dark surface and no contrasting border.
+- 重做实时分隔线：单击或移动光标进入时显示原始 `---`、`***` 或 `___`，可直接编辑／删除；在开头、中间或末尾按 Enter 会分别在前方插行、拆分或在后方建段落。
+- 重做实时围栏代码块，使完整 Markdown 源码可直接编辑。非活动时隐藏起止围栏并在右上显示语言；获得焦点时在预留行显示两个围栏，不改变高度。
+- 改善围栏代码键盘导航：光标从最近围栏进入，依次遍历每个源码行，到达另一围栏后离开。在有效结束围栏末尾按 Enter 会在下方创建段落。
+- 优化实时代码块为圆角深色表面，无对比边框。
 
-### Fixed
+### 修复
 
-- Fixed structural fence edits in Live mode so adding, removing, or invalidating a closing fence immediately reparses the remaining Markdown without generating, deleting, or relocating other authored fences. Incomplete closing fences are preserved exactly after saving and reopening.
+- 修复实时结构围栏编辑：添加、移除或使结束围栏无效后立即重新解析剩余 Markdown，不生成、删除或移动其他作者围栏。未完成结束围栏保存和重开后准确保留。
 
 ## [0.11.0] - 2026-08-09
 
-### Added
+### 新增
 
-- Added an option to remove signed-out or expired login-device records immediately. The server now removes records that remain inactive for 30 days automatically.
+- 新增立即移除已登出／过期登录设备记录的选项；服务器会自动删除持续非活动 30 天的记录。
 
-### Changed
+### 变更
 
-- Simplified General settings with a compact profile summary. Avatar, display-name, and username changes now open in a responsive **Edit profile** dialog, with a separate action for each change.
-- Replaced the small, standard, and large text-size presets with a 12–24 pixel input. Changes are previewed and saved immediately, **Restore default** returns to 14 pixels, and existing preferences migrate automatically.
+- 用紧凑资料摘要简化常规设置。头像、显示名称和用户名更改在响应式**编辑资料**对话框中打开，每项有独立操作。
+- 用 12–24 像素输入替代小／标准／大字号预设；更改立即预览并保存，**恢复默认**回到 14 像素，旧偏好自动迁移。
 
-### Fixed
+### 修复
 
-- Fixed disabled profile actions showing a busy cursor instead of the expected unavailable-action cursor.
+- 修复禁用资料操作显示忙碌光标，而非不可用操作光标。
 
 ## [0.10.1] - 2026-08-08
 
-### Fixed
+### 修复
 
-- Fixed Docker image builds failing before dependency installation because the Dockerfile required a nonexistent pnpm patches directory.
+- 修复 Dockerfile 依赖不存在的 pnpm 补丁目录，导致镜像构建在安装依赖前失败。
 
 ## [0.10.0] - 2026-08-08
 
-### Added
+### 新增
 
-- Added end-to-end encrypted custom names and independent protection controls for every note-history snapshot, with inline renaming, a shared protection badge, and a compact three-action menu.
-- Added username changes in Settings. The confirmation dialog accepts the current password and recovery key, or can generate a replacement recovery key when the existing key is unavailable.
+- 为每个笔记历史快照新增端到端加密自定义名称和独立保护控制，包括行内重命名、共享保护标记和紧凑三操作菜单。
+- 在设置中新增用户名更改；确认对话框接受当前密码与恢复密钥，旧密钥不可用时也可生成替代密钥。
 
-### Changed
+### 变更
 
-- Changed manual history saves to always create a complete snapshot, even when content is unchanged, using a selected local date-time name and protection by default; automatic history remains deduplicated and unprotected by default.
-- Moved client and server history behavior into dedicated typed modules, with durable offline metadata updates and additive compatibility for existing encrypted history records.
-- Moved the Live Markdown editor into the Mint Notes codebase as a project-owned core, preserving canonical Markdown compatibility while loading Callouts, math, Mermaid, and WikiLinks through maintained extensions.
-- Decoupled new vault-key envelopes from usernames so accounts can be renamed without changing passwords or encrypted note data, while legacy accounts migrate automatically on their first username change.
-- Changed device PIN setup, replacement, and removal to request the master password and new PIN in an action-specific confirmation dialog instead of keeping credential fields on the Security settings page.
-- Grouped master-password changes and recovery-key resets under two account-credential actions whose verification fields open only after the user selects an operation.
+- 手动历史保存始终创建完整快照，即使内容未变，并默认使用所选本地日期时间名称和保护状态；自动历史仍默认去重且不保护。
+- 将客户端／服务器历史行为移入专用类型化模块，支持持久离线元数据更新，并增量兼容现有加密历史记录。
+- 将实时 Markdown 编辑器移入 Mint Notes 代码库作为项目自有核心，在保持规范 Markdown 兼容的同时，通过维护的扩展加载 Callout、数学公式、Mermaid 和 WikiLink。
+- 新保险库密钥信封与用户名解耦，使账户改名无需改变密码或加密笔记数据；旧账户首次改名时自动迁移。
+- 设备 PIN 设置、替换和移除改为在操作专属确认对话框中请求主密码和新 PIN，不再长期显示在安全设置页。
+- 主密码更改和恢复密钥重置归入两个账户凭据操作，只有选择操作后才打开验证字段。
 
-### Security
+### 安全
 
-- Protected history is excluded from individual deletion, bulk clearing, retention cleanup, and thinning, and prevents physical cleanup of its owning note and referenced attachments until protection is removed; custom names remain encrypted while the server sees only the protection state and random attachment references.
-- Username changes now atomically update the login name and encrypted vault envelopes, revoke other sessions and remembered endpoints, and require either the current recovery key or explicit confirmation of a newly generated replacement key.
+- 受保护历史不受单项删除、批量清空、保留清理和稀疏影响，并在取消保护前阻止所属笔记及引用附件的物理清理；自定义名称保持加密，服务器只看到保护状态和随机附件引用。
+- 用户名更改原子更新登录名与加密保险库信封、撤销其他会话和已记住端点，并要求当前恢复密钥或明确确认新生成的替代密钥。
 
 ## [0.9.0] - 2026-07-30
 
-### Fixed
+### 修复
 
-- Fixed pinned nested notes and folders remaining hidden when selected from the Pinned section while their parent folders were collapsed; the complete path now expands and the original tree row scrolls into view.
+- 修复从已固定区选择嵌套笔记／文件夹时，父文件夹折叠会使其保持隐藏；现在会展开完整路径并滚动到原树行。
 
 ## [0.8.4] - 2026-07-30
 
-### Fixed
+### 修复
 
-- Fixed continuous Live editing occasionally losing the caret or reverting newer text when an older encrypted local save completed while later input was still waiting in the debounce window.
-- Fixed attachment Blob URL updates rebuilding the Live editor and discarding its active focus or selection while an image finished loading.
+- 修复持续实时编辑时，旧加密本地保存完成而新输入仍在防抖窗口中，偶尔丢失光标或回退较新文本。
+- 修复图片加载完成时附件 Blob URL 更新重建实时编辑器并丢失焦点或选区。
 
 ## [0.8.3] - 2026-07-29
 
-### Added
+### 新增
 
-- Added image insertion by drag-and-drop or clipboard paste in both Live and Source editing modes, while leaving ordinary text paste unchanged.
-- Added a copy button to fenced code blocks in Reading mode and read-only history previews, with hover reveal, touch and keyboard access, and localized copy feedback.
+- 在实时和源码模式新增通过拖放或剪贴板粘贴图片，普通文本粘贴保持不变。
+- 为阅读模式和只读历史预览中的围栏代码块新增复制按钮，支持悬停显示、触控／键盘访问和本地化反馈。
 
-### Fixed
+### 修复
 
-- Added between-row drop feedback to A-Z, creation-time, and modification-time sorting so moving notes or folders out of nested directories has a clear destination indicator without overriding the selected sort order.
-- Fixed dragged images failing to insert in Source mode after local attachment encryption completed.
+- 为 A–Z、创建时间和修改时间排序新增行间拖放反馈，使移出嵌套目录时有明确目标而不覆盖当前排序。
+- 修复本地附件加密完成后，拖入图片无法插入源码模式。
 
 ## [0.8.2] - 2026-07-29
 
-### Added
+### 新增
 
-- Added offline cold-start access for remembered devices. Devices without a local PIN open their encrypted local vault directly; PIN-protected devices require the PIN, and non-remembered sessions remain unavailable offline.
-- Added a versioned last-verified local session snapshot and foreground revalidation. Local-only sessions keep network features disabled until `/api/auth/me` confirms the same remembered endpoint, then resume synchronization in pull-before-push order.
+- 为已记住设备新增离线冷启动：无本地 PIN 的设备直接打开加密本地保险库；PIN 设备要求 PIN；未记住会话离线不可用。
+- 新增带版本最近验证本地会话快照和前台重新验证。本地会话在 `/api/auth/me` 确认同一端点前禁用网络功能，之后按先拉取后推送恢复同步。
 
-### Fixed
+### 修复
 
-- Fixed server or reverse-proxy unavailability sending remembered devices to the login page with a misleading registration-configuration error.
-- Fixed offline logout and exhausted-PIN revocation requests being lost after local account data was removed; the endpoint revocation is now retained for the next online startup.
+- 修复服务器或反向代理不可用时，已记住设备被送回登录页并显示误导性注册配置错误。
+- 修复离线登出和 PIN 尝试耗尽后，本地账户删除导致撤销请求丢失；现在会保留到下次在线启动。
 
-### Security
+### 安全
 
-- Server authorization is never inferred from the cached identity snapshot. A confirmed `401`, a non-remembered endpoint, or an identity mismatch deletes local trust and locks the vault while retaining encrypted objects and pending synchronization data.
+- 服务器授权绝不从缓存身份快照推断。确认 `401`、端点未记住或身份不匹配会删除本地信任并锁定保险库，同时保留加密对象与待同步数据。
 
 ## [0.8.1] - 2026-07-28
 
-### Fixed
+### 修复
 
-- Fixed the empty editor toolbar shifting its mode switch and hiding note actions; Live, Source, Reading, note-lock, and image controls now keep the regular note layout while remaining disabled until a note is selected, and the redundant encryption description has been removed from the welcome state.
+- 修复空编辑器工具栏移动模式切换并隐藏笔记操作；实时、源码、阅读、笔记锁和图片控件现在保持普通布局，在选择笔记前保持禁用，并移除欢迎状态中的重复加密说明。
 
 ## [0.8.0] - 2026-07-28
 
-### Added
+### 新增
 
-- Added copy-result feedback and a downloadable plaintext backup to the one-time registration recovery-key screen, which now requires explicit confirmation that the key was stored before entering the vault.
+- 为一次性注册恢复密钥界面新增复制结果反馈和可下载明文备份，并要求明确确认已保存后才进入保险库。
 
-### Changed
+### 变更
 
-- Changed new-note editing so Enter in the title moves focus directly into the Markdown body; empty Live and Source editors show a presentation-only **Start writing…** hint that disappears as soon as the editor receives focus.
-- Refined the note toolbar with a larger rounded title field aligned to the editor-mode control, and simplified the phone status bar to keep synchronization state and word and character counts readable without horizontal scrolling.
-- Simplified the status bar to four user-facing synchronization states while retaining detailed local-save tooltips, distinguishing an explicitly offline browser from an unreachable server, and preventing local persistence failures from claiming that the latest change was saved.
+- 新笔记标题中按 Enter 会直接聚焦 Markdown 正文；空实时／源码编辑器显示仅展示的“开始写作…”提示，获得焦点后消失。
+- 优化笔记工具栏：更大的圆角标题框与模式控件对齐；简化手机状态栏，使同步状态和字／字符计数无需横向滚动即可阅读。
+- 状态栏简化为四种面向用户同步状态，同时保留详细本地保存提示，区分明确离线与服务器不可达，并防止本地持久化失败声称已保存。
 
-### Fixed
+### 修复
 
-- Fixed responsive workspace controls so notifications stay below the top toolbar, the pinned left directory can always be collapsed and reopened at intermediate widths, and phone drawers use the matching sidebar-close symbols.
-- Fixed manual tree sorting lacking a clear between-row drop target and moving same-position single or multi-item drops; a connected mint insertion marker now distinguishes before/after placement from full-row folder drops.
-- Fixed asynchronous local encryption allowing an older save of the same object to overwrite a newer edit in IndexedDB or its synchronization outbox.
-- Fixed conflict, duplicate, and history-restored note copies reusing the source note's attachment ownership; copies now receive independent attachment IDs and keys, while incomplete attachment recovery keeps the local change pending for a safe retry instead of creating a broken copy.
+- 修复响应式工作区：通知位于顶部工具栏下方；中等宽度下固定左目录始终可折叠／打开；手机抽屉使用匹配的侧栏关闭符号。
+- 修复手动排序缺少明确行间目标且同位置单／多项拖放仍移动；连接式薄荷插入标记现在区分前后放置与整行文件夹放置。
+- 修复异步本地加密让同一对象的旧保存覆盖 IndexedDB 或同步发件箱中的较新编辑。
+- 修复冲突、复制和历史恢复副本复用来源附件所有权；副本现在获得独立附件 ID 与密钥，附件恢复不完整时保留本地更改安全重试。
 
 ## [0.7.0] - 2026-07-28
 
-### Changed
+### 变更
 
-- Changed the PIN lock screen to show the current account's display name as the primary heading and the localized **Notes locked** status beneath it, without retaining or displaying the encrypted profile avatar.
-- Changed workspace restoration so the active note, editor mode, and collapsed sidebars are remembered independently in each browser or installed PWA instead of synchronizing across devices; newly signed-in devices start with an empty editor.
-- Changed Live Callout headers so clicking the rendered title row reveals the complete editable marker with its `>` quote prefix, places the caret near the clicked title character, and keeps long marker lines usable without covering the body.
-- Changed installed iOS and iPadOS layouts to extend application surfaces beneath the translucent system status area while keeping toolbars, drawers, settings, notifications, editor content, and bottom controls inside device safe areas.
+- PIN 锁屏以当前账户显示名称为主标题，下方显示本地化“笔记已锁定”，不保留或显示加密头像。
+- 工作区恢复改为在每个浏览器／PWA 中独立记住活动笔记、编辑器模式和折叠侧栏，不跨设备同步；新登录设备以空编辑器开始。
+- 实时 Callout 标题行点击后显示包含 `>` 前缀的完整可编辑标记，将光标放到靠近所点标题字符的位置，并让长标记行不遮盖正文。
+- 已安装 iOS／iPadOS 布局延伸到半透明系统状态区下，同时让工具栏、抽屉、设置、通知、编辑器和底部控件位于安全区内。
 
-### Fixed
+### 修复
 
-- Fixed login and lock screens being clipped in short mobile landscape viewports instead of allowing the complete form to scroll.
+- 修复短移动横屏视口中的登录与锁屏被裁剪，改为允许完整表单滚动。
 
 ## [0.6.0] - 2026-07-26
 
-### Added
+### 新增
 
-- Added lock and unlock actions to the contextual menu for a single note.
+- 为单篇笔记上下文菜单新增锁定／解锁操作。
 
-### Fixed
+### 修复
 
-- Fixed lock-state changes altering a note's modification time and modification-time sorting.
-- Kept the image attachment action visible but disabled while a note is locked, preserving the toolbar layout.
+- 修复锁定状态变化改变笔记修改时间和修改时间排序。
+- 锁定笔记时保持显示但禁用图片附件操作，维持工具栏布局。
 
 ## [0.5.0] - 2026-07-26
 
-### Added
+### 新增
 
-- Added end-to-end encrypted note locking that synchronizes across devices, keeps locked notes in Reading mode without changing the workspace's selected editor mode, and shows lock badges in the directory and pinned-note lists.
-- Added recursive trash protection for locked notes, including folders and multi-item selections containing a locked descendant, while explicit note copies remain unlocked.
+- 新增跨设备同步的端到端加密笔记锁；锁定笔记保持阅读模式但不改变工作区所选模式，并在目录和固定列表显示锁标记。
+- 新增锁定笔记的递归回收站保护，包括含锁定后代的文件夹和多选；显式笔记副本保持解锁。
 
-### Fixed
+### 修复
 
-- Fixed touch devices requiring a second tap to open a note or expand or collapse a folder in the mobile directory drawer.
+- 修复触控设备需要第二次点击才能打开笔记或展开／折叠移动目录抽屉中的文件夹。
 
 ## [0.4.0] - 2026-07-26
 
-### Added
+### 新增
 
-- Added inline `$...$` and display `$$...$$` KaTeX math rendering in Live and Reading modes, with editable source presentation in Live mode and canonical delimiters preserved in Markdown.
-- Added local Mermaid rendering for `mermaid` fenced blocks in Live and Reading modes, with strict sanitization and editable source fallback.
-- Added WikiLink navigation for note titles, vault-root paths, custom labels, and headings, including current-folder preference when duplicate note titles exist.
-- Added optional Mint Notes Callout appearance attributes for predefined colors and icons.
+- 新增实时／阅读模式行内 `$...$` 与展示 `$$...$$` KaTeX 数学渲染，实时模式可编辑源码且保留规范分隔符。
+- 新增 `mermaid` 围栏块的本地 Mermaid 渲染，使用严格清理和可编辑源码回退。
+- 新增按笔记标题、保险库根路径、自定义标签和标题导航的 WikiLink；重名时优先当前文件夹。
+- 为预定义颜色和图标新增可选 Mint Notes Callout 外观属性。
 
-### Changed
+### 变更
 
-- Expanded Callouts to cover every built-in Obsidian type and alias, preserve alias-specific default titles, and render unknown custom types with a neutral style.
-- Changed empty Callout editing so Backspace moves into the marker line; an incomplete marker degrades to an ordinary blockquote without deleting its content, while retyping `]` restores Callout rendering.
+- Callout 扩展到全部内置 Obsidian 类型与别名，保留别名默认标题，未知自定义类型采用中性样式。
+- 空 Callout 中 Backspace 会移入标记行；未完成标记退化为普通块引用且不删内容，重新输入 `]` 后恢复 Callout。
 
-### Fixed
+### 修复
 
-- Fixed Live Callout title editing so entering a space and custom title after the closing `]` remains visible and renders immediately.
-- Fixed an acknowledged encrypted revision uploaded by the current browser being reported as an update from another device when synchronization encountered it again.
-- Fixed repeated PWA update prompts by fingerprinting the deployed Service Worker, suppressing duplicate prompts for the same version for 24 hours, and still prompting immediately for a genuinely different version.
+- 修复实时 Callout 标题编辑中，结束 `]` 后输入空格和自定义标题不立即显示／渲染。
+- 修复当前浏览器上传并确认的加密修订再次同步时被报告为其他设备更新。
+- 通过 Service Worker 指纹、同版本 24 小时抑制和不同版本即时提示，修复重复 PWA 更新提示。
 
 ## [0.3.0] - 2026-07-26
 
-### Added
+### 新增
 
-- Added inward edge-swipe gestures on phone-sized screens to open the directory drawer from the left or the Outline/History drawer from the right.
+- 手机尺寸下新增从左边缘打开目录、从右边缘打开大纲／历史抽屉的内滑手势。
 
-### Changed
+### 变更
 
-- Changed PIN-protected vaults so an ordinary refresh of an unlocked tab can remain unlocked through a tab-scoped encrypted refresh envelope, while application launches, manual locks, inactivity locks, expired intervals, and invalid sessions still require the PIN.
-- Reorganized administrator account controls under **User management**, separating new-user activation from existing-account actions.
+- PIN 保险库的普通已解锁标签页刷新可通过标签页作用域加密刷新信封保持解锁；应用启动、手动／不活动锁定、间隔过期和无效会话仍需 PIN。
+- 管理员账户控件重组到**用户管理**，分离新用户激活与现有账户操作。
 
-### Fixed
+### 修复
 
-- Removed the off-screen drawer shadows that remained visible along both sides of the mobile editor.
+- 移除移动编辑器两侧仍可见的屏外抽屉阴影。
 
 ## [0.2.1] - 2026-07-25
 
-### Changed
+### 变更
 
-- Changed PIN-protected vaults to require the local PIN after every refresh or new Crypto Worker instead of reusing browser-session authorization.
-- Added an automatic safe upgrade for legacy local PIN credentials after the next successful PIN unlock.
+- PIN 保险库在每次刷新或新加密 Worker 后要求本地 PIN，不再复用浏览器会话授权。
+- 旧本地 PIN 凭据会在下次成功 PIN 解锁后自动安全升级。
 
-### Security
+### 安全
 
-- Fixed a local lock-screen bypass where refreshing a manually or automatically locked PWA could restore the vault without requesting the PIN.
-- Replaced verifier-only local PIN protection with an Argon2id-derived AES-GCM envelope around the device-wrapped vault credential, with user and endpoint binding, wrong-PIN rejection, and tamper detection.
+- 修复手动或自动锁定 PWA 后刷新可不输入 PIN 恢复保险库的本地锁屏绕过。
+- 用 Argon2id 派生 AES-GCM 信封替代仅验证器 PIN 保护；信封包裹设备包装保险库凭据，绑定用户和端点，并能拒绝错误 PIN 和检测篡改。
 
 ## [0.2.0] - 2026-07-25
 
-### Added
+### 新增
 
-- Added Obsidian-compatible Callouts across Live, Reading, and historical previews, including common aliases, custom titles, nested Callouts, neutral styling for unknown types, and collapsible `+`/`-` markers.
-- Added an editable YAML frontmatter properties panel in Live mode and a read-only panel in Reading mode and historical previews, with safe fallbacks for invalid or complex YAML.
+- 在实时、阅读和历史预览中新增兼容 Obsidian 的 Callout，包括常用别名、自定义标题、嵌套 Callout、未知类型中性样式和可折叠 `+`／`-` 标记。
+- 新增实时模式可编辑 YAML Front Matter 属性面板，以及阅读／历史预览只读面板；无效或复杂 YAML 安全回退。
 
-### Changed
+### 变更
 
-- Changed line-leading `>` input to remain visible until Enter confirms the line, then continue editing on an empty quoted line.
-- Changed Live mode to preserve user-authored Markdown escapes across reloads while never inserting backslash escapes automatically.
+- 行首 `>` 输入保持可见，直到 Enter 确认该行，随后在空引用行继续编辑。
+- 实时模式跨重新加载保留作者 Markdown 转义，绝不自动插入反斜杠。
 
-### Fixed
+### 修复
 
-- Fixed Callout frames not resizing immediately when body lines were added or removed.
-- Fixed empty Callout body deletion losing the caret, corrupting the marker, or preventing undo after the whole block was removed.
-- Fixed private highlight/backtick markers and generated backslash escapes leaking into canonical Markdown.
+- 修复 Callout 正文增删行时边框不立即调整。
+- 修复删除空 Callout 正文时丢失光标、损坏标记或整块删除后无法撤销。
+- 修复私有高亮／反引号标记和生成的反斜杠转义泄漏到规范 Markdown。
 
 ## [0.1.0] - 2026-07-24
 
-### Added
+### 新增
 
-- Added local-first Markdown editing with durable browser saves, background synchronization, and browser-side end-to-end encryption.
-- Added responsive note organization with folders, search, sorting, trash, live/source/reading modes, and a generated outline.
-- Added multi-user accounts, recovery keys, trusted devices, administrator activation codes, and conflict-safe cross-device synchronization.
-- Added encrypted note history, image attachments, and folder-preserving Markdown/ZIP import and export.
-- Added installable multilingual PWA layouts for desktop, tablet, and mobile use.
-- Added single-service Docker deployment with SQLite storage, health checks, and consistent online backups.
+- 新增本地优先 Markdown 编辑、持久浏览器保存、后台同步和浏览器端端到端加密。
+- 新增响应式笔记组织，包括文件夹、搜索、排序、回收站、实时／源码／阅读模式和生成的大纲。
+- 新增多用户账户、恢复密钥、可信设备、管理员激活码和冲突安全的跨设备同步。
+- 新增加密笔记历史、图片附件，以及保留文件夹的 Markdown／ZIP 导入导出。
+- 新增可安装的多语言桌面、平板和移动端 PWA 布局。
+- 新增使用 SQLite 存储、健康检查和一致在线备份的单服务 Docker 部署。

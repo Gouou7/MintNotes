@@ -1,129 +1,145 @@
-# Architecture
+# 系统架构
 
-[Documentation index](README.md)
+[文档索引](README.md)
 
-## Goals
+## 目标
 
-Mint Notes optimizes for a small deployment footprint, responsive editing under high latency, ciphertext-only server storage, multi-user isolation, and recoverable user mistakes.
+Mint Notes 针对小型部署体积、高延迟下的响应式编辑、服务器仅存密文、多用户隔离和用户误操作可恢复进行优化。
 
-## Runtime topology
-
-```text
-Browser / installed PWA
-  - React responsive shell
-  - in-repository ProseMirror editor core with injected Callout and Math/Mermaid/WikiLink extensions
-  - crypto worker
-  - encrypted IndexedDB
-  - durable synchronization outbox
-              |
-              | HTTPS, opaque encrypted objects
-              v
-Single Node.js service
-  - static PWA delivery
-  - account and session API
-  - batched delta API + user-scoped synchronization hints
-  - SQLite transactions, synchronization revisions, and independent encrypted note history
-              |
-              v
-Persistent SQLite volume mounted at /data + independent backups
-```
-
-No Redis, object store, search server, or background worker service is required. Encrypted attachment chunks live in SQLite so the online backup remains a single consistent artifact.
-
-## Component boundaries
-
-The browser entrypoint routes session state only. Session restoration and cross-tab trust live in the session controller; the unlocked vault composes a dedicated in-memory model, object-persistence lane, retrying document-save queue, pull/cursor controller, local purge repository, atomic outbox-acknowledgement service, attachment-copy service, tree view, and typed encrypted-history controller. `VaultWorkspace.tsx` wires those boundaries and retains cross-domain UI orchestration rather than owning their storage transactions.
-
-On the server, `index.ts` starts the process and `app.ts` composes dependencies. History validation and routes live under `server/history/`, attachment validation and cleanup under `server/attachments/`, and trusted-endpoint lifecycle under `server/account/`. Session authentication, object storage, administration, maintenance, history/trash policy, and synchronization events remain independently owned modules. These boundaries do not change the wire protocol or the browser/server plaintext boundary.
-
-## Responsive application shell
-
-Desktop uses three panes:
-
-1. A folder/note tree with search, sorting, trash, contextual actions, and settings access.
-2. The active note in live-rendered edit, Markdown source, or read-only rendered mode, with an encrypted client-side note-lock toggle.
-3. A right tool panel containing the live H1-H6 outline and encrypted history for the active document.
-
-Tablet collapses the right tool panel into a drawer. Mobile renders the editor as the primary route and exposes the tree and Outline/History panel as left/right drawers. Plaintext outline and historical preview data are derived or decrypted in memory and are not synchronized as plaintext.
-
-## Local-first write path
+## 运行时拓扑
 
 ```text
-editor change
-  -> immediate in-memory document update
-  -> 500 ms idle debounce, with a 5 second durability deadline
-  -> enqueue in the per-user, per-object persistence lane
-  -> encrypt in browser worker
-  -> atomic IndexedDB object + outbox transaction
-  -> show "syncing" while the durable outbox awaits acknowledgement
-  -> 2 second upload debounce, with a 15 second batching deadline
-  -> batched conditional upload
-  -> show "synced" after acknowledgement
+浏览器／已安装 PWA
+  - React 响应式外壳
+  - 仓库内 ProseMirror 编辑器核心，注入 Callout 和 Math/Mermaid/WikiLink 扩展
+  - 加密 Worker
+  - 加密 IndexedDB
+  - 持久同步发件箱
+              |
+              | HTTPS、不透明加密对象
+              v
+单个 Node.js 服务
+  - 静态 PWA 交付
+  - 账户和会话 API
+  - 批量增量 API + 用户作用域同步提示
+  - SQLite 事务、同步修订和独立加密笔记历史
+              |
+              v
+挂载到 /data 的持久 SQLite 卷 + 独立备份
 ```
 
-Network latency is outside the input and local-save path. The status bar keeps its previous main synchronization state while encryption and the atomic local write are in progress; its tooltip exposes that local-save phase. After the encrypted object and durable outbox entry commit, the main state becomes `syncing`. A browser-reported offline condition is distinct from an online request failure: both retain durable local changes, but the former is shown as `offline` and the latter as `error`. A local encryption or IndexedDB failure is not classified as a synchronization error and triggers a persistent critical warning without claiming local durability. Encryption and IndexedDB commits for one object are serialized even when an earlier Worker request finishes after a newer edit was queued; unrelated objects may still persist concurrently. Completion checks prevent an older durable write from replacing newer in-memory state, including edits that are still inside the debounce window and have not entered the persistence lane yet. A flush waits for both the debounce timer and any in-flight write for that object. Page visibility changes, note switches, and ordinary lock operations request an immediate local flush. Confirmed logout is the deliberate destructive exception: it stops new local writes and synchronization, waits for in-flight local transactions, cancels pending save timers without flushing them, and then deletes the current user's encrypted cache and outboxes.
+无需 Redis、对象存储、搜索服务器或后台 Worker 服务。加密附件分块存储在 SQLite 中，因此在线备份仍是单个一致产物。
 
-Remote pulls do not replace a document while its current plaintext change is still waiting for the local encryption debounce. The later conditional push either commits that locally saved version or follows the normal conflict-copy path if another device changed the server revision.
+## 组件边界
 
-The note lock is a boolean inside the encrypted schema-v2 document payload. Toggling it from the editor toolbar or a single note's contextual menu flushes pending title and editor changes through the same local-first object/outbox path. The lock-only revision preserves the document payload's existing `updatedAt`, so lock metadata synchronization does not alter the user-visible modification time or modification-time sorting. A locked note derives an effective read-only editor mode without changing the device-local workspace preference's remembered editor mode. Missing lock fields from older schema-v2 ciphertext normalize to `false`; no IndexedDB or server migration is required.
+浏览器入口只路由会话状态。会话恢复和跨标签页信任属于会话控制器；已解锁保险库组合专用内存模型、对象持久化通道、重试文档保存队列、拉取／游标控制器、本地清除仓库、原子发件箱确认服务、附件复制服务、树视图和类型化加密历史控制器。`VaultWorkspace.tsx` 连接这些边界并保留跨领域 UI 编排，但不拥有其存储事务。
 
-After acknowledgement, the server is the durable cross-device copy. The browser store is the low-latency write buffer, offline retry source, and working cache; it is not intended to survive an explicit logout.
+服务器端由 `index.ts` 启动进程、`app.ts` 组合依赖。历史验证与路由位于 `server/history/`，附件验证与清理位于 `server/attachments/`，可信端点生命周期位于 `server/account/`。会话认证、对象存储、管理、维护、历史／回收站策略和同步事件仍由独立模块负责。这些边界不改变线上协议或浏览器／服务器明文边界。
 
-After a successful password or recovery-key unlock, the browser creates a non-exportable AES-GCM device key in IndexedDB and stores a user- and endpoint-bound wrapped vault credential beside it. The credential optionally includes a versioned snapshot of the most recently server-verified `User`, remembered `AuthEndpoint`, and verification time. The snapshot is eligible for offline restoration only when the credential mode and endpoint are both remembered and both IDs match the credential. It grants local routing and display context, never server authorization. Online startup verifies `/api/auth/me` first; only a timeout or transport/server failure may fall back to that snapshot, while a `401` is authoritative. A non-remembered session still requires the per-tab `sessionStorage` grant or another authorized tab's `BroadcastChannel` grant and cannot cold-start offline. Remembered endpoints use a persistent rolling session, while ordinary sessions use a session cookie.
+## 响应式应用外壳
 
-Configuring a PIN replaces the persistent directly device-wrapped credential with a two-layer envelope: the vault key is first wrapped by the non-exportable device key, then that inner envelope is encrypted by an Argon2id-derived, domain-separated PIN key bound to the user and endpoint. IndexedDB retains only the outer PIN ciphertext, salt, KDF version, non-exportable device key, failure count, and local settings. The PIN key and decrypted inner envelope exist only during unlock. While the vault remains unlocked, the current tab keeps a separate directly device-wrapped refresh envelope and last-activity timestamp in `sessionStorage`; a navigation explicitly reported as a reload may use it after `/api/auth/me` verifies the session and endpoint and the configured inactivity interval has not elapsed. Manual or inactivity locking clears this short-lived envelope before erasing memory. A non-reload launch rejects and clears it, and cross-tab session grants never carry it. Legacy version-two PIN-verifier credentials are never auto-restored and migrate to the two-layer envelope after their next successful PIN unlock.
+桌面端使用三个窗格：
 
-Locking clears decrypted memory and the tab's refresh envelope but retains the PIN-encrypted local credential and remembered endpoint snapshot. On an eligible offline cold start, a direct credential unlocks automatically; a PIN credential establishes only the lock-screen session and cannot use the refresh envelope or a cross-tab grant to bypass PIN entry. Local restoration sets `serverSessionVerified` to false. Until `/api/auth/me` revalidates the same remembered user and endpoint, synchronization, SSE, remote attachment reads, and account, device, administrator, history-policy, and retention requests remain disabled. The vault loads local ciphertext first, skips its initial pull, and never interprets an unverified empty cache as a new account requiring a welcome note. Revalidation runs on reconnect, foreground visibility, and a 30-second visible-page interval with concurrent attempts deduplicated; success starts pull-before-push synchronization and SSE.
+1. 文件夹／笔记树，包含搜索、排序、回收站、上下文操作和设置入口。
+2. 活动笔记，可使用实时渲染编辑、Markdown 源码或只读渲染模式，并提供客户端加密笔记锁开关。
+3. 右侧工具面板，包含活动文档的实时 H1–H6 大纲和加密历史。
 
-Confirmed logout broadcasts to other same-origin tabs and deletes every current-user IndexedDB record plus the tab authorization grant. If server logout fails, it then recreates a browser-local pending endpoint revocation for the next online startup. Invalid-session handling, an endpoint no longer marked remembered, an identity mismatch, credential corruption, and five failed PIN attempts delete local trust without discarding the encrypted content cache and outboxes. Remote revocation is therefore delayed while a device remains offline. Browser restart detection is best effort because browsers may restore tabs and session state, but only a Navigation Timing `reload` is eligible for PIN refresh restoration after online verification; ordinary PIN-protected launches require the PIN.
+平板端把右侧工具面板折叠为抽屉。移动端以编辑器为主路由，把树和大纲／历史面板显示为左右抽屉。明文大纲和历史预览数据只在内存中派生或解密，不以明文同步。
 
-## Synchronization model
+## 本地优先写入路径
 
-- Each server object is addressed by a random object ID scoped to a user.
-- Each accepted mutation increments the object's revision and appends a user-scoped change sequence.
-- Clients pull changes after a durable cursor and push with `baseRevision` plus an idempotency key.
-- One in-browser coordinator coalesces pull and push reasons and serializes network work. Local edits request only an outbox push; startup, reconnect, and visibility recovery pull before pushing.
-- While an unlocked page is visible, one authenticated same-origin SSE connection carries only a latest-cursor hint. The hint wakes the delta pull but is not itself a correctness boundary. A five-minute cursor check remains active while SSE is healthy; unavailable SSE falls back to 60/120/300-second foreground checks.
-- Object outbox entries are packed into requests of at most 50 objects and 1.5 MiB. Oversized individual envelopes use the compatible single-object route. Attachment chunks still upload before their manifest and owning note.
-- Pull pages scan up to 500 change-log entries and may compact repeated revisions of one object within the page. IndexedDB applies each page with bulk operations, while React receives one indexed merge after the complete pull. The page cursor is committed only after every retained change has authenticated, decrypted, and reached the same local transaction; a failed envelope leaves the cursor before that page for retry. If a restored server reports a maximum cursor below the browser cursor, the server returns an explicit reset response and the client replays from zero instead of treating the old cursor as current.
-- Source-client SSE suppression means a client can later encounter its own accepted change during a cursor check. An exact match of object type, revision, ciphertext, nonce, encryption version, and deletion state advances the cursor silently; only a different encrypted version is treated as a remote update.
-- A stale `baseRevision` produces a conflict response. The client preserves both versions rather than selecting a winner by timestamp. When an older upload is acknowledged after a newer local generation exists, the browser re-encrypts that generation for the accepted base and atomically replaces its IndexedDB object/outbox pair; there is no delete-before-requeue window.
-- Document conflicts become a new local object named with the `（冲突副本）` suffix. Before the remote version replaces the source, every attachment referenced by either encrypted document metadata or Markdown is recovered and copied to a new UUID, key, and target-note ownership. If the complete attachment graph cannot be recovered, the original pending object and synchronization cursor are retained for retry rather than creating an incomplete conflict copy. Attachment-manifest conflicts preserve the server manifest and leave local encrypted chunks intact for diagnosis.
-- Explicit note and history copies start unlocked; conflict copies preserve the local source's lock state.
-- Active/open note IDs, editor mode, and sidebar state are device-local preferences and never enter the object outbox. Updated clients ignore the reserved legacy workspace object during pulls and discard any local pending legacy write; a pre-upgrade device may migrate only the legacy record already present before its first network pull.
-- A remote update, lock-state change, or deletion of the actively edited note is committed as ciphertext locally but deferred in the visible editor. Pending local content becomes a conflict copy whose editor session remains mounted; a clean remote version becomes visible after the user leaves the note.
-- Deletions are tombstones. The server evaluates each account's non-sensitive retention setting hourly and purges expired opaque objects; `NULL` means permanent retention. Immediate user-requested purge requires an authenticated session and an explicit client-side confirmation. Both manual and pulled purge stop before physical local cleanup while a document save, object/chunk outbox, history creation, or history-metadata update is pending. A concurrent remote purge of a locally edited document first creates a durable conflict copy; attachment/history queues that cannot yet be rebound hold the cursor for retry.
-- Synchronization runs after durable local changes, at verified startup, after a locally restored session is revalidated, on reconnect, when the page becomes visible, from SSE hints, and through the low-frequency safety check. Hidden, locked, and locally unlocked but server-unverified pages do not synchronize, poll object APIs, or open SSE.
-- Local startup decrypts objects independently and publishes every readable document before network synchronization. A failed object remains encrypted in IndexedDB, including any durable outbox entry, rather than aborting the entire vault load. Dismissing repeated notification for an exact failed revision stores only an object/revision/nonce fingerprint in local metadata; it does not remove the encrypted object, and a changed fingerprint is reported again.
-- Pulled ciphertext is authenticated and decrypted before it replaces the last known-good local object. Failed remote objects are isolated while later revisions may repair them. When the local store is empty or safely repairable, the client resets its cursor and performs a full pull; it creates the initial welcome note only after that pull verifies an empty account.
-- Device clocks are display metadata only and never determine conflict winners.
+```text
+编辑器更改
+  -> 立即更新内存文档
+  -> 500 ms 空闲防抖，最长 5 秒持久化期限
+  -> 进入每用户、每对象持久化通道
+  -> 在浏览器 Worker 中加密
+  -> 原子 IndexedDB 对象 + 发件箱事务
+  -> 持久发件箱等待确认时显示“同步中”
+  -> 2 秒上传防抖，最长 15 秒批处理期限
+  -> 批量条件上传
+  -> 确认后显示“已同步”
+```
 
-The generated Service Worker is updated only when its precache script changes. When a waiting worker is detected, the browser fingerprints the currently deployed `sw.js` before prompting. Duplicate lifecycle callbacks and reopen/refresh cycles for the same fingerprint are suppressed for 24 hours; a different fingerprint prompts immediately. Confirming activates the waiting worker and reloads the application through the existing update path.
+网络延迟不在输入与本地保存路径上。加密和原子本地写入期间，状态栏保留之前的主同步状态，工具提示会显示本地保存阶段。加密对象与持久发件箱提交后，主状态变为 `syncing`。浏览器报告离线与在线请求失败不同：两者都保留持久本地更改，前者显示 `offline`，后者显示 `error`。本地加密或 IndexedDB 失败不归类为同步错误；它会触发持续严重警告，且不声称已本地持久化。
 
-## Data storage
+同一对象的加密与 IndexedDB 提交始终串行，即使旧 Worker 请求在新编辑排队后才完成；无关对象仍可并发持久化。完成检查会阻止旧持久写入覆盖较新的内存状态，包括仍在防抖窗口、尚未进入持久化通道的编辑。刷新会等待该对象的防抖定时器和进行中写入。页面可见性变化、切换笔记和普通锁定都会请求立即本地刷新。确认登出是有意的破坏性例外：停止新本地写入和同步，等待进行中的本地事务，取消未刷新的保存定时器，然后删除当前用户的加密缓存与发件箱。
 
-### Browser
+当前明文更改仍在等待本地加密防抖时，远程拉取不会替换文档。之后的条件推送要么提交该本地版本，要么在其他设备已更改服务器修订时走正常冲突副本路径。
 
-IndexedDB database `webmd-notes-v2` stores encrypted objects, encrypted attachment chunks, encrypted history snapshots, server revisions, a per-user synchronization cursor, per-user device-local UI preferences, durable object/chunk/history outboxes, and an optional endpoint-bound device credential. Note lock state remains inside each encrypted document object and is never indexed separately. Dexie v5 adds `historySnapshots` and `historyOutbox`; Dexie v6 additively defaults existing snapshots to unprotected and adds the encrypted `historyIndex` cache plus `historyMetadataOutbox` without renaming the compatibility database. The optional verified-session snapshot remains an additive value field. History creation follows the same local-first boundary: the current note is durable first, then the browser encrypts the complete snapshot and independent history metadata and atomically records the snapshot with its retry entry. Rename and protection changes update unlocked memory, encrypt fresh metadata, then atomically replace the local encrypted snapshot and generation-stamped metadata retry entry. Creation retry runs before metadata retry, and acknowledgements remove only the generation they observed, so offline edits and rapid consecutive changes cannot be lost to an older response. A transient encryption or IndexedDB failure keeps the latest decrypted generation in the save queue, retries with bounded backoff, and prevents ordinary locking from clearing it until a durable transaction succeeds. If the browser storage subsystem remains unwritable, the warning does not claim durability; closing or crashing the browser is an unrecoverable platform boundary and the user must keep the vault open or export data after storage recovers. Network failure never blocks editing. The versioned device-local preferences include the active/open-note list, editor mode, collapsed state and widths of both sidebars, selected right-panel tab, language, theme, font size, and sorting. A browser profile with no local workspace preference starts with an empty editor even after it downloads existing notes; the initial welcome note for an empty account is created without opening it and only after a verified pull confirms emptiness. The reserved encrypted workspace control object is a legacy compatibility record: an upgraded device may migrate a locally cached version once, then deletes its local object and outbox entry, while records received from the server are ignored without being decrypted or persisted. Existing opaque server records are not automatically purged, so older clients can coexist during a rolling upgrade. The non-sensitive language preference is also mirrored to Local Storage so browser-language following and the selected login-page language work before a user unlocks a vault; it is never synchronized to the server. The device credential contains the non-exportable `CryptoKey`, remembered/session mode, failure count, auto-lock preference, optional last-verified identity snapshot, and either a direct device envelope when no PIN exists or a PIN-encrypted outer envelope, salt, and KDF version when one does. A PIN-unlocked tab may additionally hold a directly device-wrapped refresh envelope in `sessionStorage`; it is not copied to IndexedDB or granted to another tab. A pending endpoint-revocation record survives offline PIN-exhaustion or logout handling. Confirmed logout atomically removes the current user's objects, object and attachment outboxes, attachment chunks, history snapshots and both history outboxes, cursor, preferences, ignored-integrity fingerprints, credential, and prior pending revocations without touching another user's rows; if the server request then fails, a new pending revocation record is written. The shared pre-login language preference and PWA shell cache are not account data and remain. Unlocked documents, decrypted history names and previews, avatar Blob URLs, attachment keys, attachment Blob URLs, PIN-derived keys, and search indexes remain in memory.
+笔记锁是加密 schema-v2 文档负载中的布尔值。工具栏或单篇笔记上下文菜单切换锁定时，会通过同一本地优先对象／发件箱路径刷新待处理标题和编辑器更改。仅锁定修订保留原有 `updatedAt`，因此不会改变用户可见修改时间或其排序。锁定笔记派生有效只读编辑器模式，但不改变设备本地工作区记住的编辑器模式。旧 schema-v2 密文缺失锁定字段时规范化为 `false`，无需迁移 IndexedDB 或服务器。
 
-### Server
+确认后，服务器成为持久跨设备副本。浏览器存储是低延迟写缓冲、离线重试来源和工作缓存，不保证在明确登出后保留。
 
-SQLite schema v2 additively stores per-account history settings, versioned vault-envelope contexts, opaque encrypted `note_history`, and note/account clear markers alongside users, hashed authentication material, trusted endpoints, sessions, trash retention, encrypted profile avatars, encrypted objects, synchronization revisions, attachment chunks, purge events, activation records, and the change log. History rows may also contain an independent encrypted metadata envelope, a server-visible protection bit, and user-scoped protected-history references to random attachment UUIDs. The server never receives the custom history name in plaintext. Legacy vault envelopes remain readable with their v1 username binding until the account first changes its username. New and migrated accounts use a random immutable v2 context, allowing later username changes without making the login name part of the cryptographic identity. A rename transaction replaces both browser-rewrapped vault-key envelopes and revokes other endpoints; when the existing recovery key is unavailable, the same transaction may also replace its verifier after the browser displays a newly generated key and the user confirms storage. User objects, attachment chunks, history, IndexedDB keys, and PIN credentials remain unchanged because their ownership and AAD use the stable user ID. `object_revisions` remains independent and is never user-deleted because it is required for incremental synchronization. Object revisions and attachment chunks share the configured per-user storage quota; history has its own quota. Idempotency matches are accepted only when the authenticated user, target identity, envelope fields, and request content match the original operation. History cleanup runs hourly and before settings/quota operations: unprotected automatic snapshots remain dense for 24 hours, then one per UTC hour through day 7 and one per UTC day afterward; unprotected snapshots follow account retention. Protected rows still count toward quota but survive thinning, retention cleanup, and clear markers. Protected attachment references must resolve to current-user, non-deleted attachment objects; the unlocked client additionally verifies their encrypted owner-note relationship. A protected snapshot may cross an earlier clear boundary during offline recovery, while old unprotected snapshots are rejected. The maintenance loop also deletes week-old chunk staging records that never acquired an attachment manifest, plus trusted endpoints and their cascading session rows 30 days after explicit revocation or the latest session expiry. Users may delete an inactive endpoint immediately, while the 24-hour endpoint-age gate continues to protect remote sign-out of an active endpoint. Profile, history, object, revision, change, attachment, endpoint, retention, and purge queries use the authenticated session's `user_id`.
+密码或恢复密钥解锁成功后，浏览器在 IndexedDB 中创建不可导出的 AES-GCM 设备密钥，并存储绑定用户和端点的已包装保险库凭据。凭据可以包含最近经服务器验证的 `User`、已记住 `AuthEndpoint` 与验证时间的带版本快照。只有凭据模式与端点均为已记住、且两个 ID 与凭据匹配时，快照才可用于离线恢复。它只授予本地路由和显示上下文，不授予服务器权限。在线启动首先验证 `/api/auth/me`；只有超时或传输／服务器失败才可回退到快照，`401` 具有权威性。未记住会话仍需每标签页 `sessionStorage` 授权或另一已授权标签页的 `BroadcastChannel` 授权，不能离线冷启动。已记住端点使用持久滚动会话，普通会话使用会话 Cookie。
 
-## Attachments
+配置 PIN 后，持久的设备直接包装凭据会替换为双层信封：保险库密钥先由不可导出设备密钥包装，内部信封再由 Argon2id 派生、领域分离且绑定用户和端点的 PIN 密钥加密。IndexedDB 只保留外层 PIN 密文、盐、KDF 版本、不可导出设备密钥、失败计数和本地设置。PIN 密钥和解密的内部信封只在解锁期间存在。保险库保持解锁时，当前标签页可在 `sessionStorage` 中保存独立的设备直接包装刷新信封和上次活动时间戳；只有导航明确报告为重新加载、`/api/auth/me` 已验证会话与端点、且不活动间隔未过期时才可使用。手动或不活动锁定会先清除该短期信封再擦除内存；非重新加载启动会拒绝并清除它，跨标签页授权永不携带它。旧版 v2 PIN 验证器凭据绝不自动恢复，会在下次 PIN 解锁成功后迁移为双层信封。
 
-Each attachment has a random UUID and an independently generated AES key stored only inside its vault-key-encrypted manifest. The browser validates supported image signatures, encrypts 1 MiB chunks with unique nonces, then commits the encrypted manifest/object outbox and every chunk/chunk outbox in one IndexedDB transaction before inserting a `webmd-attachment:<uuid>` Markdown reference. Synchronization uploads chunks before the manifest and note revision. Upload and download validate the attachment ID, continuous chunk indexes, total count, encryption version, and per-chunk authenticated nonce before reassembly; the final plaintext size and SHA-256 must also match encrypted metadata. Other devices fetch ciphertext chunks lazily and create short-lived Blob URLs only after those checks.
+锁定会清除解密内存和标签页刷新信封，但保留 PIN 加密本地凭据和已记住端点快照。符合条件的离线冷启动中，直接凭据会自动解锁；PIN 凭据只建立锁屏会话，不能借刷新信封或跨标签页授权绕过 PIN。此时 `serverSessionVerified` 为 false。在 `/api/auth/me` 重新验证同一用户和端点前，同步、SSE、远程附件读取，以及账户、设备、管理员、历史策略和保留请求都禁用。保险库先加载本地密文、跳过首次拉取，也不会把未经验证的空缓存误认为需要欢迎笔记的新账户。重新联网、前台可见和页面可见期间每 30 秒触发重新验证，并对并发尝试去重；成功后启动先拉取后推送的同步和 SSE。
 
-Attachment ownership is one note to many attachments. Duplicating a note creates new attachment UUIDs and keys. Moving a note to trash tombstones its manifests without deleting chunks. Protected history keeps its owning note and every still-referenced attachment ineligible for physical purge; multiple snapshots may reference the same attachment, and it becomes eligible only after the final reference is removed. Manual purge rejects an affected batch atomically, while retention cleanup skips affected objects. Otherwise confirmed manual purge or expiry under the account retention policy removes manifest history and chunks.
+确认登出会广播到其他同源标签页，并删除当前用户的全部 IndexedDB 记录与标签页授权。服务器登出失败时，会重新创建浏览器本地待处理端点撤销，供下次在线启动执行。无效会话、端点不再标记为已记住、身份不匹配、凭据损坏和五次 PIN 失败会删除本地信任，但保留加密内容缓存与发件箱。因此设备离线时远程撤销会延迟。浏览器可能恢复标签页与会话状态，所以重启检测只能尽力而为；只有 Navigation Timing `reload` 可在在线验证后恢复 PIN 刷新，普通 PIN 保护启动仍需输入 PIN。
 
-## Import and export
+## 同步模型
 
-Import parsing occurs in the browser. Markdown and ZIP inputs have no application-level archive, entry, or expanded-total size cap; available browser memory and storage provide the practical boundary. Entries are path-normalized, converted into application objects, encrypted, and committed locally before synchronization. ZIP input rejects more than 4,000 files, duplicate case-folded paths, and traversal outside the archive root. Referenced images are converted into attachments only when they satisfy the separate client attachment format and 25 MiB per-image limit.
+- 每个服务器对象由用户作用域内的随机对象 ID 寻址。
+- 每次接受的变更都会递增对象修订并追加用户作用域变更序列。
+- 客户端在持久游标之后拉取，并使用 `baseRevision` 与幂等键推送。
+- 浏览器内单一协调器合并拉取／推送原因并串行网络工作。本地编辑只请求推送发件箱；启动、重新联网和可见性恢复先拉取再推送。
+- 已解锁页面可见时，一条已认证同源 SSE 连接只携带最新游标提示。提示会唤醒增量拉取，但本身不是正确性边界。SSE 健康时仍每五分钟检查游标；不可用时退回 60／120／300 秒前台检查。
+- 对象发件箱每个请求最多打包 50 个对象和 1.5 MiB。过大的单个信封使用兼容单对象路由。附件分块仍先于清单与所属笔记上传。
+- 拉取页最多扫描 500 条变更日志，并可压缩页内同一对象的重复修订。IndexedDB 批量应用每页，React 在完整拉取后只接收一次索引合并。只有每个保留变更都完成认证、解密并进入同一本地事务后才提交页面游标；信封失败时游标停在该页之前重试。恢复后的服务器若报告最大游标低于浏览器游标，会返回明确重置响应，客户端从零重放。
+- 来源客户端 SSE 抑制意味着客户端之后可能在游标检查中遇到自己的已接受变更。对象类型、修订、密文、nonce、加密版本和删除状态完全一致时只静默前移游标；只有不同加密版本才视为远程更新。
+- 过期 `baseRevision` 产生冲突响应。客户端保留两个版本，不按时间戳选胜者。如果旧上传在较新本地代次存在后才确认，浏览器会针对已接受基线重新加密该代次，并原子替换 IndexedDB 对象／发件箱对，不存在先删后重排队窗口。
+- 文档冲突成为名称带 `（冲突副本）` 后缀的新本地对象。远程版本替换来源前，会恢复加密元数据或 Markdown 引用的全部附件，并复制为新 UUID、密钥和目标笔记所有权。无法恢复完整附件图时，保留原待处理对象和同步游标重试，不创建不完整副本。附件清单冲突保留服务器清单，并留下本地加密分块供诊断。
+- 显式笔记／历史副本初始不锁定；冲突副本保留本地来源的锁定状态。
+- 活动／已打开笔记 ID、编辑器模式和侧栏状态是设备本地偏好，不进入对象发件箱。新客户端拉取时忽略保留旧工作区对象，并丢弃本地待处理旧写入；升级前设备只能迁移首次网络拉取前已存在的旧记录。
+- 活动编辑笔记的远程更新、锁定变化或删除会在本地提交为密文，但延迟反映到可见编辑器。待处理本地内容变成保持编辑器会话挂载的冲突副本；干净远程版本在用户离开笔记后显示。
+- 删除使用墓碑。服务器每小时评估账户的非敏感保留设置并清除过期不透明对象；`NULL` 表示永久保留。立即清除需要已认证会话和明确客户端确认。文档保存、对象／分块发件箱、历史创建或历史元数据更新待处理时，手动和拉取清除都会在物理本地清理前停止。并发远程清除已编辑文档时先创建持久冲突副本；尚不能重绑定的附件／历史队列会保持游标等待重试。
+- 同步在持久本地更改后、已验证启动时、本地恢复会话重新验证后、重新联网时、页面变为可见时、收到 SSE 提示时以及低频安全检查中运行。隐藏、锁定或本地已解锁但服务器未验证的页面不会同步、轮询对象 API 或打开 SSE。
+- 本地启动独立解密各对象，并在网络同步前发布全部可读文档。失败对象及其持久发件箱仍以密文保留在 IndexedDB，不会中止整个保险库加载。忽略某准确失败修订的重复通知，只在本地元数据存储对象／修订／nonce 指纹，不删除对象；指纹变化后会再次报告。
+- 拉取密文在替换最后已知良好本地对象前必须认证并解密。失败远程对象会隔离，后续修订可修复。若本地存储为空或可安全修复，客户端重置游标并执行完整拉取；只有拉取确认账户为空后才创建初始欢迎笔记。
+- 设备时钟只用于显示，绝不决定冲突胜者。
 
-Plaintext Markdown exports are built entirely in the browser. ZIP exports retain folders and empty directories, place images under `_attachments/<uuid>.<ext>`, and rewrite note links to portable relative paths. Export aborts rather than silently omit an attachment that cannot be recovered locally or from the server.
+生成的 Service Worker 只在其预缓存脚本变化时更新。检测到等待中的 Worker 后，浏览器会在提示前计算当前部署 `sw.js` 的指纹。同一指纹的重复生命周期回调和重新打开／刷新周期在 24 小时内抑制；不同指纹立即提示。确认后通过现有更新路径激活等待 Worker 并重新加载应用。
 
-## Editor model
+## 数据存储
 
-Canonical Markdown is the editor's only document model. Live and Reading rendering are browser-only views: rendered DOM, node-view text, temporary syntax, and Blob URLs never become persisted document content. Cursor movement and structural edits remain anchored to authored source positions.
+### 浏览器
 
-The non-negotiable invariant, one-way data flow, module ownership, presentation-only representations, and editor regression requirements are defined in [Editor architecture](EDITOR_ARCHITECTURE.md). User-facing syntax and interactions remain in the [user guide](USER_GUIDE.md).
+IndexedDB 数据库 `webmd-notes-v2` 存储加密对象、加密附件分块、加密历史快照、服务器修订、每用户同步游标、每用户设备本地 UI 偏好、持久对象／分块／历史发件箱，以及可选的端点绑定设备凭据。笔记锁定状态留在每个加密文档对象内，不单独索引。Dexie v5 添加 `historySnapshots` 和 `historyOutbox`；Dexie v6 在不重命名兼容数据库的情况下，增量把现有快照默认为未保护，并添加加密 `historyIndex` 缓存与 `historyMetadataOutbox`。可选已验证会话快照仍是增量值字段。
+
+历史创建遵循相同本地优先边界：先持久化当前笔记，再由浏览器加密完整快照与独立历史元数据，并原子记录快照和重试条目。重命名与保护变化先更新已解锁内存、加密新元数据，再原子替换本地加密快照和带代次元数据重试条目。创建重试先于元数据重试；确认只移除其观察到的代次，避免旧响应丢失离线编辑或快速连续变化。临时加密或 IndexedDB 失败会把最新解密代次留在保存队列，以有界退避重试，并阻止普通锁定在持久事务成功前清除它。浏览器存储持续不可写时，警告不声称已持久；关闭或崩溃属于不可恢复的平台边界，用户必须保持保险库打开，或在存储恢复后导出。网络故障绝不阻止编辑。
+
+带版本设备偏好包括活动／已打开笔记列表、编辑器模式、两个侧栏的折叠状态与宽度、所选右面板标签、语言、主题、字号和排序。没有本地工作区偏好的浏览器配置文件即使下载了已有笔记，也以空编辑器启动；只有已验证拉取确认账户为空后才创建且不自动打开欢迎笔记。保留的加密工作区控制对象属于旧兼容记录：升级设备可迁移一次本地缓存版本，随后删除本地对象和发件箱；服务器收到的记录不解密、不持久化而直接忽略。现有服务器不透明记录不会自动清除，允许旧客户端滚动共存。
+
+非敏感语言偏好还会镜像到 Local Storage，使跟随浏览器语言和登录页选择在解锁前生效，但绝不同步。设备凭据包含不可导出 `CryptoKey`、已记住／会话模式、失败计数、自动锁定偏好、可选最近验证身份快照，以及无 PIN 时的直接设备信封，或有 PIN 时的 PIN 加密外层信封、盐和 KDF 版本。PIN 解锁标签页可在 `sessionStorage` 另存直接设备包装刷新信封，但不复制到 IndexedDB 或授权给其他标签页。待处理端点撤销记录可跨离线 PIN 耗尽或登出保留。
+
+确认登出会原子移除当前用户的对象、对象与附件发件箱、附件分块、历史快照与两个历史发件箱、游标、偏好、已忽略完整性指纹、凭据和旧待撤销记录，不触及其他用户行；若服务器请求随后失败，再写入新待撤销记录。共享登录前语言偏好和 PWA 外壳缓存不属于账户数据，会保留。已解锁文档、解密历史名称与预览、头像 Blob URL、附件密钥／Blob URL、PIN 派生密钥和搜索索引只存在于内存。
+
+### 服务器
+
+SQLite schema v2 在用户、认证材料哈希、可信端点、会话、回收站保留、加密头像、加密对象、同步修订、附件分块、清除事件、激活记录和变更日志之外，增量存储每账户历史设置、带版本保险库信封上下文、不透明加密 `note_history` 和笔记／账户清除标记。历史行还可包含独立加密元数据信封、服务器可见保护位，以及用户作用域的受保护历史到随机附件 UUID 引用。服务器绝不接收明文自定义历史名称。
+
+旧保险库信封在账户首次改名之前继续使用 v1 用户名绑定。新账户和已迁移账户使用随机不可变 v2 上下文，允许以后改名而不把登录名作为密码学身份。改名事务替换两个由浏览器重新包装的保险库密钥信封并撤销其他端点；旧恢复密钥不可用时，同一事务可在浏览器显示新密钥且用户确认已保存后替换验证器。用户对象、附件分块、历史、IndexedDB 密钥和 PIN 凭据不变，因为其所有权与 AAD 使用稳定用户 ID。`object_revisions` 独立存在且用户不能删除，因为增量同步依赖它。对象修订与附件分块共用每用户存储配额；历史有独立配额。
+
+幂等匹配只在已认证用户、目标身份、信封字段和请求内容与原操作一致时接受。历史清理每小时以及设置／配额操作前运行：未保护自动快照在 24 小时内保持密集，此后到第 7 天每 UTC 小时保留一份，再之后每 UTC 日保留一份；未保护快照遵循账户保留期。受保护行仍计入配额，但不受稀疏、保留清理和清除标记影响。受保护附件引用必须指向当前用户未删除附件对象，已解锁客户端还要验证其加密所有者笔记关系。离线恢复时，受保护快照可以跨越较早清除边界，旧未保护快照会被拒绝。
+
+维护循环还会删除一周前从未获得附件清单的分块暂存记录，以及明确撤销或最后会话到期 30 天后的可信端点及其级联会话。用户可以立即删除非活动端点；24 小时端点年龄限制继续保护活动端点的远程登出。头像、历史、对象、修订、变更、附件、端点、保留与清除查询均使用已认证会话的 `user_id`。
+
+## 附件
+
+每个附件具有随机 UUID 和独立生成的 AES 密钥，密钥只存于由保险库密钥加密的清单中。浏览器验证支持的图片签名，以唯一 nonce 加密 1 MiB 分块，然后在插入 `webmd-attachment:<uuid>` Markdown 引用前，通过一个 IndexedDB 事务提交加密清单／对象发件箱与全部分块／分块发件箱。同步先上传分块，再上传清单和笔记修订。上传与下载在重组前验证附件 ID、连续分块索引、总数、加密版本和每分块认证 nonce；最终明文大小与 SHA-256 也必须匹配加密元数据。其他设备惰性获取密文分块，只有检查通过后才创建短期 Blob URL。
+
+附件所有权是一篇笔记对多个附件。复制笔记会创建新附件 UUID 和密钥。移入回收站会为清单创建墓碑，但不删除分块。受保护历史让所属笔记及仍被引用的附件不能物理清除；多个快照可以引用同一附件，最后一个引用移除后才可清除。手动清除会原子拒绝受影响批次，保留清理会跳过受影响对象。其他情况下，确认的手动清除或账户保留期到期会删除清单历史和分块。
+
+## 导入与导出
+
+导入解析在浏览器内进行。Markdown 和 ZIP 输入没有应用级压缩包、条目或展开总大小上限；实际边界由浏览器内存与存储决定。条目先规范化路径、转换为应用对象、加密并在本地提交，再同步。ZIP 输入会拒绝超过 4,000 个文件、大小写折叠后重复路径和越出压缩包根目录的遍历。引用图片只有满足独立客户端附件格式与每图 25 MiB 限制时才转换为附件。
+
+明文 Markdown 导出完全在浏览器构建。ZIP 导出保留文件夹与空目录，把图片放在 `_attachments/<uuid>.<ext>`，并把笔记链接改写为可移植相对路径。无法从本地或服务器恢复附件时，导出会中止，而不是静默省略。
+
+## 编辑器模型
+
+规范 Markdown 是编辑器唯一文档模型。实时与阅读渲染只是浏览器视图：渲染 DOM、节点视图文本、临时语法和 Blob URL 永不成为持久文档内容。光标移动与结构编辑始终锚定作者源码位置。
+
+不可协商的不变量、单向数据流、模块职责、仅展示表示和编辑器回归要求见[编辑器架构](EDITOR_ARCHITECTURE.md)。面向用户的语法与交互见[用户指南](USER_GUIDE.md)。
