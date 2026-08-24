@@ -20,6 +20,51 @@ function pressArrow(host: HTMLElement, key: "ArrowUp" | "ArrowDown" | "ArrowLeft
   return event.defaultPrevented;
 }
 
+function pressEnter(host: HTMLElement): boolean {
+  const event = new KeyboardEvent("keydown", {
+    key: "Enter",
+    code: "Enter",
+    bubbles: true,
+    cancelable: true,
+  });
+  host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+test.each([">", "> ", ">    ", ">\t \t"])(
+  "Enter exits the empty quote source %j onto the line after a blank row",
+  (markdown) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, { initialContent: markdown });
+    editor.setSelectionOffset(markdown.length);
+
+    expect(pressEnter(host)).toBe(true);
+    expect(editor.getMarkdown()).toBe("\n");
+    expect(editor.getSelectionOffset()).toBe(1);
+    expect(host.querySelector(".source-blockquote-node")).toBeNull();
+
+    editor.destroy();
+    host.remove();
+  },
+);
+
+test("Enter preserves a blank source line between the quotes around it", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const markdown = "> first\n>   \n>second";
+  const emptyQuoteEnd = markdown.indexOf("\n>") + 5;
+  const editor = createEditor(host, { initialContent: markdown });
+  editor.setSelectionOffset(emptyQuoteEnd);
+
+  expect(pressEnter(host)).toBe(true);
+  expect(editor.getMarkdown()).toBe("> first\n\n\n>second");
+  expect(editor.getSelectionOffset()).toBe("> first\n\n".length);
+
+  editor.destroy();
+  host.remove();
+});
+
 test("Backspace before the first quote delimiter moves to the previous source line", () => {
   const view = fakeView(setup("before\n\n> quoted"));
   let quotePos = -1;

@@ -94,8 +94,8 @@ function enterTransaction(
       return transaction(
         selection,
         line.from,
-        line.from + list.full.length,
-        "",
+        line.to,
+        "\n",
         "command",
       );
     }
@@ -107,9 +107,11 @@ function enterTransaction(
     const prefix = quote[1]!;
     const contentBefore = beforeLine.slice(prefix.length);
     const contentAfter = source.slice(to, line.to);
-    const bareCandidate = prefix === ">" && line.text === ">";
-    if (atLineEnd && !bareCandidate && !`${contentBefore}${contentAfter}`.trim()) {
-      return transaction(selection, line.from, line.from + prefix.length, "", "command");
+    if (atLineEnd && !`${contentBefore}${contentAfter}`.trim()) {
+      // Live mode does not retain an authored quote marker on an otherwise
+      // empty line. Replace the complete line with one more line ending so
+      // two Enter presses leave the caret on the line after the blank row.
+      return transaction(selection, line.from, line.to, "\n", "command");
     }
     return transaction(selection, from, to, `\n${prefix}`, "command");
   }

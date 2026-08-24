@@ -41,17 +41,33 @@ describe("canonical Live source commands", () => {
     expect(press(source, source.length, "Enter")).toBe(expected);
   });
 
-  it("exits empty lists and quotes by removing only their current prefix", () => {
-    expect(press("- ", 2, "Enter")).toBe("");
-    expect(press("3. ", 3, "Enter")).toBe("");
-    expect(press("- [ ] ", 6, "Enter")).toBe("");
-    expect(press("> ", 2, "Enter")).toBe("");
+  it("exits empty lists and quotes onto the line after a blank row", () => {
+    expect(press("- ", 2, "Enter")).toBe("\n");
+    expect(press("3. ", 3, "Enter")).toBe("\n");
+    expect(press("- [ ] ", 6, "Enter")).toBe("\n");
+    expect(press("> ", 2, "Enter")).toBe("\n");
+    expect(press("- item\n- ", 9, "Enter")).toBe("- item\n\n");
+    expect(press("> quote\n> ", 10, "Enter")).toBe("> quote\n\n");
+  });
+
+  it.each([">", "> ", ">    ", ">\t \t", "> >   "])(
+    "turns an otherwise empty quote line into a blank line for %j",
+    (source) => {
+      expect(press(source, source.length, "Enter")).toBe("\n");
+    },
+  );
+
+  it("exits an empty quote line between quoted content without folding it away", () => {
+    const source = ">first\n>   \n> second";
+    expect(press(source, source.indexOf("\n>") + 5, "Enter")).toBe(
+      ">first\n\n\n> second",
+    );
   });
 
   it("continues quotes with their exact authored nesting prefix", () => {
     expect(press("> quote", 7, "Enter")).toBe("> quote\n> ");
     expect(press("> > nested", 10, "Enter")).toBe("> > nested\n> > ");
-    expect(press(">", 1, "Enter")).toBe(">\n>");
+    expect(press(">quote", 6, "Enter")).toBe(">quote\n>");
   });
 
   it("indents and outdents list source instead of applying presentation-only margins", () => {

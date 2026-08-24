@@ -1065,6 +1065,39 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
+  it.each([
+    ["bullet list", "- item", "- item\n- ", "- item\n\n"],
+    ["ordered list", "3. item", "3. item\n4. ", "3. item\n\n"],
+    ["task list", "- [x] item", "- [x] item\n- [ ] ", "- [x] item\n\n"],
+    ["blockquote", ">quote", ">quote\n>", ">quote\n\n"],
+  ] as const)(
+    "moves below a preserved blank row after two Enter presses in a %s",
+    (_name, initial, continued, exited) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host, { initialContent: initial });
+      const editable = host.querySelector<HTMLElement>(".ProseMirror");
+      const enter = () => editable?.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }));
+      editor.setSelectionOffset(initial.length);
+
+      enter();
+      expect(editor.getMarkdown()).toBe(continued);
+      expect(editor.getSelectionOffset()).toBe(continued.length);
+
+      enter();
+      expect(editor.getMarkdown()).toBe(exited);
+      expect(editor.getSelectionOffset()).toBe(exited.length);
+
+      editor.destroy();
+      host.remove();
+    },
+  );
+
   it.each(SOURCE_FIDELITY_LINE_ENDING_STRINGS)(
     "round-trips every available source offset for %j",
     (markdown) => {
@@ -1285,7 +1318,7 @@ describe("Mint editor core public controller", () => {
     extendedEditor.destroy();
   });
 
-  it("recognizes a line-leading greater-than candidate without changing its source", async () => {
+  it("exits a bare greater-than candidate below a preserved blank row", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
@@ -1315,12 +1348,11 @@ describe("Mint editor core public controller", () => {
       bubbles: true,
       cancelable: true
     }));
-    expect(host.querySelector("blockquote")).not.toBeNull();
-    expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
-    expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(">\n>");
-    expect(editor.getMarkdown()).toBe(">\n>");
-    expect(editor.getSelectionOffset()).toBe(">\n>".length);
-    expect(changes.at(-1)).toBe(">\n>");
+    expect(host.querySelector("blockquote")).toBeNull();
+    expect(host.querySelector(".source-blockquote-node")).toBeNull();
+    expect(editor.getMarkdown()).toBe("\n");
+    expect(editor.getSelectionOffset()).toBe(1);
+    expect(changes.at(-1)).toBe("\n");
     expect(editor.getMarkdown()).not.toContain("\\>");
 
     editor.replaceMarkdown("a > b", "a > b".length);
