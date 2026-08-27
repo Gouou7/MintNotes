@@ -1,47 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  canonicalizeMathBlocksFromLive,
-  materializeMathBlocksForLive,
-  materializeSingleLineDisplayMathForReading
-} from "./liveMathCodec";
+import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
 
-describe("live math codec", () => {
-  it("materializes multiline display math as a reversible private code block", () => {
-    const markdown = [
-      "Before",
-      "",
-      "$$",
-      "\\int_0^1 x^2\\,dx",
-      "$$",
-      "",
-      "After"
-    ].join("\n");
-    const live = materializeMathBlocksForLive(markdown);
-
-    expect(live).toContain("```mint-math\n\\int_0^1 x^2\\,dx\n```");
-    expect(canonicalizeMathBlocksFromLive(live)).toBe(markdown);
-  });
-
-  it("handles display math nested in a blockquote and ignores authored fences", () => {
-    const markdown = [
-      "> [!NOTE]",
-      "> $$",
-      "> E = mc^2",
-      "> $$",
-      "",
-      "```md",
-      "$$",
-      "not math",
-      "$$",
-      "```"
-    ].join("\n");
-    const live = materializeMathBlocksForLive(markdown);
-
-    expect(live).toContain("> ```mint-math\n> E = mc^2\n> ```");
-    expect(live).toContain("```md\n$$\nnot math\n$$\n```");
-    expect(canonicalizeMathBlocksFromLive(live)).toBe(markdown);
-  });
-
+describe("reading math codec", () => {
   it("expands single-line display math for the read-only parser without touching code fences", () => {
     const markdown = "$$E = mc^2$$\n\n```md\n$$not math$$\n```";
     expect(materializeSingleLineDisplayMathForReading(markdown)).toBe(
@@ -49,24 +9,14 @@ describe("live math codec", () => {
     );
   });
 
-  it("chooses a fence that cannot collide with display-math content", () => {
-    const markdown = "$$\n\\text{```}\n$$";
-    const live = materializeMathBlocksForLive(markdown);
-
-    expect(live).toBe("````mint-math\n\\text{```}\n````");
-    expect(canonicalizeMathBlocksFromLive(live)).toBe(markdown);
-  });
-
   it.each([
+    "plain text",
     "$$\nvalue\n$$",
     "$$\r\nvalue\r\n$$\r\n",
-    "before\r\n$$\nvalue\r\n$$\nafter",
     "> $$\r\n> value\n> $$\r\n",
-    "  $$  \n`code` and ``ticks``\n  $$  ",
-    "$$\nincomplete",
     "````md\n$$\nnot math\n$$\n````",
     "~~~md\r\n$$\r\nnot math\r\n$$\r\n~~~",
-  ])("is an exact Live/canonical bijection for %j", (markdown) => {
-    expect(canonicalizeMathBlocksFromLive(materializeMathBlocksForLive(markdown))).toBe(markdown);
+  ])("leaves non-single-line source unchanged for %j", (markdown) => {
+    expect(materializeSingleLineDisplayMathForReading(markdown)).toBe(markdown);
   });
 });

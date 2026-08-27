@@ -2035,6 +2035,14 @@ describe("Mint editor core public controller", () => {
       "",
       "$$E = mc^2$$",
       "",
+      "$$",
+      "A_B",
+      "$$",
+      "",
+      "```mint-math",
+      "not display math",
+      "```",
+      "",
       "```mermaid",
       "graph TD",
       "  A --> B",
@@ -2051,13 +2059,127 @@ describe("Mint editor core public controller", () => {
     });
 
     expect(host.querySelector(".live-inline-math-widget")?.textContent).toBe("inline:x_i");
-    expect(host.querySelector(".live-math-block-widget")?.textContent).toBe("block:E = mc^2");
+    expect([...host.querySelectorAll(".live-math-block-widget")].map((node) => node.textContent)).toEqual([
+      "block:E = mc^2",
+      "block:A_B",
+    ]);
+    expect(host.querySelector("pre[data-lang='mint-math']")?.textContent).toContain("not display math");
     expect(host.querySelector(".live-mermaid-widget")?.textContent).toContain("diagram:graph TD");
     const wikiLink = host.querySelector<HTMLButtonElement>(".live-wikilink");
     expect(wikiLink?.textContent).toBe("the guide");
     wikiLink?.click();
     expect(wikiLinks).toEqual(["Guide"]);
     expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it.each(["\n", "\r\n"])(
+    "renders authored multiline math directly and preserves %j line endings",
+    (eol) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const markdown = ["Before", "", "$$", "A_B", "$$", "", "After"].join(eol);
+      const changes: string[] = [];
+      const editor = createMintEditor(host, {
+        initialContent: markdown,
+        onChange: (next) => changes.push(next),
+        presentations: {
+          renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
+        },
+      });
+
+      expect(host.querySelector(".live-math-block-widget")?.textContent).toBe("block:A_B");
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(changes).toEqual([]);
+      editor.destroy();
+    },
+  );
+
+  it("reveals and edits exact multiline math source without a private code fence", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "Before\n\n$$\nA_B\n$$\n\nAfter";
+    const changes: string[] = [];
+    const editor = createMintEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+      presentations: {
+        renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
+      },
+    });
+
+    const widget = host.querySelector<HTMLElement>(".live-math-block-widget");
+    expect(widget?.textContent).toBe("block:A_B");
+    widget?.click();
+    expect(host.querySelector(".live-math-block-widget")).toBeNull();
+    expect(host.querySelector(".live-math-block-source.is-live-syntax-editing")?.textContent).toBe("$$\nA_B\n$$");
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+
+    const insertion = markdown.indexOf("A_B") + "A_B".length;
+    editor.insertMarkdown("{}", insertion);
+    const edited = markdown.slice(0, insertion) + "{}" + markdown.slice(insertion);
+    expect(editor.getMarkdown()).toBe(edited);
+    expect(changes).toEqual([edited]);
+    editor.setSelectionOffset(edited.length);
+    expect(host.querySelector(".live-math-block-widget")?.textContent).toBe("block:A_B{}");
+
+    editor.toggleSource();
+    expect(editor.getMarkdown()).toBe(edited);
+    editor.toggleSource();
+    expect(editor.getMarkdown()).toBe(edited);
+    expect(changes).toEqual([edited]);
+    editor.destroy();
+  });
+
+  it("forms multiline math through Live input without collapsing authored lines", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const editor = createMintEditor(host, {
+      initialContent: "$$",
+      onChange: (next) => changes.push(next),
+      presentations: {
+        renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
+      },
+    });
+    const enter = () => host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    editor.setSelectionOffset(2);
+    enter();
+    editor.insertMarkdown("A_B");
+    enter();
+    editor.insertMarkdown("$$");
+    expect(editor.getMarkdown()).toBe("$$\nA_B\n$$");
+    expect(editor.getMarkdown()).not.toBe("$$ A_B $$");
+
+    editor.insertMarkdown("\n\nAfter");
+    expect(editor.getMarkdown()).toBe("$$\nA_B\n$$\n\nAfter");
+    expect(host.querySelector(".live-math-block-widget")?.textContent).toBe("block:A_B");
+    expect(changes.at(-1)).toBe("$$\nA_B\n$$\n\nAfter");
+    editor.destroy();
+  });
+
+  it.each([
+    "$$\nincomplete",
+    "```mint-math\nA_B\n```",
+  ])("does not render invalid or fenced display-math source for %j", (markdown) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createMintEditor(host, {
+      initialContent: `Before\n\n${markdown}\n\nAfter`,
+      presentations: {
+        renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
+      },
+    });
+
+    expect(host.querySelector(".live-math-block-widget")).toBeNull();
+    expect(editor.getMarkdown()).toBe(`Before\n\n${markdown}\n\nAfter`);
     editor.destroy();
   });
 

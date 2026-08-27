@@ -316,7 +316,7 @@ describe("MarkdownEditor live mode", () => {
     await act(async () => root.unmount());
   });
 
-  it("keeps multiline math private to Live mode and forwards WikiLink navigation", async () => {
+  it("passes canonical multiline math directly to Live mode and forwards WikiLink navigation", async () => {
     const editor = {
       destroy: vi.fn(),
       focus: vi.fn(),
@@ -342,7 +342,7 @@ describe("MarkdownEditor live mode", () => {
     const math = vi.mocked(createMathExtension).mock.calls[0]?.[0];
     const mermaid = vi.mocked(createMermaidExtension).mock.calls[0]?.[0];
     const wikiLink = vi.mocked(createWikiLinkExtension).mock.calls[0]?.[0];
-    expect(options?.initialContent).toBe("```mint-math\nE = mc^2\n```\n\n[[Guide]]");
+    expect(options?.initialContent).toBe(markdown);
     expect(options?.extensions?.map((extension) => extension.id)).toEqual([
       "mint-comment",
       "mint-callout",
@@ -357,7 +357,7 @@ describe("MarkdownEditor live mode", () => {
     act(() => wikiLink?.onNavigate?.("Guide"));
     expect(onWikiLink).toHaveBeenCalledWith("Guide");
 
-    act(() => editorChange?.("```mint-math\nE = ma\n```\n\n[[Guide]]"));
+    act(() => editorChange?.("$$\nE = ma\n$$\n\n[[Guide]]"));
     expect(onChange).toHaveBeenCalledWith("$$\nE = ma\n$$\n\n[[Guide]]");
 
     await act(async () => root.unmount());

@@ -326,7 +326,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .live-math-block-widget, .live-mermaid-widget { display: block; width: 100%; margin: 0; cursor: text; }
 .markdown-editor-host .live-math-block-source.is-live-syntax-rendered,
 .markdown-editor-host .live-mermaid-source.is-live-syntax-rendered { display: none; }
-.live-math-block-widget { overflow-x: auto; padding: 14px 18px; border-radius: 8px; background: var(--surface-input); text-align: center; }
+.live-math-block-widget { overflow-x: auto; text-align: center; }
 .live-mermaid-widget, .mermaid-diagram { padding: 16px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); }
 .live-mermaid-widget img, .mermaid-diagram img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 .live-mermaid-widget.is-rendering, .mermaid-diagram-canvas.is-rendering { color: var(--muted); text-align: center; }

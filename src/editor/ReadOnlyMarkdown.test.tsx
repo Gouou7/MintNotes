@@ -93,6 +93,10 @@ describe("ReadOnlyMarkdown", () => {
         "",
         "$$\\int_0^1 x^2\\,dx$$",
         "",
+        "> $$",
+        "> A_B",
+        "> $$",
+        "",
         "[[Guide/Setup#Install|Open setup]]",
         "",
         "```mermaid",
@@ -103,7 +107,7 @@ describe("ReadOnlyMarkdown", () => {
     );
 
     expect(html).toContain("class=\"katex\"");
-    expect(html).toContain("class=\"katex-display\"");
+    expect(html.match(/class=\"katex-display\"/g)).toHaveLength(2);
     expect(html).toContain("class=\"wiki-link\"");
     expect(html).toContain("mint-wikilink:");
     expect(html).toContain("class=\"mermaid-diagram\"");

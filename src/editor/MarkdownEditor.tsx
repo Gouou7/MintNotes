@@ -18,7 +18,6 @@ import { createWikiLinkExtension } from "./extensions/wikilink";
 import { I18nProvider, useI18n } from "../i18n";
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter, replaceFrontmatterBody } from "./frontmatter";
-import { canonicalizeMathBlocksFromLive, materializeMathBlocksForLive } from "./liveMathCodec";
 import { ReadOnlyMarkdown } from "./ReadOnlyMarkdown";
 import { renderMathInto, renderMermaidInto } from "./richRenderers";
 
@@ -105,7 +104,6 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
   const attachmentsPendingRef = useRef(attachmentsPending);
   const frontmatterRef = useRef(frontmatter);
   const editorMarkdownRef = useRef(markdown);
-  const renderedMarkdownRef = useRef(materializeLiveMarkdown(frontmatter.body));
   const wikiLinkRef = useRef(onWikiLink);
   changeRef.current = onChange;
   attachmentUrlsRef.current = attachmentUrls;
@@ -122,7 +120,7 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
   useEffect(() => {
     if (!hostRef.current) return;
     const editor = createEditor(hostRef.current, {
-      initialContent: renderedMarkdownRef.current,
+      initialContent: frontmatter.body,
       extensions: [
         createCommentExtension(),
         createCalloutExtension({
@@ -156,14 +154,12 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
           ?? (attachmentsPendingRef.current ? null : undefined);
       },
       onChange: (next) => {
-        const canonicalizedLiveBody = canonicalizeMathBlocksFromLive(next);
-        let canonicalBody = canonicalizedLiveBody;
+        let canonicalBody = next;
         for (const [url, attachmentId] of attachmentUrlHistoryRef.current) {
           canonicalBody = canonicalBody.split(url).join(`webmd-attachment:${attachmentId}`);
         }
         const canonical = replaceFrontmatterBody(frontmatterRef.current, canonicalBody);
         const previousMarkdown = editorMarkdownRef.current;
-        renderedMarkdownRef.current = materializeLiveSyntax(canonicalizedLiveBody);
         if (canonical === previousMarkdown) return;
         editorMarkdownRef.current = canonical;
         changeRef.current(canonical);
@@ -182,10 +178,8 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
     // Attachment Blob URLs are refreshed through the presentation resolver
     // below. Only authored Markdown changes rebuild the editor document.
     if (markdown === editorMarkdownRef.current) return;
-    const renderedMarkdown = materializeLiveMarkdown(frontmatter.body);
     editorMarkdownRef.current = markdown;
-    renderedMarkdownRef.current = renderedMarkdown;
-    editorRef.current.setMarkdown(renderedMarkdown);
+    editorRef.current.setMarkdown(frontmatter.body);
   }, [markdown, frontmatter.body]);
 
   useEffect(() => {
@@ -235,10 +229,6 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
   );
 });
 
-function materializeLiveMarkdown(markdown: string): string {
-  return materializeLiveSyntax(markdown);
-}
-
 function imageFileFromTransfer(transfer: Pick<DataTransfer, "files" | "items">): File | null {
   const file = Array.from(transfer.files).find((entry) => entry.type.startsWith("image/"));
   if (file) return file;
@@ -248,8 +238,4 @@ function imageFileFromTransfer(transfer: Pick<DataTransfer, "files" | "items">):
     if (entry) return entry;
   }
   return null;
-}
-
-function materializeLiveSyntax(markdown: string): string {
-  return materializeMathBlocksForLive(markdown);
 }

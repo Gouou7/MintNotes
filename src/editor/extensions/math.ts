@@ -3,7 +3,6 @@ import type {
   EditorExtension,
   InlineSourcePresentation,
 } from "../core/lib";
-import { parseFencedCodeSource } from "../core/fenced-code-source";
 
 export interface MathExtensionOptions {
   renderInline?: (container: HTMLElement, source: string) => void | (() => void);
@@ -55,31 +54,30 @@ function inlineMathPresentation(
 
 function blockMathPresentation(
   render: NonNullable<MathExtensionOptions["renderBlock"]>,
-): BlockSourcePresentation<{ kind: "paragraph" | "fenced" }> {
+): BlockSourcePresentation<{ kind: "single-line" | "multiline" }> {
   return {
     id: "mint-math-block",
-    nodeTypes: ["paragraph", "code_block"],
+    nodeTypes: ["paragraph"],
     sourceClassName: "live-math-block-source",
     widgetClassName: "live-math-block-widget",
-    match(source, context) {
-      if (context.nodeType === "paragraph") {
-        const matched = /^\$\$([^\n]+)\$\$$/.exec(source);
-        if (!matched) return null;
+    match(source) {
+      const singleLine = /^\$\$([^\r\n]+)\$\$$/.exec(source);
+      if (singleLine) {
         return {
           source,
-          renderSource: matched[1]!,
+          renderSource: singleLine[1]!,
           key: source,
-          data: { kind: "paragraph" },
+          data: { kind: "single-line" },
         };
       }
-      if (context.attributes.sourceEditing === true) return null;
-      const fenced = parseFencedCodeSource(source);
-      if (!fenced || fenced.lang.toLowerCase() !== "mint-math") return null;
+
+      const multiline = /^\$\$(?:\r\n|\r|\n)([\s\S]+?)(?:\r\n|\r|\n)\$\$$/.exec(source);
+      if (!multiline) return null;
       return {
         source,
-        renderSource: fenced.body,
+        renderSource: multiline[1]!,
         key: source,
-        data: { kind: "fenced" },
+        data: { kind: "multiline" },
       };
     },
     render: (container, match) => render(container, match.renderSource),
