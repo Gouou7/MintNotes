@@ -141,6 +141,10 @@
 }
 
 /* ─── extension marks ────────────────────────────────────────────── */
+.ProseMirror em {
+  font-style: italic;
+  font-synthesis: style;
+}
 .ProseMirror mark {
   background: #fff3a3;
   color: inherit;

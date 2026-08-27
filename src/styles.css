@@ -218,6 +218,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-editor-host .ProseMirror th { background: var(--surface-raised); }
 .markdown-editor-host .ProseMirror img, .readonly-markdown img { max-width: 100%; border-radius: 8px; }
 .readonly-markdown { font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; font-size: calc(17px + var(--font-adjust)); line-height: 1.75; overflow-wrap: anywhere; }
+.readonly-markdown em { font-style: italic; font-synthesis: style; }
 .readonly-markdown h1, .readonly-markdown h2, .readonly-markdown h3 { color: var(--text-strong); line-height: 1.3; margin-top: 1.7em; }
 .readonly-markdown h1:first-child { margin-top: 0; }
 .markdown-editor-host .ProseMirror blockquote,

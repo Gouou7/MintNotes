@@ -1007,6 +1007,18 @@ describe("Mint editor core public controller", () => {
     },
   );
 
+  it("renders Chinese emphasis as an em mark in Live mode", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "中文 *斜体* and _italic_";
+    const editor = createEditor(host, { initialContent: markdown });
+    const emphasis = host.querySelectorAll<HTMLElement>(".ProseMirror em");
+
+    expect(Array.from(emphasis, (node) => node.textContent)).toEqual(["斜体", "italic"]);
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
   it("reveals a WikiLink in place without changing canonical Markdown", () => {
     const host = document.createElement("div");
     document.body.append(host);

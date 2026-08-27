@@ -160,6 +160,10 @@
 .ProseMirror table tr:nth-child(2n) { background: #f6f8fa; }
 
 /* ─── inline / extension marks ───────────────────────────────────── */
+.ProseMirror em {
+  font-style: italic;
+  font-synthesis: style;
+}
 .ProseMirror mark {
   background: #fff8c5;
   color: inherit;

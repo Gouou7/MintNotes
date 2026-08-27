@@ -15,6 +15,15 @@ afterEach(() => {
 });
 
 describe("ReadOnlyMarkdown", () => {
+  it("keeps Chinese emphasis as semantic italic text", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={"*斜体* and _italic_"} /></I18nProvider>
+    );
+
+    expect(html).toContain("<em>斜体</em>");
+    expect(html).toContain("<em>italic</em>");
+  });
+
   it("keeps an authored soft line break in one paragraph", async () => {
     const container = document.createElement("div");
     document.body.append(container);
