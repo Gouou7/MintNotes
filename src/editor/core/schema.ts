@@ -46,10 +46,10 @@ const coreNodes: Record<string, NodeSpec> = {
   },
 
   // Line-ending characters inside a source gap need stable document
-  // positions without letting <pre> turn the structural separators on both
-  // sides of a Markdown block boundary into additional visible rows. Each
-  // atom owns exactly one canonical character. Only atoms representing an
-  // authored blank row render a <br>; boundary atoms remain zero-width.
+  // positions without letting <pre> turn the structural separator after the
+  // preceding Markdown block into an additional visible row. Each atom owns
+  // exactly one canonical character. Atoms ending authored blank rows render
+  // a <br>; the preceding block's boundary atom remains zero-width.
   source_gap_eol: {
     group: "inline",
     inline: true,

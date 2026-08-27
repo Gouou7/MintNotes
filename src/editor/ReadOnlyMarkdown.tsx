@@ -1,5 +1,4 @@
 import { Check, Copy } from "lucide-react";
-import rehypeKatex from "rehype-katex";
 import { Children, isValidElement, type HTMLAttributes, type ReactNode, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,7 +18,7 @@ import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter } from "./frontmatter";
 import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
 import { stripCommentsForReading } from "./extensions/comment";
-import { MermaidDiagram } from "./richRenderers";
+import { MathFormula, MermaidDiagram } from "./richRenderers";
 import { remarkWikiLinks } from "./wikilinks";
 
 function renderedText(children: ReactNode): string {
@@ -96,7 +95,6 @@ export function ReadOnlyMarkdown({
       <FrontmatterProperties markdown={markdown} />
       <ReactMarkdown
         remarkPlugins={[remarkMath, remarkGfm, remarkCallouts, remarkWikiLinks]}
-        rehypePlugins={[rehypeKatex]}
         skipHtml
         urlTransform={(url, key, node) => (
           key === "href" && url.startsWith("mint-wikilink:")
@@ -110,10 +108,10 @@ export function ReadOnlyMarkdown({
           p: ({ node: _node, children, ...props }) => (
             <p {...props} className="markdown-softbreak-paragraph">{children}</p>
           ),
-          blockquote: ({ node, children }) => {
+          blockquote: ({ node, children, ...props }) => {
             const properties = node?.properties ?? {};
             const kind = (properties["data-callout-kind"] ?? properties["dataCalloutKind"]) as CalloutKind | undefined;
-            if (!kind) return <blockquote>{children}</blockquote>;
+            if (!kind) return <blockquote {...props} className="markdown-quote">{children}</blockquote>;
             return <CalloutBlock
               kind={kind}
               title={String(properties["data-callout-title"] ?? properties["dataCalloutTitle"] ?? "")}
@@ -129,10 +127,19 @@ export function ReadOnlyMarkdown({
               ? properties.className.map(String)
               : [String(properties?.className ?? "")];
             const textChild = child && "children" in child ? child.children?.[0] : undefined;
+            if (classNames.includes("math-display") && textChild && "value" in textChild) {
+              return <MathFormula source={String(textChild.value ?? "")} displayMode />;
+            }
             if (classNames.includes("language-mermaid") && textChild && "value" in textChild) {
               return <MermaidDiagram source={String(textChild.value ?? "").replace(/\n$/, "")} />;
             }
             return <ReadOnlyCodeBlock {...props}>{children}</ReadOnlyCodeBlock>;
+          },
+          code: ({ node: _node, className, children, ...props }) => {
+            const classNames = className?.split(/\s+/) ?? [];
+            return classNames.includes("math-inline")
+              ? <MathFormula source={renderedText(children)} />
+              : <code {...props} className={className}>{children}</code>;
           },
           a: ({ node, href, children, ...props }) => {
             const properties = node?.properties ?? {};

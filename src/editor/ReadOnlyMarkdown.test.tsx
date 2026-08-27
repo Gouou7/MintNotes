@@ -69,7 +69,9 @@ describe("ReadOnlyMarkdown", () => {
         "> Body",
         "",
         "> [!custom-kind]",
-        "> Custom body"
+        "> Custom body",
+        "",
+        "> Plain quote"
       ].join("\n")} /></I18nProvider>
     );
 
@@ -82,6 +84,7 @@ describe("ReadOnlyMarkdown", () => {
     expect(html).not.toContain("<details open");
     expect(html).toContain("Read this");
     expect(html).toContain("callout-custom");
+    expect(html).toContain("class=\"markdown-quote\"");
     expect(html).not.toContain("[!IMPORTANT]");
   });
 
@@ -89,7 +92,7 @@ describe("ReadOnlyMarkdown", () => {
     localStorage.setItem("webmd-notes-language", "en");
     const html = renderToStaticMarkup(
       <I18nProvider><ReadOnlyMarkdown markdown={[
-        "Inline $E = mc^2$.",
+        "Inline $E_i = mc^2$.",
         "",
         "$$\\int_0^1 x^2\\,dx$$",
         "",
@@ -108,6 +111,7 @@ describe("ReadOnlyMarkdown", () => {
 
     expect(html).toContain("class=\"katex\"");
     expect(html.match(/class=\"katex-display\"/g)).toHaveLength(2);
+    expect(html).toContain("katex-sizing reset-size6 size3");
     expect(html).toContain("class=\"wiki-link\"");
     expect(html).toContain("mint-wikilink:");
     expect(html).toContain("class=\"mermaid-diagram\"");

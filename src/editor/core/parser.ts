@@ -486,7 +486,6 @@ function topLevelSourceRanges(tokens: readonly Token[], source: string): SourceB
 function sourceGapContent(
   source: string,
   hideFirstLineEnding: boolean,
-  hideLastLineEnding: boolean,
 ): PMNode[] {
   const lineEndings = [...source.matchAll(/\r\n|\r|\n/g)];
   const children: PMNode[] = [];
@@ -498,8 +497,11 @@ function sourceGapContent(
     const start = match.index;
     pushText(source.slice(cursor, start));
     const ending = match[0];
-    const visible = !(hideFirstLineEnding && index === 0)
-      && !(hideLastLineEnding && index === lineEndings.length - 1);
+    // Only the first line ending belongs to the preceding rendered block.
+    // Every later ending terminates an authored blank row and must own that
+    // row's DOM height so native pointer placement resolves to its exact
+    // canonical source boundary instead of a synthetic trailing break.
+    const visible = !(hideFirstLineEnding && index === 0);
     for (let characterIndex = 0; characterIndex < ending.length; characterIndex += 1) {
       const character = ending[characterIndex]!;
       children.push(schema.nodes.source_gap_eol.createChecked({
@@ -530,7 +532,7 @@ function sourceGapNode(
       [SOURCE_TO_ATTR]: to,
       [SOURCE_TEXT_ATTR]: source,
     },
-    sourceGapContent(source, from > 0, to < fullSourceLength),
+    sourceGapContent(source, from > 0),
   );
   return node.type.createChecked({
     ...node.attrs,

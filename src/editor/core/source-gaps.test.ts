@@ -45,13 +45,13 @@ describe("source-backed whitespace gaps", () => {
   });
 
   it.each([
-    ["a\n\nb", 0],
-    ["a\n\n\nb", 1],
-    ["\n\nb", 1],
+    ["a\n\nb", 1],
+    ["a\n\n\nb", 2],
+    ["\n\nb", 2],
     ["a\n\n", 1],
     ["\n\n", 2],
-    ["a\r\n\r\nb", 0],
-    ["a\r\n\r\n\r\nb", 1],
+    ["a\r\n\r\nb", 1],
+    ["a\r\n\r\n\r\nb", 2],
   ] as const)("renders only authored blank rows for %j", (markdown, visibleBreaks) => {
     const gap = parse(markdown).content.content.find((node) => node.type.name === "source_gap");
     expect(gap).toBeDefined();

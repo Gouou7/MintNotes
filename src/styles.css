@@ -220,6 +220,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .readonly-markdown { font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; font-size: calc(17px + var(--font-adjust)); line-height: 1.75; overflow-wrap: anywhere; }
 .readonly-markdown h1, .readonly-markdown h2, .readonly-markdown h3 { color: var(--text-strong); line-height: 1.3; margin-top: 1.7em; }
 .readonly-markdown h1:first-child { margin-top: 0; }
+.markdown-editor-host .ProseMirror blockquote,
+.readonly-markdown .markdown-quote { border-left-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+.readonly-markdown .markdown-quote { margin: 1em 0; padding: 0 0 0 1em; border-left-width: 3px; border-left-style: solid; }
 .readonly-markdown code { padding: .14em .32em; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; }
 .readonly-markdown pre { overflow: auto; padding: 16px; border-radius: 8px; }
 .readonly-code-block { position: relative; margin: 1em 0; }

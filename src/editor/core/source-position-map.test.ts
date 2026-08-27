@@ -23,4 +23,36 @@ describe("canonical source position map", () => {
     expect(map.sourceToDocument(1, "left")).toBe(map.sourceToDocument(0, "left"));
     expect(map.sourceToDocument(1, "right")).toBe(map.sourceToDocument(3, "right"));
   });
+
+  it("gives blank rows between a list, Quote, and Callout an authored DOM position", () => {
+    const source = [
+      "1. 的",
+      "2. 有序列表",
+      "",
+      ">quote",
+      "",
+      "> [!note]",
+      "> callout",
+    ].join("\n");
+    const doc = parse(source);
+    const map = SourcePositionMap.fromDocument(doc, source);
+    const blankOffsets = [
+      source.indexOf("\n\n>quote") + 1,
+      source.indexOf("\n\n> [!note]") + 1,
+    ];
+    const visibleRowPositions: number[] = [];
+
+    doc.forEach((node, position) => {
+      if (node.type.name !== "source_gap") return;
+      node.forEach((child, relativePosition) => {
+        if (child.type.name === "source_gap_eol" && child.attrs.visible === true) {
+          visibleRowPositions.push(position + 1 + relativePosition);
+        }
+      });
+    });
+
+    expect(visibleRowPositions).toHaveLength(2);
+    expect(visibleRowPositions.map((position) => map.documentToSource(position)))
+      .toEqual(blankOffsets);
+  });
 });

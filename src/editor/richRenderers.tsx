@@ -53,6 +53,19 @@ export function renderMathInto(container: HTMLElement, source: string, displayMo
   return () => container.replaceChildren();
 }
 
+export function MathFormula({ source, displayMode = false }: { source: string; displayMode?: boolean }) {
+  const markup = katex.renderToString(source, {
+    displayMode,
+    throwOnError: false,
+    strict: "warn",
+    trust: false,
+    output: "htmlAndMathml"
+  });
+  return displayMode
+    ? <div className="readonly-math-block" dangerouslySetInnerHTML={{ __html: markup }} />
+    : <span className="readonly-inline-math" dangerouslySetInnerHTML={{ __html: markup }} />;
+}
+
 export function renderMermaidInto(container: HTMLElement, source: string): () => void {
   let cancelled = false;
   let objectUrl: string | null = null;

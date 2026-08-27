@@ -78,7 +78,7 @@
   height: 0;
   overflow: hidden;
 }
-.ProseMirror pre[data-source-gap-structural] br.ProseMirror-trailingBreak { display: none; }
+.ProseMirror pre[data-source-gap] br.ProseMirror-trailingBreak { display: none; }
 /* Source-gap rows are the only Live-mode block separators. Theme margins
  * must not add a second, non-authored gap around them. */
 .ProseMirror .hr-node-view {

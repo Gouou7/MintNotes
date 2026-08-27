@@ -835,18 +835,20 @@ describe("Mint editor core public controller", () => {
     const standardGapHost = document.createElement("div");
     document.body.append(standardGapHost);
     const standardGap = createEditor(standardGapHost, { initialContent: "a\n\nb" });
-    expect(standardGapHost.querySelectorAll("pre[data-source-gap] br[data-source-gap-eol]")).toHaveLength(0);
-    expect(standardGapHost.querySelectorAll("pre[data-source-gap] [data-source-gap-hidden]")).toHaveLength(2);
-    expect(standardGapHost.querySelectorAll("pre[data-source-gap] br")).toHaveLength(1);
+    expect(standardGapHost.querySelectorAll("pre[data-source-gap] br[data-source-gap-eol]")).toHaveLength(1);
+    expect(standardGapHost.querySelectorAll("pre[data-source-gap] [data-source-gap-hidden]")).toHaveLength(1);
+    expect(standardGapHost.querySelector("pre[data-source-gap] br.ProseMirror-trailingBreak"))
+      .not.toBeNull();
     expect(standardGap.getMarkdown()).toBe("a\n\nb");
     standardGap.destroy();
 
     const blankHost = document.createElement("div");
     document.body.append(blankHost);
     const blank = createEditor(blankHost, { initialContent: "a\n\n\nb" });
-    expect(blankHost.querySelectorAll("pre[data-source-gap] br[data-source-gap-eol]")).toHaveLength(1);
-    expect(blankHost.querySelectorAll("pre[data-source-gap] [data-source-gap-hidden]")).toHaveLength(2);
-    expect(blankHost.querySelectorAll("pre[data-source-gap] br")).toHaveLength(2);
+    expect(blankHost.querySelectorAll("pre[data-source-gap] br[data-source-gap-eol]")).toHaveLength(2);
+    expect(blankHost.querySelectorAll("pre[data-source-gap] [data-source-gap-hidden]")).toHaveLength(1);
+    expect(blankHost.querySelector("pre[data-source-gap] br.ProseMirror-trailingBreak"))
+      .not.toBeNull();
     expect(blank.getMarkdown()).toBe("a\n\n\nb");
     blank.destroy();
   });
@@ -914,7 +916,7 @@ describe("Mint editor core public controller", () => {
         const gap = host.querySelector<HTMLElement>(".ProseMirror > pre[data-source-gap]");
         const visibleRows = gap?.hasAttribute("data-source-gap-structural")
           ? 0
-          : (gap?.querySelectorAll("br[data-source-gap-eol]").length ?? 0) + 1;
+          : (gap?.querySelectorAll("br[data-source-gap-eol]").length ?? 0);
 
         expect(gap).not.toBeNull();
         expect(visibleRows).toBe(expectedRows);
