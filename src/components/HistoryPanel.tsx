@@ -1,4 +1,4 @@
-import { Clock3, Ellipsis, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Clock3, Ellipsis, Pencil, RotateCcw, Save, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n";
 import { canDeleteHistory } from "../features/history";
@@ -90,7 +90,11 @@ export function HistoryPanel({
     <div className="history-list" aria-label={t("history.list")}>
       {groups.map((group) => <section className="history-day" key={group.day}>
         <h3>{group.day}</h3>
-        {group.items.map((item) => <div className={`history-row ${selectedId === item.historyId ? "active" : ""}`} data-history-id={item.historyId} key={item.historyId}>
+        {group.items.map((item) => <div className={`history-row ${selectedId === item.historyId ? "active" : ""}`} data-history-id={item.historyId} key={item.historyId} onContextMenu={(event) => {
+          if (renamingId === item.historyId) return;
+          event.preventDefault();
+          setMenu({ item, x: event.clientX, y: event.clientY });
+        }}>
           {renamingId === item.historyId
             ? <div className="history-select history-renaming">
                 <span className="history-row-icon"><AppIcon icon={item.captureKind === "restore-safety" ? RotateCcw : Clock3} size={15} />{item.protected && <ProtectionBadge label={t("history.protectedBadge")} />}</span>
@@ -112,13 +116,13 @@ export function HistoryPanel({
       {hasMore && !loading && <button className="history-more" onClick={onLoadMore}>{t("history.loadMore")}</button>}
     </div>
     {menu && <div className="context-menu history-context-menu" style={{
-      left: Math.min(menu.x, window.innerWidth - 230),
+      left: Math.min(menu.x, window.innerWidth - 214),
       top: Math.min(menu.y, window.innerHeight - 150)
     }} onPointerDown={(event) => event.stopPropagation()}>
-      <button onClick={() => { setMenu(null); onBeginRename(menu.item); }}>{t("history.rename")}</button>
-      <button onClick={() => { setMenu(null); onToggleProtection(menu.item); }}>{menu.item.protected ? t("history.unprotect") : t("history.protect")}</button>
+      <button onClick={() => { setMenu(null); onBeginRename(menu.item); }}><AppIcon icon={Pencil} size={14} />{t("history.rename")}</button>
+      <button onClick={() => { setMenu(null); onToggleProtection(menu.item); }}><AppIcon icon={menu.item.protected ? ShieldOff : ShieldCheck} size={14} />{menu.item.protected ? t("history.unprotect") : t("history.protect")}</button>
       <hr />
-      <button className="danger" disabled={!canDeleteHistory(menu.item)} title={menu.item.protected ? t("history.protectedDeleteHint") : undefined} onClick={() => { setMenu(null); onDelete(menu.item); }}>{t("history.deleteOne")}</button>
+      <button className="danger" disabled={!canDeleteHistory(menu.item)} title={menu.item.protected ? t("history.protectedDeleteHint") : undefined} onClick={() => { setMenu(null); onDelete(menu.item); }}><AppIcon icon={Trash2} size={14} />{t("history.deleteOne")}</button>
     </div>}
   </div>;
 }

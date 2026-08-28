@@ -58,10 +58,26 @@ describe("HistoryPanel", () => {
     await act(async () => (container.querySelector("button[aria-label='History actions']") as HTMLButtonElement).click());
     const menuButtons = [...container.querySelectorAll(".history-context-menu button")] as HTMLButtonElement[];
     expect(menuButtons.map((button) => button.textContent?.trim())).toEqual(["Rename", "Remove protection", "Delete this version"]);
+    expect(menuButtons.every((button) => button.querySelector("svg"))).toBe(true);
     expect(menuButtons[2].disabled).toBe(true);
     expect(menuButtons[2].title).toBe("Remove protection before deleting this version");
     await act(async () => menuButtons[1].click());
     expect(props.onToggleProtection).toHaveBeenCalledWith(protectedItem);
+  });
+
+  it("opens the same action menu by right-clicking a history row", async () => {
+    const { container } = await renderHistory();
+    const row = container.querySelector(".history-row") as HTMLElement;
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 80, clientY: 90 });
+
+    await act(async () => row.dispatchEvent(event));
+
+    const menu = container.querySelector(".history-context-menu") as HTMLElement;
+    expect(event.defaultPrevented).toBe(true);
+    expect(menu).not.toBeNull();
+    expect(menu.style.left).toBe("80px");
+    expect(menu.style.top).toBe("90px");
+    expect([...menu.querySelectorAll("button")].map((button) => button.textContent?.trim())).toEqual(["Rename", "Remove protection", "Delete this version"]);
   });
 
   it("focuses and selects the complete generated name while renaming", async () => {

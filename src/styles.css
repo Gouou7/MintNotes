@@ -648,16 +648,15 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .app-shell .trash-details small, .app-shell .sidebar-user-name small, .app-shell .status-bar { font-size: calc(11px + var(--font-adjust)); }
 .app-shell .settings-section label, .app-shell .notice, .app-shell .error { font-size: calc(13px + var(--font-adjust)); }
 
-.context-menu { position: fixed; z-index: 150; width: 220px; max-height: min(430px, calc(100dvh - 20px)); overflow: auto; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: 0 14px 44px rgba(0,0,0,.34); }
-.context-menu button, .context-menu summary { display: block; width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; cursor: pointer; }
-.context-menu button:hover, .context-menu summary:hover { background: var(--surface-hover); }
+.context-menu { position: fixed; z-index: 150; width: 204px; max-height: min(430px, calc(100dvh - 20px)); overflow: auto; padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); box-shadow: 0 12px 36px rgba(0,0,0,.32); }
+.context-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; cursor: pointer; font-size: calc(12px + var(--font-adjust)); line-height: 1.25; }
+.context-menu button > svg { width: 14px; height: 14px; flex: 0 0 14px; color: var(--muted); }
+.context-menu button:hover { background: var(--surface-hover); }
 .context-menu button:disabled { cursor: not-allowed; opacity: .45; background: transparent; color: var(--muted); }
 .context-menu .danger { color: var(--danger); }
-.context-menu hr { border: 0; border-top: 1px solid var(--border); }
-.context-menu details button { padding-left: 22px; }
-.context-menu summary { list-style: none; }
-.context-menu summary::after { content: "›"; float: right; }
-.context-selection-count { margin: 2px 5px 5px; padding: 6px 5px 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.context-menu .danger > svg { color: currentColor; }
+.context-menu hr { margin: 4px; border: 0; border-top: 1px solid var(--border); }
+.context-selection-count { margin: 1px 4px 4px; padding: 5px 4px 7px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: calc(11px + var(--font-adjust)); }
 
 @media (max-width: 1100px) {
   .app-shell, .app-shell.outline-collapsed { grid-template-columns: var(--tree-track) var(--tree-resizer-track) minmax(0, 1fr); }

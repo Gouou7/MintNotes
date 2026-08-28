@@ -1,12 +1,28 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Ellipsis, FileText, Folder } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Download,
+  Ellipsis,
+  FilePlus2,
+  FileText,
+  Folder,
+  FolderPlus,
+  LockKeyhole,
+  LockKeyholeOpen,
+  Pencil,
+  Pin,
+  PinOff,
+  RotateCcw,
+  Trash2
+} from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
 import { ProtectionBadge } from "../../components/ProtectionBadge";
 import { TreeRenameInput } from "../../components/TreeRenameInput";
 import { useI18n } from "../../i18n";
 import type { OpenDocument } from "../../types";
 import {
-  canMoveDocument,
   isFolderDropZone,
   lockedNoteInSelection,
   selectionRoots,
@@ -119,7 +135,7 @@ export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, e
   }) as ReactNode;
 }
 
-export function ContextMenu({ document, selection, documents, position, onClose, onSelect, onRename, onToggleLock, onMove, onCreate, onDuplicate, onExport, onPin, onDelete, onRestore, onPurge }: {
+export function ContextMenu({ document, selection, documents, position, onClose, onSelect, onRename, onToggleLock, onCreate, onDuplicate, onExport, onPin, onDelete, onRestore, onPurge }: {
   document: OpenDocument;
   selection: OpenDocument[];
   documents: OpenDocument[];
@@ -128,7 +144,6 @@ export function ContextMenu({ document, selection, documents, position, onClose,
   onSelect: (id: string) => void;
   onRename: (id: string) => void;
   onToggleLock: (id: string) => Promise<void>;
-  onMove: (ids: string[], parentId: string | null) => void;
   onCreate: (kind: "note" | "folder", parentId: string | null) => Promise<string>;
   onDuplicate: (ids: string[]) => Promise<void>;
   onExport: (ids: string[]) => Promise<void>;
@@ -145,19 +160,27 @@ export function ContextMenu({ document, selection, documents, position, onClose,
   const deleted = selected.every((entry) => entry.deleted);
   const lockedTrashNote = deleted ? undefined : lockedNoteInSelection(documents, roots);
   const allPinned = selected.every((entry) => entry.favorite);
-  const folders = documents.filter((entry) => entry.kind === "folder" && !entry.deleted && !selectedIds.includes(entry.objectId) && roots.every((id) => canMoveDocument(documents, id, entry.objectId)));
   const act = (callback: () => unknown | Promise<unknown>) => { onClose(); void callback(); };
   return (
-    <div className="context-menu" style={{ left: Math.min(position.x, window.innerWidth - 230), top: Math.min(position.y, window.innerHeight - 430) }} onPointerDown={(event) => event.stopPropagation()}>
+    <div className="context-menu" style={{ left: Math.min(position.x, window.innerWidth - 214), top: Math.min(position.y, window.innerHeight - 430) }} onPointerDown={(event) => event.stopPropagation()}>
       {!single && <p className="context-selection-count">{t("app.selectedCount", { count: selected.length })}</p>}
-      {single && document.kind === "note" && <button onClick={() => act(() => onSelect(document.objectId))}>{t("app.open")}</button>}
-      {!deleted && <>{single && <button disabled={isLockedNote(document)} title={isLockedNote(document) ? t("app.unlockToEdit") : undefined} onClick={() => act(() => onRename(document.objectId))}>{t("app.rename")}</button>}{single && document.kind === "note" && <button onClick={() => act(() => onToggleLock(document.objectId))}>{isLockedNote(document) ? t("app.unlockNote") : t("app.lockNote")}</button>}<button onClick={() => act(() => onPin(selectedIds, !allPinned))}>{allPinned ? t("app.unpin") : t("app.pinned")}</button></>}
-      {!deleted && single && document.kind === "folder" && <><button onClick={() => act(() => onCreate("note", document.objectId))}>{t("app.createNoteInFolder")}</button><button onClick={() => act(() => onCreate("folder", document.objectId))}>{t("app.createSubfolder")}</button></>}
-      {!deleted && <button onClick={() => act(() => onDuplicate(selectedIds))}>{t("app.duplicate")}</button>}
-      <button onClick={() => act(() => onExport(selectedIds))}>{t("app.export")}</button>
-      {!deleted && <details><summary>{t("app.moveTo")}</summary><button onClick={() => act(() => onMove(selectedIds, null))}>{t("app.rootDirectory")}</button>{folders.map((folder) => <button key={folder.objectId} onClick={() => act(() => onMove(selectedIds, folder.objectId))}>{folder.title}</button>)}</details>}
+      {single && document.kind === "note" && <button onClick={() => act(() => onSelect(document.objectId))}><AppIcon icon={FileText} size={14} />{t("app.open")}</button>}
+      {!deleted && <>
+        {single && <button disabled={isLockedNote(document)} title={isLockedNote(document) ? t("app.unlockToEdit") : undefined} onClick={() => act(() => onRename(document.objectId))}><AppIcon icon={Pencil} size={14} />{t("app.rename")}</button>}
+        {single && document.kind === "note" && <button onClick={() => act(() => onToggleLock(document.objectId))}><AppIcon icon={isLockedNote(document) ? LockKeyholeOpen : LockKeyhole} size={14} />{isLockedNote(document) ? t("app.unlockNote") : t("app.lockNote")}</button>}
+        <button onClick={() => act(() => onPin(selectedIds, !allPinned))}><AppIcon icon={allPinned ? PinOff : Pin} size={14} />{allPinned ? t("app.unpin") : t("app.pinned")}</button>
+      </>}
+      {!deleted && single && document.kind === "folder" && <>
+        <button onClick={() => act(() => onCreate("note", document.objectId))}><AppIcon icon={FilePlus2} size={14} />{t("app.createNoteInFolder")}</button>
+        <button onClick={() => act(() => onCreate("folder", document.objectId))}><AppIcon icon={FolderPlus} size={14} />{t("app.createSubfolder")}</button>
+      </>}
+      {!deleted && <button onClick={() => act(() => onDuplicate(selectedIds))}><AppIcon icon={Copy} size={14} />{t("app.duplicate")}</button>}
+      <button onClick={() => act(() => onExport(selectedIds))}><AppIcon icon={Download} size={14} />{t("app.export")}</button>
       <hr />
-      {deleted ? <><button onClick={() => act(() => onRestore(selectedIds))}>{t("app.restore")}</button><button className="danger" onClick={() => act(() => onPurge(selectedIds))}>{t("app.permanentDeleteEllipsis")}</button></> : <button className="danger" disabled={Boolean(lockedTrashNote)} title={lockedTrashNote ? t("notice.lockedTrashBlocked", { title: lockedTrashNote.title }) : undefined} onClick={() => act(() => onDelete(selectedIds))}>{t("app.moveToTrash")}</button>}
+      {deleted ? <>
+        <button onClick={() => act(() => onRestore(selectedIds))}><AppIcon icon={RotateCcw} size={14} />{t("app.restore")}</button>
+        <button className="danger" onClick={() => act(() => onPurge(selectedIds))}><AppIcon icon={Trash2} size={14} />{t("app.permanentDeleteEllipsis")}</button>
+      </> : <button className="danger" disabled={Boolean(lockedTrashNote)} title={lockedTrashNote ? t("notice.lockedTrashBlocked", { title: lockedTrashNote.title }) : undefined} onClick={() => act(() => onDelete(selectedIds))}><AppIcon icon={Trash2} size={14} />{t("app.moveToTrash")}</button>}
     </div>
   );
 }

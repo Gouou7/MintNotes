@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../i18n";
 import type { OpenDocument } from "../../types";
-import { TreeLevel, type TreeDropTarget } from "./VaultTree";
+import { ContextMenu, TreeLevel, type TreeDropTarget } from "./VaultTree";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -95,6 +95,38 @@ describe("VaultTree drag feedback", () => {
     expect(row?.classList.contains("drop-before")).toBe(false);
     expect(row?.classList.contains("drop-after")).toBe(false);
     expect(row?.dataset.dropPosition).toBeUndefined();
+
+    await act(async () => root.unmount());
+  });
+});
+
+describe("VaultTree context menu", () => {
+  it("shows an icon beside every available action", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(<I18nProvider><ContextMenu
+      document={note}
+      selection={[note]}
+      documents={[note]}
+      position={{ x: 20, y: 20 }}
+      onClose={vi.fn()}
+      onSelect={vi.fn()}
+      onRename={vi.fn()}
+      onToggleLock={vi.fn(async () => undefined)}
+      onCreate={vi.fn(async () => "new-object")}
+      onDuplicate={vi.fn(async () => undefined)}
+      onExport={vi.fn(async () => undefined)}
+      onPin={vi.fn(async () => undefined)}
+      onDelete={vi.fn(async () => undefined)}
+      onRestore={vi.fn(async () => undefined)}
+      onPurge={vi.fn()}
+    /></I18nProvider>));
+
+    const actions = [...container.querySelectorAll<HTMLElement>(".context-menu button")];
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions.every((action) => action.querySelector("svg"))).toBe(true);
+    expect(actions.every((action) => action.textContent?.trim() !== "Move to")).toBe(true);
 
     await act(async () => root.unmount());
   });
