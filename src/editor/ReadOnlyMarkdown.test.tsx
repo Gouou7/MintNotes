@@ -15,6 +15,22 @@ afterEach(() => {
 });
 
 describe("ReadOnlyMarkdown", () => {
+  it("enables visual code wrapping by default without changing code text", () => {
+    const source = "const_very_long_authored_line_without_breaks_1234567890";
+    const markdown = `\`\`\`ts\n${source}\n\`\`\``;
+    const wrapped = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={markdown} /></I18nProvider>
+    );
+    const unwrapped = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={markdown} wrapCodeBlocks={false} /></I18nProvider>
+    );
+
+    expect(wrapped).toContain('class="readonly-markdown wrap-code-blocks"');
+    expect(unwrapped).toContain('class="readonly-markdown"');
+    expect(unwrapped).not.toContain("wrap-code-blocks");
+    expect(wrapped).toContain(source);
+  });
+
   it("keeps Chinese emphasis as semantic italic text", () => {
     const html = renderToStaticMarkup(
       <I18nProvider><ReadOnlyMarkdown markdown={"*斜体* and _italic_"} /></I18nProvider>
@@ -22,6 +38,25 @@ describe("ReadOnlyMarkdown", () => {
 
     expect(html).toContain("<em>斜体</em>");
     expect(html).toContain("<em>italic</em>");
+  });
+
+  it("renders highlights with nested inline formatting", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={"这是 ==高亮中包含 **粗体** 的文本。=="} /></I18nProvider>
+    );
+
+    expect(html).toContain("这是 <mark>高亮中包含 <strong>粗体</strong> 的文本。</mark>");
+    expect(html).not.toContain("==");
+  });
+
+  it("keeps highlight markers literal in inline code and when escaped", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={"`==code==` and \\==literal=="} /></I18nProvider>
+    );
+
+    expect(html).toContain("<code>==code==</code>");
+    expect(html).toContain("==literal==");
+    expect(html).not.toContain("<mark>");
   });
 
   it("keeps an authored soft line break in one paragraph", async () => {
@@ -215,5 +250,6 @@ describe("ReadOnlyMarkdown", () => {
     expect(html).toContain('class="readonly-code-language">TypeScript</span>');
     expect(html).toContain('class="readonly-code-language">custom-lang</span>');
     expect(html.match(/class="readonly-code-language"/g)).toHaveLength(2);
+    expect(html.match(/class="readonly-code-actions"/g)).toHaveLength(3);
   });
 });

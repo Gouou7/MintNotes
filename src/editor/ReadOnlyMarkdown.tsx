@@ -17,6 +17,7 @@ import {
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter } from "./frontmatter";
 import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
+import { remarkReadingHighlight } from "./reading-highlight";
 import { remarkReadingListSpacing } from "./reading-list-spacing";
 import { stripCommentsForReading } from "./extensions/comment";
 import { displayCodeLanguage } from "./core/fenced-code-source";
@@ -60,30 +61,34 @@ function ReadOnlyCodeBlock({
   };
 
   return (
-    <div className={`readonly-code-block${language ? " has-language" : ""}`}>
+    <div className="readonly-code-block">
       <pre {...props}>{children}</pre>
-      {language && <span className="readonly-code-language">{displayCodeLanguage(language)}</span>}
-      <button
-        type="button"
-        className="readonly-code-copy"
-        data-copy-state={copyState}
-        aria-label={label}
-        title={label}
-        onClick={() => void copyCode()}
-      >
-        <AppIcon icon={copyState === "copied" ? Check : Copy} size={15} />
-        <span className="sr-only" aria-live="polite">{copyState === "idle" ? "" : label}</span>
-      </button>
+      <div className="readonly-code-actions">
+        {language && <span className="readonly-code-language">{displayCodeLanguage(language)}</span>}
+        <button
+          type="button"
+          className="readonly-code-copy"
+          data-copy-state={copyState}
+          aria-label={label}
+          title={label}
+          onClick={() => void copyCode()}
+        >
+          <AppIcon icon={copyState === "copied" ? Check : Copy} size={15} />
+          <span className="sr-only" aria-live="polite">{copyState === "idle" ? "" : label}</span>
+        </button>
+      </div>
     </div>
   );
 }
 
 export function ReadOnlyMarkdown({
   markdown,
+  wrapCodeBlocks = true,
   attachmentUrls = new Map(),
   onWikiLink
 }: {
   markdown: string;
+  wrapCodeBlocks?: boolean;
   attachmentUrls?: Map<string, string>;
   onWikiLink?: (target: string) => void;
 }) {
@@ -95,10 +100,17 @@ export function ReadOnlyMarkdown({
   );
 
   return (
-    <article className="readonly-markdown">
+    <article className={`readonly-markdown${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
       <FrontmatterProperties markdown={markdown} />
       <ReactMarkdown
-        remarkPlugins={[remarkMath, remarkGfm, remarkCallouts, remarkWikiLinks, remarkReadingListSpacing]}
+        remarkPlugins={[
+          remarkMath,
+          remarkGfm,
+          remarkReadingHighlight,
+          remarkCallouts,
+          remarkWikiLinks,
+          remarkReadingListSpacing,
+        ]}
         skipHtml
         urlTransform={(url, key, node) => (
           key === "href" && url.startsWith("mint-wikilink:")

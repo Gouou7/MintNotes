@@ -594,6 +594,20 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
                 <button type="button" className="font-size-reset" disabled={preferences.fontSize === DEFAULT_FONT_SIZE} onClick={restoreDefaultFontSize}><AppIcon icon={RotateCcw} size={15} />{t("settings.restoreDefaultFontSize")}</button>
               </div>
             </div>
+            <h3>{t("settings.editor")}</h3>
+            <label className="settings-control-row">
+              <span>{t("settings.wrapCodeBlocks")}</span>
+              <span className="settings-switch">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label={t("settings.wrapCodeBlocks")}
+                  checked={preferences.wrapCodeBlocks}
+                  onChange={(event) => onPreferences({ ...preferences, wrapCodeBlocks: event.target.checked })}
+                />
+                <span className="settings-switch-track" aria-hidden="true" />
+              </span>
+            </label>
           </div>}
 
           {tab === "trash" && <div className="settings-section trash-settings">

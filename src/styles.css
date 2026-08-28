@@ -22,6 +22,8 @@
   --code-copy-bg: transparent;
   --code-copy-hover: #eeeeec;
   --code-copy-shadow: none;
+  --highlight-bg: #fff0a6;
+  --highlight-text: #4a3d00;
   --document-divider: #deddd8;
   --toolbar: rgba(255,255,255,.96);
   --danger: #ae3030;
@@ -57,6 +59,8 @@
   --code-copy-bg: rgba(36,36,34,.9);
   --code-copy-hover: #343432;
   --code-copy-shadow: 0 2px 8px rgba(0,0,0,.24);
+  --highlight-bg: #d8bf5a;
+  --highlight-text: #211d09;
   --document-divider: #30302d;
   --toolbar: rgba(25,25,24,.96);
   --danger: #ff8b8b;
@@ -203,6 +207,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-editor-host .ProseMirror h1, .markdown-editor-host .ProseMirror h2, .markdown-editor-host .ProseMirror h3, .markdown-editor-host .ProseMirror h4, .markdown-editor-host .ProseMirror h5 { color: var(--text-strong); }
 .markdown-editor-host .ProseMirror h6, .markdown-editor-host .ProseMirror blockquote { color: var(--muted); }
 .markdown-editor-host .ProseMirror code, .readonly-markdown code { background: var(--surface-input); color: var(--text); }
+.markdown-editor-host .ProseMirror mark, .readonly-markdown mark { padding: 0 .1em; border-radius: 2px; background: var(--highlight-bg); color: var(--highlight-text); }
 .markdown-editor-host .ProseMirror pre, .readonly-markdown pre { background: var(--code-block-bg); color: var(--code-block-text); border: 0; border-radius: 8px; }
 .markdown-editor-host .ProseMirror pre[data-source-gap] { min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; line-height: inherit; white-space: pre-wrap; tab-size: inherit; }
 .readonly-markdown .markdown-softbreak-paragraph { white-space: break-spaces; }
@@ -216,7 +221,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-editor-host .ProseMirror pre[data-source-block] > code { padding: 0; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; color: inherit; font: inherit; white-space: inherit; }
 .markdown-editor-host .ProseMirror pre[data-source-block][data-source-kind^="heading-"] { margin: 0; font-weight: 600; line-height: 1.3; color: var(--text-strong); }
 .markdown-editor-host .ProseMirror pre[data-source-block][data-source-kind="heading-6"] { color: var(--muted); }
-.markdown-editor-host .ProseMirror pre:not(.cb-source-editing)[data-lang] { padding-right: 72px; }
 .markdown-editor-host .ProseMirror pre code { background: transparent; color: inherit; }
 .markdown-editor-host .ProseMirror pre .cb-language-label { color: var(--code-block-muted); }
 .markdown-editor-host .ProseMirror hr, .readonly-markdown hr { height: 1px; padding: 0; background: var(--document-divider); border: 0; }
@@ -232,20 +236,34 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .readonly-markdown code { padding: .14em .32em; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; }
 .readonly-markdown pre { overflow: auto; padding: 16px; border-radius: 8px; }
 .readonly-code-block { position: relative; margin: 1em 0; }
-.readonly-markdown .readonly-code-block pre { margin: 0; padding-right: 52px; }
-.readonly-markdown .readonly-code-block.has-language pre { padding-top: 42px; }
-.readonly-code-language { position: absolute; top: 12px; right: 48px; color: var(--code-block-muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: .78em; font-weight: 500; line-height: 1.2; user-select: none; }
+.readonly-markdown .readonly-code-block pre { margin: 0; }
+.readonly-code-actions { position: absolute; top: 8px; right: 8px; display: grid; justify-items: end; }
+.readonly-code-language, .readonly-code-copy { grid-area: 1 / 1; }
+.readonly-code-language { min-height: 30px; display: flex; align-items: center; padding: 0 4px; color: var(--code-block-muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: .78em; font-weight: 500; line-height: 1.2; user-select: none; pointer-events: none; transition: opacity .14s ease; }
 .readonly-markdown pre code { padding: 0; background: transparent; color: inherit; }
-.readonly-code-copy { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 1px solid var(--code-copy-border); border-radius: 7px; opacity: 0; color: var(--code-block-muted); background: var(--code-copy-bg); box-shadow: var(--code-copy-shadow); cursor: pointer; transition: opacity .14s ease, color .14s ease, background .14s ease, transform .14s ease; }
+.readonly-code-copy { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 1px solid var(--code-copy-border); border-radius: 7px; opacity: 0; color: var(--code-block-muted); background: var(--code-copy-bg); box-shadow: var(--code-copy-shadow); cursor: pointer; transition: opacity .14s ease, color .14s ease, background .14s ease, transform .14s ease; }
+.readonly-code-block:hover .readonly-code-language, .readonly-code-block:focus-within .readonly-code-language { opacity: 0; }
 .readonly-code-block:hover .readonly-code-copy, .readonly-code-copy:focus-visible { opacity: 1; }
 .readonly-code-copy:hover { background: var(--code-copy-hover); transform: translateY(-1px); }
 .readonly-code-copy[data-copy-state="copied"] { color: var(--accent); }
 .readonly-code-copy[data-copy-state="failed"] { color: var(--danger); }
+.wrap-code-blocks .readonly-code-block pre,
+.live-editor-document.wrap-code-blocks .markdown-editor-host .ProseMirror pre:not([data-source-block]):not([data-source-gap]):not([data-source-blockquote]) {
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.wrap-code-blocks .readonly-code-block pre code,
+.live-editor-document.wrap-code-blocks .markdown-editor-host .ProseMirror pre:not([data-source-block]):not([data-source-gap]):not([data-source-blockquote]) > code {
+  white-space: inherit;
+  overflow-wrap: inherit;
+}
 @media (hover: none), (pointer: coarse) {
+  .readonly-code-language { opacity: 0; }
   .readonly-code-copy { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .readonly-code-copy { transition: none; }
+  .readonly-code-language, .readonly-code-copy { transition: none; }
 }
 .readonly-markdown table { border-collapse: collapse; width: 100%; }
 .readonly-markdown th, .readonly-markdown td { border: 1px solid var(--border); padding: 7px 10px; }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE, normalizeFontSize } from "./appearance";
+import {
+  DEFAULT_FONT_SIZE,
+  DEFAULT_WRAP_CODE_BLOCKS,
+  MAX_FONT_SIZE,
+  MIN_FONT_SIZE,
+  normalizeFontSize,
+  normalizeWrapCodeBlocks
+} from "./appearance";
 
 describe("normalizeFontSize", () => {
   it("keeps supported pixel sizes and clamps out-of-range values", () => {
@@ -18,5 +25,14 @@ describe("normalizeFontSize", () => {
     expect(normalizeFontSize(14.5)).toBe(DEFAULT_FONT_SIZE);
     expect(normalizeFontSize("18")).toBe(DEFAULT_FONT_SIZE);
     expect(normalizeFontSize(null)).toBe(DEFAULT_FONT_SIZE);
+  });
+});
+
+describe("normalizeWrapCodeBlocks", () => {
+  it("defaults to wrapping unless the stored preference is explicitly disabled", () => {
+    expect(normalizeWrapCodeBlocks(undefined)).toBe(DEFAULT_WRAP_CODE_BLOCKS);
+    expect(normalizeWrapCodeBlocks(true)).toBe(true);
+    expect(normalizeWrapCodeBlocks(false)).toBe(false);
+    expect(normalizeWrapCodeBlocks("false")).toBe(DEFAULT_WRAP_CODE_BLOCKS);
   });
 });

@@ -198,6 +198,8 @@ const messages = {
   "settings.fontSize": { en: "Font size", "zh-CN": "字体大小", "zh-TW": "字體大小" },
   "settings.fontSizePixels": { en: "Font size in pixels", "zh-CN": "字体大小（像素）", "zh-TW": "字體大小（像素）" },
   "settings.restoreDefaultFontSize": { en: "Restore default", "zh-CN": "恢复默认大小", "zh-TW": "恢復預設大小" },
+  "settings.editor": { en: "Editor", "zh-CN": "编辑器", "zh-TW": "編輯器" },
+  "settings.wrapCodeBlocks": { en: "Wrap code blocks", "zh-CN": "代码块自动换行", "zh-TW": "程式碼區塊自動換行" },
   "settings.trashHelp": {
     en: "Items in trash are automatically deleted after the selected retention period.",
     "zh-CN": "回收站的内容会在到达设置的自动删除时间后自动删除。",

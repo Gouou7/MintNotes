@@ -30,6 +30,7 @@ interface Props {
   onImageInsert?: (file: File) => Promise<string | null>;
   onWikiLink?: (target: string) => void;
   emptyHint?: string;
+  wrapCodeBlocks?: boolean;
 }
 
 export interface MarkdownEditorHandle {
@@ -94,7 +95,7 @@ const SourceEditor = forwardRef<MarkdownEditorHandle, Props>(function SourceEdit
   );
 });
 
-const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), attachmentsPending = false, onImageInsert, onWikiLink, emptyHint }, ref) {
+const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), attachmentsPending = false, onImageInsert, onWikiLink, emptyHint, wrapCodeBlocks = true }, ref) {
   const frontmatter = parseFrontmatter(markdown);
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorController | null>(null);
@@ -130,6 +131,7 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
               <I18nProvider>
                 <ReadOnlyMarkdown
                   markdown={source}
+                  wrapCodeBlocks={false}
                   attachmentUrls={attachmentUrlsRef.current}
                   onWikiLink={(target) => wikiLinkRef.current?.(target)}
                 />
@@ -215,7 +217,7 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
   };
 
   return (
-    <div className="live-editor-document">
+    <div className={`live-editor-document${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
       {frontmatter.status !== "absent" && <FrontmatterProperties markdown={markdown} editable onChange={changeProperties} />}
       <div
         ref={hostRef}

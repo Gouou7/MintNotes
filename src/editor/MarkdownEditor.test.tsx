@@ -60,6 +60,32 @@ function transferEvent(
 }
 
 describe("MarkdownEditor live mode", () => {
+  it("toggles visual code wrapping without rebuilding the editor", async () => {
+    const editor = {
+      destroy: vi.fn(),
+      focus: vi.fn(),
+      setMarkdown: vi.fn()
+    } as unknown as EditorController;
+    vi.mocked(createEditor).mockReturnValue(editor);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const render = (wrapCodeBlocks: boolean) => (
+      <I18nProvider>
+        <MarkdownEditor markdown={"```\nlong_code_line\n```"} mode="live" wrapCodeBlocks={wrapCodeBlocks} onChange={vi.fn()} />
+      </I18nProvider>
+    );
+
+    await act(async () => root.render(render(true)));
+    expect(container.querySelector(".live-editor-document")?.classList).toContain("wrap-code-blocks");
+
+    await act(async () => root.render(render(false)));
+    expect(container.querySelector(".live-editor-document")?.classList).not.toContain("wrap-code-blocks");
+    expect(createEditor).toHaveBeenCalledTimes(1);
+
+    await act(async () => root.unmount());
+  });
+
   it("exposes focus and shows a non-persistent hint for an empty note", async () => {
     localStorage.setItem("webmd-notes-language", "en");
     const editor = {

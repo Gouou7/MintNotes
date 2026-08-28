@@ -456,8 +456,7 @@
 .ProseMirror pre[data-source-block] {
   box-sizing: border-box;
   margin: 0;
-  font-family: inherit;
-  line-height: inherit;
+  font: inherit;
   color: inherit;
   background: transparent;
   padding: 0;

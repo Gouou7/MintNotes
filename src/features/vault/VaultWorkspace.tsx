@@ -131,7 +131,12 @@ import {
 import { useVaultModel } from "./useVaultModel";
 import { attachmentGraphSignature, useAttachmentUrls } from "./useAttachmentUrls";
 import { VaultHistoryController, type HistoryIndexEnvelope } from "./historyController";
-import { DEFAULT_FONT_SIZE, normalizeFontSize } from "../appearance";
+import {
+  DEFAULT_FONT_SIZE,
+  DEFAULT_WRAP_CODE_BLOCKS,
+  normalizeFontSize,
+  normalizeWrapCodeBlocks
+} from "../appearance";
 
 type EditorMode = WorkspaceEditorMode;
 type CreateDocumentOptions = { focusName?: boolean; activate?: boolean };
@@ -139,6 +144,7 @@ const DEFAULT_PREFERENCES: UiPreferences = {
   ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
   theme: "system",
   fontSize: DEFAULT_FONT_SIZE,
+  wrapCodeBlocks: DEFAULT_WRAP_CODE_BLOCKS,
   language: "system",
   sortMode: "alphabetical",
   treeCollapsed: false,
@@ -1239,6 +1245,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
           ...storedUiPreferences,
           ...deviceWorkspace,
           fontSize: normalizeFontSize(storedUiPreferences.fontSize),
+          wrapCodeBlocks: normalizeWrapCodeBlocks(storedUiPreferences.wrapCodeBlocks),
           language: isLanguagePreference(storedUiPreferences.language) ? storedUiPreferences.language : languagePreference
         };
         await localDb.transaction("rw", localDb.objects, localDb.outbox, localDb.meta, async () => {
@@ -2535,10 +2542,10 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         </div>}
         <div className="editor-area" ref={editorArea}>
           {activeDocument ? historyPreview
-            ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
+            ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
             : displayedMode === "readonly"
-            ? <ReadOnlyMarkdown markdown={activeDocument.markdown} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : <MarkdownEditor ref={editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={(markdown) => {
+            ? <ReadOnlyMarkdown markdown={activeDocument.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
+            : <MarkdownEditor ref={editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={(markdown) => {
               const latest = documentIndexRef.current.get(activeDocument.objectId);
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });

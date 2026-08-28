@@ -195,6 +195,7 @@ export interface UiPreferences {
   editorMode: WorkspaceEditorMode;
   theme: ThemePreference;
   fontSize: number;
+  wrapCodeBlocks: boolean;
   language: LanguagePreference;
   sortMode: SortMode;
   treeCollapsed: boolean;

@@ -33,6 +33,7 @@ const preferences: UiPreferences = {
   editorMode: "live",
   theme: "system",
   fontSize: 14,
+  wrapCodeBlocks: true,
   language: "zh-CN",
   sortMode: "alphabetical",
   treeCollapsed: false,
@@ -105,7 +106,7 @@ describe("SettingsPanel", () => {
     expect(container.querySelector(".profile-summary")?.textContent).toContain("Administrator@admin");
     expect(container.querySelector(".settings-section > h3")?.textContent).toBe("外观");
     expect(container.textContent).not.toContain("上传头像");
-    expect(container.querySelectorAll(".settings-content input:not([type='file'])")).toHaveLength(1);
+    expect(container.querySelectorAll(".settings-content input:not([type='file'])")).toHaveLength(2);
     await act(async () => button(container, "编辑资料").click());
     expect(container.querySelectorAll(".profile-edit-dialog form input")).toHaveLength(2);
     expect(container.querySelectorAll(".profile-edit-dialog > .compact-form")).toHaveLength(2);
@@ -117,9 +118,21 @@ describe("SettingsPanel", () => {
     expect((button(container, "修改用户名") as HTMLButtonElement).disabled).toBe(true);
     expect(button(container, "关闭").classList).toContain("profile-action-button");
     expect(container.textContent).toContain("字体大小");
+    expect(container.textContent).toContain("编辑器代码块自动换行");
     expect(container.textContent).toContain("语言");
     expect(container.textContent).not.toContain("文件排序");
     expect(container.textContent).not.toContain("恢复两侧栏");
+  });
+
+  it("enables code block wrapping by default and saves explicit changes", async () => {
+    const onPreferences = vi.fn();
+    const container = await renderSettings(admin, vi.fn(), onPreferences);
+    const toggle = container.querySelector("[role='switch'][aria-label='代码块自动换行']") as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+
+    await act(async () => toggle.click());
+
+    expect(onPreferences).toHaveBeenCalledWith(expect.objectContaining({ wrapCodeBlocks: false }));
   });
 
   it("accepts a pixel font size and restores the current default", async () => {
