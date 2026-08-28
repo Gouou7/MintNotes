@@ -32,8 +32,8 @@ import type { FeatureSpec } from "./_types";
 // Block serializer walks children → `[label]: url ["title"]`. Title is
 // emitted only if non-empty.
 
-const REF_DRAFT_RE = /^\[([^\]]+)\]:/;
-const REF_COMMIT_RE = /^\[([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?\s*$/;
+const REF_DRAFT_RE = /^\[(?!\^)([^\]]+)\]:/;
+const REF_COMMIT_RE = /^\[(?!\^)([^\]]+)\]:\s+(\S+)(?:\s+"([^"]*)")?\s*$/;
 
 function refDraftPlugin(): Plugin {
   return new Plugin({

@@ -129,6 +129,8 @@ export interface OutlineItem {
   level: number;
   text: string;
   index: number;
+  sourceOffset: number;
+  sourceLine: number;
 }
 
 export type HistoryCaptureKind = "baseline" | "interval" | "idle" | "manual" | "restore-safety";

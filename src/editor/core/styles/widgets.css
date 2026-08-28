@@ -479,3 +479,24 @@
 .live-comment-widget {
   display: none;
 }
+
+.ProseMirror .live-footnote-reference,
+.ProseMirror .live-footnote-definition,
+.ProseMirror .live-footnote-backlinks {
+  white-space: nowrap;
+}
+.ProseMirror .live-footnote-reference,
+.ProseMirror .live-footnote-backlinks {
+  font-size: 0.75em;
+  line-height: 0;
+  vertical-align: super;
+}
+.ProseMirror .live-footnote-definition-number {
+  margin-right: 0.45em;
+}
+.ProseMirror .live-footnote-backlinks {
+  margin-left: 0.35em;
+}
+.ProseMirror .live-footnote-backlinks a + a {
+  margin-left: 0.2em;
+}

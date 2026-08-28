@@ -12,6 +12,7 @@ import {
 import {
   collectMdItPlugins,
   collectParserPostProcessors,
+  collectParserSourceProtectors,
   collectParserTokens,
 } from "./features/index";
 import { parseFencedCodeSource } from "./fenced-code-source";
@@ -26,6 +27,7 @@ import { sourceFingerprint } from "./source-fingerprint";
 
 const md: MarkdownIt = new MarkdownIt("commonmark", { html: false });
 for (const plugin of collectMdItPlugins()) md.use(plugin);
+const parserSourceProtectors = collectParserSourceProtectors();
 
 const LITERAL_FENCE_SENTINEL = "\uE000";
 const INCOMPLETE_BLOCK_CHARACTERS = new Set(["*", "+", "-", ".", ")", "="]);
@@ -131,14 +133,16 @@ function splitTopLevelListBlocks(tokens: readonly Token[], lines: readonly Sourc
 }
 
 /**
- * markdown-it accepts an empty list marker at end-of-line (`*`, `+`, `-`,
- * `1.`, `1)`) and one-character Setext underlines. Mint Notes deliberately
- * keeps those spellings literal until the user types the required list space
- * or the third Setext underline character. Protecting only the candidate
- * punctuation gives the parser the desired transient shape without changing
- * source length, line maps, or the canonical authored string.
+ * Protect source spellings whose CommonMark meaning differs from Mint Notes'
+ * Live presentation. Same-size private sentinels preserve every UTF-16 source
+ * boundary, and ParserState restores the authored characters immediately.
+ *
+ * Feature-owned protections also use this boundary when plain markdown-it
+ * would otherwise consume syntax that the feature must present from exact
+ * authored text. The feature declares only character offsets; sentinel
+ * allocation and restoration remain centralized here.
  */
-function protectIncompleteBlockCandidates(source: string): {
+function protectLiveParserSpellings(source: string): {
   parserSource: string;
   restoration: ReadonlyMap<string, string>;
 } {
@@ -163,14 +167,30 @@ function protectIncompleteBlockCandidates(source: string): {
   };
   let changed = false;
   for (const line of sourceLines(source)) {
+    for (const protect of parserSourceProtectors) {
+      for (const lineOffset of protect(line.text)) {
+        const character = line.text[lineOffset];
+        if (character === undefined) continue;
+        const sentinel = sentinelFor(character);
+        if (!sentinel) continue;
+        const sourceOffset = line.from + lineOffset;
+        if (characters[sourceOffset] !== sentinel) {
+          characters[sourceOffset] = sentinel;
+          changed = true;
+        }
+      }
+    }
     if (!/^( {0,3})(?:[*+-]|\d+[.)]|={1,2}|-{1,2})$/.test(line.text)) continue;
     for (let index = 0; index < line.text.length; index += 1) {
       const character = line.text[index]!;
       if (!INCOMPLETE_BLOCK_CHARACTERS.has(character)) continue;
       const sentinel = sentinelFor(character);
       if (!sentinel) continue;
-      characters[line.from + index] = sentinel;
-      changed = true;
+      const sourceOffset = line.from + index;
+      if (characters[sourceOffset] !== sentinel) {
+        characters[sourceOffset] = sentinel;
+        changed = true;
+      }
     }
   }
   return {
@@ -701,7 +721,7 @@ export interface ParseOptions {
 }
 
 export function parse(src: string, options: ParseOptions = {}): PMNode {
-  const protectedSource = protectIncompleteBlockCandidates(
+  const protectedSource = protectLiveParserSpellings(
     protectRecoverableUnclosedFences(src),
   );
   const lines = sourceLines(src);

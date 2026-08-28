@@ -61,6 +61,12 @@ export type FeatureSpec = {
   marks?: Record<string, PMMarkSpec>;
   nodes?: Record<string, PMNodeSpec>;
   mdItPlugins?: Array<(md: MarkdownIt) => void>;
+  /**
+   * Same-size parser compatibility boundary. Returned line-local character
+   * offsets are replaced by private sentinels for markdown-it, then restored
+   * before entering the derived document. Canonical source is never changed.
+   */
+  protectParserSource?: (line: string) => readonly number[];
   parserTokens?: Record<string, TokenHandler>;
   // Optional post-processor: runs once after parse() builds the doc, e.g.
   // to fold `[ ] ` text prefixes inside list_items into task_marker nodes.

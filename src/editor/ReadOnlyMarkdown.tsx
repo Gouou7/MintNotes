@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react";
-import { Children, isValidElement, type CSSProperties, type HTMLAttributes, type ReactNode, useEffect, useRef, useState } from "react";
+import { Children, isValidElement, type CSSProperties, type HTMLAttributes, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -17,10 +17,12 @@ import {
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter } from "./frontmatter";
 import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
+import { materializeInlineFootnotesForReading } from "./inlineFootnotes";
 import { remarkReadingHighlight } from "./reading-highlight";
 import { remarkReadingListSpacing } from "./reading-list-spacing";
 import { stripCommentsForReading } from "./extensions/comment";
 import { displayCodeLanguage } from "./core/fenced-code-source";
+import { navigateToDocumentFragment } from "./core/fragment-navigation";
 import { MathFormula, MermaidDiagram } from "./richRenderers";
 import { remarkWikiLinks } from "./wikilinks";
 
@@ -93,14 +95,19 @@ export function ReadOnlyMarkdown({
   onWikiLink?: (target: string) => void;
 }) {
   const { t } = useI18n();
+  const renderId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const footnoteLabelId = `mint-footnote-${renderId}-label`;
+  const articleRef = useRef<HTMLElement>(null);
   const allowedAttachmentUrls = new Set(attachmentUrls.values());
   const frontmatter = parseFrontmatter(markdown);
-  const renderedMarkdown = materializeSingleLineDisplayMathForReading(
-    stripCommentsForReading(materializeAttachmentUrls(frontmatter.body, attachmentUrls))
+  const renderedMarkdown = materializeInlineFootnotesForReading(
+    materializeSingleLineDisplayMathForReading(
+      stripCommentsForReading(materializeAttachmentUrls(frontmatter.body, attachmentUrls))
+    )
   );
 
   return (
-    <article className={`readonly-markdown${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
+    <article ref={articleRef} className={`readonly-markdown${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
       <FrontmatterProperties markdown={markdown} />
       <ReactMarkdown
         remarkPlugins={[
@@ -112,6 +119,7 @@ export function ReadOnlyMarkdown({
           remarkReadingListSpacing,
         ]}
         skipHtml
+        remarkRehypeOptions={{ clobberPrefix: `mint-footnote-${renderId}-` }}
         urlTransform={(url, key, node) => (
           key === "href" && url.startsWith("mint-wikilink:")
             ? url
@@ -121,8 +129,13 @@ export function ReadOnlyMarkdown({
             : defaultUrlTransform(url)
         )}
         components={{
+          h2: ({ node: _node, id, children, ...props }) => (
+            <h2 {...props} id={id === "footnote-label" ? footnoteLabelId : id}>{children}</h2>
+          ),
           li: ({ node, children, style, ...props }) => {
             const properties = node?.properties ?? {};
+            const footnoteDefinition = String(properties.id ?? "")
+              .startsWith(`mint-footnote-${renderId}-fn-`);
             const blankRows = Number(
               properties["data-list-gap-before"] ?? properties.dataListGapBefore ?? 0,
             );
@@ -132,7 +145,14 @@ export function ReadOnlyMarkdown({
                   "--markdown-list-gap-before": String(blankRows),
                 } as CSSProperties
               : style;
-            return <li {...props} style={listStyle}>{children}</li>;
+            return <li
+              {...props}
+              style={listStyle}
+              {...(footnoteDefinition ? {
+                tabIndex: -1,
+                "data-footnote-definition": "true",
+              } : {})}
+            >{children}</li>;
           },
           p: ({ node: _node, children, ...props }) => (
             <p {...props} className="markdown-softbreak-paragraph">{children}</p>
@@ -184,6 +204,20 @@ export function ReadOnlyMarkdown({
                 onClick={(event) => {
                   event.preventDefault();
                   onWikiLink?.(target);
+                }}
+              >{children}</a>;
+            }
+            if (href?.startsWith("#")) {
+              const footnoteReference = Boolean(
+                properties["data-footnote-ref"] ?? properties.dataFootnoteRef,
+              );
+              return <a
+                {...props}
+                href={href}
+                aria-describedby={footnoteReference ? footnoteLabelId : props["aria-describedby"]}
+                onClick={(event) => {
+                  const root = articleRef.current;
+                  if (root && navigateToDocumentFragment(root, href)) event.preventDefault();
                 }}
               >{children}</a>;
             }

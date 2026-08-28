@@ -20,6 +20,7 @@ import { code } from "./code";
 import { emoji } from "./emoji";
 import { emphasis } from "./emphasis";
 import { fencedCode } from "./fenced-code";
+import { footnote } from "./footnote";
 import { frontMatter } from "./front-matter";
 import { heading } from "./heading";
 import { highlight } from "./highlight";
@@ -56,6 +57,7 @@ export const ALL_FEATURES: FeatureSpec[] = [
   list,
   fencedCode,
   frontMatter,
+  footnote,
   refDef,
   table,
   toc,
@@ -74,6 +76,11 @@ export function collectNodes(): NonNullable<FeatureSpec["nodes"]> {
 }
 export function collectMdItPlugins(): NonNullable<FeatureSpec["mdItPlugins"]> {
   return ALL_FEATURES.flatMap((f) => f.mdItPlugins ?? []);
+}
+export function collectParserSourceProtectors(): Array<NonNullable<FeatureSpec["protectParserSource"]>> {
+  return ALL_FEATURES.flatMap((feature) => (
+    feature.protectParserSource ? [feature.protectParserSource] : []
+  ));
 }
 export function collectParserTokens(): NonNullable<FeatureSpec["parserTokens"]> {
   return Object.assign({}, ...ALL_FEATURES.map((f) => f.parserTokens ?? {}));

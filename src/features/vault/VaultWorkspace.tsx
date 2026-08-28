@@ -34,9 +34,9 @@ import {
   markEndpointRevocationPending,
   touchPinRefreshGrant
 } from "../../crypto/deviceUnlock";
-import { buildOutline } from "../../editor/outline";
+import { buildOutline, findOutlineHeading } from "../../editor/outline";
 import { ReadOnlyMarkdown } from "../../editor/ReadOnlyMarkdown";
-import { MarkdownEditor, type MarkdownEditorHandle } from "../../editor/MarkdownEditor";
+import { MarkdownEditor } from "../../editor/MarkdownEditor";
 import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/wikilinks";
 import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
 import { AttachmentCloneService } from "../attachmentClone";
@@ -117,6 +117,7 @@ import { ContextMenu, draggedDocumentIds, TreeDocumentIcon, TreeLevel, type Tree
 import { EmptyEditor, NoteToolbar } from "./NoteToolbar";
 import { useObjectPersistence } from "./useObjectPersistence";
 import { useDocumentSaveQueue } from "./useDocumentSaveQueue";
+import { useDocumentNavigation } from "./useDocumentNavigation";
 import { hasPendingLocalObjectGraph, removePurgedLocalData } from "./localPurge";
 import { acknowledgeOutboxEntry } from "./outboxAcknowledgement";
 import { pullVaultChanges } from "./pullController";
@@ -283,9 +284,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const deferredActiveRemoteId = useRef<string | null>(null);
   const documentTree = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
-  const editorArea = useRef<HTMLDivElement>(null);
-  const editorSurface = useRef<MarkdownEditorHandle>(null);
-  const pendingEditorSelection = useRef<number | null>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const pendingTitleFocus = useRef<string | null>(null);
   const pendingTitleSave = useRef<Promise<boolean>>(Promise.resolve(true));
@@ -1481,18 +1479,10 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
   const activeDocumentLocked = isLockedNote(activeDocument);
   const displayedMode = effectiveEditorMode(mode, activeDocument);
-  useEffect(() => {
-    const offset = pendingEditorSelection.current;
-    if (offset === null || displayedMode === "readonly") return;
-    pendingEditorSelection.current = null;
-    const frame = window.requestAnimationFrame(() => editorSurface.current?.setSelectionOffset(offset));
-    return () => window.cancelAnimationFrame(frame);
-  }, [displayedMode]);
+  const documentNavigation = useDocumentNavigation(displayedMode);
 
   const changeEditorMode = (nextMode: EditorMode) => {
-    if (displayedMode !== "readonly") {
-      pendingEditorSelection.current = editorSurface.current?.getSelectionOffset() ?? null;
-    }
+    if (!documentNavigation.prepareModeChange(nextMode)) return;
     setMode(nextMode);
   };
   useEffect(() => {
@@ -1632,13 +1622,13 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       return;
     }
     const { heading } = parseWikiLinkTarget(target);
+    const headingItem = heading
+      ? findOutlineHeading(buildOutline(destination.markdown), heading)
+      : null;
     void selectDocument(destination.objectId).then(() => {
-      if (!heading) return;
+      if (!headingItem) return;
       window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-        const normalized = heading.trim().toLocaleLowerCase();
-        const headingElement = [...(editorArea.current?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6") ?? [])]
-          .find((element) => element.textContent?.trim().toLocaleLowerCase() === normalized);
-        headingElement?.scrollIntoView({ block: "start" });
+        documentNavigation.jumpToHeading(headingItem);
       }));
     });
   };
@@ -2199,6 +2189,9 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       const current = documentIndexRef.current.get(noteId);
       if (!current || current.kind !== "note") return;
       const locked = !isLockedNote(current);
+      if (noteId === activeIdRef.current) {
+        documentNavigation.prepareModeChange(locked ? "readonly" : mode);
+      }
       await persistObject(
         { ...current, locked, dirty: true },
         { preserveUpdatedAt: true }
@@ -2416,7 +2409,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   }, [outlineOpen, settingsOpen, treeOpen]);
 
   const jumpToHeading = (index: number) => {
-    editorArea.current?.querySelectorAll("h1,h2,h3,h4,h5,h6").item(index)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const item = outline[index];
+    if (item) documentNavigation.jumpToHeading(item);
     setOutlineOpen(false);
   };
 
@@ -2516,7 +2510,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
               if (!updated) setTitleDraft(documentIndexRef.current.get(noteId)?.title ?? "");
             });
           }}
-          onTitleKeyDown={(event) => { focusEditorFromTitle(event, editorSurface.current); }}
+          onTitleKeyDown={(event) => { focusEditorFromTitle(event, documentNavigation.editorSurface.current); }}
           onModeChange={changeEditorMode}
           onToggleLock={() => void toggleActiveNoteLock()}
           onAddImage={() => attachmentInput.current?.click()}
@@ -2540,12 +2534,12 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
             <button className="danger" disabled={!canDeleteHistory(historyPreview.item)} onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={historyPreview.item.protected ? t("history.protectedDeleteHint") : t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} size={14} /></button>
           </div>
         </div>}
-        <div className="editor-area" ref={editorArea}>
+        <div className="editor-area" ref={documentNavigation.editorArea}>
           {activeDocument ? historyPreview
             ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
             : displayedMode === "readonly"
             ? <ReadOnlyMarkdown markdown={activeDocument.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : <MarkdownEditor ref={editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={(markdown) => {
+            : <MarkdownEditor ref={documentNavigation.editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={(markdown) => {
               const latest = documentIndexRef.current.get(activeDocument.objectId);
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });

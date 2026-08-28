@@ -204,6 +204,82 @@ describe("ReadOnlyMarkdown", () => {
     expect(html).not.toContain("%%");
   });
 
+  it("renders Obsidian named and inline footnotes as current-document links", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={[
+        "Named footnote[^release] and inline footnote ^[Inline detail.]",
+        "",
+        "[^release]: Release detail.",
+      ].join("\n")} /></I18nProvider>
+    );
+
+    expect(html).toContain('data-footnote-ref="true"');
+    expect(html).toContain('data-footnotes="true"');
+    expect(html).toContain("Inline detail.");
+    expect(html.match(/data-footnote-ref="true"/g)).toHaveLength(2);
+    expect(html.match(/<li id="mint-footnote-/g)).toHaveLength(2);
+    expect(html).not.toMatch(/data-footnote-(?:ref|backref)[^>]*target="_blank"/);
+  });
+
+  it("keeps Obsidian inline-footnote syntax literal in code and when escaped", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={[
+        "`^[inline code]` and \\^[escaped]",
+        "",
+        "```md",
+        "^[fenced code]",
+        "```",
+      ].join("\n")} /></I18nProvider>
+    );
+
+    expect(html).not.toContain('data-footnote-ref="true"');
+    expect(html).toContain("^[inline code]");
+    expect(html).toContain("^[escaped]");
+    expect(html).toContain("^[fenced code]");
+  });
+
+  it("keeps footnote references and backlinks in the current reading surface", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(
+      <I18nProvider><ReadOnlyMarkdown markdown={[
+        "Reference[^note].",
+        "",
+        "[^note]: Footnote body.",
+      ].join("\n")} /></I18nProvider>
+    ));
+
+    const reference = container.querySelector<HTMLAnchorElement>("a[data-footnote-ref]");
+    const definition = container.querySelector<HTMLElement>("li[data-footnote-definition]");
+    const backlink = container.querySelector<HTMLAnchorElement>("a[data-footnote-backref]");
+    const label = container.querySelector<HTMLElement>("section[data-footnotes] > h2");
+    const referenceScroll = vi.fn();
+    const definitionScroll = vi.fn();
+    Object.defineProperty(reference, "scrollIntoView", { configurable: true, value: referenceScroll });
+    Object.defineProperty(definition, "scrollIntoView", { configurable: true, value: definitionScroll });
+
+    expect(reference?.target).toBe("");
+    expect(backlink?.target).toBe("");
+    expect(definition?.tabIndex).toBe(-1);
+    expect(reference?.getAttribute("aria-describedby")).toBe(label?.id);
+    await act(async () => reference?.click());
+    expect(definitionScroll).toHaveBeenCalledOnce();
+    await act(async () => backlink?.click());
+    expect(referenceScroll).toHaveBeenCalledOnce();
+
+    await act(async () => root.unmount());
+  });
+
+  it("continues to open external Reading-mode links in a new tab", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown="[External](https://example.test)" /></I18nProvider>
+    );
+
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+  });
+
   it("copies every line from a fenced code block", async () => {
     localStorage.setItem("webmd-notes-language", "en");
     const writeText = vi.fn().mockResolvedValue(undefined);

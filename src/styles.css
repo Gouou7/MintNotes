@@ -268,6 +268,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .readonly-markdown table { border-collapse: collapse; width: 100%; }
 .readonly-markdown th, .readonly-markdown td { border: 1px solid var(--border); padding: 7px 10px; }
 .readonly-markdown a { color: var(--accent-text); }
+.markdown-editor-host .live-footnote-reference a,
+.markdown-editor-host .live-footnote-definition a,
+.markdown-editor-host .live-footnote-backlinks a { color: var(--accent-text); cursor: pointer; text-decoration: none; }
+.markdown-editor-host [data-footnote-definition],
+.readonly-markdown [data-footnote-definition] { scroll-margin-top: 24px; }
+.readonly-markdown [data-footnote-ref],
+.readonly-markdown [data-footnote-backref] { cursor: pointer; }
 .readonly-markdown > :first-child { margin-top: 0; }
 
 .properties-panel { margin: 0 0 28px; padding: 0 2px 18px; border-bottom: 1px solid var(--border); font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: calc(14px + var(--font-adjust)); }
