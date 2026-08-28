@@ -34,6 +34,8 @@ export interface InlinePresentationSearchContext {
 export interface InlineSourcePresentation<Data = unknown> {
   readonly id: string;
   readonly sourceClassName: string;
+  /** Optional class applied to the complete authored range while selected. */
+  readonly editingClassName?: string;
   readonly widgetClassName: string;
   readonly priority?: number;
   find(
@@ -60,6 +62,11 @@ export interface BlockPresentationSearchContext {
   readonly attributes: Readonly<Record<string, unknown>>;
 }
 
+export interface BlockSourceEditing {
+  /** Complete and in-progress authored forms that require exact block editing. */
+  matches(source: string): boolean;
+}
+
 /**
  * A presentation-only block matcher. The core owns selection activation and
  * ProseMirror decorations; extensions only recognize source and mount output.
@@ -70,6 +77,8 @@ export interface BlockSourcePresentation<Data = unknown> {
   readonly sourceClassName: string;
   readonly widgetClassName: string;
   readonly priority?: number;
+  /** Exact, text-backed editing for authored forms that cannot use the derived node. */
+  readonly sourceBlockEditing?: BlockSourceEditing;
   match(
     source: string,
     context: BlockPresentationSearchContext,

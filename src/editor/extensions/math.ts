@@ -9,12 +9,22 @@ export interface MathExtensionOptions {
   renderBlock?: (container: HTMLElement, source: string) => void | (() => void);
 }
 
+function isEditableBlockMathSource(source: string): boolean {
+  if (source === "$$" || /^\$\$[^\r\n]+\$\$$/.test(source)) return true;
+  const opening = /^\$\$(?:\r\n|\r|\n)/.exec(source);
+  if (!opening) return false;
+  const body = source.slice(opening[0].length);
+  const closing = /(?:^|\r\n|\r|\n)\$\$(?=$|\r\n|\r|\n)/.exec(body);
+  return closing === null || closing.index + closing[0].length === body.length;
+}
+
 function inlineMathPresentation(
   render: NonNullable<MathExtensionOptions["renderInline"]>,
 ): InlineSourcePresentation<{ kind: "inline-math" }> {
   return {
     id: "mint-math-inline",
     sourceClassName: "live-inline-math-source",
+    editingClassName: "live-inline-math-editing",
     widgetClassName: "live-inline-math-widget",
     find(source) {
       const matches = [];
@@ -60,6 +70,11 @@ function blockMathPresentation(
     nodeTypes: ["paragraph"],
     sourceClassName: "live-math-block-source",
     widgetClassName: "live-math-block-widget",
+    sourceBlockEditing: {
+      matches(source) {
+        return isEditableBlockMathSource(source);
+      },
+    },
     match(source) {
       const singleLine = /^\$\$([^\r\n]+)\$\$$/.exec(source);
       if (singleLine) {

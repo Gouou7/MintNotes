@@ -2109,6 +2109,68 @@ describe("Mint editor core public controller", () => {
     },
   );
 
+  it("shows the complete inline-math source in its active editing range", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "Before $A_d$ after";
+    const changes: string[] = [];
+    const editor = createMintEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+      presentations: {
+        renderMath: (container, source) => { container.textContent = `inline:${source}`; },
+      },
+    });
+
+    expect(host.querySelector(".live-inline-math-widget")?.textContent).toBe("inline:A_d");
+    editor.setSelectionOffset(markdown.indexOf("A_d") + 1);
+    expect(host.querySelector(".live-inline-math-editing")?.textContent).toBe("$A_d$");
+    expect(host.querySelector(".live-inline-math-widget")).toBeNull();
+
+    editor.setSelectionOffset(0);
+    expect(host.querySelector(".live-inline-math-editing")).toBeNull();
+    expect(host.querySelector(".live-inline-math-widget")?.textContent).toBe("inline:A_d");
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+    editor.destroy();
+  });
+
+  it.each([
+    ["single-line", "$$E = mc^2$$", "E = mc^2"],
+    ["multiline", "$$\nA_B\n$$", "A_B"],
+  ] as const)(
+    "shows the complete %s display-math source only while its block is active",
+    (_kind, authoredMath, renderedMath) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const markdown = `Before\n\n${authoredMath}\n\nAfter`;
+      const editor = createMintEditor(host, {
+        initialContent: markdown,
+        presentations: {
+          renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
+        },
+      });
+
+      const widget = host.querySelector<HTMLElement>(".live-math-block-widget");
+      expect(widget?.textContent).toBe(`block:${renderedMath}`);
+      widget?.click();
+
+      const source = host.querySelector<HTMLElement>(
+        'pre[data-source-block][data-source-kind="mint-math-block"]',
+      );
+      expect(source?.textContent).toBe(authoredMath);
+      expect(source?.querySelector("code")?.textContent).toBe(authoredMath);
+      expect(host.querySelector(".live-math-block-widget")).toBeNull();
+
+      editor.setSelectionOffset(markdown.length);
+      expect(host.querySelector(".live-math-block-source.is-live-syntax-rendered")).not.toBeNull();
+      expect(host.querySelector(".live-math-block-widget")?.textContent)
+        .toBe(`block:${renderedMath}`);
+      expect(editor.getMarkdown()).toBe(markdown);
+      editor.destroy();
+    },
+  );
+
   it("reveals and edits exact multiline math source without a private code fence", () => {
     const host = document.createElement("div");
     document.body.append(host);
@@ -2126,7 +2188,9 @@ describe("Mint editor core public controller", () => {
     expect(widget?.textContent).toBe("block:A_B");
     widget?.click();
     expect(host.querySelector(".live-math-block-widget")).toBeNull();
-    expect(host.querySelector(".live-math-block-source.is-live-syntax-editing")?.textContent).toBe("$$\nA_B\n$$");
+    expect(host.querySelector(
+      'pre[data-source-block][data-source-kind="mint-math-block"] > code',
+    )?.textContent).toBe("$$\nA_B\n$$");
     expect(editor.getMarkdown()).toBe(markdown);
     expect(changes).toEqual([]);
 
@@ -2143,6 +2207,36 @@ describe("Mint editor core public controller", () => {
     editor.toggleSource();
     expect(editor.getMarkdown()).toBe(edited);
     expect(changes).toEqual([edited]);
+    editor.destroy();
+  });
+
+  it("deletes one authored character from the end of an active multiline math block", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "Before\n\n$$\nA\nB\n$$\n\nAfter";
+    const editor = createMintEditor(host, {
+      initialContent: markdown,
+      presentations: {
+        renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
+      },
+    });
+
+    host.querySelector<HTMLElement>(".live-math-block-widget")?.click();
+    const blockEnd = markdown.indexOf("\n\nAfter");
+    editor.setSelectionOffset(blockEnd);
+    const event = new KeyboardEvent("keydown", {
+      key: "Backspace",
+      code: "Backspace",
+      bubbles: true,
+      cancelable: true,
+    });
+    host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe(
+      markdown.slice(0, blockEnd - 1) + markdown.slice(blockEnd),
+    );
+    expect(editor.getMarkdown()).toContain("$$\nA\nB\n$");
     editor.destroy();
   });
 
@@ -2176,6 +2270,83 @@ describe("Mint editor core public controller", () => {
     expect(editor.getMarkdown()).toBe("$$\nA_B\n$$\n\nAfter");
     expect(host.querySelector(".live-math-block-widget")?.textContent).toBe("block:A_B");
     expect(changes.at(-1)).toBe("$$\nA_B\n$$\n\nAfter");
+    editor.destroy();
+  });
+
+  it("keeps delimiter-only display-math lines while typing the complete block natively", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const editor = createMintEditor(host, {
+      initialContent: "",
+      onChange: (next) => changes.push(next),
+      presentations: {
+        renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
+      },
+    });
+    const enter = () => host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await typeNativeText(host, "$$");
+    expect(editor.getMarkdown()).toBe("$$");
+    enter();
+    expect(editor.getMarkdown()).toBe("$$\n");
+    await typeNativeText(host, "A_B");
+    expect(editor.getMarkdown()).toBe("$$\nA_B");
+    enter();
+    expect(editor.getMarkdown()).toBe("$$\nA_B\n");
+    await typeNativeText(host, "$$");
+
+    const authored = "$$\nA_B\n$$";
+    expect(editor.getMarkdown()).toBe(authored);
+    expect(editor.getMarkdown()).not.toBe("$$ A_B $$");
+    expect(host.querySelector(
+      'pre[data-source-block][data-source-kind="mint-math-block"] > code',
+    )?.textContent).toBe(authored);
+    expect(changes.at(-1)).toBe(authored);
+
+    enter();
+    expect(editor.getMarkdown()).toBe(`${authored}\n`);
+    enter();
+    expect(editor.getMarkdown()).toBe(`${authored}\n\n`);
+    editor.insertMarkdown("After");
+    expect(editor.getMarkdown()).toBe(`${authored}\n\nAfter`);
+    expect(host.querySelector(".live-math-block-widget")?.textContent).toBe("block:A_B");
+    editor.destroy();
+  });
+
+  it("keeps an empty display-math body on its own authored line", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createMintEditor(host, {
+      presentations: {
+        renderMathBlock: (container, source) => { container.textContent = `block:${source}`; },
+      },
+    });
+    const enter = () => host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        code: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await typeNativeText(host, "$$");
+    enter();
+    enter();
+    await typeNativeText(host, "$$");
+
+    expect(editor.getMarkdown()).toBe("$$\n\n$$");
+    expect(host.querySelector(
+      'pre[data-source-block][data-source-kind="mint-math-block"] > code',
+    )?.textContent).toBe("$$\n\n$$");
     editor.destroy();
   });
 

@@ -326,10 +326,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-editor-host .source-blockquote-node.is-source-editing .source-blockquote-source-code { padding: 0; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; }
 .markdown-editor-host .live-markdown-escape-hidden { font-size: 0; line-height: 0; color: transparent; }
 .markdown-editor-host .live-inline-math-source, .markdown-editor-host .live-wikilink-source { font-size: 0; line-height: 0; color: transparent; }
+.markdown-editor-host .ProseMirror .live-inline-math-editing { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
 .live-inline-math-widget { display: inline-block; max-width: 100%; padding: 0 .08em; vertical-align: middle; pointer-events: none; }
 .live-math-block-widget, .live-mermaid-widget { display: block; width: 100%; margin: 0; cursor: text; }
 .markdown-editor-host .live-math-block-source.is-live-syntax-rendered,
 .markdown-editor-host .live-mermaid-source.is-live-syntax-rendered { display: none; }
+.markdown-editor-host .ProseMirror pre[data-source-block][data-source-kind="mint-math-block"] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: break-spaces;
+}
+.markdown-editor-host .ProseMirror pre[data-source-block][data-source-kind="mint-math-block"] > code {
+  font: inherit;
+  white-space: inherit;
+}
 .live-math-block-widget { overflow-x: auto; text-align: center; }
 .live-mermaid-widget, .mermaid-diagram { padding: 16px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); }
 .live-mermaid-widget img, .mermaid-diagram img { display: block; max-width: 100%; height: auto; margin: 0 auto; }

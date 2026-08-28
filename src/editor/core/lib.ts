@@ -9,6 +9,7 @@ export type { Editor, EditorOptions } from "./editor-api";
 export type {
   BlockPresentationMatch,
   BlockPresentationSearchContext,
+  BlockSourceEditing,
   BlockSourcePresentation,
   EditorExtension,
   EditorExtensionCommand,

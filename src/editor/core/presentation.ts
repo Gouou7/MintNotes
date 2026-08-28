@@ -10,7 +10,7 @@ import type {
   PresentationCleanup,
 } from "./extension";
 
-type BlockCandidate = {
+export type ResolvedBlockPresentation = {
   presentation: BlockSourcePresentation;
   match: BlockPresentationMatch;
 };
@@ -85,10 +85,10 @@ function comparePriority(
   return (right.priority ?? 0) - (left.priority ?? 0);
 }
 
-function selectBlockCandidate(
-  candidates: readonly BlockCandidate[],
+function selectBlockCandidate<Candidate extends { presentation: BlockSourcePresentation }>(
+  candidates: readonly Candidate[],
   node: PMNode,
-): BlockCandidate | null {
+): Candidate | null {
   if (candidates.length === 0) return null;
   const ordered = [...candidates].sort((left, right) => (
     comparePriority(left.presentation, right.presentation)
@@ -105,6 +105,41 @@ function selectBlockCandidate(
     );
   }
   return first;
+}
+
+/** Resolve the one declaration that owns a derived block, independent of DOM. */
+export function resolveBlockPresentation(
+  node: PMNode,
+  presentations: readonly BlockSourcePresentation[],
+): ResolvedBlockPresentation | null {
+  const candidates: ResolvedBlockPresentation[] = [];
+  for (const presentation of presentations) {
+    if (!presentation.nodeTypes.includes(node.type.name)) continue;
+    const match = presentation.match(node.textContent, {
+      nodeType: node.type.name,
+      attributes: node.attrs as Readonly<Record<string, unknown>>,
+    });
+    if (!match) continue;
+    if (match.source !== node.textContent) {
+      throw new Error(`Invalid block source from presentation ${presentation.id}`);
+    }
+    candidates.push({ presentation, match });
+  }
+  return selectBlockCandidate(candidates, node);
+}
+
+/** Resolve a complete or in-progress block that requires exact source editing. */
+export function resolveSourceBlockEditingPresentation(
+  node: PMNode,
+  presentations: readonly BlockSourcePresentation[],
+): BlockSourcePresentation | null {
+  const candidates = presentations
+    .filter((presentation) => presentation.nodeTypes.includes(node.type.name))
+    .filter((presentation) => (
+      presentation.sourceBlockEditing?.matches(node.textContent) === true
+    ))
+    .map((presentation) => ({ presentation }));
+  return selectBlockCandidate(candidates, node)?.presentation ?? null;
 }
 
 function collectInlineDecorations(
@@ -132,7 +167,14 @@ function collectInlineDecorations(
       }
       const from = position + match.from;
       const to = position + match.to;
-      if (selectionIsInside(selection, from, to)) continue;
+      if (selectionIsInside(selection, from, to)) {
+        if (presentation.editingClassName) {
+          decorations.push(Decoration.inline(from, to, {
+            class: presentation.editingClassName,
+          }));
+        }
+        continue;
+      }
       decorations.push(Decoration.inline(from, to, {
         class: presentation.sourceClassName,
       }));
@@ -171,21 +213,7 @@ export function extensionPresentationPlugin(
           if (!block.some((presentation) => presentation.nodeTypes.includes(node.type.name))) {
             return;
           }
-          const candidates: BlockCandidate[] = [];
-          for (const presentation of block) {
-            if (!presentation.nodeTypes.includes(node.type.name)) continue;
-            const match = presentation.match(node.textContent, {
-              nodeType: node.type.name,
-              attributes: node.attrs as Readonly<Record<string, unknown>>,
-            });
-            if (match) {
-              if (match.source !== node.textContent) {
-                throw new Error(`Invalid block source from presentation ${presentation.id}`);
-              }
-              candidates.push({ presentation, match });
-            }
-          }
-          const candidate = selectBlockCandidate(candidates, node);
+          const candidate = resolveBlockPresentation(node, block);
           if (!candidate) return;
           const from = position + 1;
           const to = position + node.nodeSize - 1;

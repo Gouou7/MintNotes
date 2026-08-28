@@ -13,7 +13,10 @@ import { EditorView } from "prosemirror-view";
 import { defaultPlugins } from "./editor";
 import { parse } from "./parser";
 import { schema } from "./schema";
-import type { EditorExtension } from "./extension";
+import type {
+  BlockSourcePresentation,
+  EditorExtension,
+} from "./extension";
 import { SOURCE_BLOCK_PRESENTATION_META } from "./extension";
 import { INLINE_PRESENTATION_META } from "./inline-parse";
 import { SourcePositionMap } from "./source-position-map";
@@ -31,6 +34,7 @@ import {
 import { SOURCE_TRANSACTION_META, transactionSourceEffect } from "./source-transaction";
 import { SourceComposition } from "./source-composition";
 import { liveSourceKeyTransaction } from "./live-source-commands";
+import { resolveSourceBlockEditingPresentation } from "./presentation";
 import {
   LIVE_NAVIGATION_META,
   markLiveNavigation,
@@ -110,7 +114,16 @@ export function createEditor(
     source: string;
     kind: string;
     presentationKind: string;
+    sourceBlockEditing: boolean;
   };
+  type ActiveSourceBlockEditing = {
+    from: number;
+    to: number;
+    presentation: BlockSourcePresentation;
+  };
+  const blockPresentations = options.extensions?.flatMap(
+    (extension) => extension.presentations?.block ?? [],
+  ) ?? [];
   const blockHeightCache = new Map<string, number>();
   let blockHeightFrame: number | null = null;
   let blockResizeObserver: ResizeObserver | null = null;
@@ -124,6 +137,9 @@ export function createEditor(
 
   function structureSignatureForDocument(doc: PMNode): string {
     const visit = (node: PMNode): unknown => {
+      const sourceEditingPresentation = node.type.name === "source_block"
+        ? null
+        : resolveSourceBlockEditingPresentation(node, blockPresentations)?.id ?? null;
       const attributes = Object.fromEntries(
         Object.entries(node.attrs).filter(([name]) => (
           name !== SOURCE_FROM_ATTR
@@ -138,7 +154,7 @@ export function createEditor(
       node.forEach((child) => {
         if (!child.isText) children.push(visit(child));
       });
-      return [node.type.name, attributes, children];
+      return [node.type.name, attributes, sourceEditingPresentation, children];
     };
     return JSON.stringify(visit(doc));
   }
@@ -230,12 +246,27 @@ export function createEditor(
         && from <= offset
         && offset <= to
       ) {
-        const presentationKind = node.type.name === "heading"
+        const sourceBlockEditingPresentation = node.type.name === "source_block"
+          ? null
+          : resolveSourceBlockEditingPresentation(node, blockPresentations);
+        const sourceBlockEditing = node.type.name === "source_block"
+          || sourceBlockEditingPresentation !== null;
+        const presentationKind = sourceBlockEditingPresentation
+          ? sourceBlockEditingPresentation.id
+          : node.type.name === "heading"
           ? `heading-${String(node.attrs.level ?? 1)}`
           : node.type.name === "source_block"
             ? String(node.attrs.kind ?? "block")
             : node.type.name;
-        const candidate = { pos, from, to, source, kind: node.type.name, presentationKind };
+        const candidate = {
+          pos,
+          from,
+          to,
+          source,
+          kind: node.type.name,
+          presentationKind,
+          sourceBlockEditing,
+        };
         if (node.type.name === "source_gap") gaps.push(candidate);
         else blocks.push(candidate);
       }
@@ -308,6 +339,79 @@ export function createEditor(
     return found;
   }
 
+  function activeSourceBlockEditing(state: EditorState): ActiveSourceBlockEditing | null {
+    const node = state.selection.$head.parent;
+    if (node.type.name !== "source_block") return null;
+    const from = Number(node.attrs[SOURCE_FROM_ATTR]);
+    const to = Number(node.attrs[SOURCE_TO_ATTR]);
+    const kind = String(node.attrs.kind ?? "");
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return null;
+    const presentation = blockPresentations.find((candidate) => (
+      candidate.id === kind && candidate.sourceBlockEditing
+    ));
+    if (!presentation) return null;
+    return {
+      from,
+      to,
+      presentation,
+    };
+  }
+
+  function sourceBlockEditingRemainsActive(
+    editing: ActiveSourceBlockEditing,
+    transaction: SourceTransaction,
+    nextState: EditorState,
+    nextSource: string,
+  ): { from: number; to: number; source: string } | null {
+    if (transaction.edits.some((edit) => edit.from < editing.from || edit.to > editing.to)) {
+      return null;
+    }
+    const delta = transaction.edits.reduce(
+      (total, edit) => total + edit.insert.length - (edit.to - edit.from),
+      0,
+    );
+    const to = editing.to + delta;
+    if (
+      transaction.selection.anchor < editing.from
+      || transaction.selection.anchor > to
+      || transaction.selection.head < editing.from
+      || transaction.selection.head > to
+    ) return null;
+    const node = nextState.selection.$head.parent;
+    if (
+      node.type.name !== "source_block"
+      || String(node.attrs.kind ?? "") !== editing.presentation.id
+    ) return null;
+    const source = nextSource.slice(editing.from, to);
+    if (
+      source !== node.textContent
+      || editing.presentation.sourceBlockEditing?.matches(source) !== true
+    ) return null;
+    return { from: editing.from, to, source };
+  }
+
+  function refreshActiveSourceBlockSnapshot(
+    state: EditorState,
+    range: { from: number; to: number; source: string },
+  ): EditorState {
+    const node = state.selection.$head.parent;
+    if (node.type.name !== "source_block") return state;
+    const pos = state.selection.$head.before();
+    const base = node.type.createChecked({
+      ...node.attrs,
+      [SOURCE_FROM_ATTR]: range.from,
+      [SOURCE_TO_ATTR]: range.to,
+      [SOURCE_TEXT_ATTR]: range.source,
+    }, node.content);
+    const tr = state.tr.setNodeMarkup(pos, undefined, {
+      ...base.attrs,
+      [SOURCE_FINGERPRINT_ATTR]: sourceFingerprint(base),
+    });
+    tr.setMeta("addToHistory", false);
+    tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
+    return state.apply(tr);
+  }
+
   function sourceBlockForRange(range: LiveSourceRange, layoutHeight: number | null): PMNode | null {
     const sourceBlockType = schema.nodes.source_block;
     if (!sourceBlockType) return null;
@@ -324,9 +428,10 @@ export function createEditor(
     }, base.content);
   }
 
-  function sourceBlockKindIsEligible(kind: string, activateTable: boolean): boolean {
-    if (["paragraph", "source_gap", "source_block"].includes(kind)) return false;
-    if (kind === "table" && !activateTable) return false;
+  function shouldActivateSourceBlock(range: LiveSourceRange, activateTable: boolean): boolean {
+    if (range.sourceBlockEditing) return range.kind !== "source_block";
+    if (["paragraph", "source_gap", "source_block"].includes(range.kind)) return false;
+    if (range.kind === "table" && !activateTable) return false;
     return true;
   }
 
@@ -340,7 +445,7 @@ export function createEditor(
     const keepCurrentSourceBlock = targetBefore?.kind === "source_block";
     const targetHeight = targetBefore
       && targetBefore.kind !== "source_block"
-      && sourceBlockKindIsEligible(targetBefore.kind, intent.activateTable === true)
+      && shouldActivateSourceBlock(targetBefore, intent.activateTable === true)
       && !["blockquote", "code_block"].includes(targetBefore.kind)
       ? renderedHeightForRange(targetBefore)
       : null;
@@ -388,7 +493,7 @@ export function createEditor(
     }
 
     const target = sourceRangeAtOffsetInDocument(tr.doc, sourceSelection.head, direction);
-    if (target && sourceBlockKindIsEligible(target.kind, intent.activateTable === true)) {
+    if (target && shouldActivateSourceBlock(target, intent.activateTable === true)) {
       const targetNode = tr.doc.nodeAt(target.pos);
       if (targetNode && ["blockquote", "code_block"].includes(target.kind)) {
         if (targetNode.attrs.sourceEditing !== true) {
@@ -597,7 +702,46 @@ export function createEditor(
     }, 0);
   }
 
+  function dispatchTransactionInsideActiveSourceBlock(
+    transaction: SourceTransaction,
+  ): boolean {
+    const editing = activeSourceBlockEditing(view.state);
+    if (!editing) return false;
+    const applied = new CanonicalSource(canonicalMarkdown).apply(transaction);
+    const nextSource = applied.source.value;
+    if (nextSource === canonicalMarkdown) return false;
+    const delta = transaction.edits.reduce(
+      (total, edit) => total + edit.insert.length - (edit.to - edit.from),
+      0,
+    );
+    const nextTo = editing.to + delta;
+    if (
+      transaction.edits.some((edit) => edit.from < editing.from || edit.to > editing.to)
+      || transaction.selection.anchor < editing.from
+      || transaction.selection.anchor > nextTo
+      || transaction.selection.head < editing.from
+      || transaction.selection.head > nextTo
+    ) return false;
+
+    const blockPosition = view.state.selection.$head.before();
+    let tr = view.state.tr;
+    for (const edit of [...transaction.edits].sort((left, right) => right.from - left.from)) {
+      const from = blockPosition + 1 + edit.from - editing.from;
+      const to = blockPosition + 1 + edit.to - editing.from;
+      tr = tr.insertText(edit.insert, from, to);
+    }
+    tr = tr.setSelection(TextSelection.create(
+      tr.doc,
+      blockPosition + 1 + transaction.selection.anchor - editing.from,
+      blockPosition + 1 + transaction.selection.head - editing.from,
+    ));
+    tr.setMeta(SOURCE_TRANSACTION_META, transaction);
+    view.dispatch(tr);
+    return true;
+  }
+
   function applyAndRenderCanonicalTransaction(transaction: SourceTransaction): boolean {
+    if (dispatchTransactionInsideActiveSourceBlock(transaction)) return true;
     const previousSelection = sourceSelectionForState(view.state);
     if (!applyCanonicalTransaction(transaction, previousSelection)) return false;
     reparsePresentation(view.state, transaction.selection.head, true);
@@ -644,6 +788,9 @@ export function createEditor(
         if (compositionId !== undefined && !pendingComposition) beginComposition();
         const beforeCanonical = pendingComposition?.source.source ?? canonicalMarkdown;
         const beforeSelection = sourceSelectionForState(v.state);
+        const activeSourceEditing = tr.docChanged
+          ? activeSourceBlockEditing(v.state)
+          : null;
         const editedParent = v.state.selection.$head.parent;
         const editedSourcePresentation = tr.docChanged
           && (
@@ -662,10 +809,22 @@ export function createEditor(
               pendingComposition.source.apply(effect.transaction);
               pendingComposition.reparseRequested ||= effect.reparseDerivedDocument === true;
             } else {
+              const nextCanonical = new CanonicalSource(beforeCanonical)
+                .apply(effect.transaction).source.value;
+              const retainedSourceEditing = activeSourceEditing
+                ? sourceBlockEditingRemainsActive(
+                    activeSourceEditing,
+                    effect.transaction,
+                    next,
+                    nextCanonical,
+                  )
+                : null;
               const reparseDerivedDocument = effect.reparseDerivedDocument === true
                 || prepareDerivedStructureForTransaction(effect.transaction);
               const changed = applyCanonicalTransaction(effect.transaction, beforeSelection);
-              if (changed && reparseDerivedDocument) {
+              if (changed && retainedSourceEditing) {
+                next = refreshActiveSourceBlockSnapshot(next, retainedSourceEditing);
+              } else if (changed && reparseDerivedDocument) {
                 reparseRequest = {
                   selection: effect.transaction.selection.head,
                   reactivate: editedSourcePresentation
