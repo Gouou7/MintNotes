@@ -31,45 +31,45 @@ export const fencedCodeSpecs: FeatureSpecs = {
   },
   cases: [
     // ──────────────────────────────────────────────────────────────
-    // 1. draft decoration appears once three backticks are on the line
+    // 1. Third backtick completes the closing fence without moving the caret.
     // ──────────────────────────────────────────────────────────────
     {
       id: "draft-trigger",
-      label: "``` enters draft; all three chars show gray",
+      label: "``` completes a closing fence and keeps the caret after the opener",
       seed: "",
       events: ["`", "`", "`"],
       checkpoints: [
         { at: 1, expect: "`|" },
         { at: 2, expect: "``|" },
-        { at: 3, expect: "<g>```</g>|" },
+        { at: 3, expect: "```|\n```" },
       ],
     },
 
     // ──────────────────────────────────────────────────────────────
-    // 2. draft + lang pre-fill: lang chars are NOT gray
+    // 2. Language can be typed on the completed opening fence.
     // ──────────────────────────────────────────────────────────────
     {
       id: "draft-with-lang",
-      label: "```ts — lang characters are plain (not gray)",
+      label: "``` autocomplete keeps language input on the opening line",
       seed: "",
       events: ["`", "`", "`", "t", "s"],
       checkpoints: [
-        { at: 3, expect: "<g>```</g>|" },
-        { at: 4, expect: "<g>```</g>t|" },
-        { at: 5, expect: "<g>```</g>ts|" },
+        { at: 3, expect: "```|\n```" },
+        { at: 4, expect: "```t|\n```" },
+        { at: 5, expect: "```ts|\n```" },
       ],
     },
 
     // ──────────────────────────────────────────────────────────────
-    // 3. Enter commits; cursor lands INSIDE the new code_block.
+    // 3. Enter after an optional language opens the body line.
     // ──────────────────────────────────────────────────────────────
     {
-      id: "enter-commit-inside",
-      label: "```ts + Enter → code_block(lang=ts), cursor inside",
+      id: "enter-body-inside",
+      label: "```ts + Enter → cursor inside the completed code block",
       seed: "",
       events: ["`", "`", "`", "t", "s", "<Enter>"],
       checkpoints: [
-        { at: 5, expect: "<g>```</g>ts|" },
+        { at: 5, expect: "```ts|\n```" },
         { at: 6, expect: "```ts\n|\n```" },
       ],
     },
@@ -90,30 +90,30 @@ export const fencedCodeSpecs: FeatureSpecs = {
     },
 
     // ──────────────────────────────────────────────────────────────
-    // 5. Enter-commit with empty lang.
+    // 5. Enter opens the body when no language is supplied.
     // ──────────────────────────────────────────────────────────────
     {
-      id: "enter-commit-no-lang",
-      label: "``` + Enter → code_block(lang=''), cursor inside",
+      id: "enter-body-no-lang",
+      label: "``` + Enter → cursor inside a language-free code block",
       seed: "",
       events: ["`", "`", "`", "<Enter>"],
       checkpoints: [
-        { at: 3, expect: "<g>```</g>|" },
+        { at: 3, expect: "```|\n```" },
         { at: 4, expect: "```\n|\n```" },
       ],
     },
 
     // ──────────────────────────────────────────────────────────────
-    // 6. Typing a space breaks the pattern ^```(\w*)$ → exit draft.
+    // 6. Opening-fence info remains ordinary editable source.
     // ──────────────────────────────────────────────────────────────
     {
-      id: "break-match-exits-draft",
-      label: "```ts<space> — space breaks \\w*, draft dissolves",
+      id: "opening-info-space",
+      label: "```ts<space> keeps editing the completed opening fence",
       seed: "",
       events: ["`", "`", "`", "t", "s", " "],
       checkpoints: [
-        { at: 5, expect: "<g>```</g>ts|" },
-        { at: 6, expect: "```ts |" },
+        { at: 5, expect: "```ts|\n```" },
+        { at: 6, expect: "```ts |\n```" },
       ],
     },
 

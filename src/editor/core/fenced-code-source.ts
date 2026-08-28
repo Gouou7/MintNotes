@@ -12,6 +12,30 @@ export type FencedCodeSource = {
   closingTo: number | null;
 };
 
+export function displayCodeLanguage(lang: string): string {
+  const normalized = lang.trim().toLowerCase();
+  const names: Record<string, string> = {
+    bash: "Shell",
+    sh: "Shell",
+    shell: "Shell",
+    zsh: "Shell",
+    js: "JavaScript",
+    javascript: "JavaScript",
+    ts: "TypeScript",
+    typescript: "TypeScript",
+    py: "Python",
+    python: "Python",
+    html: "HTML",
+    css: "CSS",
+    json: "JSON",
+    yaml: "YAML",
+    yml: "YAML",
+    md: "Markdown",
+    markdown: "Markdown",
+  };
+  return names[normalized] ?? lang.trim();
+}
+
 const OPENING_FENCE_RE = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/;
 
 function closingFenceLength(line: string, marker: string): number | null {

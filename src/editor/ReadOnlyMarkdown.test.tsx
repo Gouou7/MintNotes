@@ -38,6 +38,39 @@ describe("ReadOnlyMarkdown", () => {
     await act(async () => root.unmount());
   });
 
+  it.each([
+    ["bullet", "- one\n- two\n\n- three"],
+    ["ordered", "1. one\n2. two\n\n3. three"],
+    ["task", "- [ ] one\n- [x] two\n\n- [ ] three"],
+  ] as const)("renders adjacent %s items compactly and preserves authored gaps", async (
+    _kind,
+    markdown,
+  ) => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(
+      <I18nProvider><ReadOnlyMarkdown markdown={markdown} /></I18nProvider>
+    ));
+
+    const items = container.querySelectorAll<HTMLElement>("li");
+    expect(items).toHaveLength(3);
+    expect(items[0]?.hasAttribute("data-list-gap-before")).toBe(false);
+    expect(items[1]?.hasAttribute("data-list-gap-before")).toBe(false);
+    expect(items[2]?.dataset.listGapBefore).toBe("1");
+    expect(items[2]?.style.getPropertyValue("--markdown-list-gap-before")).toBe("1");
+    await act(async () => root.unmount());
+  });
+
+  it("preserves multiple authored blank rows between reading-mode list blocks", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={"- one\n\n\n- two"} /></I18nProvider>
+    );
+
+    expect(html).toContain('data-list-gap-before="2"');
+    expect(html).toContain('--markdown-list-gap-before:2');
+  });
+
   it("renders an attachment reference from its in-memory Blob URL", () => {
     localStorage.setItem("webmd-notes-language", "zh-CN");
     const attachmentId = "11111111-1111-4111-8111-111111111111";
@@ -160,5 +193,27 @@ describe("ReadOnlyMarkdown", () => {
     expect(writeText).toHaveBeenCalledWith("const first = 1;\nconst second = first + 1;\n");
     expect(copyButton?.getAttribute("aria-label")).toBe("Code copied");
     await act(async () => root.unmount());
+  });
+
+  it("shows fenced-code languages in Reading mode", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadOnlyMarkdown markdown={[
+        "```ts",
+        "const value = 1;",
+        "```",
+        "",
+        "```custom-lang",
+        "value",
+        "```",
+        "",
+        "```",
+        "plain",
+        "```",
+      ].join("\n")} /></I18nProvider>
+    );
+
+    expect(html).toContain('class="readonly-code-language">TypeScript</span>');
+    expect(html).toContain('class="readonly-code-language">custom-lang</span>');
+    expect(html.match(/class="readonly-code-language"/g)).toHaveLength(2);
   });
 });

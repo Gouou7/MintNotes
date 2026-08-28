@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react";
-import { Children, isValidElement, type HTMLAttributes, type ReactNode, useEffect, useRef, useState } from "react";
+import { Children, isValidElement, type CSSProperties, type HTMLAttributes, type ReactNode, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -17,7 +17,9 @@ import {
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter } from "./frontmatter";
 import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
+import { remarkReadingListSpacing } from "./reading-list-spacing";
 import { stripCommentsForReading } from "./extensions/comment";
+import { displayCodeLanguage } from "./core/fenced-code-source";
 import { MathFormula, MermaidDiagram } from "./richRenderers";
 import { remarkWikiLinks } from "./wikilinks";
 
@@ -31,8 +33,9 @@ function renderedText(children: ReactNode): string {
 
 function ReadOnlyCodeBlock({
   children,
+  language,
   ...props
-}: HTMLAttributes<HTMLPreElement>) {
+}: HTMLAttributes<HTMLPreElement> & { language?: string }) {
   const { t } = useI18n();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const resetTimer = useRef<number | undefined>(undefined);
@@ -57,8 +60,9 @@ function ReadOnlyCodeBlock({
   };
 
   return (
-    <div className="readonly-code-block">
+    <div className={`readonly-code-block${language ? " has-language" : ""}`}>
       <pre {...props}>{children}</pre>
+      {language && <span className="readonly-code-language">{displayCodeLanguage(language)}</span>}
       <button
         type="button"
         className="readonly-code-copy"
@@ -94,7 +98,7 @@ export function ReadOnlyMarkdown({
     <article className="readonly-markdown">
       <FrontmatterProperties markdown={markdown} />
       <ReactMarkdown
-        remarkPlugins={[remarkMath, remarkGfm, remarkCallouts, remarkWikiLinks]}
+        remarkPlugins={[remarkMath, remarkGfm, remarkCallouts, remarkWikiLinks, remarkReadingListSpacing]}
         skipHtml
         urlTransform={(url, key, node) => (
           key === "href" && url.startsWith("mint-wikilink:")
@@ -105,6 +109,19 @@ export function ReadOnlyMarkdown({
             : defaultUrlTransform(url)
         )}
         components={{
+          li: ({ node, children, style, ...props }) => {
+            const properties = node?.properties ?? {};
+            const blankRows = Number(
+              properties["data-list-gap-before"] ?? properties.dataListGapBefore ?? 0,
+            );
+            const listStyle = Number.isInteger(blankRows) && blankRows > 0
+              ? {
+                  ...style,
+                  "--markdown-list-gap-before": String(blankRows),
+                } as CSSProperties
+              : style;
+            return <li {...props} style={listStyle}>{children}</li>;
+          },
           p: ({ node: _node, children, ...props }) => (
             <p {...props} className="markdown-softbreak-paragraph">{children}</p>
           ),
@@ -133,7 +150,10 @@ export function ReadOnlyMarkdown({
             if (classNames.includes("language-mermaid") && textChild && "value" in textChild) {
               return <MermaidDiagram source={String(textChild.value ?? "").replace(/\n$/, "")} />;
             }
-            return <ReadOnlyCodeBlock {...props}>{children}</ReadOnlyCodeBlock>;
+            const language = classNames
+              .find((className) => className.startsWith("language-"))
+              ?.slice("language-".length);
+            return <ReadOnlyCodeBlock {...props} language={language}>{children}</ReadOnlyCodeBlock>;
           },
           code: ({ node: _node, className, children, ...props }) => {
             const classNames = className?.split(/\s+/) ?? [];

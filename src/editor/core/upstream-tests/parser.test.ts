@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { parse as parseMarkdown } from "../parser";
 import { schema } from "../schema";
 import { serialize } from "../serializer";
+import { SOURCE_TEXT_ATTR } from "../source";
 
 const parse = (markdown: string) => parseMarkdown(markdown, { sourceGaps: false });
 
@@ -74,19 +75,52 @@ describe("parser: block nodes", () => {
     expect(li.child(0).textContent).toBe("a");
   });
 
-  test.each([
-    ["- one\n- two", 0],
-    ["- one\n\n- two", 1],
-    ["- one\n\n\n- two", 2],
-    ["- one\r\n \r\n\t\r\n- two", 2],
-  ] as const)("retains authored list-item spacing for %j", (markdown, gapBefore) => {
-    const doc = parse(markdown);
-    const list = doc.firstChild;
+  test("keeps adjacent bullet items in one compact list", () => {
+    const doc = parseMarkdown("- one\n- two");
 
-    expect(list?.type).toBe(schema.nodes.bullet_list);
-    expect(list?.child(0).attrs.sourceGapBefore).toBe(0);
-    expect(list?.child(1).attrs.sourceGapBefore).toBe(gapBefore);
-    expect(serialize(parseMarkdown(markdown))).toBe(markdown);
+    expect(doc.childCount).toBe(1);
+    expect(doc.firstChild?.type).toBe(schema.nodes.bullet_list);
+    expect(doc.firstChild?.childCount).toBe(2);
+  });
+
+  test.each([
+    ["- one\n\n- two", "\n\n"],
+    ["- one\n\n\n- two", "\n\n\n"],
+    ["- one\r\n \r\n\t\r\n- two", "\r\n \r\n\t\r\n"],
+  ] as const)("separates authored bullet-list blocks for %j", (markdown, gap) => {
+    const doc = parseMarkdown(markdown);
+
+    expect(doc.childCount).toBe(3);
+    expect(doc.child(0).type).toBe(schema.nodes.bullet_list);
+    expect(doc.child(1).type).toBe(schema.nodes.source_gap);
+    expect(doc.child(1).attrs[SOURCE_TEXT_ATTR]).toBe(gap);
+    expect(doc.child(2).type).toBe(schema.nodes.bullet_list);
+    expect(serialize(doc)).toBe(markdown);
+  });
+
+  test("separates the authored top-level list blocks around a nested list", () => {
+    const markdown = [
+      "- 一级项目",
+      "    - 二级项目",
+      "    - 二级项目",
+      "- 一级项目",
+      "",
+      "- 另一个一级项目",
+    ].join("\n");
+    const doc = parseMarkdown(markdown);
+    const firstList = doc.child(0);
+
+    expect(doc.content.content.map((node) => node.type.name)).toEqual([
+      "bullet_list",
+      "source_gap",
+      "bullet_list",
+    ]);
+    expect(firstList.childCount).toBe(2);
+    expect(firstList.child(0).child(1).type).toBe(schema.nodes.bullet_list);
+    expect(firstList.child(0).child(1).childCount).toBe(2);
+    expect(firstList.attrs[SOURCE_TEXT_ATTR]).toBe(markdown.slice(0, markdown.indexOf("\n\n")));
+    expect(doc.child(2).attrs[SOURCE_TEXT_ATTR]).toBe("- 另一个一级项目");
+    expect(serialize(doc)).toBe(markdown);
   });
 
   test("retains authored spacing independently inside nested lists", () => {
@@ -103,10 +137,12 @@ describe("parser: block nodes", () => {
   test("retains authored spacing between ordered-list items", () => {
     const markdown = "1. one\n\n\n2. two";
     const doc = parseMarkdown(markdown);
-    const list = doc.firstChild;
 
-    expect(list?.type).toBe(schema.nodes.ordered_list);
-    expect(list?.child(1).attrs.sourceGapBefore).toBe(2);
+    expect(doc.childCount).toBe(3);
+    expect(doc.child(0).type).toBe(schema.nodes.ordered_list);
+    expect(doc.child(1).type).toBe(schema.nodes.source_gap);
+    expect(doc.child(2).type).toBe(schema.nodes.ordered_list);
+    expect(doc.child(2).attrs.start).toBe(2);
     expect(serialize(doc)).toBe(markdown);
   });
 

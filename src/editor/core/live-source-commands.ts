@@ -17,6 +17,7 @@ type ListPrefix = {
 
 const QUOTE_PREFIX = /^( {0,3}(?:>[\t ]?)+)/;
 const LIST_PREFIX = /^(\s*)((?:[-+*])|(?:\d+[.)]))([\t ]+)(?:\[([^\]\r\n])\]([\t ]+))?/;
+const LIST_LEVEL_INDENT = "    ";
 
 function lineContext(source: string, offset: number): LineContext {
   let from = offset;
@@ -131,10 +132,7 @@ function tabTransaction(
 
   if (shiftKey) {
     if (!list.indent) return null;
-    const remove = Math.min(
-      list.indent.length,
-      /\d+[.)]/.test(list.marker) ? list.marker.length + 1 : 2,
-    );
+    const remove = Math.min(list.indent.length, LIST_LEVEL_INDENT.length);
     const head = Math.max(line.from, selection.head - remove);
     return {
       edits: [{ from: line.from, to: line.from + remove, insert: "" }],
@@ -144,7 +142,7 @@ function tabTransaction(
     };
   }
 
-  const indent = " ".repeat(/\d+[.)]/.test(list.marker) ? list.marker.length + 1 : 2);
+  const indent = LIST_LEVEL_INDENT;
   const head = selection.head + indent.length;
   return {
     edits: [{ from: line.from, to: line.from, insert: indent }],

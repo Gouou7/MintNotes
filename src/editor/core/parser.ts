@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type Token from "markdown-it/lib/token.mjs";
+import Token from "markdown-it/lib/token.mjs";
 import {
   Fragment,
   Mark,
@@ -43,6 +43,91 @@ function sourceLines(source: string): SourceLine[] {
     from = source[to] === "\r" && source[to + 1] === "\n" ? to + 2 : to + 1;
   }
   return lines;
+}
+
+function cloneToken(token: Token): Token {
+  const clone = new Token(token.type, token.tag, token.nesting);
+  Object.assign(clone, token);
+  clone.attrs = token.attrs?.map(([name, value]) => [name, value]) ?? null;
+  clone.map = token.map ? [token.map[0], token.map[1]] : null;
+  return clone;
+}
+
+function orderedListStart(line: string, fallback: number): number {
+  const match = /^ {0,3}(\d+)[.)][\t ]+/.exec(line);
+  return match ? Number(match[1]) : fallback;
+}
+
+/**
+ * CommonMark deliberately keeps blank-line-separated items in one loose
+ * list. Live mode needs the author's blank row to remain a real source gap,
+ * because each side is an independently activated source block. Split only
+ * top-level list tokens here; the canonical Markdown remains untouched.
+ */
+function splitTopLevelListBlocks(tokens: readonly Token[], lines: readonly SourceLine[]): Token[] {
+  const result: Token[] = [];
+  for (let index = 0; index < tokens.length;) {
+    const open = tokens[index]!;
+    const isTopLevelList = open.level === 0
+      && open.nesting === 1
+      && (open.type === "bullet_list_open" || open.type === "ordered_list_open");
+    if (!isTopLevelList) {
+      result.push(open);
+      index += 1;
+      continue;
+    }
+
+    const closeType = open.type.replace("_open", "_close");
+    let closeIndex = index + 1;
+    while (closeIndex < tokens.length) {
+      const candidate = tokens[closeIndex]!;
+      if (candidate.level === 0 && candidate.type === closeType) break;
+      closeIndex += 1;
+    }
+    if (closeIndex >= tokens.length || !open.map) {
+      result.push(open);
+      index += 1;
+      continue;
+    }
+
+    const boundaries: number[] = [];
+    for (let tokenIndex = index + 1; tokenIndex < closeIndex; tokenIndex += 1) {
+      const candidate = tokens[tokenIndex]!;
+      if (candidate.type !== "list_item_open" || candidate.level !== 1 || !candidate.map) continue;
+      const itemLine = candidate.map[0];
+      if (itemLine > open.map[0] && !lines[itemLine - 1]?.text.trim()) {
+        boundaries.push(tokenIndex);
+      }
+    }
+    if (boundaries.length === 0) {
+      result.push(...tokens.slice(index, closeIndex + 1));
+      index = closeIndex + 1;
+      continue;
+    }
+
+    const segmentStarts = [index + 1, ...boundaries];
+    const segmentEnds = [...boundaries, closeIndex];
+    for (let segment = 0; segment < segmentStarts.length; segment += 1) {
+      const firstTokenIndex = segmentStarts[segment]!;
+      const endTokenIndex = segmentEnds[segment]!;
+      const firstItem = tokens[firstTokenIndex]!;
+      const nextItem = tokens[endTokenIndex];
+      const fromLine = firstItem.map?.[0] ?? open.map[0];
+      const toLine = nextItem?.map?.[0] ?? open.map[1];
+      const segmentOpen = cloneToken(open);
+      segmentOpen.map = [fromLine, toLine];
+      if (segmentOpen.type === "ordered_list_open") {
+        segmentOpen.attrSet(
+          "start",
+          String(orderedListStart(lines[fromLine]?.text ?? "", Number(open.attrGet("start") ?? 1))),
+        );
+      }
+      result.push(segmentOpen, ...tokens.slice(firstTokenIndex, endTokenIndex));
+      result.push(cloneToken(tokens[closeIndex]!));
+    }
+    index = closeIndex + 1;
+  }
+  return result;
 }
 
 /**
@@ -619,9 +704,12 @@ export function parse(src: string, options: ParseOptions = {}): PMNode {
   const protectedSource = protectIncompleteBlockCandidates(
     protectRecoverableUnclosedFences(src),
   );
-  const tokens = md.parse(protectedSource.parserSource, {});
-  const state = new ParserState(protectedSource.restoration);
   const lines = sourceLines(src);
+  const tokens = splitTopLevelListBlocks(
+    md.parse(protectedSource.parserSource, {}),
+    lines,
+  );
+  const state = new ParserState(protectedSource.restoration);
   const listHasItem: boolean[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;

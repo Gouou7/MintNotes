@@ -71,8 +71,9 @@ describe("canonical Live source commands", () => {
   });
 
   it("indents and outdents list source instead of applying presentation-only margins", () => {
-    expect(press("- item", 6, "Tab")).toBe("  - item");
-    expect(press("  - item", 8, "Tab", true)).toBe("- item");
-    expect(press("1. item", 7, "Tab")).toBe("   1. item");
+    expect(press("- item", 6, "Tab")).toBe("    - item");
+    expect(press("    - item", 10, "Tab", true)).toBe("- item");
+    expect(press("1. item", 7, "Tab")).toBe("    1. item");
+    expect(press("- [ ] item", 10, "Tab")).toBe("    - [ ] item");
   });
 });

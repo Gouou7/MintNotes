@@ -11,6 +11,7 @@ import { EditorState, TextSelection, type Transaction } from "prosemirror-state"
 import { EditorView } from "prosemirror-view";
 
 import { defaultPlugins } from "./editor";
+import { resolveSourceKey, resolveSourceTextInput } from "./features/index";
 import { parse } from "./parser";
 import { schema } from "./schema";
 import type {
@@ -923,9 +924,15 @@ export function createEditor(
             event.preventDefault();
             return true;
           }
-          const transaction = liveSourceKeyTransaction(
+          const sourceSelection = sourceSelectionForState(view.state);
+          const transaction = resolveSourceKey({
+            source: canonicalMarkdown,
+            selection: sourceSelection,
+            key: event.key,
+            shiftKey: event.shiftKey,
+          }) ?? liveSourceKeyTransaction(
             canonicalMarkdown,
-            sourceSelectionForState(view.state),
+            sourceSelection,
             event.key,
             event.shiftKey,
           );
@@ -1022,6 +1029,17 @@ export function createEditor(
         const from = positions.documentToSource(fromPosition, "right");
         const to = positions.documentToSource(toPosition, "left");
         if (to < from) return true;
+        const featureTransaction = resolveSourceTextInput({
+          source: canonicalMarkdown,
+          from,
+          to,
+          text,
+          parentNodeType: view.state.doc.resolve(fromPosition).parent.type.name,
+        });
+        if (featureTransaction) {
+          applyAndRenderCanonicalTransaction(featureTransaction);
+          return true;
+        }
         const head = from + text.length;
         const nextSource = canonicalMarkdown.slice(0, from)
           + text

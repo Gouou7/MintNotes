@@ -71,6 +71,30 @@ async function typeNativeText(host: HTMLElement, text: string): Promise<void> {
   }
 }
 
+async function typeNativeTextAtSelection(host: HTMLElement, text: string): Promise<void> {
+  for (const character of text) {
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    const selection = document.getSelection();
+    if (!editable || !selection || selection.rangeCount === 0) {
+      throw new Error("Missing active Live selection");
+    }
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const inserted = document.createTextNode(character);
+    range.insertNode(inserted);
+    range.setStartAfter(inserted);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editable.dispatchEvent(new InputEvent("input", {
+      inputType: "insertText",
+      data: character,
+      bubbles: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 async function composeNativeText(host: HTMLElement, candidates: readonly string[]): Promise<void> {
   const editable = host.querySelector<HTMLElement>(".ProseMirror");
   const surface = editable ? activeLiveTextSurface(editable) : null;
@@ -449,6 +473,43 @@ describe("Mint editor core public controller", () => {
     },
   );
 
+  it("completes a fenced code block on the third typed backtick without moving the caret", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: string[] = [];
+    const editor = createEditor(host, { onChange: (next) => changes.push(next) });
+    editor.focus();
+
+    await typeNativeText(host, "```");
+
+    expect(editor.getMarkdown()).toBe("```\n```");
+    expect(editor.getSelectionOffset()).toBe(3);
+    const code = host.querySelector<HTMLElement>(".ProseMirror > pre > code");
+    expect(code?.textContent).toBe("```\n```");
+    const domSelection = document.getSelection();
+    if (!code || !domSelection?.anchorNode) throw new Error("Missing fenced-code DOM selection");
+    const domOffset = document.createRange();
+    domOffset.selectNodeContents(code);
+    domOffset.setEnd(domSelection.anchorNode, domSelection.anchorOffset);
+    expect(domOffset.toString().length).toBe(3);
+    expect(changes.at(-1)).toBe("```\n```");
+
+    await typeNativeTextAtSelection(host, "ts");
+    host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(editor.getMarkdown()).toBe("```ts\n\n```");
+    expect(editor.getSelectionOffset()).toBe(6);
+    expect(host.querySelector(".ProseMirror > pre > code")?.textContent).toBe("```ts\n\n```");
+    expect(changes.at(-1)).toBe("```ts\n\n```");
+    editor.destroy();
+  });
+
   it("keeps the native Live text surface mounted while ordinary typing advances the caret", async () => {
     const host = document.createElement("div");
     document.body.append(host);
@@ -497,7 +558,6 @@ describe("Mint editor core public controller", () => {
     ["ordered list", "1. ", "pre[data-source-block][data-source-kind='ordered_list'] > code"],
     ["task list", "- [ ] ", "pre[data-source-block][data-source-kind='bullet_list'] > code"],
     ["blockquote", ">", ".source-blockquote-node.is-source-editing .source-blockquote-source-code"],
-    ["fenced code", "```", "pre.cb-source-editing > code"],
     ["horizontal rule", "---", "pre[data-source-block][data-source-kind='horizontal_rule'] > code"],
     ["TOC", "[TOC]", "pre[data-source-block][data-source-kind='toc'] > code"],
     ["reference definition", "[ref]: https://example.test", "pre[data-source-gap] > code"],
@@ -872,18 +932,47 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("displays every authored blank row between bullet items", () => {
+  it("keeps authored blank rows as gaps between independent bullet-list blocks", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const markdown = "- one\n\n\n- two\n\n- three";
     const editor = createEditor(host, { initialContent: markdown });
-    const items = host.querySelectorAll<HTMLElement>(".ProseMirror > ul > li");
+    const blocks = [...host.querySelectorAll<HTMLElement>(".ProseMirror > *")];
+    const gaps = host.querySelectorAll<HTMLElement>(".ProseMirror > pre[data-source-gap]");
 
-    expect(items).toHaveLength(3);
-    expect(items[0]?.hasAttribute("data-source-gap-before")).toBe(false);
-    expect(items[1]?.dataset.sourceGapBefore).toBe("2");
-    expect(items[1]?.style.getPropertyValue("--source-gap-before")).toBe("2");
-    expect(items[2]?.dataset.sourceGapBefore).toBe("1");
+    expect(blocks.map((block) => block.tagName)).toEqual(["UL", "PRE", "UL", "PRE", "UL"]);
+    expect(gaps[0]?.querySelectorAll("br[data-source-gap-eol]")).toHaveLength(2);
+    expect(gaps[1]?.querySelectorAll("br[data-source-gap-eol]")).toHaveLength(1);
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it.each([
+    [
+      "bullet",
+      "- one\n    - nested\n- two\n\n- three",
+      "- one\n    - nested\n- two",
+      "- three",
+    ],
+    ["ordered", "1. one\n2. two\n\n3. three", "1. one\n2. two", "3. three"],
+    ["task", "- [ ] one\n- [x] two\n\n- [ ] three", "- [ ] one\n- [x] two", "- [ ] three"],
+  ] as const)("activates only the selected %s list block across an authored gap", (
+    _kind,
+    markdown,
+    firstBlock,
+    secondBlock,
+  ) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, { initialContent: markdown });
+
+    editor.setSelectionOffset(markdown.indexOf("one") + 1);
+    expect(host.querySelectorAll(".ProseMirror > pre[data-source-block]")).toHaveLength(1);
+    expect(host.querySelector(".ProseMirror > pre[data-source-block]")?.textContent).toBe(firstBlock);
+
+    editor.setSelectionOffset(markdown.indexOf("three") + 1);
+    expect(host.querySelectorAll(".ProseMirror > pre[data-source-block]")).toHaveLength(1);
+    expect(host.querySelector(".ProseMirror > pre[data-source-block]")?.textContent).toBe(secondBlock);
     expect(editor.getMarkdown()).toBe(markdown);
     editor.destroy();
   });

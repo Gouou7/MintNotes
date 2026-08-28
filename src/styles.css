@@ -206,6 +206,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .markdown-editor-host .ProseMirror pre, .readonly-markdown pre { background: var(--code-block-bg); color: var(--code-block-text); border: 0; border-radius: 8px; }
 .markdown-editor-host .ProseMirror pre[data-source-gap] { min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; line-height: inherit; white-space: pre-wrap; tab-size: inherit; }
 .readonly-markdown .markdown-softbreak-paragraph { white-space: break-spaces; }
+.readonly-markdown li > .markdown-softbreak-paragraph:first-child { margin-top: 0; }
+.readonly-markdown li > .markdown-softbreak-paragraph:last-child { margin-bottom: 0; }
+.readonly-markdown li[data-list-gap-before] {
+  margin-top: calc(var(--markdown-list-gap-before) * 1.75em);
+}
 .markdown-editor-host .ProseMirror pre { box-sizing: border-box; padding: 16px 18px; line-height: 1.55; }
 .markdown-editor-host .ProseMirror pre[data-source-block] { margin: 0; padding: 0; overflow: visible; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; color: var(--text); font-family: inherit; line-height: inherit; word-wrap: break-word; }
 .markdown-editor-host .ProseMirror pre[data-source-block] > code { padding: 0; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; color: inherit; font: inherit; white-space: inherit; }
@@ -228,6 +233,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .readonly-markdown pre { overflow: auto; padding: 16px; border-radius: 8px; }
 .readonly-code-block { position: relative; margin: 1em 0; }
 .readonly-markdown .readonly-code-block pre { margin: 0; padding-right: 52px; }
+.readonly-markdown .readonly-code-block.has-language pre { padding-top: 42px; }
+.readonly-code-language { position: absolute; top: 12px; right: 48px; color: var(--code-block-muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: .78em; font-weight: 500; line-height: 1.2; user-select: none; }
 .readonly-markdown pre code { padding: 0; background: transparent; color: inherit; }
 .readonly-code-copy { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 1px solid var(--code-copy-border); border-radius: 7px; opacity: 0; color: var(--code-block-muted); background: var(--code-copy-bg); box-shadow: var(--code-copy-shadow); cursor: pointer; transition: opacity .14s ease, color .14s ease, background .14s ease, transform .14s ease; }
 .readonly-code-block:hover .readonly-code-copy, .readonly-code-copy:focus-visible { opacity: 1; }
