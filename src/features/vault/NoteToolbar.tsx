@@ -18,7 +18,7 @@ interface NoteToolbarProps {
   titleReadOnly: boolean;
   locked: boolean;
   historyPreview: boolean;
-  displayedMode: WorkspaceEditorMode;
+  effectiveEditorMode: WorkspaceEditorMode;
   onOpenLeft: () => void;
   onTitleChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTitleBlur: (event: FocusEvent<HTMLInputElement>) => void;
@@ -36,7 +36,7 @@ export function NoteToolbar({
   titleReadOnly,
   locked,
   historyPreview,
-  displayedMode,
+  effectiveEditorMode,
   onOpenLeft,
   onTitleChange,
   onTitleBlur,
@@ -64,10 +64,10 @@ export function NoteToolbar({
           aria-label={t("app.noteTitle")}
         />
       : <strong className="empty-title-slot">{t("app.selectNote")}</strong>}
-    <div className="mode-switch" aria-label={t("app.displayMode")}>
-      <button disabled={modeDisabled} className={active && displayedMode === "live" ? "active" : ""} onClick={() => onModeChange("live")}>{t("app.modeLive")}</button>
-      <button disabled={modeDisabled} className={active && displayedMode === "source" ? "active" : ""} onClick={() => onModeChange("source")}>{t("app.modeSource")}</button>
-      <button disabled={modeDisabled} className={active && displayedMode === "readonly" ? "active" : ""} onClick={() => onModeChange("readonly")}>{t("app.modeReading")}</button>
+    <div className="mode-switch" aria-label={t("app.editorMode")}>
+      <button disabled={modeDisabled} className={active && effectiveEditorMode === "live" ? "active" : ""} onClick={() => onModeChange("live")}>{t("app.modeLive")}</button>
+      <button disabled={modeDisabled} className={active && effectiveEditorMode === "source" ? "active" : ""} onClick={() => onModeChange("source")}>{t("app.modeSource")}</button>
+      <button disabled={modeDisabled} className={active && effectiveEditorMode === "reading" ? "active" : ""} onClick={() => onModeChange("reading")}>{t("app.modeReading")}</button>
     </div>
     <button
       className={`toolbar-icon note-lock-toggle ${active && locked ? "active" : ""}`}

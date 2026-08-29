@@ -35,7 +35,7 @@ import {
   touchPinRefreshGrant
 } from "../../crypto/deviceUnlock";
 import { buildOutline, findOutlineHeading } from "../../editor/outline";
-import { ReadOnlyMarkdown } from "../../editor/ReadOnlyMarkdown";
+import { ReadingEditor } from "../../editor/ReadingEditor";
 import { MarkdownEditor } from "../../editor/MarkdownEditor";
 import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/wikilinks";
 import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
@@ -1478,8 +1478,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const indexedActiveDocument = activeId ? documentIndexRef.current.get(activeId) : null;
   const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
   const activeDocumentLocked = isLockedNote(activeDocument);
-  const displayedMode = effectiveEditorMode(mode, activeDocument);
-  const documentNavigation = useDocumentNavigation(displayedMode);
+  const effectiveMode = effectiveEditorMode(mode, activeDocument);
+  const documentNavigation = useDocumentNavigation(effectiveMode);
 
   const changeEditorMode = (nextMode: EditorMode) => {
     if (!documentNavigation.prepareModeChange(nextMode)) return;
@@ -2190,7 +2190,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       if (!current || current.kind !== "note") return;
       const locked = !isLockedNote(current);
       if (noteId === activeIdRef.current) {
-        documentNavigation.prepareModeChange(locked ? "readonly" : mode);
+        documentNavigation.prepareModeChange(locked ? "reading" : mode);
       }
       await persistObject(
         { ...current, locked, dirty: true },
@@ -2499,7 +2499,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
           titleReadOnly={Boolean(historyPreview) || activeDocumentLocked}
           locked={activeDocumentLocked}
           historyPreview={Boolean(historyPreview)}
-          displayedMode={displayedMode}
+          effectiveEditorMode={effectiveMode}
           onOpenLeft={() => preferences.treeCollapsed ? setPreferences({ ...preferences, treeCollapsed: false }) : setTreeOpen(true)}
           onTitleChange={(event) => setTitleDraft(event.target.value)}
           onTitleBlur={(event) => {
@@ -2536,10 +2536,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         </div>}
         <div className="editor-area" ref={documentNavigation.editorArea}>
           {activeDocument ? historyPreview
-            ? <ReadOnlyMarkdown markdown={historyPreview.payload.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : displayedMode === "readonly"
-            ? <ReadOnlyMarkdown markdown={activeDocument.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : <MarkdownEditor ref={documentNavigation.editorSurface} key={`${editorSessionId}:${displayedMode}`} markdown={activeDocument.markdown} mode={displayedMode} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={(markdown) => {
+            ? <ReadingEditor markdown={historyPreview.payload.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
+            : <MarkdownEditor ref={documentNavigation.editorSurface} key={`${editorSessionId}:${effectiveMode}`} markdown={activeDocument.markdown} mode={effectiveMode} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={(markdown) => {
               const latest = documentIndexRef.current.get(activeDocument.objectId);
               if (!latest || markdown === latest.markdown) return;
               patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });

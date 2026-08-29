@@ -97,8 +97,8 @@ describe("document navigation", () => {
     const source = host.querySelector<HTMLTextAreaElement>(".source-editor")!;
     dimensions(source, { scrollTop: 300, scrollHeight: 1400, clientHeight: 400 });
 
-    expect(navigation.prepareModeChange("readonly")).toBe(true);
-    await act(async () => root.render(createElement(Harness, { mode: "readonly" })));
+    expect(navigation.prepareModeChange("reading")).toBe(true);
+    await act(async () => root.render(createElement(Harness, { mode: "reading" })));
     const area = host.firstElementChild as HTMLElement;
     dimensions(area, { scrollTop: 0, scrollHeight: 2400, clientHeight: 400 });
     await act(async () => {

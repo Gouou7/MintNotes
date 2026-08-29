@@ -20,6 +20,11 @@ import type {
 } from "./extension";
 import { SOURCE_BLOCK_PRESENTATION_META } from "./extension";
 import { INLINE_PRESENTATION_META } from "./inline-parse";
+import {
+  isLiveSyntaxEditing,
+  LIVE_SYNTAX_EDITING,
+  LIVE_SYNTAX_RENDERING,
+} from "./live-syntax-state";
 import { SourcePositionMap } from "./source-position-map";
 import { authoredDocumentSource, sourceFingerprint } from "./source-fingerprint";
 import {
@@ -138,7 +143,7 @@ export function createEditor(
 
   function structureSignatureForDocument(doc: PMNode): string {
     const visit = (node: PMNode): unknown => {
-      const sourceEditingPresentation = node.type.name === "source_block"
+      const editingPresentation = node.type.name === "source_block"
         ? null
         : resolveSourceBlockEditingPresentation(node, blockPresentations)?.id ?? null;
       const attributes = Object.fromEntries(
@@ -148,14 +153,14 @@ export function createEditor(
           && name !== SOURCE_TEXT_ATTR
           && name !== SOURCE_FINGERPRINT_ATTR
           && name !== SOURCE_LAYOUT_HEIGHT_ATTR
-          && name !== "sourceEditing"
+          && name !== "liveSyntaxState"
         )),
       );
       const children: unknown[] = [];
       node.forEach((child) => {
         if (!child.isText) children.push(visit(child));
       });
-      return [node.type.name, attributes, sourceEditingPresentation, children];
+      return [node.type.name, attributes, editingPresentation, children];
     };
     return JSON.stringify(visit(doc));
   }
@@ -205,7 +210,7 @@ export function createEditor(
       if (
         node.type.name === "source_block"
         || (["blockquote", "code_block"].includes(node.type.name)
-          && node.attrs.sourceEditing === true)
+          && isLiveSyntaxEditing(node.attrs.liveSyntaxState))
       ) {
         hasActiveSourcePresentation = true;
         return false;
@@ -299,7 +304,7 @@ export function createEditor(
         if (
           node.type.name === "source_block"
           || (["blockquote", "code_block"].includes(node.type.name)
-            && node.attrs.sourceEditing === true)
+            && isLiveSyntaxEditing(node.attrs.liveSyntaxState))
         ) return;
         const from = Number(node.attrs[SOURCE_FROM_ATTR]);
         const to = Number(node.attrs[SOURCE_TO_ATTR]);
@@ -429,10 +434,10 @@ export function createEditor(
     }, base.content);
   }
 
-  function shouldActivateSourceBlock(range: LiveSourceRange, activateTable: boolean): boolean {
+  function shouldEnterSourceEditing(range: LiveSourceRange, editTable: boolean): boolean {
     if (range.sourceBlockEditing) return range.kind !== "source_block";
     if (["paragraph", "source_gap", "source_block"].includes(range.kind)) return false;
-    if (range.kind === "table" && !activateTable) return false;
+    if (range.kind === "table" && !editTable) return false;
     return true;
   }
 
@@ -446,7 +451,7 @@ export function createEditor(
     const keepCurrentSourceBlock = targetBefore?.kind === "source_block";
     const targetHeight = targetBefore
       && targetBefore.kind !== "source_block"
-      && shouldActivateSourceBlock(targetBefore, intent.activateTable === true)
+      && shouldEnterSourceEditing(targetBefore, intent.editTable === true)
       && !["blockquote", "code_block"].includes(targetBefore.kind)
       ? renderedHeightForRange(targetBefore)
       : null;
@@ -477,7 +482,7 @@ export function createEditor(
     tr.doc.forEach((node, pos) => {
       if (
         ["blockquote", "code_block"].includes(node.type.name)
-        && node.attrs.sourceEditing === true
+        && isLiveSyntaxEditing(node.attrs.liveSyntaxState)
       ) editingBlocks.push({ pos, node });
     });
     for (const active of editingBlocks.reverse()) {
@@ -489,16 +494,22 @@ export function createEditor(
         && from <= sourceSelection.head
         && sourceSelection.head <= to
       ) continue;
-      tr.setNodeMarkup(active.pos, undefined, { ...active.node.attrs, sourceEditing: false });
+      tr.setNodeMarkup(active.pos, undefined, {
+        ...active.node.attrs,
+        liveSyntaxState: LIVE_SYNTAX_RENDERING,
+      });
       presentationChanged = true;
     }
 
     const target = sourceRangeAtOffsetInDocument(tr.doc, sourceSelection.head, direction);
-    if (target && shouldActivateSourceBlock(target, intent.activateTable === true)) {
+    if (target && shouldEnterSourceEditing(target, intent.editTable === true)) {
       const targetNode = tr.doc.nodeAt(target.pos);
       if (targetNode && ["blockquote", "code_block"].includes(target.kind)) {
-        if (targetNode.attrs.sourceEditing !== true) {
-          tr.setNodeMarkup(target.pos, undefined, { ...targetNode.attrs, sourceEditing: true });
+        if (!isLiveSyntaxEditing(targetNode.attrs.liveSyntaxState)) {
+          tr.setNodeMarkup(target.pos, undefined, {
+            ...targetNode.attrs,
+            liveSyntaxState: LIVE_SYNTAX_EDITING,
+          });
           presentationChanged = true;
         }
       } else if (targetNode && target.kind !== "source_block") {
@@ -533,9 +544,9 @@ export function createEditor(
     return tr;
   }
 
-  function activateSourceBoundary(
+  function enterSourceEditingAtBoundary(
     offset: number,
-    options: { activateTable?: boolean; scroll?: boolean } = {},
+    options: { editTable?: boolean; scroll?: boolean } = {},
   ): boolean {
     const clamped = Math.max(0, Math.min(offset, canonicalMarkdown.length));
     const positions = sourcePositionMapForState(view.state);
@@ -545,7 +556,7 @@ export function createEditor(
       {
         anchor: clamped,
         head: clamped,
-        activateTable: options.activateTable,
+        editTable: options.editTable,
         scroll: options.scroll ?? true,
       },
     );
@@ -606,7 +617,7 @@ export function createEditor(
   function reparsePresentation(
     state: EditorState,
     sourceSelection: number,
-    reactivateSource = false,
+    restoreSourceEditing = false,
   ): void {
     const reparsed = parse(canonicalMarkdown);
     const repair = state.tr.replaceWith(0, state.doc.content.size, reparsed.content);
@@ -624,7 +635,7 @@ export function createEditor(
     // source range, including tables. Tables stay on their rich-cell path for
     // ordinary navigation, but an edit that just created or changed one must
     // not strand the DOM caret in the rebuilt projection.
-    if (reactivateSource) activateSourceBoundary(sourceSelection, { activateTable: true });
+    if (restoreSourceEditing) enterSourceEditingAtBoundary(sourceSelection, { editTable: true });
   }
 
   function applyCanonicalTransaction(
@@ -798,11 +809,11 @@ export function createEditor(
             editedParent.type.name === "source_block"
             || (
               ["blockquote", "code_block"].includes(editedParent.type.name)
-              && editedParent.attrs.sourceEditing === true
+              && isLiveSyntaxEditing(editedParent.attrs.liveSyntaxState)
             )
           );
         let next = v.state.apply(tr);
-        let reparseRequest: { selection: number; reactivate: boolean } | null = null;
+        let reparseRequest: { selection: number; restoreEditing: boolean } | null = null;
         if (tr.docChanged && !tr.getMeta(SOURCE_BLOCK_PRESENTATION_META)) {
           const effect = transactionSourceEffect(tr, beforeCanonical);
           if (effect.kind === "source") {
@@ -828,7 +839,7 @@ export function createEditor(
               } else if (changed && reparseDerivedDocument) {
                 reparseRequest = {
                   selection: effect.transaction.selection.head,
-                  reactivate: editedSourcePresentation
+                  restoreEditing: editedSourcePresentation
                     || !["command", "external"].includes(effect.transaction.origin),
                 };
               }
@@ -873,7 +884,7 @@ export function createEditor(
         v.updateState(next);
         scheduleBlockHeightCache();
         if (reparseRequest) {
-          reparsePresentation(next, reparseRequest.selection, reparseRequest.reactivate);
+          reparsePresentation(next, reparseRequest.selection, reparseRequest.restoreEditing);
           scheduleBlockHeightCache();
         }
       },
@@ -1222,7 +1233,7 @@ export function createEditor(
       sourceTextarea.setSelectionRange(clamped, clamped);
       return;
     }
-    activateSourceBoundary(clamped, { activateTable: true, scroll: true });
+    enterSourceEditingAtBoundary(clamped, { editTable: true, scroll: true });
   }
 
   function runExtensionCommand<Result>(command: string, input?: unknown): Result | undefined {

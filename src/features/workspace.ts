@@ -21,6 +21,10 @@ export type DeviceWorkspacePreferences = Pick<
   "workspaceVersion" | "activeNoteId" | "openNoteIds" | "editorMode" | "treeCollapsed" | "outlineCollapsed"
 >;
 
+type StoredUiPreferences = Omit<Partial<UiPreferences>, "editorMode"> & {
+  editorMode?: unknown;
+};
+
 export const DEFAULT_DEVICE_WORKSPACE_PREFERENCES: DeviceWorkspacePreferences = {
   workspaceVersion: 1,
   activeNoteId: null,
@@ -37,7 +41,8 @@ function normalizeOpenNoteIds(value: unknown): string[] {
 }
 
 function normalizeEditorMode(value: unknown): WorkspaceEditorMode {
-  return value === "source" || value === "readonly" ? value : "live";
+  if (value === "readonly") return "reading";
+  return value === "source" || value === "reading" ? value : "live";
 }
 
 export function parseLegacyWorkspaceState(document: Pick<VaultDocument, "markdown">): LegacyWorkspaceState | null {
@@ -61,7 +66,7 @@ export function parseLegacyWorkspaceState(document: Pick<VaultDocument, "markdow
 }
 
 export function resolveDeviceWorkspacePreferences(
-  stored: Partial<UiPreferences>,
+  stored: StoredUiPreferences,
   legacy: LegacyWorkspaceState | null
 ): DeviceWorkspacePreferences {
   if (stored.workspaceVersion === 1) {

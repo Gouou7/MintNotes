@@ -9,7 +9,7 @@ function document(kind: VaultDocument["kind"], locked: boolean): Pick<VaultDocum
 describe("note locking", () => {
   it("forces locked notes into reading mode without changing the workspace mode", () => {
     const workspaceMode = "source" as const;
-    expect(effectiveEditorMode(workspaceMode, document("note", true))).toBe("readonly");
+    expect(effectiveEditorMode(workspaceMode, document("note", true))).toBe("reading");
     expect(workspaceMode).toBe("source");
   });
 

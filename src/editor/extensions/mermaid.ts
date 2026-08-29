@@ -1,5 +1,5 @@
 import { parseFencedCodeSource } from "../core/fenced-code-source";
-import type { BlockSourcePresentation, EditorExtension } from "../core/lib";
+import { isLiveSyntaxEditing, type BlockSourcePresentation, type EditorExtension } from "../core/lib";
 
 export interface MermaidExtensionOptions {
   render?: (container: HTMLElement, source: string) => void | (() => void);
@@ -14,7 +14,7 @@ function mermaidPresentation(
     sourceClassName: "live-mermaid-source",
     widgetClassName: "live-mermaid-widget",
     match(source, context) {
-      if (context.attributes.sourceEditing === true) return null;
+      if (isLiveSyntaxEditing(context.attributes.liveSyntaxState)) return null;
       const fenced = parseFencedCodeSource(source);
       if (!fenced || fenced.lang.toLowerCase() !== "mermaid") return null;
       return {

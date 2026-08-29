@@ -504,3 +504,26 @@ describe("MarkdownEditor source mode", () => {
     await act(async () => root.unmount());
   });
 });
+
+describe("MarkdownEditor reading mode", () => {
+  it("renders the reading editor without creating an editable controller or emitting changes", async () => {
+    const onChange = vi.fn();
+    vi.mocked(createEditor).mockClear();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => root.render(
+      <I18nProvider>
+        <MarkdownEditor markdown="# Reading" mode="reading" onChange={onChange} />
+      </I18nProvider>
+    ));
+
+    expect(container.querySelector(".reading-editor h1")?.textContent).toBe("Reading");
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(createEditor).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+
+    await act(async () => root.unmount());
+  });
+});

@@ -11,7 +11,7 @@ export function effectiveEditorMode(
   workspaceMode: WorkspaceEditorMode,
   document: LockableDocument | null | undefined
 ): WorkspaceEditorMode {
-  return isLockedNote(document) ? "readonly" : workspaceMode;
+  return isLockedNote(document) ? "reading" : workspaceMode;
 }
 
 export function derivedNoteLockState(

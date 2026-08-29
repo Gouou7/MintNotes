@@ -62,8 +62,8 @@ export function MathFormula({ source, displayMode = false }: { source: string; d
     output: "htmlAndMathml"
   });
   return displayMode
-    ? <div className="readonly-math-block" dangerouslySetInnerHTML={{ __html: markup }} />
-    : <span className="readonly-inline-math" dangerouslySetInnerHTML={{ __html: markup }} />;
+    ? <div className="reading-math-block" dangerouslySetInnerHTML={{ __html: markup }} />
+    : <span className="reading-inline-math" dangerouslySetInnerHTML={{ __html: markup }} />;
 }
 
 export function renderMermaidInto(container: HTMLElement, source: string): () => void {

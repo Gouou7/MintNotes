@@ -221,7 +221,7 @@ export function extensionPresentationPlugin(
           decorations.push(Decoration.node(position, position + node.nodeSize, {
             class: `${candidate.presentation.sourceClassName} ${editing
               ? "is-live-syntax-editing"
-              : "is-live-syntax-rendered"}`,
+              : "is-live-syntax-rendering"}`,
           }));
           if (!editing) decorations.push(presentationWidget(
             position,

@@ -33,5 +33,11 @@ export type {
 } from "./source";
 export { SourcePositionMap } from "./source-position-map";
 export type { PositionAffinity } from "./source-position-map";
+export {
+  isLiveSyntaxEditing,
+  LIVE_SYNTAX_EDITING,
+  LIVE_SYNTAX_RENDERING,
+} from "./live-syntax-state";
+export type { LiveSyntaxState } from "./live-syntax-state";
 export { SOURCE_TRANSACTION_META, transactionSourceEffect } from "./source-transaction";
 export type { TransactionSourceEffect } from "./source-transaction";

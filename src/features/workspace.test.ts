@@ -66,10 +66,26 @@ describe("workspace state", () => {
       workspaceVersion: 1,
       activeNoteId: "local-note",
       openNoteIds: ["local-note"],
-      editorMode: "readonly",
+      editorMode: "reading",
       treeCollapsed: false,
       outlineCollapsed: true
     });
+  });
+
+  it("normalizes legacy reading-mode values without changing the workspace version", () => {
+    expect(parseLegacyWorkspaceState({ markdown: JSON.stringify({
+      version: 1,
+      activeNoteId: "legacy-note",
+      openNoteIds: ["legacy-note"],
+      editorMode: "readonly",
+      treeCollapsed: false,
+      outlineCollapsed: false
+    }) })?.editorMode).toBe("reading");
+
+    expect(resolveDeviceWorkspacePreferences({
+      workspaceVersion: 1,
+      editorMode: "not-a-mode"
+    }, null).editorMode).toBe("live");
   });
 
   it("migrates only a locally supplied legacy record and otherwise starts blank", () => {

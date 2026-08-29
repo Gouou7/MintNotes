@@ -14,7 +14,7 @@ describe("emphasis presentation", () => {
       expect(theme).toMatch(/\.ProseMirror em\s*\{[^}]*font-style: italic;[^}]*font-synthesis: style;/s);
     }
     expect(appStyles).toMatch(
-      /\.readonly-markdown em\s*\{[^}]*font-style: italic;[^}]*font-synthesis: style;/s,
+      /\.reading-editor em\s*\{[^}]*font-style: italic;[^}]*font-synthesis: style;/s,
     );
   });
 });

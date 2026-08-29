@@ -7,7 +7,7 @@ import type {
   EditorExtension,
   SourceBlockPresentation,
 } from "../core/lib";
-import { SOURCE_BLOCK_PRESENTATION_META } from "../core/lib";
+import { LIVE_SYNTAX_EDITING, SOURCE_BLOCK_PRESENTATION_META } from "../core/lib";
 import { markLiveNavigation } from "../core/source-navigation";
 import { parseCalloutMarker, type CalloutMarker } from "../callouts";
 
@@ -116,7 +116,7 @@ export function createCalloutExtension(
           if (!node) return false;
           const tr = view.state.tr.setNodeMarkup(marker.nodePos, undefined, {
             ...node.attrs,
-            sourceEditing: true,
+            liveSyntaxState: LIVE_SYNTAX_EDITING,
           });
           tr.setSelection(TextSelection.create(tr.doc, marker.from + offset));
           tr.setMeta("addToHistory", false);

@@ -41,7 +41,7 @@ export function scrollElementToViewportPosition(
 
 export function renderedHeadingElements(editorArea: HTMLElement): HTMLElement[] {
   const documentRoot = editorArea.querySelector<HTMLElement>(".markdown-editor-host .ProseMirror")
-    ?? editorArea.querySelector<HTMLElement>(".readonly-markdown");
+    ?? editorArea.querySelector<HTMLElement>(".reading-editor");
   if (!documentRoot) return [];
   return [...documentRoot.children]
     .filter((element): element is HTMLElement => element instanceof HTMLElement && element.matches(RENDERED_HEADING_SELECTOR));
@@ -77,7 +77,7 @@ export function useDocumentNavigation(mode: WorkspaceEditorMode): DocumentNaviga
 
     let layoutFrame = 0;
     const mountFrame = window.requestAnimationFrame(() => {
-      if (selection !== null && mode !== "readonly") {
+      if (selection !== null && mode !== "reading") {
         pendingSelection.current = null;
         editorSurface.current?.setSelectionOffset(selection);
       }
@@ -97,7 +97,7 @@ export function useDocumentNavigation(mode: WorkspaceEditorMode): DocumentNaviga
     if (nextMode === modeRef.current) return false;
     const area = editorArea.current;
     if (area) pendingScrollProgress.current = readScrollProgress(documentScrollElement(area));
-    if (modeRef.current !== "readonly") {
+    if (modeRef.current !== "reading") {
       pendingSelection.current = editorSurface.current?.getSelectionOffset() ?? null;
     }
     return true;

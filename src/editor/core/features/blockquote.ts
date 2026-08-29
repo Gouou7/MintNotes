@@ -6,6 +6,11 @@ import type { EditorView, NodeView } from "prosemirror-view";
 import type { SourceBlockPresentation } from "../extension";
 import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
 import { INLINE_PRESENTATION_META } from "../inline-parse";
+import {
+  isLiveSyntaxEditing,
+  LIVE_SYNTAX_EDITING,
+  LIVE_SYNTAX_RENDERING,
+} from "../live-syntax-state";
 import { SOURCE_FROM_ATTR } from "../source";
 import { markLiveNavigation, selectionOutsideBlock } from "../source-navigation";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
@@ -125,7 +130,7 @@ function selectedBlockquote(state: EditorView["state"]): {
   return null;
 }
 
-function activateSource(
+function enterEditingState(
   view: EditorView,
   pos: number,
   offset: number,
@@ -212,7 +217,7 @@ function moveBlockquoteSourceVertically(view: EditorView, direction: -1 | 1): bo
   if (
     !selection.empty
     || selection.$from.parent.type.name !== "blockquote"
-    || selection.$from.parent.attrs.sourceEditing !== true
+    || !isLiveSyntaxEditing(selection.$from.parent.attrs.liveSyntaxState)
   ) return false;
 
   const text = selection.$from.parent.textContent;
@@ -375,7 +380,7 @@ class BlockquoteView implements NodeView {
   }
 
   private onSourceBeforeInput = (event: InputEvent): void => {
-    if (!this.node.attrs.sourceEditing || event.isComposing || !event.cancelable) return;
+    if (!isLiveSyntaxEditing(this.node.attrs.liveSyntaxState) || event.isComposing || !event.cancelable) return;
     const { anchor, head } = this.sourceSelectionOffsets();
     if (anchor == null || head == null) return;
     const from = Math.min(anchor, head);
@@ -428,7 +433,7 @@ class BlockquoteView implements NodeView {
     if (pos == null) return;
     event.preventDefault();
     event.stopPropagation();
-    activateSource(
+    enterEditingState(
       this.view,
       pos,
       pointerSourceOffset(this.preview, this.node.textContent, event),
@@ -463,7 +468,7 @@ class BlockquoteView implements NodeView {
 
   private applyNode(node: PMNode): void {
     this.node = node;
-    const editing = node.attrs.sourceEditing === true;
+    const editing = isLiveSyntaxEditing(node.attrs.liveSyntaxState);
     this.dom.classList.toggle("is-source-editing", editing);
     this.sourceSurface.hidden = !editing;
     this.sourceSurface.setAttribute("aria-hidden", editing ? "false" : "true");
@@ -483,7 +488,7 @@ class BlockquoteView implements NodeView {
   }
 
   stopEvent(event: Event): boolean {
-    return !this.node.attrs.sourceEditing && this.preview.contains(event.target as Node);
+    return !isLiveSyntaxEditing(this.node.attrs.liveSyntaxState) && this.preview.contains(event.target as Node);
   }
 
   ignoreMutation(mutation: { target: Node }): boolean {
@@ -518,7 +523,7 @@ function blockquotePlugin(
       const selectionChanged = !oldState.selection.eq(newState.selection);
       let hasActive = false;
       newState.doc.descendants((node) => {
-        if (node.type === schema.nodes.blockquote && node.attrs.sourceEditing) hasActive = true;
+        if (node.type === schema.nodes.blockquote && isLiveSyntaxEditing(node.attrs.liveSyntaxState)) hasActive = true;
       });
       if (!selectionChanged && !hasActive) return null;
 
@@ -527,8 +532,11 @@ function blockquotePlugin(
       newState.doc.descendants((node, pos) => {
         if (node.type !== schema.nodes.blockquote) return;
         const shouldEdit = selected?.pos === pos;
-        if (node.attrs.sourceEditing === shouldEdit) return;
-        tr.setNodeMarkup(pos, undefined, { ...node.attrs, sourceEditing: shouldEdit });
+        if (isLiveSyntaxEditing(node.attrs.liveSyntaxState) === shouldEdit) return;
+        tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
+          liveSyntaxState: shouldEdit ? LIVE_SYNTAX_EDITING : LIVE_SYNTAX_RENDERING,
+        });
       });
       if (!tr.docChanged) return null;
       // setNodeMarkup uses a replace-around mapping even though this update
@@ -551,7 +559,7 @@ function blockquotePlugin(
 
         if (
           $from.parent.type.name === "blockquote"
-          && $from.parent.attrs.sourceEditing === true
+          && isLiveSyntaxEditing($from.parent.attrs.liveSyntaxState)
         ) {
           if (event.key === "ArrowUp" || event.key === "ArrowDown") {
             return moveBlockquoteSourceVertically(view, event.key === "ArrowUp" ? -1 : 1);
@@ -575,7 +583,7 @@ function blockquotePlugin(
           && view.endOfTextblock(event.key === "ArrowUp" ? "up" : "down", state)
         ) adjacent = siblingBlockquote(state, direction);
         if (!adjacent) return false;
-        return activateSource(
+        return enterEditingState(
           view,
           adjacent.pos,
           direction < 0 ? adjacent.node.content.size : 0,
@@ -584,8 +592,8 @@ function blockquotePlugin(
       handleDOMEvents: {
         focus(view) {
           const selected = selectedBlockquote(view.state);
-          if (!selected || selected.node.attrs.sourceEditing) return false;
-          activateSource(
+          if (!selected || isLiveSyntaxEditing(selected.node.attrs.liveSyntaxState)) return false;
+          enterEditingState(
             view,
             selected.pos,
             view.state.selection.head - selected.pos - 1,
@@ -654,7 +662,7 @@ export const blockquote: FeatureSpec = {
           const pos = $from.before();
           const source = `${$from.parent.textContent}\n${prefix}`;
           const quote = schema.nodes.blockquote.create(
-            { ...$from.parent.attrs, sourceEditing: true },
+            { ...$from.parent.attrs, liveSyntaxState: LIVE_SYNTAX_EDITING },
             schema.text(source),
           );
           const tr = state.tr.replaceWith(pos, pos + $from.parent.nodeSize, quote);
@@ -677,7 +685,10 @@ export const blockquote: FeatureSpec = {
         return true;
       }
 
-      if ($from.parent.type !== schema.nodes.blockquote || !$from.parent.attrs.sourceEditing) return false;
+      if (
+        $from.parent.type !== schema.nodes.blockquote
+        || !isLiveSyntaxEditing($from.parent.attrs.liveSyntaxState)
+      ) return false;
       const node = $from.parent;
       const pos = $from.before();
       const offset = $from.parentOffset;
@@ -692,7 +703,7 @@ export const blockquote: FeatureSpec = {
             dispatch(tr.scrollIntoView());
           } else {
             const quote = schema.nodes.blockquote.create(
-              { sourceEditing: false },
+              { liveSyntaxState: LIVE_SYNTAX_RENDERING },
               schema.text(remaining),
             );
             const tr = state.tr.replaceWith(pos, pos + node.nodeSize, [quote, paragraph]);

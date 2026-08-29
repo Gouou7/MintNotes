@@ -14,7 +14,7 @@ const PRESENTATION_ATTRS = new Set([
   SOURCE_TEXT_ATTR,
   SOURCE_FINGERPRINT_ATTR,
   SOURCE_LAYOUT_HEIGHT_ATTR,
-  "sourceEditing",
+  "liveSyntaxState",
 ]);
 
 function sourceShape(node: PMNode): unknown {

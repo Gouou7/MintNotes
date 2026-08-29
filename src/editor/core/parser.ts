@@ -16,6 +16,7 @@ import {
   collectParserTokens,
 } from "./features/index";
 import { parseFencedCodeSource } from "./fenced-code-source";
+import { LIVE_SYNTAX_EDITING, LIVE_SYNTAX_RENDERING } from "./live-syntax-state";
 import { schema } from "./schema";
 import {
   SOURCE_FINGERPRINT_ATTR,
@@ -63,7 +64,7 @@ function orderedListStart(line: string, fallback: number): number {
 /**
  * CommonMark deliberately keeps blank-line-separated items in one loose
  * list. Live mode needs the author's blank row to remain a real source gap,
- * because each side is an independently activated source block. Split only
+ * because each side is an independently editing syntax structure. Split only
  * top-level list tokens here; the canonical Markdown remains untouched.
  */
 function splitTopLevelListBlocks(tokens: readonly Token[], lines: readonly SourceLine[]): Token[] {
@@ -489,7 +490,7 @@ function handleBlock(
       const textNodes = source ? [schema.text(source)] : [];
       state.push(nodes.code_block.createChecked({
         lang: token.info.trim(),
-        sourceEditing: !sourceFenceIsClosed(token, src)
+        liveSyntaxState: sourceFenceIsClosed(token, src) ? LIVE_SYNTAX_RENDERING : LIVE_SYNTAX_EDITING
           || parseFencedCodeSource(source)?.closingFrom === null,
       }, textNodes));
       return;
@@ -736,7 +737,7 @@ export function parse(src: string, options: ParseOptions = {}): PMNode {
     if (token.type === "blockquote_open") {
       const source = sourceForBlockquote(token, src);
       state.push(schema.nodes.blockquote.createChecked(
-        { sourceEditing: false },
+        { liveSyntaxState: LIVE_SYNTAX_RENDERING },
         source ? schema.text(source) : undefined,
       ));
       index = blockquoteCloseIndex(tokens, index);

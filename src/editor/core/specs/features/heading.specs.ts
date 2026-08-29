@@ -141,6 +141,6 @@ export const headingSpecs: FeatureSpecs = {
     //     AND ArrowUp from a following paragraph into the heading)
     //   - empty-heading-double-backspace (needs a seed path to an empty
     //     heading; parser drops `# ` to a paragraph)
-    // Reactivate once test-utils grows a JSON-seed path.
+    // Restore editing state once test-utils grows a JSON-seed path.
   ],
 };

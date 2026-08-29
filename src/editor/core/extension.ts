@@ -68,7 +68,7 @@ export interface BlockSourceEditing {
 }
 
 /**
- * A presentation-only block matcher. The core owns selection activation and
+ * A presentation-only block matcher. The core owns selection-driven editing state and
  * ProseMirror decorations; extensions only recognize source and mount output.
  */
 export interface BlockSourcePresentation<Data = unknown> {

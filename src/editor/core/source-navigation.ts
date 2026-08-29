@@ -12,8 +12,8 @@ export interface LiveNavigationIntent {
   readonly head?: number;
   readonly direction?: -1 | 1;
   readonly scroll?: boolean;
-  /** Explicit controller positioning may activate a table source block. */
-  readonly activateTable?: boolean;
+  /** Explicit controller positioning may put a table source block into editing state. */
+  readonly editTable?: boolean;
 }
 
 export function markLiveNavigation<T extends Transaction>(

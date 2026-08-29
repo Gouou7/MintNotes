@@ -51,7 +51,7 @@ pnpm dev:server
 | `src/components/` | 共享展示原语，包括标准图标包装器。 |
 | `src/editor/core/` | ProseMirror／Markdown 核心、规范解析器和序列化器、输入事务、通用的仅声明呈现宿主与扩展契约、稳定控制器、导入的行为规范和来源说明。 |
 | `src/editor/extensions/` | 相互独立、产品特有的 Callout、Comment、Math、Mermaid 和 WikiLink／Embed 实时呈现；核心不导入这些模块。新渲染器声明源码匹配与渲染回调，不创建原始 ProseMirror 插件。 |
-| `src/editor/` 中的其他模块 | React 实时／源码适配器、源码／实时拖放处理、Markdown 呈现编解码器、只读渲染和大纲提取。 |
+| `src/editor/` 中的其他模块 | React 实时／源码／阅读三种模式编辑器、源码／实时拖放处理、Markdown 呈现编解码器和大纲提取。 |
 | `src/features/history.ts`、`src/features/vault/historyController.ts` 和 `src/components/HistoryPanel.tsx` | 历史负载／去重策略、类型化加密本地持久化／元数据队列，以及右侧面板的历史呈现。 |
 | `src/features/session/` | 会话恢复、可信设备状态、跨标签页失效和锁定会话命令。 |
 | `src/features/vault/` | 已解锁保险库组合、类型化状态／控制器 Hook、串行对象持久化、可重试文档保存、分页拉取／游标应用、本地清除、原子发件箱确认，以及文档树等保险库专用呈现。 |

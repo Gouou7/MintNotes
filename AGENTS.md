@@ -52,7 +52,7 @@ Mint Notes 是一个轻量、自托管、多用户的 Markdown 笔记 PWA。它�
 - `src/App.tsx`：只负责顶层会话状态路由。它选择认证、锁定和已解锁保险库界面，不得包含保险库持久化、同步、文档或附件算法。
 - `src/components/`：共享展示原语，包括标准 Lucide 图标包装器。
 - `src/editor/core/`：仓库内的 ProseMirror／Markdown 核心、规范解析器和序列化器、输入事务、通用扩展契约与稳定控制器。`UPSTREAM.md` 记录导入源码的来源。
-- `src/editor/extensions/`：Mint Notes 自有的 Callout、Comment、Math、Mermaid 和 WikiLink／Embed 实时模式扩展，通过核心扩展契约注入。`src/editor/` 下的其他模块分别负责 React 适配器、源码／实时模式图片拖放、只读 Markdown 渲染和大纲提取。
+- `src/editor/extensions/`：Mint Notes 自有的 Callout、Comment、Math、Mermaid 和 WikiLink／Embed 实时模式扩展，通过核心扩展契约注入。`src/editor/` 下的其他模块分别负责 React 适配器、实时／源码／阅读三种模式编辑器、源码／实时模式图片拖放和大纲提取。
 - `src/crypto/`：仅限浏览器的 Argon2id／HMAC 密钥派生、密钥信封、认证对象加密和附件分块加密。不得将明文密码学工作移到服务器。
 - `src/storage/`：用于加密 IndexedDB 对象、附件分块、每用户偏好／游标和持久发件箱的 Dexie 架构。
 - `src/features/vault/`：已解锁保险库组合、类型化控制器、内存索引、对象写入串行化和保险库专用视图。将持久化、附件复制、同步、历史和文档命令留在各自所属模块中，不要添加到 `VaultApp.tsx` 或视图组件。
@@ -103,6 +103,7 @@ Mint Notes 是一个轻量、自托管、多用户的 Markdown 笔记 PWA。它�
 
 ## 编辑器与 PWA 约束
 
+- 负责笔记正文编辑或显示的模块统一称为“编辑器”。编辑器包含“实时模式”“源码模式”“阅读模式”三种“编辑模式”。实时模式内受支持的 Markdown 语法结构在光标位于其源码范围内时处于“编辑态”，光标移出后处于“渲染态”；编辑态和渲染态不是额外的编辑模式。界面、文档、类型、组件和状态标识必须使用这一术语层级。
 - **发布阻断级编辑器原则：**规范 Markdown 字符串是唯一权威、可提交、可持久化的文档模型，也是所有编辑操作的唯一内容目标。编辑器产生的内容变化必须通过准确、原子的源码事务提交；解析、派生结构、DOM 和展示状态不得反向覆盖规范源码，输入与本地提交不得等待网络。
 - 将 `src/editor/core/` 视为 Mint Notes 自有、衍生自 `typora-web` 0.3.1 的核心。直接修改其 TypeScript 源码，并保留 `UPSTREAM.md` 和 `LICENSE.typora-web`。核心更改必须用针对性测试证明规范源码和事务效果，不能只证明解析树等价。
 - `src/editor/core/` 不得导入 Mint Notes 产品扩展。新展示通过受限的声明式扩展契约接入，不得接收原始编辑器视图或直接修改文档；修改源码的扩展能力必须返回类型化源码事务。遗留底层 Hook 仅用于迁移，不得用于新功能。

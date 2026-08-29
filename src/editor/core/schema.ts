@@ -1,6 +1,7 @@
 import { Schema, type NodeSpec, type MarkSpec } from "prosemirror-model";
 
 import { collectMarks, collectNodes } from "./features/index";
+import { LIVE_SYNTAX_EDITING, LIVE_SYNTAX_RENDERING } from "./live-syntax-state";
 import {
   SOURCE_FINGERPRINT_ATTR,
   SOURCE_FROM_ATTR,
@@ -154,19 +155,21 @@ const coreNodes: Record<string, NodeSpec> = {
     defining: true,
     attrs: {
       // Presentation-only. The complete authored quote source always stays
-      // in textContent; activating Live source never replaces the node.
-      sourceEditing: { default: false },
+      // in textContent; entering the Live editing state never replaces the node.
+      liveSyntaxState: { default: LIVE_SYNTAX_RENDERING },
     },
     parseDOM: [{
       tag: "pre[data-source-blockquote]",
       preserveWhitespace: "full",
       getAttrs: (el) => ({
-        sourceEditing: (el as HTMLElement).getAttribute("data-source-editing") === "1",
+        liveSyntaxState: (el as HTMLElement).getAttribute("data-live-syntax-state") === LIVE_SYNTAX_EDITING
+          ? LIVE_SYNTAX_EDITING
+          : LIVE_SYNTAX_RENDERING,
       }),
     }],
     toDOM: (node) => ["pre", {
       "data-source-blockquote": "1",
-      ...(node.attrs.sourceEditing ? { "data-source-editing": "1" } : {}),
+      "data-live-syntax-state": node.attrs.liveSyntaxState,
     }, ["code", 0]],
   },
 
@@ -180,7 +183,7 @@ const coreNodes: Record<string, NodeSpec> = {
       lang: { default: "" },
       // Transient Live-mode presentation state only. textContent always keeps
       // the complete fenced Markdown source regardless of this value.
-      sourceEditing: { default: false },
+      liveSyntaxState: { default: LIVE_SYNTAX_RENDERING },
     },
     parseDOM: [
       {
@@ -188,14 +191,16 @@ const coreNodes: Record<string, NodeSpec> = {
         preserveWhitespace: "full",
         getAttrs: (el) => ({
           lang: (el as HTMLElement).getAttribute("data-lang") ?? "",
-          sourceEditing: (el as HTMLElement).getAttribute("data-source-editing") === "1",
+          liveSyntaxState: (el as HTMLElement).getAttribute("data-live-syntax-state") === LIVE_SYNTAX_EDITING
+            ? LIVE_SYNTAX_EDITING
+            : LIVE_SYNTAX_RENDERING,
         }),
       },
     ],
     toDOM: (node) => {
       const attrs: Record<string, string> = {};
       if (node.attrs.lang) attrs["data-lang"] = node.attrs.lang as string;
-      if (node.attrs.sourceEditing) attrs["data-source-editing"] = "1";
+      attrs["data-live-syntax-state"] = node.attrs.liveSyntaxState as string;
       return ["pre", attrs, ["code", 0]];
     },
   },

@@ -48,7 +48,7 @@ test("three backticks inside a nonempty code line remain literal", () => {
   feedText(view, "value ```");
 
   expect(view.state.doc.childCount).toBe(1);
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("editing");
   expect(view.state.doc.child(0).textContent).toBe("```\nvalue ```\n```");
 });
 
@@ -57,7 +57,7 @@ test("an unclosed fence owns the rest of the document and closes while typing", 
 
   expect(view.state.doc.childCount).toBe(1);
   expect(view.state.doc.child(0).type.name).toBe("code_block");
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("editing");
   expect(view.state.doc.child(0).textContent).toBe(
     "```ts\nbefore\n# still code\n- still code",
   );
@@ -66,7 +66,7 @@ test("an unclosed fence owns the rest of the document and closes while typing", 
   feedText(view, "```");
 
   expect(view.state.doc.childCount).toBe(1);
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("editing");
   expect(view.state.doc.child(0).textContent).toBe(
     "```ts\nbefore\n# still code\n- still code\n```",
   );
@@ -116,7 +116,7 @@ test("horizontal arrows enter rendered code through the nearest fence", () => {
   expect(pretty(leftView.state)).toBe("before\n```ts\nfoo\n```|\nafter");
 });
 
-test("mousedown activates source once and preserves the clicked body offset", () => {
+test("mousedown enters editing state once and preserves the clicked body offset", () => {
   const mount = document.createElement("div");
   document.body.append(mount);
   let dispatchCount = 0;
@@ -149,7 +149,7 @@ test("mousedown activates source once and preserves the clicked body offset", ()
   const active = view.state.doc.child(0);
   expect(event.defaultPrevented).toBe(true);
   expect(dispatchCount).toBe(1);
-  expect(active.attrs.sourceEditing).toBe(true);
+  expect(active.attrs.liveSyntaxState).toBe("editing");
   expect(view.state.selection.$from.parentOffset).toBe(3 + "ts".length + 1 + bodyOffset);
   view.destroy();
   mount.remove();
@@ -188,7 +188,7 @@ test("mousedown to the right of the closing fence keeps a stable source caret", 
   const active = view.state.doc.child(0);
   expect(event.defaultPrevented).toBe(true);
   expect(dispatchCount).toBe(1);
-  expect(active.attrs.sourceEditing).toBe(true);
+  expect(active.attrs.liveSyntaxState).toBe("editing");
   expect(view.state.selection.empty).toBe(true);
   expect(view.state.selection.$from.parentOffset).toBe(active.content.size);
   view.destroy();
@@ -208,7 +208,7 @@ test("a native selection move into rendered code reveals the nearest fence", () 
     ),
   );
   const activeFromBelow = belowView.state.doc.child(1);
-  expect(activeFromBelow.attrs.sourceEditing).toBe(true);
+  expect(activeFromBelow.attrs.liveSyntaxState).toBe("editing");
   expect(belowView.state.selection.$from.parentOffset).toBe(activeFromBelow.content.size);
   expect(pretty(belowView.state)).toBe("before\n```ts\none\ntwo\n```|\nafter");
 
@@ -222,7 +222,7 @@ test("a native selection move into rendered code reveals the nearest fence", () 
   aboveView.dispatch(
     aboveView.state.tr.setSelection(TextSelection.create(aboveView.state.doc, codePos + 1)),
   );
-  expect(aboveView.state.doc.child(1).attrs.sourceEditing).toBe(true);
+  expect(aboveView.state.doc.child(1).attrs.liveSyntaxState).toBe("editing");
   expect(aboveView.state.selection.$from.parentOffset).toBe(0);
   expect(pretty(aboveView.state)).toBe("before\n|```ts\none\ntwo\n```\nafter");
 });
@@ -246,7 +246,7 @@ test("ArrowUp walks closing fence, body lines, opening fence, then outside", () 
   feedKey(view, "<ArrowUp>");
   expect(pretty(view.state)).toBe("before\n```|ts\none\ntwo\n```\nafter");
   feedKey(view, "<ArrowUp>");
-  expect(view.state.doc.child(1).attrs.sourceEditing).toBe(false);
+  expect(view.state.doc.child(1).attrs.liveSyntaxState).toBe("rendering");
   expect(view.state.selection.$from.parent.textContent).toBe("before");
 });
 
@@ -268,7 +268,7 @@ test("ArrowDown walks opening fence, body lines, closing fence, then outside", (
   feedKey(view, "<ArrowDown>");
   expect(pretty(view.state)).toBe("before\n```ts\none\ntwo\n```|\nafter");
   feedKey(view, "<ArrowDown>");
-  expect(view.state.doc.child(1).attrs.sourceEditing).toBe(false);
+  expect(view.state.doc.child(1).attrs.liveSyntaxState).toBe("rendering");
   expect(view.state.selection.$from.parent.textContent).toBe("after");
 });
 
@@ -281,7 +281,7 @@ test("active fenced source is real editable text and collapses after the caret l
   const view = fakeView(state);
 
   const active = view.state.doc.child(0);
-  expect(active.attrs.sourceEditing).toBe(true);
+  expect(active.attrs.liveSyntaxState).toBe("editing");
   expect(active.textContent).toBe("```bash\necho hi\n```");
 
   const languageEnd = 1 + 3 + "bash".length;
@@ -297,7 +297,7 @@ test("active fenced source is real editable text and collapses after the caret l
     view.state.tr.setSelection(TextSelection.create(view.state.doc, activeSize + 1)),
   );
   const rendered = view.state.doc.child(0);
-  expect(rendered.attrs.sourceEditing).toBe(false);
+  expect(rendered.attrs.liveSyntaxState).toBe("rendering");
   expect(rendered.attrs.lang).toBe("bash-session");
   expect(rendered.textContent).toBe("```bash-session\necho hi\n```");
   expect(serialize(view.state.doc)).toBe("```bash-session\necho hi\n```\n\nafter");
@@ -317,7 +317,7 @@ test("a range selection inside fenced source does not collapse the code block", 
   );
 
   expect(view.state.selection.empty).toBe(false);
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("editing");
   expect(view.state.doc.child(0).textContent).toBe("```ts\none\ntwo\n```");
   expect(serialize(view.state.doc)).toBe("```ts\none\ntwo\n```\n\nafter");
 });
@@ -370,7 +370,7 @@ test("Delete from above traverses the authored opening fence", () => {
 
   expect(view.state.selection.$from.parent).toBe(view.state.doc.child(1));
   expect(view.state.selection.$from.parentOffset).toBe(0);
-  expect(view.state.doc.child(1).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(1).attrs.liveSyntaxState).toBe("editing");
   expect(serialize(view.state.doc)).toBe("before\n\n```ts\nvalue\n```");
 });
 
@@ -382,10 +382,10 @@ test("ArrowDown leaves the closing source fence and restores rendered code", () 
   );
   const view = fakeView(state);
 
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("editing");
   feedKey(view, "<ArrowDown>");
 
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(false);
+  expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("rendering");
   expect(view.state.selection.$from.parent.textContent).toBe("after");
   expect(serialize(view.state.doc)).toBe("```ts\nvalue\n```\n\nafter");
 });
@@ -398,11 +398,11 @@ test("Enter after the closing fence exits into a new paragraph", () => {
   );
   const view = fakeView(state);
 
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("editing");
   feedKey(view, "<Enter>");
   feedText(view, "next");
 
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(false);
+  expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("rendering");
   expect(view.state.doc.child(1).type.name).toBe("paragraph");
   expect(view.state.doc.child(1).textContent).toBe("next");
   expect(view.state.doc.child(2).textContent).toBe("after");
@@ -420,13 +420,13 @@ test("Enter before the opening fence inserts a paragraph above the code block", 
     view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)),
   );
 
-  expect(view.state.doc.child(0).attrs.sourceEditing).toBe(true);
+  expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("editing");
   feedKey(view, "<Enter>");
 
   expect(view.state.doc.child(0).type.name).toBe("paragraph");
   expect(view.state.doc.child(0).textContent).toBe("");
   expect(view.state.doc.child(1).type.name).toBe("code_block");
-  expect(view.state.doc.child(1).attrs.sourceEditing).toBe(false);
+  expect(view.state.doc.child(1).attrs.liveSyntaxState).toBe("rendering");
   expect(view.state.doc.child(1).textContent).toBe("```ts\nvalue\n```");
   expect(view.state.selection.$from.parent).toBe(view.state.doc.child(0));
   expect(serialize(view.state.doc)).toBe("\n```ts\nvalue\n```\n\nafter");

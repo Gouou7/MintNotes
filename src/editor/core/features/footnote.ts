@@ -164,7 +164,7 @@ function definitionWidget(
   definitionId: string,
   number: number,
   firstReferenceId: string,
-  sourceActive: boolean,
+  isEditing: boolean,
 ): HTMLElement {
   const target = document.createElement("span");
   target.id = definitionId;
@@ -173,7 +173,7 @@ function definitionWidget(
   target.setAttribute("data-footnote-number", String(number));
   target.setAttribute("data-footnote-scope", scope);
   target.setAttribute("contenteditable", "false");
-  if (!sourceActive) {
+  if (!isEditing) {
     target.appendChild(navigationLink(
       ".ProseMirror",
       `#${firstReferenceId}`,
@@ -211,11 +211,11 @@ function buildFootnoteDecorations(state: EditorState, scope: string): Decoration
 
   for (const reference of references) {
     const definitionId = `${scope}-fn-${reference.number}`;
-    const sourceActive = cursor !== null && cursor >= reference.from && cursor <= reference.to;
+    const isEditing = cursor !== null && cursor >= reference.from && cursor <= reference.to;
     decorations.push(Decoration.inline(reference.from, reference.to, {
-      class: sourceActive ? "syntax-hint" : "syntax-hidden",
+      class: isEditing ? "syntax-hint" : "syntax-hidden",
     }));
-    if (!sourceActive) {
+    if (!isEditing) {
       decorations.push(Decoration.widget(
         reference.from,
         () => referenceWidget(scope, reference, definitionId),
@@ -232,24 +232,24 @@ function buildFootnoteDecorations(state: EditorState, scope: string): Decoration
   for (const [label, number] of numbers) {
     const definition = definitions.get(label)!;
     const calls = references.filter((reference) => reference.label === label);
-    const sourceActive = cursor !== null
+    const isEditing = cursor !== null
       && cursor >= definition.markerFrom
       && cursor <= definition.contentTo;
     const definitionId = `${scope}-fn-${number}`;
     decorations.push(Decoration.inline(definition.markerFrom, definition.markerTo, {
-      class: sourceActive ? "syntax-hint" : "syntax-hidden",
+      class: isEditing ? "syntax-hint" : "syntax-hidden",
     }));
     decorations.push(Decoration.widget(
       definition.markerFrom,
-      () => definitionWidget(scope, definitionId, number, calls[0]!.id, sourceActive),
+      () => definitionWidget(scope, definitionId, number, calls[0]!.id, isEditing),
       {
         side: -1,
-        key: `${definitionId}-target-${sourceActive ? "source" : "rendered"}`,
+        key: `${definitionId}-target-${isEditing ? "editing" : "rendering"}`,
         ignoreSelection: true,
         stopEvent: () => true,
       },
     ));
-    if (!sourceActive) {
+    if (!isEditing) {
       decorations.push(Decoration.widget(
         definition.contentTo,
         () => backlinksWidget(calls),

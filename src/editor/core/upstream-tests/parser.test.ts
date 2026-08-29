@@ -32,7 +32,7 @@ describe("parser: block nodes", () => {
     const bq = doc.child(0);
     expect(bq.type).toBe(schema.nodes.blockquote);
     expect(bq.textContent).toBe(source);
-    expect(bq.attrs.sourceEditing).toBe(false);
+    expect(bq.attrs.liveSyntaxState).toBe("rendering");
     expect(serialize(doc)).toBe(source);
   });
 
@@ -218,7 +218,7 @@ describe("parser: block nodes", () => {
 
     expect(code.type).toBe(schema.nodes.code_block);
     expect(code.attrs.lang).toBe("ts");
-    expect(code.attrs.sourceEditing).toBe(true);
+    expect(code.attrs.liveSyntaxState).toBe("editing");
     expect(code.textContent).toBe(markdown);
     expect(serialize(doc)).toBe(markdown);
   });

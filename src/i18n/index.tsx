@@ -492,7 +492,7 @@ const messages = {
   "app.openLeft": { en: "Open left sidebar", "zh-CN": "打开左侧栏", "zh-TW": "開啟左側欄" },
   "app.noteTitle": { en: "Note title", "zh-CN": "笔记标题", "zh-TW": "筆記標題" },
   "app.selectNote": { en: "Select a note", "zh-CN": "选择一篇笔记", "zh-TW": "選擇一篇筆記" },
-  "app.displayMode": { en: "Display mode", "zh-CN": "显示模式", "zh-TW": "顯示模式" },
+  "app.editorMode": { en: "Editor mode", "zh-CN": "编辑模式", "zh-TW": "編輯模式" },
   "app.modeLive": { en: "Live", "zh-CN": "实时", "zh-TW": "即時" },
   "app.modeSource": { en: "Source", "zh-CN": "源码", "zh-TW": "原始碼" },
   "app.modeReading": { en: "Reading", "zh-CN": "阅读", "zh-TW": "閱讀" },

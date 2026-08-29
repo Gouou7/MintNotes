@@ -10,6 +10,12 @@ import {
 import { leaveLineDraft } from "../block-draft";
 import { SOURCE_BLOCK_PRESENTATION_META } from "../extension";
 import { displayCodeLanguage, parseFencedCodeSource } from "../fenced-code-source";
+import {
+  isLiveSyntaxEditing,
+  LIVE_SYNTAX_EDITING,
+  LIVE_SYNTAX_RENDERING,
+  type LiveSyntaxState,
+} from "../live-syntax-state";
 import { SOURCE_FROM_ATTR, SOURCE_TO_ATTR } from "../source";
 import { markLiveNavigation, selectionOutsideBlock } from "../source-navigation";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
@@ -17,9 +23,9 @@ import type { FeatureSpec } from "./_types";
 
 // A fenced code node always contains its complete Markdown source, including
 // the opening fence and the closing fence when one exists. Live mode changes
-// only presentation state: sourceEditing reveals the fence characters, while
-// the stable view hides them with decorations. Source positions never change
-// merely because the caret enters or leaves the block.
+// only presentation state: the editing state reveals the fence characters,
+// while the rendering state hides them with decorations. Source positions
+// never change merely because the caret enters or leaves the block.
 
 const FENCE_RE = /^```(\w*)$/;
 
@@ -33,8 +39,8 @@ function parseCompleteSource(source: string): { lang: string; body: string } | n
   return { lang: parsed.lang, body: parsed.body };
 }
 
-function isSourceEditing(node: PMNode): boolean {
-  return node.type.name === "code_block" && node.attrs.sourceEditing === true;
+function isFencedCodeEditing(node: PMNode): boolean {
+  return node.type.name === "code_block" && isLiveSyntaxEditing(node.attrs.liveSyntaxState);
 }
 
 function sourceOffset(node: PMNode, target: SourceTarget): number {
@@ -48,11 +54,11 @@ function sourceOffset(node: PMNode, target: SourceTarget): number {
   return Math.min(bodyFrom + Math.max(0, target.bodyOffset), bodyTo);
 }
 
-function activateSource(view: EditorView, pos: number, target: SourceTarget): boolean {
+function enterEditingState(view: EditorView, pos: number, target: SourceTarget): boolean {
   const node = view.state.doc.nodeAt(pos);
   if (!node || node.type.name !== "code_block") return false;
 
-  if (isSourceEditing(node)) {
+  if (isFencedCodeEditing(node)) {
     const offset = "edge" in target
       ? target.edge === "open" ? 0 : node.content.size
       : Math.min(Math.max(0, target.bodyOffset), node.content.size);
@@ -143,7 +149,7 @@ function fencedCodeDecorations(state: EditorView["state"]): DecorationSet | null
     const source = node.textContent;
     const parsed = parseFencedCodeSource(source);
     if (!parsed) return;
-    const fenceClass = isSourceEditing(node) ? "syntax-hint" : "syntax-hidden";
+    const fenceClass = isFencedCodeEditing(node) ? "syntax-hint" : "syntax-hidden";
     decorations.push(Decoration.inline(
       pos + 1 + parsed.openingFrom,
       pos + 1 + parsed.openingTo,
@@ -210,12 +216,12 @@ class CodeBlockView implements NodeView {
     const pos = this.getPos();
     if (pos == null) return;
 
-    if (isSourceEditing(this.node)) {
+    if (isFencedCodeEditing(this.node)) {
       if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
       if (!pointerIsAtSourceEnd(this.view, this.node, pos, event)) return;
       event.preventDefault();
       event.stopPropagation();
-      activateSource(this.view, pos, { edge: "close" });
+      enterEditingState(this.view, pos, { edge: "close" });
       return;
     }
 
@@ -224,7 +230,7 @@ class CodeBlockView implements NodeView {
     // painted caret and the stable source coordinates are mapped exactly once.
     event.preventDefault();
     event.stopPropagation();
-    activateSource(
+    enterEditingState(
       this.view,
       pos,
       pointerSourceTarget(this.view, this.node, pos, this.dom, event),
@@ -235,11 +241,13 @@ class CodeBlockView implements NodeView {
     this.node = node;
     const lang = parseFencedCodeSource(node.textContent)?.lang
       || String(node.attrs.lang ?? "");
-    const editing = isSourceEditing(node);
+    const editing = isFencedCodeEditing(node);
     if (lang) this.dom.setAttribute("data-lang", lang);
     else this.dom.removeAttribute("data-lang");
-    if (editing) this.dom.setAttribute("data-source-editing", "1");
-    else this.dom.removeAttribute("data-source-editing");
+    this.dom.setAttribute(
+      "data-live-syntax-state",
+      editing ? LIVE_SYNTAX_EDITING : LIVE_SYNTAX_RENDERING,
+    );
     this.dom.classList.toggle("cb-source-editing", editing);
     this.labelEl.textContent = displayCodeLanguage(lang);
     this.labelEl.hidden = editing || lang.trim().length === 0;
@@ -253,7 +261,7 @@ class CodeBlockView implements NodeView {
 
   stopEvent(event: Event): boolean {
     return this.labelEl.contains(event.target as Node)
-      || (event.type === "mousedown" && !isSourceEditing(this.node));
+      || (event.type === "mousedown" && !isFencedCodeEditing(this.node));
   }
 
   ignoreMutation(mutation: { target: Node }): boolean {
@@ -338,7 +346,7 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
   const selection = state.selection;
   if (!selection.empty || selection.$from.parent.type.name !== "code_block") return false;
   const node = selection.$from.parent;
-  if (!isSourceEditing(node)) return false;
+  if (!isFencedCodeEditing(node)) return false;
 
   const text = node.textContent;
   const offset = selection.$from.parentOffset;
@@ -406,7 +414,7 @@ function fencedCodeSourcePlugin(): Plugin {
       const presentationUpdates: Array<{
         pos: number;
         node: PMNode;
-        sourceEditing: boolean;
+        liveSyntaxState: LiveSyntaxState;
         lang: string;
       }> = [];
       newState.doc.descendants((node, pos) => {
@@ -417,14 +425,16 @@ function fencedCodeSourcePlugin(): Plugin {
         const nodeTo = pos + node.nodeSize - 1;
         const selected = newState.selection.from <= nodeTo
           && newState.selection.to >= nodeFrom;
-        const sourceEditing = selected || parsed.closingFrom === null;
+        const liveSyntaxState = selected || parsed.closingFrom === null
+          ? LIVE_SYNTAX_EDITING
+          : LIVE_SYNTAX_RENDERING;
         if (
-          sourceEditing !== isSourceEditing(node)
+          isLiveSyntaxEditing(liveSyntaxState) !== isFencedCodeEditing(node)
           || parsed.lang !== String(node.attrs.lang ?? "")
         ) presentationUpdates.push({
           pos,
           node,
-          sourceEditing,
+          liveSyntaxState,
           lang: parsed.lang,
         });
       });
@@ -435,7 +445,7 @@ function fencedCodeSourcePlugin(): Plugin {
         tr.setNodeMarkup(
           item.pos,
           undefined,
-          { ...item.node.attrs, lang: item.lang, sourceEditing: item.sourceEditing },
+          { ...item.node.attrs, lang: item.lang, liveSyntaxState: item.liveSyntaxState },
         );
       }
       tr.setSelection(Selection.fromJSON(tr.doc, newState.selection.toJSON()));
@@ -447,10 +457,10 @@ function fencedCodeSourcePlugin(): Plugin {
         code_block: (node, view, getPos) => new CodeBlockView(node, view, getPos),
       },
       handleClickOn(view, _pos, node, nodePos, event, direct) {
-        if (!direct || node.type.name !== "code_block" || isSourceEditing(node)) return false;
+        if (!direct || node.type.name !== "code_block" || isFencedCodeEditing(node)) return false;
         const dom = (event.target as HTMLElement | null)?.closest("pre");
         if (!dom) return false;
-        return activateSource(
+        return enterEditingState(
           view,
           nodePos,
           pointerSourceTarget(view, node, nodePos, dom, event),
@@ -466,7 +476,7 @@ function fencedCodeSourcePlugin(): Plugin {
         ) {
           const adjacent = adjacentCodeBlock(view.state, -1);
           return adjacent
-            ? activateSource(view, adjacent.pos, { edge: "close" })
+            ? enterEditingState(view, adjacent.pos, { edge: "close" })
             : false;
         }
         if (
@@ -478,7 +488,7 @@ function fencedCodeSourcePlugin(): Plugin {
         ) {
           const adjacent = adjacentCodeBlock(view.state, 1);
           return adjacent
-            ? activateSource(view, adjacent.pos, { edge: "open" })
+            ? enterEditingState(view, adjacent.pos, { edge: "open" })
             : false;
         }
         if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(event.key)) {
@@ -490,22 +500,22 @@ function fencedCodeSourcePlugin(): Plugin {
         const $from = state.selection.$from;
 
         if ($from.parent.type.name === "code_block") {
-          if (isSourceEditing($from.parent)) {
+          if (isFencedCodeEditing($from.parent)) {
             if (event.key === "ArrowUp" || event.key === "ArrowDown") {
               return moveSourceVertically(view, event.key === "ArrowUp" ? -1 : 1);
             }
             return false;
           } else {
             if (event.key === "ArrowUp" && $from.parentOffset === 0) {
-              return activateSource(view, $from.before(), { edge: "open" });
+              return enterEditingState(view, $from.before(), { edge: "open" });
             }
             if (
               event.key === "ArrowDown"
               && $from.parentOffset === $from.parent.content.size
             ) {
-              return activateSource(view, $from.before(), { edge: "close" });
+              return enterEditingState(view, $from.before(), { edge: "close" });
             }
-            return activateSource(view, $from.before(), {
+            return enterEditingState(view, $from.before(), {
               bodyOffset: $from.parentOffset,
             });
           }
@@ -522,7 +532,7 @@ function fencedCodeSourcePlugin(): Plugin {
           adjacent = siblingCodeBlock(state, direction);
         }
         if (!adjacent) return false;
-        return activateSource(
+        return enterEditingState(
           view,
           adjacent.pos,
           { edge: direction < 0 ? "close" : "open" },
@@ -543,7 +553,7 @@ function makeFencedPlugin(schema: Schema) {
     commit: (tr, pos, paragraph, data) => {
       const source = `\`\`\`${data.lang}\n\n\`\`\``;
       const codeBlock = schema.nodes.code_block.create(
-        { lang: data.lang, sourceEditing: false },
+        { lang: data.lang, liveSyntaxState: LIVE_SYNTAX_RENDERING },
         schema.text(source),
       );
       tr.replaceWith(pos, pos + paragraph.nodeSize, codeBlock);
@@ -579,7 +589,7 @@ function fencedCodeAutocompletePlugin(schema: Schema): Plugin {
         const source = "```\n```";
         const pos = $from.before();
         const codeBlock = schema.nodes.code_block.create(
-          { lang: "", sourceEditing: true },
+          { lang: "", liveSyntaxState: LIVE_SYNTAX_EDITING },
           schema.text(source),
         );
         const tr = view.state.tr.replaceWith(pos, pos + paragraph.nodeSize, codeBlock);
@@ -658,7 +668,7 @@ export const fencedCode: FeatureSpec = {
       const codeBlock = $from.parent;
       if (
         codeBlock.type.name !== "code_block"
-        || !isSourceEditing(codeBlock)
+        || !isFencedCodeEditing(codeBlock)
         || codeBlock.textContent !== "```\n```"
         || $from.parentOffset !== 3
       ) return false;
@@ -695,7 +705,7 @@ export const fencedCode: FeatureSpec = {
       const $from = selection.$from;
       if (
         $from.parent.type.name === "code_block"
-        && isSourceEditing($from.parent)
+        && isFencedCodeEditing($from.parent)
         && $from.parentOffset === 0
       ) {
         if (dispatch) {
@@ -710,7 +720,7 @@ export const fencedCode: FeatureSpec = {
       }
       if (
         $from.parent.type.name === "code_block"
-        && isSourceEditing($from.parent)
+        && isFencedCodeEditing($from.parent)
         && $from.parentOffset === $from.parent.content.size
       ) {
         const parsed = parseCompleteSource($from.parent.textContent);
@@ -720,7 +730,7 @@ export const fencedCode: FeatureSpec = {
           const tr = state.tr.setNodeMarkup(pos, undefined, {
             ...$from.parent.attrs,
             lang: parsed.lang,
-            sourceEditing: false,
+            liveSyntaxState: LIVE_SYNTAX_RENDERING,
           });
           const afterBlock = pos + $from.parent.nodeSize;
           const paragraph = schema.nodes.paragraph.createAndFill();
@@ -741,7 +751,7 @@ export const fencedCode: FeatureSpec = {
         const source = `\`\`\`${lang}\n\n\`\`\``;
         const pos = $from.before();
         const codeBlock = schema.nodes.code_block.create(
-          { lang, sourceEditing: true },
+          { lang, liveSyntaxState: LIVE_SYNTAX_EDITING },
           schema.text(source),
         );
         const bodyStart = pos + 1 + 3 + lang.length + 1;

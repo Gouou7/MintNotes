@@ -16,14 +16,15 @@ import { createMathExtension } from "./extensions/math";
 import { createMermaidExtension } from "./extensions/mermaid";
 import { createWikiLinkExtension } from "./extensions/wikilink";
 import { I18nProvider, useI18n } from "../i18n";
+import type { WorkspaceEditorMode } from "../types";
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter, replaceFrontmatterBody } from "./frontmatter";
-import { ReadOnlyMarkdown } from "./ReadOnlyMarkdown";
+import { ReadingEditor } from "./ReadingEditor";
 import { renderMathInto, renderMermaidInto } from "./richRenderers";
 
 interface Props {
   markdown: string;
-  mode: "live" | "source";
+  mode: WorkspaceEditorMode;
   onChange: (markdown: string) => void;
   attachmentUrls?: Map<string, string>;
   attachmentsPending?: boolean;
@@ -41,6 +42,12 @@ export interface MarkdownEditorHandle {
 
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function MarkdownEditor(props, ref) {
   if (props.mode === "source") return <SourceEditor {...props} ref={ref} />;
+  if (props.mode === "reading") return <ReadingEditor
+    markdown={props.markdown}
+    wrapCodeBlocks={props.wrapCodeBlocks}
+    attachmentUrls={props.attachmentUrls}
+    onWikiLink={props.onWikiLink}
+  />;
   return <LiveEditor {...props} ref={ref} />;
 });
 
@@ -129,7 +136,7 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
             const root = createRoot(container);
             root.render(
               <I18nProvider>
-                <ReadOnlyMarkdown
+                <ReadingEditor
                   markdown={source}
                   wrapCodeBlocks={false}
                   attachmentUrls={attachmentUrlsRef.current}

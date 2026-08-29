@@ -26,7 +26,7 @@ describe("empty vault editor", () => {
           titleReadOnly
           locked={false}
           historyPreview={false}
-          displayedMode="live"
+          effectiveEditorMode="live"
           onOpenLeft={vi.fn()}
           onTitleChange={vi.fn()}
           onTitleBlur={vi.fn()}
@@ -40,6 +40,7 @@ describe("empty vault editor", () => {
     ));
 
     expect(container.querySelector(".empty-title-slot")?.textContent).toBe("Select a note");
+    expect(container.querySelector(".mode-switch")?.getAttribute("aria-label")).toBe("Editor mode");
     const modeButtons = [...container.querySelectorAll<HTMLButtonElement>(".mode-switch button")];
     expect(modeButtons).toHaveLength(3);
     expect(modeButtons.every((button) => button.disabled)).toBe(true);
@@ -68,6 +69,7 @@ describe("empty vault editor", () => {
     document.body.append(container);
     const root = createRoot(container);
 
+    const onModeChange = vi.fn();
     await act(async () => root.render(
       <I18nProvider>
         <NoteToolbar
@@ -77,12 +79,12 @@ describe("empty vault editor", () => {
           titleReadOnly={false}
           locked={false}
           historyPreview={false}
-          displayedMode="source"
+          effectiveEditorMode="source"
           onOpenLeft={vi.fn()}
           onTitleChange={vi.fn()}
           onTitleBlur={vi.fn()}
           onTitleKeyDown={vi.fn()}
-          onModeChange={vi.fn()}
+          onModeChange={onModeChange}
           onToggleLock={vi.fn()}
           onAddImage={vi.fn()}
           onOpenRight={vi.fn()}
@@ -94,6 +96,8 @@ describe("empty vault editor", () => {
     const modeButtons = [...container.querySelectorAll<HTMLButtonElement>(".mode-switch button")];
     expect(modeButtons.every((button) => !button.disabled)).toBe(true);
     expect(modeButtons[1]?.classList.contains("active")).toBe(true);
+    act(() => modeButtons[2]?.click());
+    expect(onModeChange).toHaveBeenCalledWith("reading");
     expect(container.querySelector<HTMLButtonElement>(".note-lock-toggle")?.disabled).toBe(false);
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Add image attachment"]')?.disabled).toBe(false);
 

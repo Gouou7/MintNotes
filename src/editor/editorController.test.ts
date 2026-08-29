@@ -525,7 +525,7 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("keeps a heading marker visible and the DOM caret on its active source line", async () => {
+  it("keeps a heading marker visible and the DOM caret on its editing source line", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
@@ -775,7 +775,7 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("keeps Chinese IME composition stable inside an activated Markdown source block", async () => {
+  it("keeps Chinese IME composition stable inside a Markdown source block in editing state", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
@@ -796,7 +796,7 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("keeps an activated source-backed surface mounted until its structure changes", async () => {
+  it("keeps an editing source-backed surface mounted until its structure changes", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const editor = createEditor(host, { initialContent: "# Heading" });
@@ -956,7 +956,7 @@ describe("Mint editor core public controller", () => {
     ],
     ["ordered", "1. one\n2. two\n\n3. three", "1. one\n2. two", "3. three"],
     ["task", "- [ ] one\n- [x] two\n\n- [ ] three", "- [ ] one\n- [x] two", "- [ ] three"],
-  ] as const)("activates only the selected %s list block across an authored gap", (
+  ] as const)("puts only the selected %s list block into editing state across an authored gap", (
     _kind,
     markdown,
     firstBlock,
@@ -1128,7 +1128,7 @@ describe("Mint editor core public controller", () => {
   });
 
   it.each([1, 2, 3, 4, 5, 6] as const)(
-    "labels an activated level-%s heading source with its original heading level",
+    "labels an editing level-%s heading source with its original heading level",
     (level) => {
       const host = document.createElement("div");
       document.body.append(host);
@@ -1288,7 +1288,7 @@ describe("Mint editor core public controller", () => {
     }
   });
 
-  it("lets an activated horizontal rule be deleted or followed by a new line", async () => {
+  it("lets an editing horizontal rule be deleted or followed by a new line", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const editor = createMintEditor(host, { initialContent: "---" });
@@ -1396,7 +1396,7 @@ describe("Mint editor core public controller", () => {
       cancelable: true,
     }));
 
-    expect(host.querySelector("pre")?.dataset.sourceEditing).toBe("1");
+    expect(host.querySelector("pre")?.dataset.liveSyntaxState).toBe("editing");
     expect(code.textContent).toBe(markdown);
     expect(host.querySelector(".cb-language-label")?.hasAttribute("hidden")).toBe(true);
     expect(editor.getMarkdown()).toBe(markdown);
@@ -1563,7 +1563,7 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("keeps an inactive callout as presentation over unchanged authored source", () => {
+  it("keeps a rendering-state callout as presentation over unchanged authored source", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const markdown = "Before\n\n> [!NOTE]\n>\n> Body";
@@ -1745,12 +1745,12 @@ describe("Mint editor core public controller", () => {
     editor.setSelectionOffset(codeFrom + 3);
     expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
     expect(editor.getSelectionOffset()).toBeLessThan(codeFrom);
-    expect(host.querySelector("pre[data-source-editing='1']")).toBeNull();
+    expect(host.querySelector("pre[data-live-syntax-state='editing']")).toBeNull();
 
     editor.setSelectionOffset(codeTo);
     expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
     expect(editor.getSelectionOffset()).toBeGreaterThan(codeTo);
-    expect(host.querySelector("pre[data-source-editing='1']")).toBeNull();
+    expect(host.querySelector("pre[data-live-syntax-state='editing']")).toBeNull();
 
     expect(editor.getMarkdown()).toBe(markdown);
     expect(changes).toEqual([]);
@@ -1762,7 +1762,7 @@ describe("Mint editor core public controller", () => {
     ["one blank row", "\n\n", 2],
     ["two blank rows", "\n\n\n", 3],
   ] as const)(
-    "activates the next heading on the first key that reaches it across a %s",
+    "puts the next heading into editing state on the first key that reaches it across a %s",
     (_name, separator, pressesToTarget) => {
       const host = document.createElement("div");
       document.body.append(host);
@@ -2252,7 +2252,7 @@ describe("Mint editor core public controller", () => {
       expect(host.querySelector(".live-math-block-widget")).toBeNull();
 
       editor.setSelectionOffset(markdown.length);
-      expect(host.querySelector(".live-math-block-source.is-live-syntax-rendered")).not.toBeNull();
+      expect(host.querySelector(".live-math-block-source.is-live-syntax-rendering")).not.toBeNull();
       expect(host.querySelector(".live-math-block-widget")?.textContent)
         .toBe(`block:${renderedMath}`);
       expect(editor.getMarkdown()).toBe(markdown);

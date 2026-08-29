@@ -188,7 +188,7 @@ export interface HistorySettings {
 export type SortMode = "alphabetical" | "created" | "updated" | "manual";
 export type ThemePreference = "system" | "light" | "dark";
 export type LanguagePreference = "system" | "en" | "zh-CN" | "zh-TW";
-export type WorkspaceEditorMode = "live" | "source" | "readonly";
+export type WorkspaceEditorMode = "live" | "source" | "reading";
 
 export interface UiPreferences {
   workspaceVersion: 1;

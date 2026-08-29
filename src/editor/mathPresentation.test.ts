@@ -10,7 +10,7 @@ const editorStyles = [
 ].join("\n");
 
 describe("display-math presentation", () => {
-  it("computes the active source block as multiline monospace text", () => {
+  it("computes the editing-state source block as multiline monospace text", () => {
     const style = document.createElement("style");
     style.textContent = editorStyles;
     const host = document.createElement("div");
@@ -29,7 +29,7 @@ describe("display-math presentation", () => {
     host.remove();
     style.remove();
     expect(styles).toMatch(
-      /\.live-math-block-source\.is-live-syntax-rendered[^}]*\{[^}]*display: none;/s,
+      /\.live-math-block-source\.is-live-syntax-rendering[^}]*\{[^}]*display: none;/s,
     );
   });
 

@@ -16,7 +16,7 @@ describe("highlight presentation", () => {
 
   it("shares the theme-aware colors between Live and Reading modes", () => {
     expect(appStyles).toMatch(
-      /\.markdown-editor-host \.ProseMirror mark, \.readonly-markdown mark\s*\{[^}]*background:\s*var\(--highlight-bg\);[^}]*color:\s*var\(--highlight-text\);/s,
+      /\.markdown-editor-host \.ProseMirror mark, \.reading-editor mark\s*\{[^}]*background:\s*var\(--highlight-bg\);[^}]*color:\s*var\(--highlight-text\);/s,
     );
   });
 });

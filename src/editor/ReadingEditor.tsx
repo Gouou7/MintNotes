@@ -34,7 +34,7 @@ function renderedText(children: ReactNode): string {
   }).join("");
 }
 
-function ReadOnlyCodeBlock({
+function ReadingCodeBlock({
   children,
   language,
   ...props
@@ -63,13 +63,13 @@ function ReadOnlyCodeBlock({
   };
 
   return (
-    <div className="readonly-code-block">
+    <div className="reading-code-block">
       <pre {...props}>{children}</pre>
-      <div className="readonly-code-actions">
-        {language && <span className="readonly-code-language">{displayCodeLanguage(language)}</span>}
+      <div className="reading-code-actions">
+        {language && <span className="reading-code-language">{displayCodeLanguage(language)}</span>}
         <button
           type="button"
-          className="readonly-code-copy"
+          className="reading-code-copy"
           data-copy-state={copyState}
           aria-label={label}
           title={label}
@@ -83,7 +83,7 @@ function ReadOnlyCodeBlock({
   );
 }
 
-export function ReadOnlyMarkdown({
+export function ReadingEditor({
   markdown,
   wrapCodeBlocks = true,
   attachmentUrls = new Map(),
@@ -107,7 +107,7 @@ export function ReadOnlyMarkdown({
   );
 
   return (
-    <article ref={articleRef} className={`readonly-markdown${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
+    <article ref={articleRef} className={`reading-editor${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
       <FrontmatterProperties markdown={markdown} />
       <ReactMarkdown
         remarkPlugins={[
@@ -185,7 +185,7 @@ export function ReadOnlyMarkdown({
             const language = classNames
               .find((className) => className.startsWith("language-"))
               ?.slice("language-".length);
-            return <ReadOnlyCodeBlock {...props} language={language}>{children}</ReadOnlyCodeBlock>;
+            return <ReadingCodeBlock {...props} language={language}>{children}</ReadingCodeBlock>;
           },
           code: ({ node: _node, className, children, ...props }) => {
             const classNames = className?.split(/\s+/) ?? [];
