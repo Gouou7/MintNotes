@@ -14,6 +14,7 @@ import { schema } from "./schema";
 import { manualEscapeDecorationPlugin } from "./canonical-markdown";
 import type { EditorExtension } from "./extension";
 import { extensionPresentationPlugin } from "./presentation";
+import { livePresentationSelectionPlugin } from "./presentation-selection";
 import { sourceGapNavigationPlugin } from "./source-navigation";
 
 // Open `<a>` links on Cmd/Ctrl+click. Inside contenteditable, a plain
@@ -69,6 +70,7 @@ export function defaultPlugins(options: {
     keymap({ "Mod-z": undo, "Mod-y": redo, "Mod-Shift-z": redo }),
     markdownInputRules(),
     spaceBreaksStoredMarks(),
+    livePresentationSelectionPlugin(),
     manualEscapeDecorationPlugin(),
     ...extensions.flatMap((extension) => extension.createPlugins?.({ schema }) ?? []),
     normalizeInlinePlugin({ resolveImageSource }),

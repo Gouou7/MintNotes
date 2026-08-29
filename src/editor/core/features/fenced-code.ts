@@ -17,7 +17,12 @@ import {
   type LiveSyntaxState,
 } from "../live-syntax-state";
 import { SOURCE_FROM_ATTR, SOURCE_TO_ATTR } from "../source";
-import { markLiveNavigation, selectionOutsideBlock } from "../source-navigation";
+import {
+  LIVE_POINTER_SELECTION_META,
+  LIVE_PRESENTATION_SYNC_META,
+  markLiveNavigation,
+  selectionOutsideBlock,
+} from "../source-navigation";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
 import type { FeatureSpec } from "./_types";
 
@@ -54,7 +59,12 @@ function sourceOffset(node: PMNode, target: SourceTarget): number {
   return Math.min(bodyFrom + Math.max(0, target.bodyOffset), bodyTo);
 }
 
-function enterEditingState(view: EditorView, pos: number, target: SourceTarget): boolean {
+function enterEditingState(
+  view: EditorView,
+  pos: number,
+  target: SourceTarget,
+  extendSelection = false,
+): boolean {
   const node = view.state.doc.nodeAt(pos);
   if (!node || node.type.name !== "code_block") return false;
 
@@ -75,12 +85,19 @@ function enterEditingState(view: EditorView, pos: number, target: SourceTarget):
   }
 
   const offset = sourceOffset(node, target);
-  const tr = view.state.tr.setSelection(
-    TextSelection.create(view.state.doc, pos + 1 + offset),
-  );
+  const headPosition = pos + 1 + offset;
+  const tr = view.state.tr.setSelection(TextSelection.create(
+    view.state.doc,
+    extendSelection ? view.state.selection.anchor : headPosition,
+    headPosition,
+  ));
   const sourceFrom = Number(node.attrs.sourceFrom);
   view.dispatch(markLiveNavigation(tr, {
-    ...(Number.isInteger(sourceFrom) ? { anchor: sourceFrom + offset, head: sourceFrom + offset } : {}),
+    ...(Number.isInteger(sourceFrom)
+      ? extendSelection
+        ? { head: sourceFrom + offset }
+        : { anchor: sourceFrom + offset, head: sourceFrom + offset }
+      : {}),
     scroll: true,
   }));
   (view as EditorView & { focus?: () => void }).focus?.();
@@ -208,10 +225,10 @@ class CodeBlockView implements NodeView {
     this.contentDOM = code;
     this.labelEl = label;
     this.applyNode(node);
-    pre.addEventListener("mousedown", this.onMouseDown);
+    pre.addEventListener("mouseup", this.onMouseUp);
   }
 
-  private onMouseDown = (event: MouseEvent): void => {
+  private onMouseUp = (event: MouseEvent): void => {
     if (event.button !== 0) return;
     const pos = this.getPos();
     if (pos == null) return;
@@ -234,6 +251,7 @@ class CodeBlockView implements NodeView {
       this.view,
       pos,
       pointerSourceTarget(this.view, this.node, pos, this.dom, event),
+      event.shiftKey,
     );
   };
 
@@ -269,7 +287,7 @@ class CodeBlockView implements NodeView {
   }
 
   destroy(): void {
-    this.dom.removeEventListener("mousedown", this.onMouseDown);
+    this.dom.removeEventListener("mouseup", this.onMouseUp);
   }
 }
 
@@ -407,6 +425,10 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
 function fencedCodeSourcePlugin(): Plugin {
   return new Plugin({
     appendTransaction(transactions, oldState, newState) {
+      if (transactions.some((transaction) => (
+        transaction.getMeta(LIVE_POINTER_SELECTION_META)
+        || transaction.getMeta(LIVE_PRESENTATION_SYNC_META)
+      ))) return null;
       if (!transactions.some((tr) => tr.selectionSet || tr.docChanged)) return null;
 
       const oldCode = codeBlockAtSelection(oldState);
@@ -568,8 +590,7 @@ function shouldCompleteOpeningFence(
   text: string,
 ): boolean {
   return parentNodeType === "paragraph"
-    && text === "`"
-    && before === "``"
+    && before + text === "```"
     && after.length === 0;
 }
 
@@ -626,8 +647,8 @@ export const fencedCode: FeatureSpec = {
       source.slice(to, lineTo),
       text,
     )) return null;
-    const insert = "`\n```";
-    const head = from + 1;
+    const insert = `${text}\n\`\`\``;
+    const head = from + text.length;
     return {
       edits: [{ from, to, insert }],
       selection: { anchor: head, head },

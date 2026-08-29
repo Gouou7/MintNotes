@@ -11,6 +11,13 @@ import { createEditor } from "../../editor-api";
 
 runFeatureCases(fencedCodeSpecs);
 
+test("one coalesced three-backtick input creates a complete fenced block", () => {
+  const view = fakeView(setup());
+  feedText(view, "```");
+
+  expect(pretty(view.state)).toBe("```|\n```");
+});
+
 test("typing a closing fence line immediately exits the code block", () => {
   const host = document.createElement("div");
   document.body.append(host);
@@ -116,7 +123,7 @@ test("horizontal arrows enter rendered code through the nearest fence", () => {
   expect(pretty(leftView.state)).toBe("before\n```ts\nfoo\n```|\nafter");
 });
 
-test("mousedown enters editing state once and preserves the clicked body offset", () => {
+test("mouseup enters editing state once and preserves the clicked body offset", () => {
   const mount = document.createElement("div");
   document.body.append(mount);
   let dispatchCount = 0;
@@ -137,7 +144,7 @@ test("mousedown enters editing state once and preserves the clicked body offset"
   Object.defineProperty(pre, "getBoundingClientRect", {
     value: () => ({ top: 0, right: 400, bottom: 120, left: 0, width: 400, height: 120 }),
   });
-  const event = new MouseEvent("mousedown", {
+  const event = new MouseEvent("mouseup", {
     bubbles: true,
     cancelable: true,
     button: 0,
@@ -155,7 +162,7 @@ test("mousedown enters editing state once and preserves the clicked body offset"
   mount.remove();
 });
 
-test("mousedown to the right of the closing fence keeps a stable source caret", () => {
+test("mouseup to the right of the closing fence keeps a stable source caret", () => {
   let state = setup("```ts\nfirst line\n```\n\nafter");
   const code = state.doc.child(0);
   state = state.apply(
@@ -176,7 +183,7 @@ test("mousedown to the right of the closing fence keeps a stable source caret", 
     value: () => ({ left: 120, right: 120, top: 80, bottom: 100 }),
   });
 
-  const event = new MouseEvent("mousedown", {
+  const event = new MouseEvent("mouseup", {
     bubbles: true,
     cancelable: true,
     button: 0,

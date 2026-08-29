@@ -43,6 +43,8 @@ import { liveSourceKeyTransaction } from "./live-source-commands";
 import { resolveSourceBlockEditingPresentation } from "./presentation";
 import {
   LIVE_NAVIGATION_META,
+  LIVE_POINTER_SELECTION_META,
+  LIVE_PRESENTATION_SYNC_META,
   markLiveNavigation,
   verticalSourceOffset,
   type LiveNavigationIntent,
@@ -134,6 +136,9 @@ export function createEditor(
   let blockHeightFrame: number | null = null;
   let blockResizeObserver: ResizeObserver | null = null;
   let compositionFinalizeTimer: ReturnType<typeof setTimeout> | null = null;
+  let pointerSelectionActive = false;
+  let pointerSelectionCommitTimer: ReturnType<typeof setTimeout> | null = null;
+  let detachPointerSelectionListeners: (() => void) | null = null;
   let presentationRefreshPending = false;
   let pendingComposition: {
     source: SourceComposition;
@@ -441,20 +446,82 @@ export function createEditor(
     return true;
   }
 
+  function sourceRangesForSelectionInDocument(
+    doc: PMNode,
+    selection: { anchor: number; head: number },
+    direction?: -1 | 1,
+  ): LiveSourceRange[] {
+    if (selection.anchor === selection.head) {
+      const range = sourceRangeAtOffsetInDocument(doc, selection.head, direction);
+      return range ? [range] : [];
+    }
+    const from = Math.min(selection.anchor, selection.head);
+    const to = Math.max(selection.anchor, selection.head);
+    const ranges: LiveSourceRange[] = [];
+    doc.forEach((node, pos) => {
+      const sourceFrom = Number(node.attrs[SOURCE_FROM_ATTR]);
+      const sourceTo = Number(node.attrs[SOURCE_TO_ATTR]);
+      const source = node.attrs[SOURCE_TEXT_ATTR];
+      if (
+        !Number.isInteger(sourceFrom)
+        || !Number.isInteger(sourceTo)
+        || typeof source !== "string"
+        || sourceFrom >= to
+        || sourceTo <= from
+      ) return;
+      const sourceBlockEditingPresentation = node.type.name === "source_block"
+        ? null
+        : resolveSourceBlockEditingPresentation(node, blockPresentations);
+      ranges.push({
+        pos,
+        from: sourceFrom,
+        to: sourceTo,
+        source,
+        kind: node.type.name,
+        presentationKind: sourceBlockEditingPresentation
+          ? sourceBlockEditingPresentation.id
+          : node.type.name === "heading"
+            ? `heading-${String(node.attrs.level ?? 1)}`
+            : node.type.name === "source_block"
+              ? String(node.attrs.kind ?? "block")
+              : node.type.name,
+        sourceBlockEditing: node.type.name === "source_block"
+          || sourceBlockEditingPresentation !== null,
+      });
+    });
+    return ranges;
+  }
+
+  function sourceSelectionAffinities(
+    selection: { anchor: number; head: number },
+    direction?: -1 | 1,
+  ): { anchor: "left" | "right"; head: "left" | "right" } {
+    if (selection.anchor === selection.head) {
+      const affinity = direction === -1 ? "left" : "right";
+      return { anchor: affinity, head: affinity };
+    }
+    return selection.anchor < selection.head
+      ? { anchor: "left", head: "right" }
+      : { anchor: "right", head: "left" };
+  }
+
   function synchronizeLivePresentation(
     state: EditorState,
     sourceSelection: { anchor: number; head: number },
     intent: LiveNavigationIntent = {},
   ): Transaction | null {
     const direction = intent.direction;
-    const targetBefore = sourceRangeAtOffsetInDocument(state.doc, sourceSelection.head, direction);
-    const keepCurrentSourceBlock = targetBefore?.kind === "source_block";
-    const targetHeight = targetBefore
-      && targetBefore.kind !== "source_block"
-      && shouldEnterSourceEditing(targetBefore, intent.editTable === true)
-      && !["blockquote", "code_block"].includes(targetBefore.kind)
-      ? renderedHeightForRange(targetBefore)
-      : null;
+    const selectedBefore = sourceRangesForSelectionInDocument(state.doc, sourceSelection, direction);
+    const selectedKeys = new Set(selectedBefore.map((range) => blockHeightKey(range)));
+    const rangeSelection = sourceSelection.anchor !== sourceSelection.head;
+    const targetHeights = new Map<string, number | null>();
+    for (const range of selectedBefore) {
+      if (
+        range.kind !== "source_block"
+        && shouldEnterSourceEditing(range, intent.editTable === true || rangeSelection)
+        && !["blockquote", "code_block"].includes(range.kind)
+      ) targetHeights.set(blockHeightKey(range), renderedHeightForRange(range));
+    }
     const tr = state.tr;
     let presentationChanged = false;
 
@@ -466,11 +533,13 @@ export function createEditor(
       const from = Number(active.node.attrs[SOURCE_FROM_ATTR]);
       const to = Number(active.node.attrs[SOURCE_TO_ATTR]);
       if (
-        keepCurrentSourceBlock
-        && Number.isInteger(from)
+        Number.isInteger(from)
         && Number.isInteger(to)
-        && from <= sourceSelection.head
-        && sourceSelection.head <= to
+        && selectedKeys.has(blockHeightKey({
+          from,
+          to,
+          source: String(active.node.attrs[SOURCE_TEXT_ATTR] ?? active.node.textContent),
+        }))
       ) continue;
       const canonical = canonicalNodeForRange(from, to);
       if (!canonical) continue;
@@ -491,8 +560,11 @@ export function createEditor(
       if (
         Number.isInteger(from)
         && Number.isInteger(to)
-        && from <= sourceSelection.head
-        && sourceSelection.head <= to
+        && selectedKeys.has(blockHeightKey({
+          from,
+          to,
+          source: String(active.node.attrs[SOURCE_TEXT_ATTR] ?? active.node.textContent),
+        }))
       ) continue;
       tr.setNodeMarkup(active.pos, undefined, {
         ...active.node.attrs,
@@ -501,8 +573,9 @@ export function createEditor(
       presentationChanged = true;
     }
 
-    const target = sourceRangeAtOffsetInDocument(tr.doc, sourceSelection.head, direction);
-    if (target && shouldEnterSourceEditing(target, intent.editTable === true)) {
+    const targets = sourceRangesForSelectionInDocument(tr.doc, sourceSelection, direction);
+    for (const target of [...targets].reverse()) {
+      if (!shouldEnterSourceEditing(target, intent.editTable === true || rangeSelection)) continue;
       const targetNode = tr.doc.nodeAt(target.pos);
       if (targetNode && ["blockquote", "code_block"].includes(target.kind)) {
         if (!isLiveSyntaxEditing(targetNode.attrs.liveSyntaxState)) {
@@ -513,7 +586,10 @@ export function createEditor(
           presentationChanged = true;
         }
       } else if (targetNode && target.kind !== "source_block") {
-        const sourceBlock = sourceBlockForRange(target, targetHeight);
+        const sourceBlock = sourceBlockForRange(
+          target,
+          targetHeights.get(blockHeightKey(target)) ?? null,
+        );
         if (sourceBlock) {
           tr.replaceWith(target.pos, target.pos + targetNode.nodeSize, sourceBlock);
           presentationChanged = true;
@@ -527,11 +603,16 @@ export function createEditor(
       const positions = SourcePositionMap.fromDocument(tr.doc, canonicalMarkdown);
       const anchor = Math.max(0, Math.min(intent.anchor ?? sourceSelection.anchor, canonicalMarkdown.length));
       const head = Math.max(0, Math.min(intent.head ?? sourceSelection.head, canonicalMarkdown.length));
-      const selectedRange = sourceRangeAtOffsetInDocument(tr.doc, head, direction);
-      const headAffinity = direction === -1 || selectedRange?.to === head ? "left" : "right";
-      const anchorAffinity = anchor === head ? headAffinity : "left";
-      const anchorPosition = positions.sourceToDocument(anchor, anchorAffinity);
-      const headPosition = positions.sourceToDocument(head, headAffinity);
+      let affinities = sourceSelectionAffinities({ anchor, head }, direction);
+      if (anchor === head) {
+        const selectedRange = sourceRangeAtOffsetInDocument(tr.doc, head, direction);
+        const affinity = direction === -1 || selectedRange?.to === head
+          ? "left"
+          : "right";
+        affinities = { anchor: affinity, head: affinity };
+      }
+      const anchorPosition = positions.sourceToDocument(anchor, affinities.anchor);
+      const headPosition = positions.sourceToDocument(head, affinities.head);
       try {
         tr.setSelection(TextSelection.create(tr.doc, anchorPosition, headPosition));
       } catch {
@@ -540,6 +621,7 @@ export function createEditor(
     }
     tr.setMeta("addToHistory", false);
     tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
+    tr.setMeta(LIVE_PRESENTATION_SYNC_META, true);
     if (intent.scroll !== false) tr.scrollIntoView();
     return tr;
   }
@@ -660,9 +742,14 @@ export function createEditor(
 
   function sourceSelectionForState(state: EditorState): { anchor: number; head: number } {
     const positions = sourcePositionMapForState(state);
+    if (state.selection.empty) {
+      const head = positions.documentToSource(state.selection.head, "right");
+      return { anchor: head, head };
+    }
+    const forward = state.selection.anchor < state.selection.head;
     return {
-      anchor: positions.documentToSource(state.selection.anchor, "left"),
-      head: positions.documentToSource(state.selection.head, "right"),
+      anchor: positions.documentToSource(state.selection.anchor, forward ? "left" : "right"),
+      head: positions.documentToSource(state.selection.head, forward ? "right" : "left"),
     };
   }
 
@@ -796,6 +883,9 @@ export function createEditor(
     const v: EditorView = new EditorView(editorHost, {
       state,
       dispatchTransaction(tr) {
+        if (pointerSelectionActive && tr.selectionSet && !tr.docChanged) {
+          tr.setMeta(LIVE_POINTER_SELECTION_META, true);
+        }
         const compositionId = tr.getMeta("composition") as number | undefined;
         if (compositionId !== undefined && !pendingComposition) beginComposition();
         const beforeCanonical = pendingComposition?.source.source ?? canonicalMarkdown;
@@ -868,6 +958,7 @@ export function createEditor(
           pendingComposition.source.setSelection(sourceSelectionForState(next));
         }
         const shouldSynchronizeSelection = !pendingComposition
+          && !pointerSelectionActive
           && compositionId === undefined
           && !tr.docChanged
           && (tr.selectionSet || intent !== undefined)
@@ -1088,10 +1179,43 @@ export function createEditor(
         return true;
       },
     });
+    const ownerDocument = v.dom.ownerDocument;
+    const onPointerDownCapture = (event: MouseEvent): void => {
+      if (event.button !== 0) return;
+      pointerSelectionActive = true;
+      if (pointerSelectionCommitTimer !== null) {
+        clearTimeout(pointerSelectionCommitTimer);
+        pointerSelectionCommitTimer = null;
+      }
+    };
+    const onPointerUpCapture = (event: MouseEvent): void => {
+      if (event.button !== 0 || !pointerSelectionActive) return;
+      pointerSelectionActive = false;
+      if (pointerSelectionCommitTimer !== null) clearTimeout(pointerSelectionCommitTimer);
+      pointerSelectionCommitTimer = setTimeout(() => {
+        pointerSelectionCommitTimer = null;
+        if (inSource || !v.dom.isConnected) return;
+        const selection = sourceSelectionForState(v.state);
+        v.dispatch(markLiveNavigation(v.state.tr, {
+          anchor: selection.anchor,
+          head: selection.head,
+          scroll: false,
+        }));
+      }, 0);
+    };
+    v.dom.addEventListener("mousedown", onPointerDownCapture, true);
+    ownerDocument.addEventListener("mouseup", onPointerUpCapture, true);
+    detachPointerSelectionListeners = () => {
+      v.dom.removeEventListener("mousedown", onPointerDownCapture, true);
+      ownerDocument.removeEventListener("mouseup", onPointerUpCapture, true);
+    };
     return v;
   }
 
   function rebuild(md: string): void {
+    detachPointerSelectionListeners?.();
+    detachPointerSelectionListeners = null;
+    pointerSelectionActive = false;
     view.destroy();
     editorHost.innerHTML = "";
     blockHeightCache.clear();
@@ -1379,11 +1503,14 @@ export function createEditor(
     destroy(): void {
       if (pendingComposition) finalizeComposition();
       if (compositionFinalizeTimer !== null) clearTimeout(compositionFinalizeTimer);
+      if (pointerSelectionCommitTimer !== null) clearTimeout(pointerSelectionCommitTimer);
+      pointerSelectionActive = false;
       window.removeEventListener("keydown", onKey);
       blockResizeObserver?.disconnect();
       if (blockHeightFrame !== null && typeof cancelAnimationFrame === "function") {
         cancelAnimationFrame(blockHeightFrame);
       }
+      detachPointerSelectionListeners?.();
       view.destroy();
       wrap.remove();
     },

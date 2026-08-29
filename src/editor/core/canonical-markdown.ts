@@ -1,6 +1,7 @@
 import { Plugin } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 
+import { presentationSelection, presentationSelectionTouches } from "./presentation-selection";
 import { schema } from "./schema";
 
 // Authored backslashes stay in the document model and are hidden only while
@@ -11,6 +12,7 @@ export function manualEscapeDecorationPlugin(): Plugin {
     props: {
       decorations(state) {
         const decorations: Decoration[] = [];
+        const selection = presentationSelection(state);
         state.doc.descendants((node, position, parent) => {
           if (
             !node.isText ||
@@ -22,10 +24,13 @@ export function manualEscapeDecorationPlugin(): Plugin {
           const text = node.text ?? "";
           for (let index = 0; index < text.length - 1; index++) {
             if (text[index] !== "\\" || !escapable.includes(text[index + 1]!)) continue;
-            decorations.push(Decoration.inline(position + index, position + index + 1, {
-              class: "live-markdown-escape-hidden",
-              "aria-hidden": "true",
-            }));
+            const from = position + index;
+            if (!presentationSelectionTouches(selection, from, from + 2)) {
+              decorations.push(Decoration.inline(from, from + 1, {
+                class: "live-markdown-escape-hidden",
+                "aria-hidden": "true",
+              }));
+            }
             index++;
           }
         });

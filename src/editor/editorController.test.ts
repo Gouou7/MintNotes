@@ -1276,6 +1276,10 @@ describe("Mint editor core public controller", () => {
       const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
       ruleRow.dispatchEvent(down);
       expect(down.defaultPrevented).toBe(true);
+      ruleRow.dispatchEvent(new MouseEvent("mouseup", {
+        bubbles: true,
+        cancelable: true,
+      }));
       ruleRow.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
       const source = host.querySelector<HTMLElement>(
@@ -1391,7 +1395,7 @@ describe("Mint editor core public controller", () => {
     if (!label || !code) throw new Error("Missing fenced code block");
     expect(label.textContent).toBe("TypeScript");
 
-    label.dispatchEvent(new MouseEvent("mousedown", {
+    label.dispatchEvent(new MouseEvent("mouseup", {
       bubbles: true,
       cancelable: true,
     }));
@@ -1533,9 +1537,12 @@ describe("Mint editor core public controller", () => {
 
     for (const symbol of "\\!\"#$%&'()*+,./:;<=>?@[]^_`{|}~-") {
       const escaped = `\\${symbol}`;
-      editor.replaceMarkdown(escaped, escaped.length);
-      expect(editor.getMarkdown()).toBe(escaped);
+      const markdown = `${escaped} x`;
+      editor.replaceMarkdown(markdown, markdown.length);
+      expect(editor.getMarkdown()).toBe(markdown);
       expect(host.querySelector(".live-markdown-escape-hidden")?.textContent).toBe("\\");
+      editor.setSelectionOffset(1);
+      expect(host.querySelector(".live-markdown-escape-hidden")).toBeNull();
     }
 
     editor.replaceMarkdown("\\>", "\\>".length);
@@ -1577,7 +1584,7 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("reveals a two-line Callout without merging its authored lines", () => {
+  it("reveals a two-line Callout on mouse release without merging its authored lines", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
@@ -1590,6 +1597,14 @@ describe("Mint editor core public controller", () => {
     if (!preview) throw new Error("Missing Callout preview");
 
     preview.dispatchEvent(new MouseEvent("mousedown", {
+      button: 0,
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    expect(host.querySelector(".source-blockquote-source")?.hasAttribute("hidden")).toBe(true);
+
+    preview.dispatchEvent(new MouseEvent("mouseup", {
       button: 0,
       bubbles: true,
       cancelable: true,
@@ -1835,6 +1850,174 @@ describe("Mint editor core public controller", () => {
     expect(changes).toEqual([]);
     editor.destroy();
   });
+
+  it("defers a rendered click until mouse release and preserves its source gap", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "before\n\n### Title";
+    const headingFrom = markdown.indexOf("### Title");
+    const editor = createEditor(host, { initialContent: markdown });
+    const heading = host.querySelector<HTMLElement>("h3");
+    if (!heading) throw new Error("Missing rendered heading");
+
+    heading.dispatchEvent(new MouseEvent("mousedown", {
+      button: 0,
+      bubbles: true,
+      cancelable: true,
+    }));
+    editor.setSelectionOffset(headingFrom + "### ".length + 2);
+
+    expect(host.querySelector("pre[data-source-block]")).toBeNull();
+
+    heading.dispatchEvent(new MouseEvent("mouseup", {
+      button: 0,
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(host.querySelector("pre[data-source-block]")?.textContent).toBe("### Title");
+    expect(editor.getSelectionOffset()).toBe(headingFrom + "### ".length + 2);
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it("keeps inline presentation frozen while dragging, then reveals and copies its source", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "before *em* after";
+    const source = "*em*";
+    const sourceFrom = markdown.indexOf(source);
+    const editor = createEditor(host, { initialContent: markdown });
+    const liveRoot = host.querySelector<HTMLElement>(".ProseMirror");
+    if (!liveRoot) throw new Error("Missing Live editor root");
+
+    editor.setSelectionOffset(0);
+    liveRoot.dispatchEvent(new MouseEvent("mousedown", {
+      button: 0,
+      bubbles: true,
+      cancelable: true,
+    }));
+    editor.setSelectionOffset(sourceFrom + source.length);
+    for (let index = 0; index < source.length; index += 1) {
+      liveRoot.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ArrowLeft",
+        code: "ArrowLeft",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+    }
+
+    expect(Array.from(host.querySelectorAll(".syntax-hidden"))
+      .filter((node) => node.textContent === "*")).toHaveLength(2);
+    expect(host.querySelectorAll(".syntax-hint")).toHaveLength(0);
+
+    liveRoot.dispatchEvent(new MouseEvent("mouseup", {
+      button: 0,
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(Array.from(host.querySelectorAll(".syntax-hint"))
+      .filter((node) => node.textContent === "*")).toHaveLength(2);
+
+    let copied = "";
+    const copy = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(copy, "clipboardData", {
+      value: {
+        setData: (type: string, value: string) => {
+          if (type === "text/plain") copied = value;
+        },
+      },
+    });
+    liveRoot.dispatchEvent(copy);
+
+    expect(copy.defaultPrevented).toBe(true);
+    expect(copied).toBe(source);
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it("reveals every block in a completed pointer range and copies canonical Markdown", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "# First\n\nmiddle\n\n## Second";
+    const editor = createEditor(host, { initialContent: markdown });
+    const firstHeading = host.querySelector<HTMLElement>("h1");
+    const secondHeading = host.querySelector<HTMLElement>("h2");
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    if (!firstHeading || !secondHeading || !editable) {
+      throw new Error("Missing rendered selection endpoints");
+    }
+
+    firstHeading.dispatchEvent(new MouseEvent("mousedown", {
+      button: 0,
+      bubbles: true,
+      cancelable: true,
+    }));
+    editor.setSelectionOffset(markdown.length);
+    for (let index = 0; index < markdown.length; index += 1) {
+      editable.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ArrowLeft",
+        code: "ArrowLeft",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+    }
+
+    expect(host.querySelectorAll("pre[data-source-block]")).toHaveLength(0);
+
+    secondHeading.dispatchEvent(new MouseEvent("mouseup", {
+      button: 0,
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(Array.from(host.querySelectorAll("pre[data-source-block]"))
+      .map((node) => node.textContent)).toEqual(["# First", "## Second"]);
+
+    let copied = "";
+    const copy = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(copy, "clipboardData", {
+      value: {
+        setData: (type: string, value: string) => {
+          if (type === "text/plain") copied = value;
+        },
+      },
+    });
+    editable.dispatchEvent(copy);
+
+    expect(copy.defaultPrevented).toBe(true);
+    expect(copied).toBe(markdown);
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it.each([
+    ["heading", "### Title", 1],
+    ["blockquote", "> Quote", 1],
+    ["bullet list", "- Item", 1],
+    ["ordered list", "1. Item", 1],
+    ["task list", "- [ ] Item", 1],
+    ["fenced code", "```\ncode\n```", 1],
+  ] as const)(
+    "moves ArrowLeft through the first authored character of a %s",
+    (_name, markdown, caret) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host, { initialContent: markdown });
+      editor.setSelectionOffset(caret);
+
+      expect(pressNavigationKey(host, "ArrowLeft")).toBe(true);
+      expect(editor.getSelectionOffset()).toBe(caret - 1);
+      expect(editor.getMarkdown()).toBe(markdown);
+      editor.destroy();
+    },
+  );
 
   it("keeps ordinary arrow navigation inside a table on the rich cell path", () => {
     const host = document.createElement("div");

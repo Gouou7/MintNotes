@@ -12,7 +12,12 @@ import {
   LIVE_SYNTAX_RENDERING,
 } from "../live-syntax-state";
 import { SOURCE_FROM_ATTR } from "../source";
-import { markLiveNavigation, selectionOutsideBlock } from "../source-navigation";
+import {
+  LIVE_POINTER_SELECTION_META,
+  LIVE_PRESENTATION_SYNC_META,
+  markLiveNavigation,
+  selectionOutsideBlock,
+} from "../source-navigation";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
 import type { FeaturePluginContext, FeatureSpec } from "./_types";
 
@@ -135,16 +140,24 @@ function enterEditingState(
   pos: number,
   offset: number,
   focusView = true,
+  extendSelection = false,
 ): boolean {
   const node = view.state.doc.nodeAt(pos);
   if (!node || node.type.name !== "blockquote") return false;
   const sourceOffset = Math.max(0, Math.min(offset, node.content.size));
-  const tr = view.state.tr.setSelection(
-    TextSelection.create(view.state.doc, pos + 1 + sourceOffset),
-  );
+  const headPosition = pos + 1 + sourceOffset;
+  const tr = view.state.tr.setSelection(TextSelection.create(
+    view.state.doc,
+    extendSelection ? view.state.selection.anchor : headPosition,
+    headPosition,
+  ));
   const sourceFrom = Number(node.attrs.sourceFrom);
   view.dispatch(markLiveNavigation(tr, {
-    ...(Number.isInteger(sourceFrom) ? { anchor: sourceFrom + sourceOffset, head: sourceFrom + sourceOffset } : {}),
+    ...(Number.isInteger(sourceFrom)
+      ? extendSelection
+        ? { head: sourceFrom + sourceOffset }
+        : { anchor: sourceFrom + sourceOffset, head: sourceFrom + sourceOffset }
+      : {}),
     scroll: true,
   }));
   if (focusView) view.focus();
@@ -310,7 +323,7 @@ class BlockquoteView implements NodeView {
     this.contentDOM = sourceCode;
     this.preview = preview;
     this.sourceSurface = source;
-    preview.addEventListener("mousedown", this.onPreviewMouseDown);
+    preview.addEventListener("mouseup", this.onPreviewMouseUp);
     // Browsers target `beforeinput` at the outer contenteditable host even
     // when the DOM selection lives in this NodeView. Capture it at the view
     // root so source-position edits run before native DOM mutation can move
@@ -427,7 +440,7 @@ class BlockquoteView implements NodeView {
     });
   }
 
-  private onPreviewMouseDown = (event: MouseEvent): void => {
+  private onPreviewMouseUp = (event: MouseEvent): void => {
     if (event.button !== 0) return;
     const pos = this.getPos();
     if (pos == null) return;
@@ -437,6 +450,8 @@ class BlockquoteView implements NodeView {
       this.view,
       pos,
       pointerSourceOffset(this.preview, this.node.textContent, event),
+      true,
+      event.shiftKey,
     );
   };
 
@@ -501,7 +516,7 @@ class BlockquoteView implements NodeView {
   }
 
   destroy(): void {
-    this.preview.removeEventListener("mousedown", this.onPreviewMouseDown);
+    this.preview.removeEventListener("mouseup", this.onPreviewMouseUp);
     this.view.dom.removeEventListener("beforeinput", this.onSourceBeforeInput, true);
     this.destroyPreview?.();
   }
@@ -520,6 +535,10 @@ function blockquotePlugin(
       apply: (tr, value) => tr.getMeta(INLINE_PRESENTATION_META) ? value + 1 : value,
     },
     appendTransaction(transactions, oldState, newState) {
+      if (transactions.some((transaction) => (
+        transaction.getMeta(LIVE_POINTER_SELECTION_META)
+        || transaction.getMeta(LIVE_PRESENTATION_SYNC_META)
+      ))) return null;
       const selectionChanged = !oldState.selection.eq(newState.selection);
       let hasActive = false;
       newState.doc.descendants((node) => {
@@ -527,11 +546,14 @@ function blockquotePlugin(
       });
       if (!selectionChanged && !hasActive) return null;
 
-      const selected = selectedBlockquote(newState);
       const tr = newState.tr;
       newState.doc.descendants((node, pos) => {
         if (node.type !== schema.nodes.blockquote) return;
-        const shouldEdit = selected?.pos === pos;
+        const nodeFrom = pos + 1;
+        const nodeTo = pos + node.nodeSize - 1;
+        const shouldEdit = newState.selection.empty
+          ? newState.selection.head >= nodeFrom && newState.selection.head <= nodeTo
+          : newState.selection.from < nodeTo && newState.selection.to > nodeFrom;
         if (isLiveSyntaxEditing(node.attrs.liveSyntaxState) === shouldEdit) return;
         tr.setNodeMarkup(pos, undefined, {
           ...node.attrs,

@@ -6,6 +6,8 @@ import { SOURCE_BLOCK_PRESENTATION_META } from "./extension";
 import { SOURCE_FROM_ATTR, SOURCE_TEXT_ATTR, SOURCE_TO_ATTR } from "./source";
 
 export const LIVE_NAVIGATION_META = "live-source-navigation";
+export const LIVE_POINTER_SELECTION_META = "live-pointer-selection";
+export const LIVE_PRESENTATION_SYNC_META = "live-presentation-sync";
 
 export interface LiveNavigationIntent {
   readonly anchor?: number;

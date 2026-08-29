@@ -3,6 +3,7 @@ import { Plugin, type EditorState } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 
 import { navigateToDocumentFragment } from "../fragment-navigation";
+import { presentationSelection, presentationSelectionTouches } from "../presentation-selection";
 import type { FeatureSpec } from "./_types";
 
 const DEFINITION_RE = /(^|\n)( {0,3})\[\^([^\]\r\n]+)\]:[\t ]*/g;
@@ -206,12 +207,12 @@ function buildFootnoteDecorations(state: EditorState, scope: string): Decoration
   const definitions = collectDefinitions(state.doc);
   const { references, numbers } = collectReferences(state.doc, definitions, scope);
   if (references.length === 0) return DecorationSet.empty;
-  const cursor = state.selection.empty ? state.selection.from : null;
+  const selection = presentationSelection(state);
   const decorations: Decoration[] = [];
 
   for (const reference of references) {
     const definitionId = `${scope}-fn-${reference.number}`;
-    const isEditing = cursor !== null && cursor >= reference.from && cursor <= reference.to;
+    const isEditing = presentationSelectionTouches(selection, reference.from, reference.to);
     decorations.push(Decoration.inline(reference.from, reference.to, {
       class: isEditing ? "syntax-hint" : "syntax-hidden",
     }));
@@ -232,9 +233,11 @@ function buildFootnoteDecorations(state: EditorState, scope: string): Decoration
   for (const [label, number] of numbers) {
     const definition = definitions.get(label)!;
     const calls = references.filter((reference) => reference.label === label);
-    const isEditing = cursor !== null
-      && cursor >= definition.markerFrom
-      && cursor <= definition.contentTo;
+    const isEditing = presentationSelectionTouches(
+      selection,
+      definition.markerFrom,
+      definition.contentTo,
+    );
     const definitionId = `${scope}-fn-${number}`;
     decorations.push(Decoration.inline(definition.markerFrom, definition.markerTo, {
       class: isEditing ? "syntax-hint" : "syntax-hidden",

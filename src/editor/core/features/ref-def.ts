@@ -2,6 +2,7 @@ import type { Node as PMNode, Schema } from "prosemirror-model";
 import { Plugin, TextSelection } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 
+import { presentationSelection } from "../presentation-selection";
 import type { FeatureSpec } from "./_types";
 
 // Reference link definition `[label]: url ["title"]` — live UX.
@@ -40,7 +41,8 @@ function refDraftPlugin(): Plugin {
     props: {
       decorations(state) {
         const decos: Decoration[] = [];
-        const cursor = state.selection.empty ? state.selection.from : -1;
+        const selection = presentationSelection(state);
+        const cursor = selection.empty ? selection.from : -1;
 
         state.doc.descendants((node, pos) => {
           // Draft decorations on paragraphs that look like a starting

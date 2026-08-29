@@ -9,6 +9,11 @@ import type {
   InlineSourcePresentation,
   PresentationCleanup,
 } from "./extension";
+import {
+  presentationSelection,
+  presentationSelectionTouches,
+  type PresentationSelection,
+} from "./presentation-selection";
 
 export type ResolvedBlockPresentation = {
   presentation: BlockSourcePresentation;
@@ -41,17 +46,19 @@ function presentationWidget(
   block: boolean,
 ): Decoration {
   let cleanup: PresentationCleanup;
-  let reveal: (() => void) | null = null;
+  let reveal: ((event: Event) => void) | null = null;
   return Decoration.widget(position, (view, getPosition) => {
     const container = document.createElement(block ? "div" : "span");
     container.className = className;
     container.contentEditable = "false";
     cleanup = mountSafely(container, authoredSource, () => render(container));
     if (block) {
-      reveal = () => {
+      reveal = (event) => {
         const target = getPosition();
         if (typeof target !== "number") return;
-        view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, target + 1)));
+        const head = target + 1;
+        const anchor = (event as MouseEvent).shiftKey ? view.state.selection.anchor : head;
+        view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, anchor, head)));
         view.focus();
       };
       container.addEventListener("mousedown", preventDefault);
@@ -67,15 +74,6 @@ function presentationWidget(
       if (typeof cleanup === "function") cleanup();
     },
   });
-}
-
-function selectionIsInside(
-  selection: { from: number; to: number },
-  from: number,
-  to: number,
-): boolean {
-  return selection.from >= from && selection.from <= to
-    && selection.to >= from && selection.to <= to;
 }
 
 function comparePriority(
@@ -146,7 +144,7 @@ function collectInlineDecorations(
   node: PMNode,
   position: number,
   parent: PMNode | null,
-  selection: { from: number; to: number },
+  selection: PresentationSelection,
   presentations: readonly InlineSourcePresentation[],
   decorations: Decoration[],
 ): void {
@@ -167,7 +165,7 @@ function collectInlineDecorations(
       }
       const from = position + match.from;
       const to = position + match.to;
-      if (selectionIsInside(selection, from, to)) {
+      if (presentationSelectionTouches(selection, from, to)) {
         if (presentation.editingClassName) {
           decorations.push(Decoration.inline(from, to, {
             class: presentation.editingClassName,
@@ -200,12 +198,13 @@ export function extensionPresentationPlugin(
     props: {
       decorations(state) {
         const decorations: Decoration[] = [];
+        const selection = presentationSelection(state);
         state.doc.descendants((node, position, parent) => {
           collectInlineDecorations(
             node,
             position,
             parent,
-            state.selection,
+            selection,
             inline,
             decorations,
           );
@@ -217,7 +216,7 @@ export function extensionPresentationPlugin(
           if (!candidate) return;
           const from = position + 1;
           const to = position + node.nodeSize - 1;
-          const editing = selectionIsInside(state.selection, from, to);
+          const editing = presentationSelectionTouches(selection, from, to);
           decorations.push(Decoration.node(position, position + node.nodeSize, {
             class: `${candidate.presentation.sourceClassName} ${editing
               ? "is-live-syntax-editing"

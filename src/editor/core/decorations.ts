@@ -13,6 +13,7 @@ import { Plugin, PluginKey, type EditorState } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 
 import { getDelims, getExtras, getWidgets, type WidgetDecoration } from "./normalize";
+import { presentationSelection, presentationSelectionTouches } from "./presentation-selection";
 
 // Widget builders — keyed by `kind`. A widget renders as a DOM element
 // at a specific position; decorations.ts decides whether to emit it based
@@ -119,7 +120,7 @@ function buildWidget(w: WidgetDecoration): HTMLElement {
 
 function buildDecorationSet(state: EditorState): DecorationSet {
   const decos: Decoration[] = [];
-  const cursor = state.selection.empty ? state.selection.from : null;
+  const selection = presentationSelection(state);
   state.doc.descendants((node, position) => {
     if (node.type.name !== "source_block") return;
     const kind = String(node.attrs.kind ?? "");
@@ -171,8 +172,11 @@ function buildDecorationSet(state: EditorState): DecorationSet {
     return false;
   });
   for (const d of getDelims(state)) {
-    const cursorInside =
-      cursor !== null && cursor >= d.spanFrom && cursor <= d.spanTo;
+    const selectionTouchesSpan = presentationSelectionTouches(
+      selection,
+      d.spanFrom,
+      d.spanTo,
+    );
     if (d.forceHidden) {
       decos.push(
         Decoration.inline(d.from, d.to, {
@@ -184,12 +188,12 @@ function buildDecorationSet(state: EditorState): DecorationSet {
     if (d.softInside) {
       // Soft range: hidden when cursor outside, plain (no decoration)
       // when cursor inside so the chars render as ordinary text.
-      if (!cursorInside) {
+      if (!selectionTouchesSpan) {
         decos.push(Decoration.inline(d.from, d.to, { class: "syntax-hidden" }));
       }
       continue;
     }
-    const visible = d.forceVisible || cursorInside;
+    const visible = d.forceVisible || selectionTouchesSpan;
     const cls = visible ? "syntax-hint" : "syntax-hidden";
     decos.push(Decoration.inline(d.from, d.to, { class: cls }));
   }
@@ -199,10 +203,13 @@ function buildDecorationSet(state: EditorState): DecorationSet {
     );
   }
   for (const w of getWidgets(state)) {
-    const cursorInsideSpan =
-      cursor !== null && cursor >= w.spanFrom && cursor <= w.spanTo;
-    if (w.when === "inside" && !cursorInsideSpan) continue;
-    if (w.when === "outside" && cursorInsideSpan) continue;
+    const selectionTouchesSpan = presentationSelectionTouches(
+      selection,
+      w.spanFrom,
+      w.spanTo,
+    );
+    if (w.when === "inside" && !selectionTouchesSpan) continue;
+    if (w.when === "outside" && selectionTouchesSpan) continue;
     const dom = buildWidget(w);
     decos.push(
       Decoration.widget(w.pos, dom, {
