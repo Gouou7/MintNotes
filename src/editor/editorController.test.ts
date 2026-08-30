@@ -95,6 +95,51 @@ async function typeNativeTextAtSelection(host: HTMLElement, text: string): Promi
   }
 }
 
+async function typeBrowserTextAtSelection(host: HTMLElement, text: string): Promise<void> {
+  for (const character of text) {
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) throw new Error("Missing Live editor");
+    const beforeInput = new InputEvent("beforeinput", {
+      inputType: "insertText",
+      data: character,
+      bubbles: true,
+      cancelable: true,
+    });
+    editable.dispatchEvent(beforeInput);
+    expect(beforeInput.defaultPrevented).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+async function typeKeyboardTextAtSelection(host: HTMLElement, text: string): Promise<void> {
+  for (const character of text) {
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) throw new Error("Missing Live editor");
+    const keyDown = new KeyboardEvent("keydown", {
+      key: character,
+      code: character === "`" ? "Backquote" : "",
+      bubbles: true,
+      cancelable: true,
+    });
+    editable.dispatchEvent(keyDown);
+    const beforeInput = new InputEvent("beforeinput", {
+      inputType: "insertText",
+      data: character,
+      bubbles: true,
+      cancelable: true,
+    });
+    editable.dispatchEvent(beforeInput);
+    expect(beforeInput.defaultPrevented).toBe(true);
+    editable.dispatchEvent(new KeyboardEvent("keyup", {
+      key: character,
+      code: character === "`" ? "Backquote" : "",
+      bubbles: true,
+      cancelable: true,
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 async function composeNativeText(host: HTMLElement, candidates: readonly string[]): Promise<void> {
   const editable = host.querySelector<HTMLElement>(".ProseMirror");
   const surface = editable ? activeLiveTextSurface(editable) : null;
@@ -473,28 +518,32 @@ describe("Mint editor core public controller", () => {
     },
   );
 
-  it("completes a fenced code block on the third typed backtick without moving the caret", async () => {
+  it("inserts each typed backtick exactly once without synthesizing a closing fence", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
     const editor = createEditor(host, { onChange: (next) => changes.push(next) });
     editor.focus();
 
-    await typeNativeText(host, "```");
+    await typeKeyboardTextAtSelection(host, "`");
+    expect(editor.getMarkdown()).toBe("`");
+    await typeKeyboardTextAtSelection(host, "`");
+    expect(editor.getMarkdown()).toBe("``");
+    await typeKeyboardTextAtSelection(host, "`");
 
-    expect(editor.getMarkdown()).toBe("```\n```");
+    expect(editor.getMarkdown()).toBe("```");
     expect(editor.getSelectionOffset()).toBe(3);
     const code = host.querySelector<HTMLElement>(".ProseMirror > pre > code");
-    expect(code?.textContent).toBe("```\n```");
+    expect(code?.textContent).toBe("```");
     const domSelection = document.getSelection();
     if (!code || !domSelection?.anchorNode) throw new Error("Missing fenced-code DOM selection");
     const domOffset = document.createRange();
     domOffset.selectNodeContents(code);
     domOffset.setEnd(domSelection.anchorNode, domSelection.anchorOffset);
     expect(domOffset.toString().length).toBe(3);
-    expect(changes.at(-1)).toBe("```\n```");
+    expect(changes).toEqual(["`", "``", "```"]);
 
-    await typeNativeTextAtSelection(host, "ts");
+    await typeKeyboardTextAtSelection(host, "ts");
     host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
       key: "Enter",
       code: "Enter",
@@ -503,10 +552,57 @@ describe("Mint editor core public controller", () => {
     }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(editor.getMarkdown()).toBe("```ts\n\n```");
+    expect(editor.getMarkdown()).toBe("```ts\n");
     expect(editor.getSelectionOffset()).toBe(6);
-    expect(host.querySelector(".ProseMirror > pre > code")?.textContent).toBe("```ts\n\n```");
-    expect(changes.at(-1)).toBe("```ts\n\n```");
+    expect(host.querySelector(".ProseMirror > pre > code")?.textContent).toBe("```ts");
+    expect(changes.at(-1)).toBe("```ts\n");
+    editor.destroy();
+  });
+
+  it.each([
+    ["an empty document", "", 0],
+    ["a trailing blank line", "before\n\n", "before\n\n".length],
+    ["a blank line between blocks", "before\n\n\nafter", "before\n\n".length],
+  ] as const)(
+    "inserts exactly one backtick per key press on %s",
+    async (_name, markdown, offset) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host, { initialContent: markdown });
+      editor.setSelectionOffset(offset);
+
+      await typeKeyboardTextAtSelection(host, "`");
+      expect(editor.getMarkdown()).toBe(
+        `${markdown.slice(0, offset)}\`${markdown.slice(offset)}`,
+      );
+      await typeKeyboardTextAtSelection(host, "`");
+      expect(editor.getMarkdown()).toBe(
+        `${markdown.slice(0, offset)}\`\`${markdown.slice(offset)}`,
+      );
+      await typeKeyboardTextAtSelection(host, "`");
+
+      expect(editor.getMarkdown()).toBe(
+        `${markdown.slice(0, offset)}\`\`\`${markdown.slice(offset)}`,
+      );
+      expect(editor.getSelectionOffset()).toBe(offset + 3);
+      expect(host.querySelector(
+        ".ProseMirror > pre:not([data-source-gap]) > code",
+      )?.textContent?.startsWith("```")).toBe(true);
+      editor.destroy();
+    },
+  );
+
+  it("commits ordinary beforeinput text at the current canonical caret", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, { initialContent: "ac" });
+    editor.setSelectionOffset(1);
+
+    await typeBrowserTextAtSelection(host, "b");
+
+    expect(editor.getMarkdown()).toBe("abc");
+    expect(editor.getSelectionOffset()).toBe(2);
+    expect(host.querySelector(".ProseMirror > p")?.textContent).toBe("abc");
     editor.destroy();
   });
 
@@ -1826,6 +1922,27 @@ describe("Mint editor core public controller", () => {
       editor.destroy();
     },
   );
+
+  it("moves through each trailing authored blank line without jumping to the end", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "text\n\n\n";
+    const editor = createEditor(host, { initialContent: markdown });
+    editor.setSelectionOffset("text".length);
+
+    for (const expected of ["text\n".length, "text\n\n".length, markdown.length]) {
+      expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
+      expect(editor.getSelectionOffset()).toBe(expected);
+    }
+
+    for (const expected of ["text\n\n".length, "text\n".length, "text".length]) {
+      expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
+      expect(editor.getSelectionOffset()).toBe(expected);
+    }
+
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
 
   it("reveals inline delimiters when an arrow reaches the styled source span", () => {
     const host = document.createElement("div");

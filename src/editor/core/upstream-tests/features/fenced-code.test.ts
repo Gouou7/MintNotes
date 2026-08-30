@@ -11,11 +11,11 @@ import { createEditor } from "../../editor-api";
 
 runFeatureCases(fencedCodeSpecs);
 
-test("one coalesced three-backtick input creates a complete fenced block", () => {
+test("one coalesced three-backtick input remains exactly authored", () => {
   const view = fakeView(setup());
   feedText(view, "```");
 
-  expect(pretty(view.state)).toBe("```|\n```");
+  expect(pretty(view.state)).toBe("```|");
 });
 
 test("typing a closing fence line immediately exits the code block", () => {
@@ -49,10 +49,8 @@ test("typing a closing fence in the middle reparses the entire remaining documen
 });
 
 test("three backticks inside a nonempty code line remain literal", () => {
-  const view = fakeView(setup());
-  feedText(view, "```");
-  feedKey(view, "<Enter>");
-  feedText(view, "value ```");
+  const view = fakeView(setup("```\nvalue\n```"));
+  feedText(view, " ```");
 
   expect(view.state.doc.childCount).toBe(1);
   expect(view.state.doc.child(0).attrs.liveSyntaxState).toBe("editing");

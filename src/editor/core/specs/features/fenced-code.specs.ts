@@ -31,98 +31,29 @@ export const fencedCodeSpecs: FeatureSpecs = {
   },
   cases: [
     // ──────────────────────────────────────────────────────────────
-    // 1. Third backtick completes the closing fence without moving the caret.
+    // 1. Ordinary source input remains exactly as authored. The fenced-code
+    //    feature may recognize the result, but it does not synthesize input.
     // ──────────────────────────────────────────────────────────────
     {
-      id: "draft-trigger",
-      label: "``` completes a closing fence and keeps the caret after the opener",
-      seed: "",
-      events: ["`", "`", "`"],
-      checkpoints: [
-        { at: 1, expect: "`|" },
-        { at: 2, expect: "``|" },
-        { at: 3, expect: "```|\n```" },
-      ],
-    },
-
-    // ──────────────────────────────────────────────────────────────
-    // 2. Language can be typed on the completed opening fence.
-    // ──────────────────────────────────────────────────────────────
-    {
-      id: "draft-with-lang",
-      label: "``` autocomplete keeps language input on the opening line",
-      seed: "",
-      events: ["`", "`", "`", "t", "s"],
-      checkpoints: [
-        { at: 3, expect: "```|\n```" },
-        { at: 4, expect: "```t|\n```" },
-        { at: 5, expect: "```ts|\n```" },
-      ],
-    },
-
-    // ──────────────────────────────────────────────────────────────
-    // 3. Enter after an optional language opens the body line.
-    // ──────────────────────────────────────────────────────────────
-    {
-      id: "enter-body-inside",
-      label: "```ts + Enter → cursor inside the completed code block",
-      seed: "",
-      events: ["`", "`", "`", "t", "s", "<Enter>"],
-      checkpoints: [
-        { at: 5, expect: "```ts|\n```" },
-        { at: 6, expect: "```ts\n|\n```" },
-      ],
-    },
-
-    // ──────────────────────────────────────────────────────────────
-    // 4. After Enter-commit, typing inserts into the code_block.
-    //    Enter inside produces a newline (baseKeymap for code_block).
-    // ──────────────────────────────────────────────────────────────
-    {
-      id: "enter-commit-then-type",
-      label: "after commit, x<Enter>y types inside the code_block",
-      seed: "",
-      events: ["`", "`", "`", "t", "s", "<Enter>", "x", "<Enter>", "y"],
-      checkpoints: [
-        { at: 7, expect: "```ts\nx|\n```" },
-        { at: 9, expect: "```ts\nx\ny|\n```" },
-      ],
-    },
-
-    // ──────────────────────────────────────────────────────────────
-    // 5. Enter opens the body when no language is supplied.
-    // ──────────────────────────────────────────────────────────────
-    {
-      id: "enter-body-no-lang",
-      label: "``` + Enter → cursor inside a language-free code block",
-      seed: "",
-      events: ["`", "`", "`", "<Enter>"],
-      checkpoints: [
-        { at: 3, expect: "```|\n```" },
-        { at: 4, expect: "```\n|\n```" },
-      ],
-    },
-
-    // ──────────────────────────────────────────────────────────────
-    // 6. Opening-fence info remains ordinary editable source.
-    // ──────────────────────────────────────────────────────────────
-    {
-      id: "opening-info-space",
-      label: "```ts<space> keeps editing the completed opening fence",
+      id: "authored-opening-fence",
+      label: "backticks and info text remain exactly as authored",
       seed: "",
       events: ["`", "`", "`", "t", "s", " "],
       checkpoints: [
-        { at: 5, expect: "```ts|\n```" },
-        { at: 6, expect: "```ts |\n```" },
+        { at: 1, expect: "`|" },
+        { at: 2, expect: "``|" },
+        { at: 3, expect: "```|" },
+        { at: 5, expect: "```ts|" },
+        { at: 6, expect: "```ts |" },
       ],
     },
 
     // ──────────────────────────────────────────────────────────────
-    // 7. Non-line-start ``` should NOT fire (pattern anchored at ^).
+    // 2. Backticks away from a line start are ordinary source too.
     // ──────────────────────────────────────────────────────────────
     {
       id: "non-line-start",
-      label: "a``` — backticks not at start of line, no draft",
+      label: "a``` remains exactly as authored",
       seed: "",
       events: ["a", "`", "`", "`"],
       checkpoints: [

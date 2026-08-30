@@ -73,6 +73,31 @@ export function verticalSourceOffset(
   return target.from + Math.min(column, target.to - target.from);
 }
 
+function adjacentSourceGap(
+  state: EditorState,
+  direction: -1 | 1,
+): { gap: PMNode; gapPos: number; offset: number } | null {
+  const { selection } = state;
+  if (!selection.empty || selection.$from.depth !== 1) return null;
+  const block = selection.$from.parent;
+  const atBoundary = direction < 0
+    ? selection.$from.parentOffset === 0
+    : selection.$from.parentOffset === block.content.size;
+  if (!atBoundary) return null;
+  const blockPos = selection.$from.before();
+  if (direction > 0) {
+    const gapPos = blockPos + block.nodeSize;
+    const gap = state.doc.nodeAt(gapPos);
+    return gap?.type.name === "source_gap"
+      ? { gap, gapPos, offset: 0 }
+      : null;
+  }
+  const gap = state.doc.resolve(blockPos).nodeBefore;
+  return gap?.type.name === "source_gap"
+    ? { gap, gapPos: blockPos - gap.nodeSize, offset: gap.content.size }
+    : null;
+}
+
 export function sourceGapNavigationPlugin(): Plugin {
   return new Plugin({
     props: {
@@ -81,31 +106,24 @@ export function sourceGapNavigationPlugin(): Plugin {
         if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
         const { state } = view;
         const { selection } = state;
-        const gap = selection.$from.parent;
-        if (!selection.empty || gap.type.name !== "source_gap") return false;
-
         const direction = event.key === "ArrowUp" ? -1 : 1;
+        if (!selection.empty) return false;
+        const currentGap = selection.$from.parent.type.name === "source_gap"
+          ? {
+              gap: selection.$from.parent,
+              gapPos: selection.$from.before(),
+              offset: selection.$from.parentOffset,
+            }
+          : adjacentSourceGap(state, direction);
+        if (!currentGap) return false;
+        const { gap, gapPos, offset } = currentGap;
         const source = String(gap.attrs[SOURCE_TEXT_ATTR] ?? "");
-        const lines = sourceLines(source);
-        const offset = selection.$from.parentOffset;
-        let lineIndex = 0;
-        for (let index = 1; index < lines.length; index += 1) {
-          if (lines[index]!.from > offset) break;
-          lineIndex = index;
-        }
-        const targetIndex = lineIndex + direction;
-        const gapPos = selection.$from.before();
+        const targetOffset = verticalSourceOffset(source, offset, direction);
 
         if (
           !gap.attrs.structuralOnly
-          && lines.length >= 3
-          && targetIndex > 0
-          && targetIndex < lines.length - 1
+          && targetOffset !== null
         ) {
-          const line = lines[lineIndex]!;
-          const target = lines[targetIndex]!;
-          const column = Math.max(0, Math.min(offset - line.from, line.to - line.from));
-          const targetOffset = target.from + Math.min(column, target.to - target.from);
           const sourceFrom = Number(gap.attrs[SOURCE_FROM_ATTR]);
           const targetSource = Number.isInteger(sourceFrom) ? sourceFrom + targetOffset : undefined;
           view.dispatch(

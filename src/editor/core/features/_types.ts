@@ -28,22 +28,6 @@ import type {
   BlockHandler,
   MarkSpec as SerializerMarkSpec,
 } from "../serializer";
-import type { SourceSelection, SourceTransaction } from "../source";
-
-export type SourceTextInputContext = {
-  readonly source: string;
-  readonly from: number;
-  readonly to: number;
-  readonly text: string;
-  readonly parentNodeType: string;
-};
-
-export type SourceKeyContext = {
-  readonly source: string;
-  readonly selection: SourceSelection;
-  readonly key: "Enter" | "Backspace" | "Delete" | "Tab";
-  readonly shiftKey: boolean;
-};
 
 export type TokenHandler = (
   state: ParserState,
@@ -83,12 +67,6 @@ export type FeatureSpec = {
   // entry when migrating.
   blockHandlers?: Record<string, BlockHandler>;
   inputRules?: (schema: Schema) => InputRule[];
-  // Canonical-source input transforms for structural autocomplete. The
-  // returned transaction is applied atomically by the public controller.
-  sourceTextInput?: (context: SourceTextInputContext) => SourceTransaction | null;
-  // Canonical-source key transforms for feature-owned paired structures.
-  // These run before the controller's generic Enter/Delete/Tab commands.
-  sourceKey?: (context: SourceKeyContext) => SourceTransaction | null;
   // Block-level interactions (Enter to exit an empty blockquote, Backspace
   // to unwrap a heading, etc.). Merged before baseKeymap so features win.
   keymap?: (schema: Schema) => Record<string, Command>;

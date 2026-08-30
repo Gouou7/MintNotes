@@ -9,10 +9,7 @@ import type {
   FeaturePluginContext,
   FeatureSpec,
   InlineFeatureSpec,
-  SourceKeyContext,
-  SourceTextInputContext,
 } from "./_types";
-import type { SourceTransaction } from "../source";
 import { autoPair } from "./auto-pair";
 import { autolink } from "./autolink";
 import { blockquote } from "./blockquote";
@@ -92,32 +89,6 @@ export function collectInputRules(
   schema: Parameters<NonNullable<FeatureSpec["inputRules"]>>[0],
 ) {
   return ALL_FEATURES.flatMap((f) => f.inputRules?.(schema) ?? []);
-}
-export function resolveSourceTextInput(
-  context: SourceTextInputContext,
-): SourceTransaction | null {
-  const matches = ALL_FEATURES.flatMap((feature) => {
-    const transaction = feature.sourceTextInput?.(context);
-    return transaction ? [{ feature: feature.name, transaction }] : [];
-  });
-  if (matches.length > 1) {
-    throw new Error(
-      `Conflicting source text input handlers: ${matches.map((match) => match.feature).join(", ")}`,
-    );
-  }
-  return matches[0]?.transaction ?? null;
-}
-export function resolveSourceKey(context: SourceKeyContext): SourceTransaction | null {
-  const matches = ALL_FEATURES.flatMap((feature) => {
-    const transaction = feature.sourceKey?.(context);
-    return transaction ? [{ feature: feature.name, transaction }] : [];
-  });
-  if (matches.length > 1) {
-    throw new Error(
-      `Conflicting source key handlers: ${matches.map((match) => match.feature).join(", ")}`,
-    );
-  }
-  return matches[0]?.transaction ?? null;
 }
 export function collectBlockHandlers(): NonNullable<FeatureSpec["blockHandlers"]> {
   return Object.assign({}, ...ALL_FEATURES.map((f) => f.blockHandlers ?? {}));

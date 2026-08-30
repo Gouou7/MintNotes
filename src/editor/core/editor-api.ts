@@ -11,7 +11,6 @@ import { EditorState, TextSelection, type Transaction } from "prosemirror-state"
 import { EditorView } from "prosemirror-view";
 
 import { defaultPlugins } from "./editor";
-import { resolveSourceKey, resolveSourceTextInput } from "./features/index";
 import { parse } from "./parser";
 import { schema } from "./schema";
 import type {
@@ -864,6 +863,37 @@ export function createEditor(
     return true;
   }
 
+  function applyLiveTextInput(
+    fromPosition: number,
+    toPosition: number,
+    text: string,
+  ): boolean {
+    const positions = sourcePositionMapForState(view.state);
+    const from = positions.documentToSource(fromPosition, "right");
+    const to = positions.documentToSource(toPosition, "left");
+    if (to < from) return true;
+    const head = from + text.length;
+    const nextSource = canonicalMarkdown.slice(0, from)
+      + text
+      + canonicalMarkdown.slice(to);
+    const nextDerivedStructure = analyzeDerivedStructure(nextSource);
+    pendingDerivedStructure = { source: nextSource, ...nextDerivedStructure };
+    const sourceTransaction: SourceTransaction = {
+      edits: [{ from, to, insert: text }],
+      selection: { anchor: head, head },
+      origin: "input",
+      ...(canonicalStructureSignature !== nextDerivedStructure.signature
+        ? { reparseDerivedDocument: true }
+        : {}),
+    };
+    view.dispatch(
+      view.state.tr
+        .insertText(text, fromPosition, toPosition)
+        .setMeta(SOURCE_TRANSACTION_META, sourceTransaction),
+    );
+    return true;
+  }
+
   function buildView(initialMd: string): EditorView {
     const doc = initialMd ? parse(initialMd) : schema.nodes.doc.createAndFill()!;
     const base = EditorState.create({
@@ -1027,12 +1057,7 @@ export function createEditor(
             return true;
           }
           const sourceSelection = sourceSelectionForState(view.state);
-          const transaction = resolveSourceKey({
-            source: canonicalMarkdown,
-            selection: sourceSelection,
-            key: event.key,
-            shiftKey: event.shiftKey,
-          }) ?? liveSourceKeyTransaction(
+          const transaction = liveSourceKeyTransaction(
             canonicalMarkdown,
             sourceSelection,
             event.key,
@@ -1097,6 +1122,20 @@ export function createEditor(
           scheduleCompositionFinalization();
           return false;
         },
+        beforeinput: (_view, event) => {
+          if (
+            event.inputType !== "insertText"
+            || event.data == null
+            || event.data.length === 0
+            || event.isComposing
+            || pendingComposition
+            || view.composing
+          ) return false;
+          const { from, to } = view.state.selection;
+          applyLiveTextInput(from, to, event.data);
+          event.preventDefault();
+          return true;
+        },
         copy: (_view, event) => {
           const selection = sourceSelectionForState(view.state);
           if (selection.anchor === selection.head || !event.clipboardData) return false;
@@ -1127,41 +1166,7 @@ export function createEditor(
         // composition metadata and browser-derived selection are required to
         // preserve the active IME text node across candidate updates.
         if (pendingComposition || _view.composing) return false;
-        const positions = sourcePositionMapForState(view.state);
-        const from = positions.documentToSource(fromPosition, "right");
-        const to = positions.documentToSource(toPosition, "left");
-        if (to < from) return true;
-        const featureTransaction = resolveSourceTextInput({
-          source: canonicalMarkdown,
-          from,
-          to,
-          text,
-          parentNodeType: view.state.doc.resolve(fromPosition).parent.type.name,
-        });
-        if (featureTransaction) {
-          applyAndRenderCanonicalTransaction(featureTransaction);
-          return true;
-        }
-        const head = from + text.length;
-        const nextSource = canonicalMarkdown.slice(0, from)
-          + text
-          + canonicalMarkdown.slice(to);
-        const nextDerivedStructure = analyzeDerivedStructure(nextSource);
-        pendingDerivedStructure = { source: nextSource, ...nextDerivedStructure };
-        const sourceTransaction: SourceTransaction = {
-          edits: [{ from, to, insert: text }],
-          selection: { anchor: head, head },
-          origin: "input",
-          ...(canonicalStructureSignature !== nextDerivedStructure.signature
-            ? { reparseDerivedDocument: true }
-            : {}),
-        };
-        view.dispatch(
-          view.state.tr
-            .insertText(text, fromPosition, toPosition)
-            .setMeta(SOURCE_TRANSACTION_META, sourceTransaction),
-        );
-        return true;
+        return applyLiveTextInput(fromPosition, toPosition, text);
       },
       handlePaste(_view, event) {
         const text = event.clipboardData?.getData("text/plain");

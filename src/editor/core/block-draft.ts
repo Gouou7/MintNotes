@@ -1,6 +1,6 @@
 // leaveLineDraft — reusable "type a prefix, cursor leaves, commit to a new
 // block node" plugin. Three features share this shape: heading (`#` …),
-// horizontal rule (`---`), fenced code (``` ```).
+// horizontal rule (`---`), and any other prefix-driven block conversion.
 //
 // While the cursor is in a paragraph whose textContent matches the feature's
 // regex, the helper:
@@ -19,8 +19,7 @@
 // trigger is "cursor exits this paragraph", not "match invalidated".
 //
 // A second, imperative commit path is exposed as `handle.commit(view)` —
-// for triggers that aren't selection changes (fenced code's autocomplete
-// dropdown click is the motivating case).
+// for triggers that aren't selection changes (for example, a toolbar action).
 
 import type { Node as PMNode } from "prosemirror-model";
 import {
@@ -62,7 +61,7 @@ export type LeaveLineDraftSpec<M> = {
 export type LeaveLineDraftHandle = {
   plugin: Plugin<DecorationSet>;
   // Imperative commit — returns true if a commit was dispatched. Features
-  // can call this from their own event handlers (autocomplete, toolbar).
+  // can call this from their own event handlers (for example, a toolbar).
   commit: (view: EditorView) => boolean;
 };
 
