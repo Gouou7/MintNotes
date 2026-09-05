@@ -1,82 +1,72 @@
 # Mint Notes
 
-Mint Notes 是一款使用 AI 开发的玩具级项目。目标是提供轻量部署、安全存储、简单易用的笔记体验。本项目支持 PWA 自适应布局和端到端加密，你可以在远程服务器上自行托管笔记，并使用熟悉的 Markdown 语法进行编辑。
+Mint Notes 是一款轻量、可自托管的多用户 Markdown 笔记 PWA，也是一个使用 AI 开发的玩具级项目。编辑内容会先在浏览器中加密保存，再由后台同步；服务器只保存无法直接读取的密文。
 
-如果你发现缺陷或有功能建议，请提交 Issue，或者让你的 AI Agent 帮你修改！
+## 主要能力
 
-
-## 功能特性
-
-- **本地优先与端到端加密：**输入和本地保存无需等待网络；标题、正文、文件夹和附件在浏览器中加密后再同步。
-- **编辑器：**提供类 Typora 的实时、源码、阅读三种编辑模式，并支持 KaTeX 数学公式、Mermaid 图表、WikiLink、可扩展的 Obsidian 风格 Callout、YAML 属性、实时大纲和文本统计。实时模式会让光标所在的受支持 Markdown 语法结构进入编辑态，移出后恢复渲染态。
-- **组织与历史：**支持文件夹、搜索、排序、拖放、笔记锁定、回收站，以及可自定义名称、保护快照、预览和恢复的跨设备加密版本历史。
-- **多用户与设备安全：**支持多用户账户、修改登录用户名、恢复密钥、激活码、可离线冷启动的已记住设备、可选的 PIN 加密本机解锁凭据、自动锁定和远程登出。
-- **附件与数据迁移：**支持加密图片附件，以及保留文件夹结构和附件路径的 Markdown／ZIP 导入导出。
-- **PWA 与多设备同步：**提供可安装的桌面、平板和移动端布局，支持已记住设备离线启动与编辑、延迟同步、主题和多语言界面。
-- **轻量自托管：**仅需一个使用 SQLite 的 Docker 服务，并提供一致的在线备份流程。
-
-## 技术栈
-
-浏览器应用使用 React、TypeScript、Vite、由 `typora-web` 衍生并在仓库内维护的 ProseMirror 编辑器核心、Web Crypto 和 Dexie／IndexedDB。
-
-服务器使用 Fastify 和 SQLite。
-
-## 开发
-
-环境要求：
-
-- Node.js 22 或更高版本
-- pnpm 11 或更高版本
-
-```bash
-pnpm install
-pnpm dev
-```
-
-打开 `http://localhost:5173`。Vite 会将 `/api` 代理到 `http://127.0.0.1:8787` 的 API 服务器。第一个账户会成为管理员，并在注册时获得恢复密钥。
-
-有关项目结构、验证命令和测试依赖，请参阅[开发指南](docs/DEVELOPMENT.md)。
+- 提供实时、源码和阅读三种编辑模式，支持数学公式、Mermaid、WikiLink、Callout 与 YAML 属性。
+- 可以用文件夹、搜索、排序和固定功能整理笔记，并提供笔记锁、回收站、加密历史与图片附件。
+- 支持多用户、恢复密钥、已记住设备、可选的本地 PIN、离线编辑和后台同步。
+- 可以导入或导出 Markdown 与 ZIP，并保留目录结构和附件。
+- 客户端采用 React 和 TypeScript，服务端采用 Fastify 和 SQLite，无需额外部署数据库或对象存储。
 
 ## Docker 快速开始
+
+需要 Docker Engine、Docker Compose v2、HTTPS 域名和反向代理。
 
 ```bash
 cp .env.example .env
 mkdir -p notes-data
 docker compose config
 docker compose up --build -d
-docker compose ps
 ```
 
-启动前，请在 `.env` 中将 `APP_ORIGIN` 设置为用户实际访问的完整 HTTPS 源，例如 `https://notes.example.com`。
+在 `.env` 中把 `APP_ORIGIN` 改为实际 HTTPS 源；Linux 用户还应让 `PUID`、`PGID` 与 `notes-data` 所有者一致。打开站点后，第一个账户会成为管理员。恢复密钥只显示一次，请立即保存；投入使用前应测试一次明文导出和服务器备份。
 
-在 Linux 上，请将 `PUID` 和 `PGID` 设置为 `./notes-data` 所有者的非零数字用户 ID 和组 ID（通常分别为 `id -u` 和 `id -g` 的输出），以便非 root 容器能够写入 SQLite 文件。
+完整配置、反向代理、升级和恢复流程见[自托管指南](docs/self-hosting.md)。
 
-## 首次使用
+## 开发与发布
 
-1. 打开应用并创建第一个账户。该账户始终会被赋予管理员角色。
-2. 将显示的恢复密钥保存在密码管理器或受保护的离线位置。恢复密钥只会在创建账户时显示一次。
-3. 除非确有需要，否则请保持关闭公开注册。管理员可以在**设置 > 管理员设置**中创建激活码。
-4. 在正式依赖此服务前，请分别创建并测试一次明文 Markdown ZIP 导出和加密服务器备份。
+本地开发需要 Node.js 22+，并使用 `package.json` 指定的 pnpm 版本（当前为 11.9.0）：
 
-[用户指南](docs/USER_GUIDE.md)涵盖编辑器模式、文件树操作、附件、同步状态、账户恢复、导入／导出和安全删除。
+```bash
+pnpm install
+pnpm dev
+```
+
+Vite 默认运行在 `http://localhost:5173`，并将 `/api` 转发到 `http://127.0.0.1:8787` 的 Fastify 服务。提交代码前至少运行 `pnpm typecheck` 和 `pnpm test`；涉及生产构建时再运行 `pnpm build`。加密 Worker 和 API 的集成检查依赖构建产物，应在构建后分别运行 `pnpm test:crypto-worker` 和 `pnpm test:smoke`。
+
+稳定 Git 标签 `vMAJOR.MINOR.PATCH` 是应用版本的唯一来源，`package.json` 中的 `0.0.0` 不是发布版本。发布前应在 `CHANGELOG.md` 中加入带日期的对应版本，并在准确的标签上运行：
+
+```bash
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test
+APP_VERSION="$(node scripts/release-version.mjs "$(git describe --tags --exact-match)")" pnpm build
+pnpm test:crypto-worker
+pnpm test:smoke
+docker compose config
+```
+
+镜像发布及升级注意事项见[自托管指南](docs/self-hosting.md#发布镜像)。
 
 ## 文档
 
-请从[文档索引](docs/README.md)按任务选择对应指南。
-
-- **使用 Mint Notes：**[用户指南](docs/USER_GUIDE.md)
-- **运维 Mint Notes：**[生产部署](docs/DEPLOYMENT.md)与[备份和恢复](docs/BACKUP_AND_RESTORE.md)
-- **参与开发：**[开发指南](docs/DEVELOPMENT.md)、[编辑器架构](docs/EDITOR_ARCHITECTURE.md)，以及文档索引中的系统架构与安全资料
-
-## 致谢
-
-感谢以下开源项目：
-
-- 编辑器核心来源：[typora-web](https://github.com/Yuyz0112/typora-web)
-- 数学公式渲染：[KaTeX](https://katex.org/)
-- 图表渲染：[Mermaid](https://mermaid.js.org/)
-- 图标库：[Lucide React](https://lucide.dev/)
+- [使用指南](docs/guide.md)：当前已经提供的功能，以及账户、编辑器、同步、附件、历史和数据迁移的实际行为。
+- [自托管指南](docs/self-hosting.md)：部署、配置、备份、恢复与升级。
+- [架构概览](docs/system-design.md)与[安全模型](docs/trust-and-security.md)：当前的数据流、信任边界与实现保证。
+- [编辑器架构原则](docs/editor-architecture.md)：编辑器需要长期遵守的状态、事务和扩展边界。
+- [变更日志](CHANGELOG.md)
 
 ## 许可证
 
-Mint Notes 采用 [MIT 许可证](LICENSE)发布。
+Mint Notes 采用 [MIT 许可证](LICENSE)。
+
+## 致谢
+
+- [typora-web](https://github.com/Yuyz0112/typora-web)：编辑器核心的上游项目，采用 MIT 许可证。
+- [KaTeX](https://katex.org/)：用于渲染数学公式，采用 MIT 许可证。
+- [Mermaid](https://mermaid.js.org/)：用于渲染图表，采用 MIT 许可证。
+- [Lucide React](https://lucide.dev/)：用于界面图标，采用 ISC 许可证；其中部分源自 Feather 的图标采用 MIT 许可证。
+
+完整的许可文本见[第三方许可声明](public/THIRD_PARTY_NOTICES.txt)，并随发布包一同提供。

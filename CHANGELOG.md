@@ -1,9 +1,5 @@
 # 变更日志
 
-本文件记录 Mint Notes 的重要用户可见变化。
-
-格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
-
 ## [未发布]
 
 ## [0.15.0] - 2026-08-30
