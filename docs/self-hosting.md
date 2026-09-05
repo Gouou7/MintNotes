@@ -43,7 +43,7 @@ Linux 上应让 `PUID`、`PGID` 与 `notes-data` 所有者一致，且不得为 
 docker compose logs --tail=100 notes
 ```
 
-日志保留由 Docker 或主机负责。日志不应包含原始 URL、查询、标头、Cookie、正文、用户名、完整内部 ID、密文、nonce 或秘密。
+日志保留由 Docker 或主机负责；允许记录的内容与运维责任见[系统设计](system-design.md#日志与运维责任)。
 
 首次打开站点创建管理员并保存恢复密钥。公开注册通常保持关闭；其他用户使用管理员生成的 72 小时一次性激活码。
 

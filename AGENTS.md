@@ -8,13 +8,12 @@ Mint Notes 是一款使用 React／TypeScript、Fastify 和 SQLite 构建的本�
 | --- | --- |
 | 产品能力、快速开始、开发、发布 | `README.md` |
 | 用户界面、编辑器行为、历史、附件、同步、导入导出 | `docs/guide.md` |
-| 拓扑、持久化、同步、存储、附件 | `docs/system-design.md` |
-| 加密、认证、隔离、CSP、元数据 | `docs/trust-and-security.md` |
+| 拓扑、持久化、同步、存储、附件、加密、认证、隔离、CSP、元数据 | `docs/system-design.md` |
 | Docker、配置、代理、备份、恢复、升级 | `docs/self-hosting.md`；并检查 `.env.example`、Compose 与 Nginx 示例 |
-| 编辑器解析、事务、映射、扩展 | `docs/editor-architecture.md`；原则冲突时停止并请求用户决定 |
+| 编辑器行为、显示、交互与验收 | `docs/editor-architecture.md`；原则冲突时停止并请求用户决定 |
 | 已发布版本的变化 | `CHANGELOG.md` |
 
-`README.md` 和使用指南描述当前已经提供的能力；系统设计、自托管和安全文档解释当前实现及其边界；本文件与编辑器架构原则记录修改项目时必须遵守的约束；变更日志只记录版本历史。尚未实现的设想应放在 Issue 或单独的设计提案中，不要写成现有功能。
+`README.md` 和使用指南描述当前已经提供的能力；系统设计按功能解释当前实现及安全边界，自托管指南说明部署与运维；编辑器原则是系统设计下单独维护的文档，与本文件共同记录修改项目时必须遵守的约束；变更日志只记录版本历史。尚未实现的设想应放在 Issue 或单独的设计提案中，不要写成现有功能。
 
 同一项事实只在最合适的文档中完整说明，其他地方保留简短摘要和链接即可。判断当前行为时以代码、测试和配置为准；编辑器架构原则则是发布门槛，不能因为实现暂时偏离就直接改写。用户能够感知的行为一旦变化，必须在同一次修改中更新使用指南。
 
@@ -33,7 +32,7 @@ Mint Notes 是一款使用 React／TypeScript、Fastify 和 SQLite 构建的本�
 - 不实现新密码学原语；使用现有 Worker 与 Web Crypto。AES-GCM 每次使用全新随机 96 位 nonce，并以 AAD 绑定用户、对象／附件、领域、版本、修订或分块位置。
 - 生产认证使用 `Secure`、`HttpOnly`、`SameSite=Strict` Cookie；服务器只存哈希。端点标识符与会话分离，不能单独认证。
 - PIN 派生密钥、恢复密钥、已解锁密钥、明文或 Blob URL 不得进入持久存储、日志、URL 或服务器。锁定清除解密内存；登出还删除当前用户本地密文与发件箱。
-- 原始 HTML、远程可执行嵌入、CDN 脚本与远程字体禁用；新增网络源、分析或嵌入必须审查 `docs/trust-and-security.md` 与 CSP。
+- 原始 HTML、远程可执行嵌入、CDN 脚本与远程字体禁用；新增网络源、分析或嵌入必须审查 `docs/system-design.md` 中的数据边界与 Web 内容安全要求，以及 CSP。
 - 不重命名 `webmd-*` IndexedDB、Cookie、标头、AAD、附件 URL 或导出标识符，除非实现保留数据的迁移。不得自动删除 v2 前数据库。
 - SQLite 使用 WAL；只用 `server/backup.ts` 在线备份。栅格图片按签名验证，拒绝 SVG；内置客户端上限 25 MiB。
 - 离线身份快照只允许本地路由；同一已记住端点经 `/api/auth/me` 验证前，禁用同步、SSE、远程附件、账户和管理请求。

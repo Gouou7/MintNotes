@@ -54,8 +54,7 @@ docker compose config
 
 - [使用指南](docs/guide.md)：当前已经提供的功能，以及账户、编辑器、同步、附件、历史和数据迁移的实际行为。
 - [自托管指南](docs/self-hosting.md)：部署、配置、备份、恢复与升级。
-- [架构概览](docs/system-design.md)与[安全模型](docs/trust-and-security.md)：当前的数据流、信任边界与实现保证。
-- [编辑器架构原则](docs/editor-architecture.md)：编辑器需要长期遵守的状态、事务和扩展边界。
+- [系统设计](docs/system-design.md)：按功能说明系统结构、数据流、安全保证与限制，并引用独立的编辑器设计原则。
 - [变更日志](CHANGELOG.md)
 
 ## 许可证
