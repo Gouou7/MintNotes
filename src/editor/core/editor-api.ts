@@ -507,7 +507,7 @@ export function createEditor(
         !Number.isInteger(sourceFrom)
         || !Number.isInteger(sourceTo)
         || typeof source !== "string"
-        || !((from >= sourceFrom && from <= sourceTo) || (to >= sourceFrom && to <= sourceTo))
+        || from > sourceTo || to < sourceFrom
       ) return;
       const sourceBlockEditingPresentation = node.type.name === "source_block"
         ? null

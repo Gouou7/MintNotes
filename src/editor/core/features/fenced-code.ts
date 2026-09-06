@@ -420,10 +420,8 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
 function fencedCodeSourcePlugin(): Plugin {
   return new Plugin({
     appendTransaction(transactions, oldState, newState) {
-      if (transactions.some((transaction) => (
-        transaction.getMeta(LIVE_POINTER_SELECTION_META)
-        || transaction.getMeta(LIVE_PRESENTATION_SYNC_META)
-      ))) return null;
+      if (transactions.some((transaction) => transaction.getMeta(LIVE_POINTER_SELECTION_META))) return null;
+      const synchronized = transactions.some((transaction) => transaction.getMeta(LIVE_PRESENTATION_SYNC_META));
       if (!transactions.some((tr) => tr.selectionSet || tr.docChanged)) return null;
 
       const oldCode = codeBlockAtSelection(oldState);
@@ -436,6 +434,9 @@ function fencedCodeSourcePlugin(): Plugin {
       }> = [];
       newState.doc.descendants((node, pos) => {
         if (node.type.name !== "code_block") return;
+        // The controller synchronizes top-level blocks; nested blocks still
+        // need the final mapped selection to update their display state.
+        if (synchronized && newState.doc.resolve(pos).depth === 0) return;
         const parsed = parseFencedCodeSource(node.textContent);
         if (!parsed) return;
         const nodeFrom = pos + 1;

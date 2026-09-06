@@ -303,10 +303,8 @@ function blockquotePlugin(
       apply: (tr, value) => tr.getMeta(INLINE_PRESENTATION_META) ? value + 1 : value,
     },
     appendTransaction(transactions, oldState, newState) {
-      if (transactions.some((transaction) => (
-        transaction.getMeta(LIVE_POINTER_SELECTION_META)
-        || transaction.getMeta(LIVE_PRESENTATION_SYNC_META)
-      ))) return null;
+      if (transactions.some((transaction) => transaction.getMeta(LIVE_POINTER_SELECTION_META))) return null;
+      const synchronized = transactions.some((transaction) => transaction.getMeta(LIVE_PRESENTATION_SYNC_META));
       const selectionChanged = !oldState.selection.eq(newState.selection);
       let hasActive = false;
       newState.doc.descendants((node) => {
@@ -317,11 +315,11 @@ function blockquotePlugin(
       const tr = newState.tr;
       newState.doc.descendants((node, pos) => {
         if (node.type !== schema.nodes.blockquote) return;
+        // Top-level blocks are already synchronized by the controller.
+        if (synchronized && newState.doc.resolve(pos).depth === 0) return;
         const nodeFrom = pos + 1;
         const nodeTo = pos + node.nodeSize - 1;
-        const shouldEdit = newState.selection.empty
-          ? newState.selection.head >= nodeFrom && newState.selection.head <= nodeTo
-          : newState.selection.from < nodeTo && newState.selection.to > nodeFrom;
+        const shouldEdit = newState.selection.from <= nodeTo && newState.selection.to >= nodeFrom;
         if (isLiveSyntaxEditing(node.attrs.liveSyntaxState) === shouldEdit) return;
         tr.setNodeMarkup(pos, undefined, {
           ...node.attrs,

@@ -117,6 +117,26 @@
  * becomes visible as soon as the cursor enters the span. */
 .ProseMirror .syntax-hidden { font-size: 0; line-height: 0; vertical-align: baseline; }
 
+/* Source prefixes hang into existing indentation rather than adding the
+ * authored indent to the rendered container indent. A task keeps the same
+ * 14px checkbox + 8px gap when its source replaces the widget. */
+.ProseMirror .source-line-prefix {
+  display: inline-block;
+  width: var(--source-prefix-width);
+  margin-inline-start: calc(-1 * min(max(0px, calc(var(--source-prefix-width) - var(--source-prefix-body-offset))), var(--source-prefix-gutter)));
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: var(--markdown-body-font-size, 1rem);
+  white-space: pre;
+  tab-size: 4;
+  user-select: text;
+}
+/* Tab stops can retain width even at font-size: 0. Collapse the prefix box too. */
+.ProseMirror .source-line-prefix-hidden {
+  display: inline-block;
+  width: 0;
+  overflow: hidden;
+}
+
 /* A Setext underline is a second authored source line. It uses body metrics
  * instead of heading metrics; rendering hides only its ink so the line keeps
  * its place and revealing either heading line does not move surrounding text. */
@@ -320,6 +340,7 @@
   background: #1f1f1f;
   border-color: #1f1f1f;
 }
+.ProseMirror .source-task-checkbox { margin-right: 8px; }
 .ProseMirror .checkbox[data-checked="1"]::after {
   content: "";
   position: absolute;

@@ -890,24 +890,33 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("keeps Chinese IME composition stable inside a Markdown source block in editing state", async () => {
+  it.each([
+    ["heading", "# 标题", "h1"],
+    ["nested list", "- 一级\n    - 二级", "li li p"],
+    ["task list", "- [ ] 任务", "li p"],
+    ["quote", "> 引用", "blockquote p"],
+  ])("keeps Chinese IME composition stable inside an editing %s", async (_name, initial, selector) => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
-    const initial = "# 标题";
     const editor = createEditor(host, {
       initialContent: initial,
       onChange: (next) => changes.push(next),
     });
+    editor.focus();
     editor.setSelectionOffset(initial.length);
-    const sourceBlock = host.querySelector("h1");
+    const sourceBlock = host.querySelector(selector);
 
     await composeNativeText(host, ["z", "zhong", "中", "中文"]);
 
-    expect(host.querySelector("h1")).toBe(sourceBlock);
+    expect(host.querySelector(selector)).toBe(sourceBlock);
     expect(editor.getMarkdown()).toBe(`${initial}中文`);
     expect(editor.getSelectionOffset()).toBe(`${initial}中文`.length);
     expect(changes).toEqual([`${initial}中文`]);
+    host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z", code: "KeyZ", ctrlKey: true, bubbles: true, cancelable: true,
+    }));
+    expect(editor.getMarkdown()).toBe(initial);
     editor.destroy();
   });
 
@@ -2178,10 +2187,10 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("reveals endpoint markers in a completed pointer range and copies canonical Markdown", async () => {
+  it("reveals every covered unit in a completed pointer range and copies canonical Markdown", async () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const markdown = "# First\n\nmiddle\n\n## Second";
+    const markdown = "# First\n\n### Middle\n\n- **item**\n\n## Second";
     const editor = createEditor(host, { initialContent: markdown });
     const firstHeading = host.querySelector<HTMLElement>("h1");
     const secondHeading = host.querySelector<HTMLElement>("h2");
@@ -2207,6 +2216,8 @@ describe("Mint editor core public controller", () => {
     }
 
     expect(host.querySelectorAll("pre[data-source-block]")).toHaveLength(0);
+    expect(host.querySelector("h3 .syntax-hidden")?.textContent).toBe("### ");
+    expect(host.querySelector("li.source-list-editing")).toBeNull();
 
     secondHeading.dispatchEvent(new MouseEvent("mouseup", {
       button: 0,
@@ -2215,8 +2226,10 @@ describe("Mint editor core public controller", () => {
     }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(Array.from(host.querySelectorAll("h1 .syntax-hint, h2 .syntax-hint"))
-      .map((node) => node.textContent)).toEqual(["# ", "## "]);
+    expect(Array.from(host.querySelectorAll("h1 .syntax-hint, h2 .syntax-hint, h3 .syntax-hint"))
+      .map((node) => node.textContent)).toEqual(["# ", "### ", "## "]);
+    expect(host.querySelector("li.source-list-editing")).not.toBeNull();
+    expect([...host.querySelectorAll("li .syntax-hint")].map((node) => node.textContent)).toEqual(["- ", "**", "**"]);
 
     let copied = "";
     const copy = new Event("copy", { bubbles: true, cancelable: true });
@@ -2569,6 +2582,33 @@ describe("Mint editor core public controller", () => {
     wikiLink?.click();
     expect(wikiLinks).toEqual(["Guide"]);
     expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it("reveals covered extension syntax while preserving image previews and exact source", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "Before\n\n$x$ [[Guide]] ![image](test.png)\n\n$$\ny\n$$\n\n```mermaid\ngraph TD; A-->B\n```\n\nAfter";
+    const changes: string[] = [];
+    const render = (container: HTMLElement, source: string) => { container.textContent = source; };
+    const editor = createMintEditor(host, {
+      initialContent: markdown,
+      onChange: (next) => changes.push(next),
+      presentations: { renderMath: render, renderMathBlock: render, renderMermaid: render },
+    });
+    const selection = { anchor: markdown.length - 1, head: 1 };
+    editor.setSelection(selection);
+    expect(host.querySelector(".live-inline-math-editing")?.textContent).toBe("$x$");
+    expect(host.querySelector(".live-inline-math-widget, .live-math-block-widget, .live-mermaid-widget, .live-wikilink")).toBeNull();
+    expect(host.querySelector("pre[data-source-kind='mint-math-block']")?.textContent).toBe("$$\ny\n$$");
+    expect(host.querySelector("img.image-render")).not.toBeNull();
+    expect(editor.getSelection()).toEqual(selection);
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+    editor.setSelectionOffset(0);
+    expect(host.querySelector(".live-inline-math-editing")).toBeNull();
+    expect(host.querySelector(".live-math-block-widget")).not.toBeNull();
+    expect(host.querySelector(".live-mermaid-widget")).not.toBeNull();
     editor.destroy();
   });
 

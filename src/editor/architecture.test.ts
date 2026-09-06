@@ -104,6 +104,20 @@ describe("editor architecture acceptance", () => {
     expect(host.querySelector("pre[data-source-kind=bullet_list]")).toBeNull();
   });
 
+  it("reveals continuation indentation without removing the first line's rendered bullet", () => {
+    const source = "- first\n  continuation\n  - nested\n\t\tcontinued\n\nend";
+    const { editor, host, clipboard, onChange } = setup(source);
+    editor.setSelectionOffset(source.indexOf("continuation") + 2);
+    expect(host.querySelector("li")?.classList.contains("source-list-editing")).toBe(false);
+    expect(host.querySelector(".source-line-prefix")?.textContent).toBe("  ");
+    editor.setSelectionOffset(source.indexOf("nested") + 2);
+    expect(host.querySelector("li li.source-list-editing")).not.toBeNull();
+    expect(host.querySelector(".source-line-prefix")?.textContent).toBe("  - ");
+    editor.setSelection({ anchor: 0, head: source.length });
+    expect(clipboard("copy")).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["=", "h1"],
     ["-", "h2"],
@@ -212,11 +226,69 @@ describe("editor architecture acceptance", () => {
     expect(editor.getMarkdown()).toBe(source);
   });
 
-  it("does not expose inactive intermediate syntax units", () => {
-    const { editor, host } = setup("a **one** b **two** c **three** z");
-    editor.setSelection({ anchor: 4, head: 24 });
-    const middle = [...host.querySelectorAll(".syntax-hidden")].filter((node) => node.textContent === "**");
-    expect(middle.length).toBeGreaterThanOrEqual(2);
+  it.each([false, true])("reveals all selected inline units, including endpoints (reverse: %s)", (reverse) => {
+    const source = "a **one** b **two** c **three** z **outside**";
+    const { editor, host, clipboard, undo, onChange } = setup(source);
+    const selection = reverse ? { anchor: 24, head: 4 } : { anchor: 4, head: 24 };
+    editor.setSelection(selection);
+    expect([...host.querySelectorAll(".syntax-hint")].filter((node) => node.textContent === "**")).toHaveLength(6);
+    expect([...host.querySelectorAll(".syntax-hidden")].filter((node) => node.textContent === "**")).toHaveLength(2);
+    expect(editor.getSelection()).toEqual(selection);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(clipboard("copy")).toBe(source.slice(4, 24));
+    expect(clipboard("cut")).toBe(source.slice(4, 24));
+    expect(editor.getMarkdown()).toBe(source.slice(0, 4) + source.slice(24));
+    undo();
+    expect(editor.getMarkdown()).toBe(source);
+    expect(editor.getSelection()).toEqual(selection);
+    editor.setSelectionOffset(source.length);
+    expect([...host.querySelectorAll(".syntax-hint")].filter((node) => node.textContent === "**")).toHaveLength(2);
+  });
+
+  it.each([false, true])("reveals covered lines and whole blocks while retaining tables (reverse: %s)", (reverse) => {
+    const source = "# before\n\n- first\n  - **nested**\n- last\n\n> quote\n> next\n\n```ts\ncode\n```\n\n> [!note]\n> body\n\n| a | b |\n| --- | --- |\n| c | **d** |\n\n## after\n\n# outside";
+    const { editor, host, clipboard, onChange } = setup(source, { extensions: [createCalloutExtension()] });
+    const from = source.indexOf("before") + 1;
+    const to = source.indexOf("after") + 2;
+    const selection = reverse ? { anchor: to, head: from } : { anchor: from, head: to };
+    editor.setSelection(selection);
+    expect(host.querySelectorAll("li.source-list-editing")).toHaveLength(3);
+    expect(host.querySelectorAll("blockquote .source-line-prefix")).toHaveLength(2);
+    expect(host.querySelector("pre[data-live-syntax-state='editing']")).not.toBeNull();
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
+    expect(host.querySelector("table")).not.toBeNull();
+    expect(host.querySelector("td .syntax-hint")?.textContent).toBe("**");
+    expect(host.querySelector("h1:last-of-type .syntax-hidden")?.textContent).toBe("# ");
+    expect(editor.getSelection()).toEqual(selection);
+    expect(clipboard("copy")).toBe(source.slice(from, to));
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
+    editor.setSelectionOffset(source.length);
+    expect(host.querySelectorAll("li.source-list-editing")).toHaveLength(0);
+    expect(host.querySelector("pre[data-live-syntax-state='editing']")).toBeNull();
+    expect(host.querySelector(".source-blockquote-node.is-source-editing")).toBeNull();
+  });
+
+  it("reveals boundary units even when only the boundaries are selected", () => {
+    const source = "**first** middle *last*";
+    const { editor, host, onChange } = setup(source);
+    editor.setSelection({ anchor: "**first**".length, head: source.indexOf("*last*") });
+    expect([...host.querySelectorAll(".syntax-hint")].map((node) => node.textContent)).toEqual(["**", "**", "*", "*"]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "> ```ts\n> code\n> ```",
+    "- item\n\n  ```ts\n  code\n  ```",
+  ])("activates covered fenced blocks inside containers: %s", (block) => {
+    const source = `before\n\n${block}\n\nafter`;
+    const { editor, host, onChange } = setup(source);
+    editor.setSelection({ anchor: 1, head: source.length - 1 });
+    expect(host.querySelector("pre[data-live-syntax-state='editing']")).not.toBeNull();
+    editor.setSelectionOffset(source.length);
+    expect(host.querySelector("pre[data-live-syntax-state='editing']")).toBeNull();
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it.each(["# title", "- item", "> quote", "**bold**"])("pastes raw Markdown into %s without repair", (source) => {

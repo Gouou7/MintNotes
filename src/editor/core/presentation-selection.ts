@@ -59,7 +59,7 @@ export function presentationSelectionTouches(
   from: number,
   to: number,
 ): boolean {
-  return selection.empty
-    ? selection.from >= from && selection.from <= to
-    : (selection.anchor >= from && selection.anchor <= to) || (selection.head >= from && selection.head <= to);
+  // Inclusive boundaries activate both endpoint units as well as every unit
+  // covered by the range, independent of the direction of selection.
+  return selection.from <= to && selection.to >= from;
 }
