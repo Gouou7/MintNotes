@@ -15,6 +15,35 @@ function gapSource(markdown: string): string {
 }
 
 describe("source-backed whitespace gaps", () => {
+  it.each([">", "> ", ">\t", ">\n>", "> \r\n>\r\n>  ", "> >"])(
+    "keeps only authored rows inside an empty quote %j",
+    (quote) => {
+      for (const prefix of ["", "before\n\n"]) {
+        const markdown = `${prefix}${quote}\n\nafter`;
+        const doc = parse(markdown);
+        let innermostQuote = doc.content.content.find((node) => node.type.name === "quote_container")!;
+        while (innermostQuote.firstChild?.type.name === "quote_container") innermostQuote = innermostQuote.firstChild;
+        expect(innermostQuote.childCount).toBe(1);
+        const gap = innermostQuote.firstChild!;
+        expect(gap.type.name).toBe("source_gap");
+        expect(gap.attrs.sourceText).toBe(quote);
+        expect(gap.content.content.filter((node) => node.type.name === "source_gap_eol" && node.attrs.visible))
+          .toHaveLength(quote.split(/\r\n|\r|\n/).length - 1);
+        expect(serialize(doc)).toBe(markdown);
+      }
+    },
+  );
+
+  it("retains the first blank quote row before quoted body text away from document start", () => {
+    const markdown = "before\n\n>\n>\n> body\n\nafter";
+    const doc = parse(markdown);
+    const quote = doc.content.content.find((node) => node.type.name === "quote_container")!;
+    const gap = quote.firstChild!;
+    expect(gap.attrs.sourceText).toBe(">\n>\n");
+    expect(gap.content.content.filter((node) => node.type.name === "source_gap_eol" && node.attrs.visible)).toHaveLength(2);
+    expect(serialize(doc)).toBe(markdown);
+  });
+
   it.each(SOURCE_FIDELITY_LINE_ENDING_STRINGS)(
     "round-trips exact whitespace and line endings for %j",
     (markdown) => {

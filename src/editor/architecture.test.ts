@@ -104,6 +104,36 @@ describe("editor architecture acceptance", () => {
     expect(host.querySelector("pre[data-source-kind=bullet_list]")).toBeNull();
   });
 
+  it.each([">", "> ", ">\n>", "> \r\n>\r\n>  ", "> >"])("toggles empty quote markers without adding a paragraph for %j", (quote) => {
+    const source = `before\n\n${quote}\n\nafter`;
+    const from = source.indexOf(">");
+    const to = from + quote.length;
+    const { editor, host, onChange, input, undo, clipboard } = setup(source);
+    const quotes = () => host.querySelectorAll("blockquote[data-source-container]");
+    const markerCount = quote.split(/\r\n|\r|\n/).length;
+    expect(quotes().length).toBeGreaterThan(0);
+    expect(host.querySelector("blockquote p")).toBeNull();
+    expect(host.querySelectorAll("blockquote .source-line-prefix-hidden")).toHaveLength(markerCount);
+
+    editor.setSelection({ anchor: from, head: to });
+    expect(host.querySelectorAll("blockquote .source-line-prefix")).toHaveLength(markerCount);
+    expect(clipboard("copy")).toBe(quote);
+    expect(editor.getSelection()).toEqual({ anchor: from, head: to });
+    editor.setSelectionOffset(source.length);
+    expect(quotes().length).toBeGreaterThan(0);
+    expect(host.querySelectorAll("blockquote .source-line-prefix-hidden")).toHaveLength(markerCount);
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
+
+    editor.setSelectionOffset(to);
+    input("文字");
+    expect(editor.getMarkdown()).toBe(`${source.slice(0, to)}文字${source.slice(to)}`);
+    undo();
+    expect(editor.getMarkdown()).toBe(source);
+    expect(editor.getSelectionOffset()).toBe(to);
+    expect(host.querySelector("blockquote p")).toBeNull();
+  });
+
   it("reveals continuation indentation without removing the first line's rendered bullet", () => {
     const source = "- first\n  continuation\n  - nested\n\t\tcontinued\n\nend";
     const { editor, host, clipboard, onChange } = setup(source);

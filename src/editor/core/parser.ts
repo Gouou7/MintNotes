@@ -386,7 +386,9 @@ export class ParserState {
       const to = Number(frame.attrs.sourceTo);
       const children: PMNode[] = [];
       let cursor = from;
-      node.forEach((child) => {
+      // Empty quotes have no parsed children. Do not retain createAndFill's
+      // synthetic paragraph: the authored marker gap already owns their rows.
+      frame.content.forEach((child) => {
         const childFrom = Number(child.attrs.sourceFrom);
         const childTo = Number(child.attrs.sourceTo);
         if (child.attrs.sourceFrom !== null && Number.isInteger(childFrom) && childFrom > cursor) {
@@ -669,7 +671,7 @@ function sourceGapNode(
       [SOURCE_TO_ATTR]: to,
       [SOURCE_TEXT_ATTR]: source,
     },
-    sourceGapContent(source, from > 0),
+    sourceGapContent(source, from > 0 && /^[\r\n]/.test(source)),
   );
   return node.type.createChecked({
     ...node.attrs,
@@ -785,7 +787,11 @@ export function parse(src: string, options: ParseOptions = {}): PMNode {
       );
       if (composite) {
         const from = lines[token.map![0]]!.from;
-        const last = lines[token.map![1] - 1]!;
+        // Empty quotes can include following unquoted blank lines in their
+        // token map. Those lines belong outside the quote's border.
+        let lastLine = token.map![1] - 1;
+        while (lastLine > token.map![0] && !lines[lastLine]!.text.trim()) lastLine--;
+        const last = lines[lastLine]!;
         const to = last.from + last.text.length;
         state.openNode(schema.nodes.quote_container, { sourceFrom: from, sourceTo: to, sourceText: src.slice(from, to) });
         compositeQuotes.push(token.level);

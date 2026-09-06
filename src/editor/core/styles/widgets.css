@@ -64,6 +64,9 @@
   tab-size: inherit;
 }
 .ProseMirror pre[data-source-gap] > code { font: inherit; white-space: inherit; }
+/* Quote markers hang into the container gutter. Ordinary pre overflow would
+ * clip them even while their source-line decoration is in editing state. */
+.ProseMirror pre[data-source-gap]:not([data-source-gap-structural]) { overflow: visible; }
 .ProseMirror [data-source-gap-hidden] { display: none; }
 .ProseMirror pre[data-source-gap-structural] {
   position: absolute;

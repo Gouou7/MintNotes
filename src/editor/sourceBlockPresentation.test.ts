@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { createEditor } from "./core/lib";
 
 const editorStyles = [
   readFileSync(resolve("src/editor/core/styles/widgets.css"), "utf8"),
@@ -24,6 +25,47 @@ function mountSource(kind: string): HTMLElement {
 
 afterEach(() => {
   for (const element of mounted.splice(0)) element.remove();
+});
+
+describe("empty quote marker visibility", () => {
+  it.each(["> ", ">\n>\n> ", "> > "])("does not clip editing markers for %j", (quote) => {
+    const style = document.createElement("style");
+    style.textContent = editorStyles;
+    document.head.append(style);
+    const host = document.createElement("div");
+    host.className = "markdown-editor-host";
+    document.body.append(host);
+    mounted.push(style, host);
+    const source = `${quote}\n\nafter`;
+    const editor = createEditor(host, { initialContent: source });
+    try {
+      editor.setSelection({ anchor: 0, head: quote.length });
+      const markers = host.querySelectorAll<HTMLElement>("blockquote .source-line-prefix");
+      expect(markers).toHaveLength(quote.split("\n").length);
+      for (const marker of markers) {
+        expect(getComputedStyle(marker).fontSize).not.toBe("0px");
+        const gap = marker.closest<HTMLElement>("pre[data-source-gap]")!;
+        expect(getComputedStyle(gap).overflow).toBe("visible");
+      }
+      editor.setSelectionOffset(source.length);
+      const hidden = host.querySelectorAll<HTMLElement>("blockquote .source-line-prefix-hidden");
+      expect(hidden).toHaveLength(markers.length);
+      for (const marker of hidden) expect(getComputedStyle(marker).width).toBe("0px");
+      expect(getComputedStyle(host.querySelector("blockquote")!).borderLeftStyle).toBe("solid");
+      expect(editor.getMarkdown()).toBe(source);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("keeps structural separators collapsed", () => {
+    const source = mountSource("paragraph");
+    source.setAttribute("data-source-gap", "1");
+    source.setAttribute("data-source-gap-structural", "1");
+    source.removeAttribute("data-source-block");
+    expect(getComputedStyle(source).overflow).toBe("hidden");
+    expect(getComputedStyle(source).height).toBe("0px");
+  });
 });
 
 describe("transient source-block typography", () => {

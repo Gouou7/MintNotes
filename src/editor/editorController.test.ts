@@ -975,6 +975,34 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
+  it("commits Chinese IME input into an empty quote once and restores the marker with undo", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const initial = "before\n\n> \n\nafter";
+    const caret = initial.indexOf("> ") + 2;
+    const changes: string[] = [];
+    const editor = createEditor(host, {
+      initialContent: initial,
+      onChange: (next) => changes.push(next),
+    });
+    editor.focus();
+    editor.setSelectionOffset(caret);
+
+    await composeNativeText(host, ["z", "zhong", "中", "中文"]);
+
+    const expected = `${initial.slice(0, caret)}中文${initial.slice(caret)}`;
+    expect(editor.getMarkdown()).toBe(expected);
+    expect(editor.getSelectionOffset()).toBe(caret + 2);
+    expect(changes).toEqual([expected]);
+    host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z", code: "KeyZ", ctrlKey: true, bubbles: true, cancelable: true,
+    }));
+    expect(editor.getMarkdown()).toBe(initial);
+    expect(editor.getSelectionOffset()).toBe(caret);
+    expect(host.querySelector("blockquote p")).toBeNull();
+    editor.destroy();
+  });
+
   it("keeps an editing source-backed surface mounted until its structure changes", async () => {
     const host = document.createElement("div");
     document.body.append(host);
