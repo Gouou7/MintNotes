@@ -31,6 +31,30 @@ test("typing a closing fence line immediately exits the code block", () => {
   host.remove();
 });
 
+test("an empty fenced block dims and hides both adjacent fences", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const markdown = "```\n```\n\nafter";
+  const changes: string[] = [];
+  const editor = createEditor(host, {
+    initialContent: markdown,
+    onChange: (source) => changes.push(source),
+  });
+
+  editor.setSelectionOffset(4);
+  expect(Array.from(host.querySelectorAll(".ProseMirror > pre .syntax-hint"))
+    .map((node) => node.textContent)).toEqual(["```", "```"]);
+
+  editor.setSelectionOffset(markdown.length);
+  expect(Array.from(host.querySelectorAll(".ProseMirror > pre .syntax-hidden"))
+    .map((node) => node.textContent)).toEqual(["```", "```"]);
+  expect(editor.getMarkdown()).toBe(markdown);
+  expect(changes).toEqual([]);
+
+  editor.destroy();
+  host.remove();
+});
+
 test("typing a closing fence in the middle reparses the entire remaining document", () => {
   const host = document.createElement("div");
   document.body.append(host);

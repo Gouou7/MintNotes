@@ -54,10 +54,13 @@ export function parseFencedCodeSource(source: string): FencedCodeSource | null {
 
   const marker = opening[1]!;
   const lastBreak = source.lastIndexOf("\n");
-  const closingLine = lastBreak > openingBreak ? source.slice(lastBreak + 1) : "";
+  const closingLine = source.slice(lastBreak + 1);
   const hasClosingFence = closingFenceLength(closingLine, marker) !== null;
   const bodyFrom = openingBreak + 1;
-  const bodyTo = hasClosingFence ? lastBreak : source.length;
+  // In an empty fenced block (`opening\nclosing`), the same line break ends
+  // the opening line and precedes the closing line. Keep the body as a valid
+  // zero-width source range at the start of the closing fence.
+  const bodyTo = hasClosingFence ? Math.max(bodyFrom, lastBreak) : source.length;
 
   return {
     marker,
