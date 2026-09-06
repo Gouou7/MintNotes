@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { Plugin } from "prosemirror-state";
 import { createEditor, type EditorExtension, type EditorOptions } from "./core/lib";
 import { createCalloutExtension, focusCalloutMarker } from "./extensions/callout";
 import { createCommentExtension } from "./extensions/comment";
@@ -209,6 +210,27 @@ function pressNavigationKey(
   });
   host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(event);
   return event.defaultPrevented;
+}
+
+function scrollRequestCounter(): {
+  extension: EditorExtension;
+  requests: () => number;
+} {
+  let requests = 0;
+  return {
+    extension: {
+      id: "test-scroll-request-counter",
+      createPlugins: () => [new Plugin({
+        props: {
+          handleScrollToSelection: () => {
+            requests += 1;
+            return true;
+          },
+        },
+      })],
+    },
+    requests: () => requests,
+  };
 }
 
 afterEach(() => {
@@ -1261,6 +1283,105 @@ describe("Mint editor core public controller", () => {
     expect(changes).toEqual(["a\nbc"]);
     expect(host.querySelectorAll(".ProseMirror > p")).toHaveLength(1);
 
+    editor.destroy();
+  });
+
+  it("requests caret scrolling after keyboard, text, clipboard, and history edits", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const counter = scrollRequestCounter();
+    const editor = createEditor(host, {
+      initialContent: "abc",
+      extensions: [counter.extension],
+    });
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) throw new Error("Missing Live editor");
+    editor.setSelectionOffset(3);
+    editor.focus();
+
+    let previous = counter.requests();
+    editable.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(counter.requests()).toBeGreaterThan(previous);
+
+    previous = counter.requests();
+    await typeBrowserTextAtSelection(host, "d");
+    expect(counter.requests()).toBeGreaterThan(previous);
+
+    previous = counter.requests();
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { getData: () => "ef" } });
+    editable.dispatchEvent(paste);
+    expect(counter.requests()).toBeGreaterThan(previous);
+
+    previous = counter.requests();
+    editable.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Backspace",
+      code: "Backspace",
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(counter.requests()).toBeGreaterThan(previous);
+
+    previous = counter.requests();
+    editable.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(counter.requests()).toBeGreaterThan(previous);
+
+    editor.destroy();
+  });
+
+  it("requests caret scrolling when table keyboard navigation changes cells", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const counter = scrollRequestCounter();
+    const markdown = "| A | B |\n| --- | --- |\n| C | D |";
+    const editor = createEditor(host, {
+      initialContent: markdown,
+      extensions: [counter.extension],
+    });
+    editor.setSelectionOffset(markdown.indexOf("A"));
+    editor.focus();
+    const previous = counter.requests();
+
+    host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    expect(editor.getSelectionOffset()).toBe(markdown.indexOf("C"));
+    expect(counter.requests()).toBeGreaterThan(previous);
+    editor.destroy();
+  });
+
+  it("keeps presentation refreshes and external replacements from moving the viewport", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const counter = scrollRequestCounter();
+    const editor = createEditor(host, {
+      initialContent: "abc",
+      extensions: [counter.extension],
+    });
+    editor.setSelectionOffset(2);
+    editor.focus();
+    const previous = counter.requests();
+
+    editor.refreshPresentation();
+    editor.replaceMarkdown("abcd", 2);
+
+    expect(editor.getSelectionOffset()).toBe(2);
+    expect(counter.requests()).toBe(previous);
     editor.destroy();
   });
 

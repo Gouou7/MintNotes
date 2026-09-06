@@ -10,10 +10,12 @@
  */
 
 .ProseMirror {
+  --markdown-body-font-size: 16px;
+  --markdown-body-line-height: 1.7;
   font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica,
     Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  font-size: 16px;
-  line-height: 1.7;
+  font-size: var(--markdown-body-font-size);
+  line-height: var(--markdown-body-line-height);
   color: #1f1f1f;
   word-wrap: break-word;
 }

@@ -104,6 +104,114 @@ describe("editor architecture acceptance", () => {
     expect(host.querySelector("pre[data-source-kind=bullet_list]")).toBeNull();
   });
 
+  it.each([
+    ["=", "h1"],
+    ["-", "h2"],
+  ] as const)("keeps a Setext %s heading as one two-line display unit", (marker, tag) => {
+    const source = `before\n\nTitle ---\n${marker.repeat(5)}\n\nafter`;
+    const titleFrom = source.indexOf("Title ---");
+    const markerFrom = source.indexOf(marker.repeat(5));
+    const { editor, host, onChange, input, undo } = setup(source);
+    const heading = host.querySelector<HTMLElement>(tag);
+    const setextMarker = () => heading?.querySelector<HTMLElement>(".setext-heading-marker");
+
+    expect(heading?.textContent).toBe(`Title ---\n${marker.repeat(5)}`);
+    expect(heading?.querySelectorAll(".setext-heading-marker")).toHaveLength(1);
+    expect(heading?.querySelector(".syntax-hidden")?.textContent).toBe(`\n${marker.repeat(5)}`);
+    expect(setextMarker()?.classList.contains("syntax-hidden")).toBe(true);
+
+    editor.setSelectionOffset(titleFrom + 2);
+    expect(setextMarker()?.classList.contains("syntax-hint")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(titleFrom + 2);
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
+
+    editor.setSelectionOffset(markerFrom + 2);
+    expect(setextMarker()?.classList.contains("syntax-hint")).toBe(true);
+    expect(editor.getSelectionOffset()).toBe(markerFrom + 2);
+    input(marker);
+    expect(editor.getMarkdown()).toBe(`${source.slice(0, markerFrom + 2)}${marker}${source.slice(markerFrom + 2)}`);
+    undo();
+    expect(editor.getMarkdown()).toBe(source);
+
+    editor.setSelectionOffset(source.length);
+    expect(setextMarker()?.classList.contains("syntax-hidden")).toBe(true);
+  });
+
+  it.each([
+    ["H1 with LF", "\n", "===", "h1"],
+    ["H1 with CRLF", "\r\n", "===", "h1"],
+    ["H2 with LF", "\n", "---", "h2"],
+    ["H2 with CRLF", "\r\n", "---", "h2"],
+  ] as const)("keeps horizontal movement on every visual Setext line for %s", (
+    _name,
+    ending,
+    underline,
+    tag,
+  ) => {
+    const prefix = `before${ending}${ending}`;
+    const source = `${prefix}Title${ending}${underline}${ending}${ending}after`;
+    const titleFrom = prefix.length;
+    const markerFrom = source.indexOf(underline, titleFrom);
+    const { editor, host, key } = setup(source);
+
+    editor.setSelectionOffset(titleFrom + 1);
+    expect(key("ArrowLeft")).toBe(false);
+
+    const heading = host.querySelector<HTMLElement>(tag);
+    expect(editor.getSelectionOffset()).toBe(titleFrom);
+    expect(document.getSelection()?.anchorNode).toBe(heading?.firstChild);
+    expect(document.getSelection()?.anchorOffset).toBe(0);
+
+    editor.setSelectionOffset(markerFrom + 1);
+    expect(key("ArrowLeft")).toBe(false);
+
+    const marker = host.querySelector<HTMLElement>(".setext-heading-marker");
+    expect(editor.getSelectionOffset()).toBe(markerFrom);
+    expect(document.getSelection()?.anchorNode).toBe(marker?.firstChild);
+    expect(document.getSelection()?.anchorOffset).toBe(ending.length);
+
+    editor.setSelectionOffset(markerFrom - ending.length);
+    expect(key("ArrowRight")).toBe(false);
+    expect(editor.getSelectionOffset()).toBe(markerFrom);
+    expect(document.getSelection()?.anchorNode).toBe(marker?.firstChild);
+    expect(document.getSelection()?.anchorOffset).toBe(ending.length);
+
+    editor.setSelectionOffset(markerFrom);
+    expect(key("ArrowLeft")).toBe(false);
+    expect(editor.getSelectionOffset()).toBe(markerFrom - ending.length);
+    expect(document.getSelection()?.anchorNode).toBe(heading?.firstChild);
+    expect(document.getSelection()?.anchorOffset).toBe("Title".length);
+
+    editor.setSelectionOffset(titleFrom + 1);
+    expect(key("ArrowLeft", { shiftKey: true })).toBe(false);
+    expect(editor.getSelection()).toEqual({ anchor: titleFrom + 1, head: titleFrom });
+    expect(document.getSelection()?.isCollapsed).toBe(false);
+
+    editor.setSelectionOffset(markerFrom + 1);
+    expect(key("ArrowLeft", { shiftKey: true })).toBe(false);
+    expect(editor.getSelection()).toEqual({ anchor: markerFrom + 1, head: markerFrom });
+    expect(document.getSelection()?.isCollapsed).toBe(false);
+
+    editor.setSelectionOffset(markerFrom - ending.length);
+    expect(key("ArrowRight", { shiftKey: true })).toBe(false);
+    expect(editor.getSelection()).toEqual({
+      anchor: markerFrom - ending.length,
+      head: markerFrom,
+    });
+    expect(document.getSelection()?.isCollapsed).toBe(false);
+
+    editor.setSelectionOffset(titleFrom);
+    expect(key("ArrowLeft")).toBe(false);
+    expect(editor.getSelectionOffset()).toBe(titleFrom - ending.length);
+
+    editor.setSelectionOffset(markerFrom + underline.length);
+    expect(key("ArrowRight")).toBe(false);
+    expect(editor.getSelectionOffset()).toBe(markerFrom + underline.length + ending.length);
+
+    expect(editor.getMarkdown()).toBe(source);
+  });
+
   it("does not expose inactive intermediate syntax units", () => {
     const { editor, host } = setup("a **one** b **two** c **three** z");
     editor.setSelection({ anchor: 4, head: 24 });

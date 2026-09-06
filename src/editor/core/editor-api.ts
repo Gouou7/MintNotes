@@ -545,6 +545,45 @@ export function createEditor(
       : { anchor: "right", head: "left" };
   }
 
+  function exactTextPositionForRange(
+    doc: PMNode,
+    range: LiveSourceRange | null,
+    sourceOffset: number,
+  ): number | null {
+    if (!range || sourceOffset < range.from || sourceOffset > range.to) return null;
+    const node = doc.nodeAt(range.pos);
+    if (
+      !node?.isTextblock
+      || node.content.size !== range.source.length
+      || node.textContent !== range.source
+    ) return null;
+    return range.pos + 1 + sourceOffset - range.from;
+  }
+
+  function exactSourceOffsetForTextPosition(
+    doc: PMNode,
+    documentPosition: number,
+  ): number | null {
+    let result: number | null = null;
+    doc.forEach((node, pos) => {
+      if (result !== null) return;
+      const from = node.attrs[SOURCE_FROM_ATTR];
+      const source = node.attrs[SOURCE_TEXT_ATTR];
+      const start = pos + 1;
+      if (
+        !Number.isInteger(from)
+        || typeof source !== "string"
+        || !node.isTextblock
+        || node.content.size !== source.length
+        || node.textContent !== source
+        || documentPosition < start
+        || documentPosition > start + source.length
+      ) return;
+      result = from + documentPosition - start;
+    });
+    return result;
+  }
+
   function synchronizeLivePresentation(
     state: EditorState,
     sourceSelection: { anchor: number; head: number },
@@ -638,20 +677,42 @@ export function createEditor(
 
     const explicitSelection = intent.anchor !== undefined || intent.head !== undefined;
     if (!presentationChanged && !explicitSelection && intent.scroll !== true) return null;
+    const requestedAnchor = Math.max(
+      0,
+      Math.min(intent.anchor ?? sourceSelection.anchor, canonicalMarkdown.length),
+    );
+    const requestedHead = Math.max(
+      0,
+      Math.min(intent.head ?? sourceSelection.head, canonicalMarkdown.length),
+    );
     if (presentationChanged || explicitSelection) {
       const positions = SourcePositionMap.fromDocument(tr.doc, canonicalMarkdown);
-      const anchor = Math.max(0, Math.min(intent.anchor ?? sourceSelection.anchor, canonicalMarkdown.length));
-      const head = Math.max(0, Math.min(intent.head ?? sourceSelection.head, canonicalMarkdown.length));
+      const anchor = requestedAnchor;
+      const head = requestedHead;
+      const preservedAnchorPosition = !presentationChanged
+        && exactSourceOffsetForTextPosition(state.doc, state.selection.anchor) === anchor
+        ? state.selection.anchor
+        : null;
+      const preservedHeadPosition = !presentationChanged
+        && exactSourceOffsetForTextPosition(state.doc, state.selection.head) === head
+        ? state.selection.head
+        : null;
       let affinities = sourceSelectionAffinities({ anchor, head }, direction);
+      let exactCollapsedPosition: number | null = null;
       if (anchor === head) {
         const selectedRange = sourceRangeAtOffsetInDocument(tr.doc, head, direction);
+        exactCollapsedPosition = exactTextPositionForRange(tr.doc, selectedRange, head);
         const affinity = direction === -1 || selectedRange?.to === head
           ? "left"
           : "right";
         affinities = { anchor: affinity, head: affinity };
       }
-      const anchorPosition = positions.sourceToDocument(anchor, affinities.anchor);
-      const headPosition = positions.sourceToDocument(head, affinities.head);
+      const anchorPosition = preservedAnchorPosition
+        ?? exactCollapsedPosition
+        ?? positions.sourceToDocument(anchor, affinities.anchor);
+      const headPosition = preservedHeadPosition
+        ?? exactCollapsedPosition
+        ?? positions.sourceToDocument(head, affinities.head);
       try {
         tr.setSelection(TextSelection.create(tr.doc, anchorPosition, headPosition));
       } catch {
@@ -751,6 +812,7 @@ export function createEditor(
     state: EditorState,
     sourceSelection: SourceSelection,
     restoreSourceEditing = false,
+    scrollToSelection = false,
   ): void {
     const reparsed = parse(canonicalMarkdown);
     const repair = state.tr.replaceWith(0, state.doc.content.size, reparsed.content);
@@ -763,12 +825,13 @@ export function createEditor(
     ));
     repair.setMeta("addToHistory", false);
     repair.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
+    if (scrollToSelection && !restoreSourceEditing) repair.scrollIntoView();
     view.updateState(state.apply(repair));
     // A reparse caused by an authored edit must keep the caret on that exact
     // source range, including tables. Tables stay on their rich-cell path for
     // ordinary navigation, but an edit that just created or changed one must
     // not strand the DOM caret in the rebuilt projection.
-    if (restoreSourceEditing) setLiveSelection(sourceSelection);
+    if (restoreSourceEditing) setLiveSelection(sourceSelection, scrollToSelection);
   }
 
   function applyCanonicalTransaction(
@@ -806,20 +869,26 @@ export function createEditor(
     return inSource ? sourceTextareaSelection() : sourceSelectionForState(view.state);
   }
 
-  function setLiveSelection(selection: SourceSelection): void {
+  function setLiveSelection(selection: SourceSelection, scrollToSelection = false): void {
     const state = refreshSourceRanges(view.state);
     view.updateState(state);
-    const synchronization = synchronizeLivePresentation(state, selection, { ...selection, scroll: false });
+    const synchronization = synchronizeLivePresentation(state, selection, {
+      ...selection,
+      scroll: scrollToSelection,
+    });
     if (synchronization) view.updateState(view.state.apply(synchronization));
   }
 
-  function renderCanonicalSelection(selection: SourceSelection): void {
+  function renderCanonicalSelection(
+    selection: SourceSelection,
+    scrollToSelection = true,
+  ): void {
     if (inSource) {
       sourceTextarea.value = new TextareaSourceMap(canonicalMarkdown).text;
       selectSourceTextarea(selection);
       sourceInputSelection = selection;
       autoSizeSource();
-    } else reparsePresentation(view.state, selection, true);
+    } else reparsePresentation(view.state, selection, true, scrollToSelection);
   }
 
   function sourceSelectionForState(state: EditorState): { anchor: number; head: number } {
@@ -864,7 +933,7 @@ export function createEditor(
     pendingComposition = null;
     const changed = applyCanonicalTransaction(transaction, composition.source.baseSelection);
     if (changed && reparseDerivedDocument) {
-      reparsePresentation(view.state, transaction.selection, true);
+      reparsePresentation(view.state, transaction.selection, true, true);
     }
     if (presentationRefreshPending && !inSource) {
       presentationRefreshPending = false;
@@ -920,15 +989,18 @@ export function createEditor(
       blockPosition + 1 + transaction.selection.head - editing.from,
     ));
     tr.setMeta(SOURCE_TRANSACTION_META, transaction);
-    view.dispatch(tr);
+    view.dispatch(tr.scrollIntoView());
     return true;
   }
 
-  function applyAndRenderCanonicalTransaction(transaction: SourceTransaction): boolean {
+  function applyAndRenderCanonicalTransaction(
+    transaction: SourceTransaction,
+    scrollToSelection = true,
+  ): boolean {
     if (!inSource && dispatchTransactionInsideActiveSourceBlock(transaction)) return true;
     const previousSelection = currentSelection();
     if (!applyCanonicalTransaction(transaction, previousSelection)) return false;
-    renderCanonicalSelection(transaction.selection);
+    renderCanonicalSelection(transaction.selection, scrollToSelection);
     return true;
   }
 
@@ -975,7 +1047,8 @@ export function createEditor(
     view.dispatch(
       view.state.tr
         .insertText(text, fromPosition, toPosition)
-        .setMeta(SOURCE_TRANSACTION_META, sourceTransaction),
+        .setMeta(SOURCE_TRANSACTION_META, sourceTransaction)
+        .scrollIntoView(),
     );
     return true;
   }
@@ -1086,7 +1159,12 @@ export function createEditor(
         v.updateState(next);
         scheduleBlockHeightCache();
         if (reparseRequest) {
-          reparsePresentation(next, reparseRequest.selection, reparseRequest.restoreEditing);
+          reparsePresentation(
+            next,
+            reparseRequest.selection,
+            reparseRequest.restoreEditing,
+            tr.scrolledIntoView,
+          );
           scheduleBlockHeightCache();
         }
       },
@@ -1107,7 +1185,7 @@ export function createEditor(
         const tableAction = tableNavigation(view.state, canonicalMarkdown, currentSelection(), event);
         if (tableAction) {
           if ("edits" in tableAction) applyAndRenderCanonicalTransaction(tableAction);
-          else setLiveSelection(tableAction);
+          else setLiveSelection(tableAction, true);
           event.preventDefault();
           return true;
         }
@@ -1162,8 +1240,15 @@ export function createEditor(
         const target = adjacentGrapheme(canonicalMarkdown, head, direction);
         if (target === head) return false;
         const anchor = event.shiftKey ? selection.anchor : target;
-        const anchorPosition = positions.sourceToDocument(anchor, "left");
-        const headPosition = positions.sourceToDocument(target, direction < 0 ? "left" : "right");
+        const currentRange = sourceRangeAtOffsetInDocument(view.state.doc, head);
+        const exactTargetPosition = exactTextPositionForRange(
+          view.state.doc,
+          currentRange,
+          target,
+        );
+        const headPosition = exactTargetPosition
+          ?? positions.sourceToDocument(target, direction < 0 ? "left" : "right");
+        const anchorPosition = event.shiftKey ? current.anchor : headPosition;
         let navigation = view.state.tr;
         try {
           navigation = navigation.setSelection(TextSelection.create(
@@ -1353,7 +1438,7 @@ export function createEditor(
   function replaceMarkdown(markdown: string, offset = markdown.length): void {
     const head = Math.max(0, Math.min(offset, markdown.length));
     applyAndRenderCanonicalTransaction({ edits: [changedSourceRange(canonicalMarkdown, markdown)],
-      selection: { anchor: head, head }, origin: "command", reparseDerivedDocument: true });
+      selection: { anchor: head, head }, origin: "command", reparseDerivedDocument: true }, false);
   }
 
   function setSelectionOffset(offset: number): void {

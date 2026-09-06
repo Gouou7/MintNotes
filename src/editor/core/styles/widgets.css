@@ -117,6 +117,19 @@
  * becomes visible as soon as the cursor enters the span. */
 .ProseMirror .syntax-hidden { font-size: 0; line-height: 0; vertical-align: baseline; }
 
+/* A Setext underline is a second authored source line. It uses body metrics
+ * instead of heading metrics; rendering hides only its ink so the line keeps
+ * its place and revealing either heading line does not move surrounding text. */
+.ProseMirror .setext-heading { white-space: break-spaces; }
+.ProseMirror .setext-heading-marker {
+  display: inline;
+  font-size: var(--markdown-body-font-size, 1rem);
+  font-weight: normal;
+  line-height: var(--markdown-body-line-height, normal);
+  white-space: break-spaces;
+}
+.ProseMirror .setext-heading-marker.syntax-hidden { visibility: hidden; }
+
 /* HTML comment — wraps the entire `<!-- ... -->` source. The chars
  * stay visible (no decoration hides them); the wrapper just dims so
  * the user can see at a glance that this is a comment. */

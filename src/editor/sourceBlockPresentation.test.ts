@@ -50,3 +50,27 @@ describe("transient source-block typography", () => {
     expect(sourceStyle.lineHeight).toBe(headingStyle.lineHeight);
   });
 });
+
+describe("Setext heading marker typography", () => {
+  it.each(["h1", "h2"])("puts the hidden %s marker on its own body-sized line", (tag) => {
+    const style = document.createElement("style");
+    style.textContent = editorStyles;
+    const host = document.createElement("div");
+    host.className = "markdown-editor-host";
+    host.innerHTML = `<div class="ProseMirror"><${tag} class="setext-heading">Title<span class="setext-heading-marker syntax-hidden">\n===</span></${tag}></div>`;
+    document.head.append(style);
+    document.body.append(host);
+    mounted.push(style, host);
+
+    const root = host.querySelector<HTMLElement>(".ProseMirror")!;
+    const marker = host.querySelector<HTMLElement>(".setext-heading-marker")!;
+    const rootStyle = getComputedStyle(root);
+    const markerStyle = getComputedStyle(marker);
+
+    expect(markerStyle.display).toBe("inline");
+    expect(markerStyle.fontSize).toBe(rootStyle.fontSize);
+    expect(markerStyle.lineHeight).toBe(rootStyle.lineHeight);
+    expect(markerStyle.whiteSpace).toBe("break-spaces");
+    expect(markerStyle.visibility).toBe("hidden");
+  });
+});

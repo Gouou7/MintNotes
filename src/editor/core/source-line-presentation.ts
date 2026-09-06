@@ -22,10 +22,18 @@ export function sourceLinePresentationPlugin(units: NonNullable<EditorExtension[
             }
           }
           const text = node.type.name === "source_gap" ? String(node.attrs.sourceText) : node.textContent;
+          const setextHeading = node.type.name === "heading" && node.attrs.style === "setext";
+          const setextHeadingEditing = setextHeading
+            && presentationSelectionTouches(selection, pos + 1, pos + 1 + text.length);
+          if (setextHeading) {
+            output.push(Decoration.node(pos, pos + node.nodeSize, { class: "setext-heading" }));
+          }
           for (const line of text.matchAll(/[^\r\n]+/g)) {
             const start = pos + 1 + line.index;
             const end = start + line[0].length;
-            const editing = blockEditing || presentationSelectionTouches(selection, start, end);
+            const editing = blockEditing
+              || setextHeadingEditing
+              || presentationSelectionTouches(selection, start, end);
             if (editing && ancestors.parent.type.name === "paragraph" && ancestors.depth > 1 && ancestors.node(ancestors.depth - 1).type.name === "list_item") {
               const item = ancestors.node(ancestors.depth - 1);
               const itemPos = ancestors.before(ancestors.depth - 1);
@@ -36,10 +44,26 @@ export function sourceLinePresentationPlugin(units: NonNullable<EditorExtension[
               class: editing ? "syntax-hint" : "syntax-hidden",
             }));
             if (node.type.name === "heading") {
-              const suffix = /(?:[\t ]+#+[\t ]*|[\t ]*[=-]+[\t ]*)$/.exec(line[0]);
-              if (suffix) output.push(Decoration.inline(start + suffix.index, end, {
-                class: editing ? "syntax-hint" : "syntax-hidden",
-              }));
+              const suffix = setextHeading
+                ? line.index + line[0].length === text.length
+                  ? /^[\t ]*[=-]+[\t ]*$/.exec(line[0])
+                  : null
+                : /[\t ]+#+[\t ]*$/.exec(line[0]);
+              if (suffix) {
+                const precedingEnding = setextHeading
+                  ? /(?:\r\n|\r|\n)$/.exec(text.slice(0, line.index))?.[0].length ?? 0
+                  : 0;
+                output.push(Decoration.inline(
+                  start + suffix.index - precedingEnding,
+                  end,
+                  {
+                    class: [
+                      ...(setextHeading ? ["setext-heading-marker"] : []),
+                      editing ? "syntax-hint" : "syntax-hidden",
+                    ].join(" "),
+                  },
+                ));
+              }
             }
             const task = /^\[([ xX])\][\t ]+/.exec(line[0].slice(prefix.length));
             if (task) {
