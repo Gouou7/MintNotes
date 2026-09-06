@@ -19,8 +19,8 @@ export const refDefSpecs: FeatureSpecs = {
         "<Enter>",
       ],
       checkpoints: [
-        { at: 1, expect: "[|]" },
-        { at: 2, expect: "[s|]" },
+        { at: 1, expect: "[|" },
+        { at: 2, expect: "[s|" },
         { at: 3, expect: "[s]|" },
         { at: 4, expect: "<gi>[</gi>s<gi>]:</gi>|" },
         { at: 5, expect: "<gi>[</gi>s<gi>]:</gi> |" },
@@ -45,8 +45,6 @@ export const refDefSpecs: FeatureSpecs = {
         "<Enter>",                                  // Enter inside → new empty
       ],
       checkpoints: [
-        // After first commit (event 7 — auto-pair adds 1 to indices):
-        // wait — `[`, `a`, `]`, `:`, ` `, `x`, `<Enter>` is 7 events.
         // After commit cursor is inside the label of the first def.
         {
           at: 7,

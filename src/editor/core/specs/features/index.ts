@@ -8,7 +8,6 @@
 
 import type { Case, FeatureSpecs, RenderCase } from "../_types";
 
-import { autoPairSpecs } from "./auto-pair.specs";
 import { autolinkSpecs } from "./autolink.specs";
 import { blockquoteSpecs } from "./blockquote.specs";
 import { codeSpecs } from "./code.specs";
@@ -51,7 +50,6 @@ export const ALL_SPECS: FeatureSpecs[] = [
   refDefSpecs,
   tableSpecs,
   tocSpecs,
-  autoPairSpecs,
 ];
 
 export function collectRenderCases(): Record<string, RenderCase> {

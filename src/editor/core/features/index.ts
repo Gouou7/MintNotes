@@ -10,7 +10,6 @@ import type {
   FeatureSpec,
   InlineFeatureSpec,
 } from "./_types";
-import { autoPair } from "./auto-pair";
 import { autolink } from "./autolink";
 import { blockquote } from "./blockquote";
 import { code } from "./code";
@@ -58,7 +57,6 @@ export const ALL_FEATURES: FeatureSpec[] = [
   refDef,
   table,
   toc,
-  autoPair,
 ];
 
 // Thin helpers that collect a named table from every feature. They are
@@ -126,7 +124,7 @@ export function collectPlugins(
   context: FeaturePluginContext,
 ): Plugin[] {
   return ALL_FEATURES.flatMap((f) => (
-    context.canonicalSource && ["heading", "list", "task", "ref-def", "auto-pair"].includes(f.name)
+    context.canonicalSource && ["heading", "list", "task", "ref-def"].includes(f.name)
       ? [] : f.plugins?.(schema, context) ?? []
   ));
 }

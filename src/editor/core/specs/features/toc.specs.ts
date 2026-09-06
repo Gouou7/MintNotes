@@ -17,10 +17,8 @@ export const tocSpecs: FeatureSpecs = {
       seed: "",
       events: ["[", "t", "o", "c", "]", "<Enter>"],
       checkpoints: [
-        // auto-pair inserts the closing `]` when `[` lands; subsequent
-        // chars type inside the pair, and the explicit `]` skips over.
-        { at: 1, expect: "[|]" },
-        { at: 4, expect: "[toc|]" },
+        { at: 1, expect: "[|" },
+        { at: 4, expect: "[toc|" },
         { at: 5, expect: "[toc]|" },
         // Enter converts; cursor lands in the trailing fresh paragraph.
         { at: 6, expect: "<toc/>\n|" },
@@ -42,7 +40,6 @@ export const tocSpecs: FeatureSpecs = {
       events: ["[", "o", "t", "h", "e", "r", "]", "<Enter>"],
       checkpoints: [
         // Plain split — paragraph 1 is `[other]`, cursor in fresh para.
-        // auto-pair pairs `[` with `]`, then explicit `]` skips over.
         { at: 8, expect: "[other]\n|" },
       ],
     },

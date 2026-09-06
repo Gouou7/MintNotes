@@ -591,6 +591,61 @@ describe("Mint editor core public controller", () => {
   });
 
   it.each([
+    "[", "(", "{", "<", "'", '"', "`", "*", "_", "~", "=", "^", "$", "%",
+    "（", "【", "《", "“", "‘",
+  ])("inserts typed symbol %j exactly once without synthesizing a pair", async (symbol) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host);
+    editor.focus();
+
+    await typeKeyboardTextAtSelection(host, symbol);
+
+    expect(editor.getMarkdown()).toBe(symbol);
+    expect(editor.getSelectionOffset()).toBe(symbol.length);
+    editor.destroy();
+  });
+
+  it.each(["]", ")"])(
+    "inserts closing symbol %j before the same symbol instead of skipping over it",
+    async (symbol) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const editor = createEditor(host, { initialContent: symbol });
+      editor.setSelectionOffset(0);
+
+      await typeKeyboardTextAtSelection(host, symbol);
+
+      expect(editor.getMarkdown()).toBe(`${symbol}${symbol}`);
+      expect(editor.getSelectionOffset()).toBe(1);
+      editor.destroy();
+    },
+  );
+
+  it.each([
+    ["[", "]"],
+    ["(", ")"],
+  ])("Backspace inside %s%s deletes only the preceding authored symbol", async (open, close) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, { initialContent: `${open}${close}` });
+    editor.setSelectionOffset(1);
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) throw new Error("Missing Live editor");
+
+    editable.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Backspace",
+      code: "Backspace",
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    expect(editor.getMarkdown()).toBe(close);
+    expect(editor.getSelectionOffset()).toBe(0);
+    editor.destroy();
+  });
+
+  it.each([
     ["an empty document", "", 0],
     ["a trailing blank line", "before\n\n", "before\n\n".length],
     ["a blank line between blocks", "before\n\n\nafter", "before\n\n".length],

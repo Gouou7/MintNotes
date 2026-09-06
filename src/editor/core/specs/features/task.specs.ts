@@ -11,8 +11,8 @@ export const taskSpecs: FeatureSpecs = {
       checkpoints: [
         { at: 1, expect: "-|" },
         { at: 2, expect: "<ul><li>|</li></ul>" },
-        { at: 3, expect: "<ul><li>[|]</li></ul>" },
-        { at: 4, expect: "<ul><li>[ |]</li></ul>" },
+        { at: 3, expect: "<ul><li>[|</li></ul>" },
+        { at: 4, expect: "<ul><li>[ |</li></ul>" },
         { at: 5, expect: "<ul><li>[ ]|</li></ul>" },
         { at: 6, expect: "<ul><li><checkbox/>|</li></ul>" },
         { at: 7, expect: "<ul><li><checkbox/>a|</li></ul>" },

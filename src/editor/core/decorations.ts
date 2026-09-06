@@ -205,8 +205,8 @@ function buildDecorationSet(state: EditorState, renderIcon?: RenderControlIcon):
         // PM should not forward DOM events bubbled out of the widget
         // back as editor input — otherwise input/keydown fired around
         // the widget mount can land in handleTextInput and re-trigger
-        // our own auto-pair / normalize work, which we observed looping
-        // when an image span first appears mid-typing.
+        // normalization, which we observed looping when an image span first
+        // appears mid-typing.
         stopEvent: (e: Event) => e.type !== "click",
       }),
     );

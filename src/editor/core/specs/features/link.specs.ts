@@ -21,14 +21,9 @@ export const linkSpecs: FeatureSpecs = {
       events: ["[", "a", "]", "(", "b", ")", " "],
       checkpoints: [
         { at: 3, expect: "[a]|" },
-        // at 4: auto-pair on `(` puts `)` in place. Empty href `[a]()`
-        // is now a valid link (regex allows empty href), so the link
-        // fires immediately; cursor splits the close-delim gray span.
-        { at: 4, expect: "<g>[</g><l:>a</l><g>](</g>|<g>)</g>" },
-        // at 5: typing `b` completes `[a](b)` so the link fires; cursor
-        // sits between `b` and the close `)`.
-        { at: 5, expect: "<g>[</g><l:b>a</l><g>](b</g>|<g>)</g>" },
-        // at 6: skip-over moves cursor past `)`; link span unchanged.
+        { at: 4, expect: "[a](|" },
+        { at: 5, expect: "[a](b|" },
+        // The explicitly authored close `)` completes the link.
         { at: 6, expect: "<g>[</g><l:b>a</l><g>](b)</g>|" },
         // at 7: space pushes cursor past span → delims hidden.
         { at: 7, expect: "<l:b>a</l> |" },
@@ -41,9 +36,8 @@ export const linkSpecs: FeatureSpecs = {
       events: ["[", "a", "]", "(", ")"],
       checkpoints: [
         { at: 3, expect: "[a]|" },
-        { at: 4, expect: "<g>[</g><l:>a</l><g>](</g>|<g>)</g>" },
-        // at 5: skip-over moves cursor past `)`; cursor sits at span's
-        // right edge so delims stay visible (same as inline-link at:6).
+        { at: 4, expect: "[a](|" },
+        // The explicitly authored close `)` completes the empty href.
         { at: 5, expect: "<g>[</g><l:>a</l><g>]()</g>|" },
       ],
     },
@@ -118,15 +112,15 @@ export const linkSpecs: FeatureSpecs = {
       id: "empty-link",
       label: "[]() — empty text + empty href, all chars are delim",
       seed: "",
-      events: ["[", "]", "("],
+      events: ["[", "]", "(", ")"],
       checkpoints: [
-        { at: 1, expect: "[|]" },
+        { at: 1, expect: "[|" },
         { at: 2, expect: "[]|" },
-        // at 3: doc is `[]()`, link mark covers all 4 chars (all delim).
+        { at: 3, expect: "[](|" },
+        // at 4: doc is `[]()`, link mark covers all 4 chars (all delim).
         // open delim `[` and close delim `](...)` are emitted as separate
-        // decorations (content is empty between them); cursor between `(`
-        // and `)` splits the close-delim span.
-        { at: 3, expect: "<g>[</g><g>](</g>|<g>)</g>" },
+        // decorations because content is empty between them.
+        { at: 4, expect: "<g>[</g><g>]()</g>|" },
       ],
     },
   ],
