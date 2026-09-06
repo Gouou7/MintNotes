@@ -16,11 +16,10 @@ import type { FeatureSpec, InlineFeatureSpec } from "./_types";
 //   close delim = `](src "title")` or `](src)`
 //
 // Visibility model (different from link, matches Typora):
-//   - cursor outside span: source chars hidden, an <img> widget at openFrom
+//   - cursor outside span: source chars hidden, an <img> widget at closeTo
 //     renders the loaded image
 //   - cursor inside span:  source chars visible (plain), an icon widget at
-//     openFrom flags the line as image; if src is empty, a <file-input/>
-//     widget sits between `(` and `)` so the user can pick a file
+//     openFrom flags the line as image; empty sources stay editable.
 //
 // We piggy-back on the existing softInside delim path to flip the source
 // chars on and off, and on widgetDecorations to swap the img/icon UI.
@@ -80,7 +79,7 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
       widgetDecorations: [],
     };
 
-    // Edit-mode (file-input + source visible always) when:
+    // Source visible always when:
     //   - src is empty
     //   - probe has confirmed src fails to load
     // Otherwise (probe pending or confirmed ok) render optimistically —
@@ -94,7 +93,7 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
     const editMode = src === "" || status === "error";
     // Icon side=1: caret at openFrom renders to the LEFT of the icon, so
     // ArrowLeft from inside the source can park the cursor before the icon
-    // emoji. With side=-1 the caret ended up between icon and `!`, with no
+    // widget. With side=-1 the caret ended up between icon and `!`, with no
     // way to navigate further left while still inside the textblock.
     const iconWidget = {
       pos: openFrom,
@@ -124,7 +123,7 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
       span.delimRanges = [];
       span.widgetDecorations!.push(
         { ...iconWidget, when: "always" } as never,
-        { pos: closeFrom + 2, when: "always", kind: "file-input" },
+
       );
     }
     out.push(span);
@@ -132,10 +131,6 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
   return out;
 };
 
-// Wires up the file-input widget: when the user picks a file, read it as a
-// data URL and insert that URL at the widget's stamped doc position. The
-// data-pos attribute is added by decorations.buildWidget; it stays correct
-// across rebuilds because the widget is recreated on every state change.
 // Probes every image src found in the doc. On load/error, updates the
 // shared status map and dispatches a meta-only tx to retrigger normalize/
 // decorations so the span flips between image-mode and edit-mode.
@@ -144,11 +139,15 @@ function imageLoadProbePlugin(
 ): Plugin {
   return new Plugin({
     view(editorView) {
+      let destroyed = false;
+      const owned = new Set<string>();
       const probe = (src: string): void => {
         if (imageLoadStatus.has(src)) return;
         imageLoadStatus.set(src, "loading");
+        owned.add(src);
         const probeImg = new Image();
         const finish = (status: LoadStatus): void => {
+          if (destroyed) return;
           imageLoadStatus.set(src, status);
           // setMeta-only tx: nothing in doc changes, but state.apply runs
           // for normalize+decorations and the per-span editMode flag re-
@@ -178,38 +177,7 @@ function imageLoadProbePlugin(
       scanDoc();
       return {
         update: () => scanDoc(),
-        destroy: () => {},
-      };
-    },
-  });
-}
-
-function imageFileInputPlugin(): Plugin {
-  return new Plugin({
-    view(editorView) {
-      const onPick = (e: Event): void => {
-        const evt = e as CustomEvent<{ files: FileList | null }>;
-        const trigger = evt.target as HTMLElement | null;
-        if (!trigger?.classList?.contains("file-input")) return;
-        const file = evt.detail?.files?.[0];
-        if (!file) return;
-        const posStr = trigger.getAttribute("data-pos");
-        if (!posStr) return;
-        const pos = Number(posStr);
-        if (!Number.isFinite(pos)) return;
-        // Use a blob URL instead of a base64 data URL — base64 dumps tens
-        // of KB into the doc text per image, which is unreadable in the
-        // source view and bloats the transaction. blob URLs are short,
-        // session-scoped, and load directly into <img>. (Persisting across
-        // reloads is a separate problem — out of scope for the pilot.)
-        const url = URL.createObjectURL(file);
-        editorView.dispatch(editorView.state.tr.insertText(url, pos));
-      };
-      editorView.dom.addEventListener("file-input-pick", onPick);
-      return {
-        destroy(): void {
-          editorView.dom.removeEventListener("file-input-pick", onPick);
-        },
+        destroy: () => { destroyed = true; for (const src of owned) imageLoadStatus.delete(src); },
       };
     },
   });
@@ -279,7 +247,6 @@ export const image: FeatureSpec = {
   },
 
   plugins: (_schema, context) => [
-    imageFileInputPlugin(),
     imageLoadProbePlugin(context.resolveImageSource),
   ],
 

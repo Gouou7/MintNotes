@@ -28,67 +28,37 @@ export class SourcePositionMap {
 
   static fromDocument(doc: PMNode, source: string): SourcePositionMap {
     const map = new SourcePositionMap(source.length, doc.content.size);
-    let topLevelPosition = 0;
-    doc.forEach((node) => {
+    doc.descendants((node, position) => {
       const from = numericAttr(node, SOURCE_FROM_ATTR);
-      let to = numericAttr(node, SOURCE_TO_ATTR);
-      if (
-        from !== null
-        && ["paragraph", "source_block", "blockquote", "code_block"].includes(node.type.name)
-        && source.slice(from, from + node.textContent.length) === node.textContent
-      ) {
-        to = from + node.textContent.length;
-      }
-      if (from !== null && to !== null && from <= to && to <= source.length) {
-        const contentFrom = topLevelPosition + 1;
-        const contentTo = contentFrom + node.content.size;
-        map.add(from, contentFrom);
-        map.add(to, contentTo);
-
-        if (node.type.name === "source_gap") {
-          let sourceOffset = from;
-          node.forEach((child, relativePosition) => {
-            const documentStart = contentFrom + relativePosition;
-            if (child.isText) {
-              const text = child.text ?? "";
-              for (let index = 0; index <= text.length; index += 1) {
-                map.add(sourceOffset + index, documentStart + index);
-              }
-              sourceOffset += text.length;
-              return;
-            }
-            if (child.type.name === "source_gap_eol") {
-              const character = child.attrs.character;
-              if (character !== "\r" && character !== "\n") return;
-              map.add(sourceOffset, documentStart);
-              sourceOffset += 1;
-              map.add(sourceOffset, documentStart + child.nodeSize);
-            }
-          });
-          topLevelPosition += node.nodeSize;
-          return;
-        }
-
-        const ownedSource = source.slice(from, to);
-        let searchOffset = 0;
-        node.descendants((child, relativePosition) => {
-          if (!child.isText) return;
-          const text = child.text ?? "";
-          const found = ownedSource.indexOf(text, searchOffset);
-          if (found < 0) return;
-          const sourceStart = from + found;
-          const documentStart = contentFrom + relativePosition;
-          for (let index = 0; index <= text.length; index += 1) {
-            map.add(sourceStart + index, documentStart + index);
-          }
-          searchOffset = found + text.length;
+      const to = numericAttr(node, SOURCE_TO_ATTR);
+      if (from === null || to === null) return true;
+      const start = position + 1;
+      if (node.type.name === "source_gap") {
+        let offset = from;
+        node.forEach((child, relative) => {
+          const text = child.isText ? child.text ?? "" : String(child.attrs.character ?? "");
+          for (let i = 0; i <= text.length; i++) map.add(offset + i, start + relative + i);
+          offset += text.length;
         });
+        return false;
       }
-      topLevelPosition += node.nodeSize;
+      if (node.isTextblock) {
+        // Text projections carry their own source range. Never locate repeated
+        // rendered text by searching the Markdown or infer missing delimiters.
+        const text = node.textContent;
+        if (node.content.size === text.length && source.slice(from, from + text.length) === text) {
+          for (let i = 0; i <= text.length; i++) map.add(from + i, start + i);
+        }
+        return false;
+      }
+      return true;
     });
-    map.add(0, Math.min(1, doc.content.size));
-    map.add(source.length, Math.max(0, doc.content.size - 1));
+    if (!source && doc.firstChild?.isTextblock) map.add(0, 1);
     return map;
+  }
+
+  hasExactDocumentBoundary(position: number): boolean {
+    return (this.documentPositions[position]?.length ?? 0) > 0;
   }
 
   /** Whether this authored boundary owns a concrete Live document position. */

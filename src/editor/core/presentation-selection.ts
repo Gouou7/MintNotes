@@ -61,5 +61,5 @@ export function presentationSelectionTouches(
 ): boolean {
   return selection.empty
     ? selection.from >= from && selection.from <= to
-    : selection.from < to && selection.to > from;
+    : (selection.anchor >= from && selection.anchor <= to) || (selection.head >= from && selection.head <= to);
 }

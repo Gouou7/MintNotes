@@ -17,11 +17,13 @@ describe("canonical source position map", () => {
     },
   );
 
-  it("uses deterministic affinity for delimiters absent from the derived heading content", () => {
+  it("owns every heading delimiter boundary in both directions", () => {
     const source = "## heading ##";
     const map = SourcePositionMap.fromDocument(parse(source), source);
-    expect(map.sourceToDocument(1, "left")).toBe(map.sourceToDocument(0, "left"));
-    expect(map.sourceToDocument(1, "right")).toBe(map.sourceToDocument(3, "right"));
+    for (let offset = 0; offset <= source.length; offset++) {
+      expect(map.documentToSource(map.sourceToDocument(offset, "left"))).toBe(offset);
+      expect(map.documentToSource(map.sourceToDocument(offset, "right"))).toBe(offset);
+    }
   });
 
   it("gives blank rows between a list, Quote, and Callout an authored DOM position", () => {

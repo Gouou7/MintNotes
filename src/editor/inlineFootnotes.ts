@@ -1,3 +1,4 @@
+import type { ReadingReplacement, SourcePiece } from "./reading-source";
 function escaped(source: string, offset: number): boolean {
   let slashes = 0;
   for (let index = offset - 1; index >= 0 && source[index] === "\\"; index -= 1) slashes += 1;
@@ -38,7 +39,8 @@ function nextInlineLabel(source: string, sequence: number): string {
 }
 
 /** Materialize Obsidian `^[text]` notes for the read-only Markdown pipeline. */
-export function materializeInlineFootnotesForReading(source: string): string {
+export function materializeInlineFootnotesForReading(source: string, replacements?: ReadingReplacement[]): string {
+  const appended: SourcePiece[] = [{ text: "\n\n" }];
   const output: string[] = [];
   const definitions: string[] = [];
   let cursor = 0;
@@ -83,11 +85,15 @@ export function materializeInlineFootnotesForReading(source: string): string {
     const label = nextInlineLabel(source, sequence++);
     output.push(source.slice(cursor, index), `[^${label}]`);
     definitions.push(`[^${label}]: ${source.slice(index + 2, end)}`);
+    replacements?.push({ from: index, to: end + 1, pieces: [{ text: `[^${label}]` }] });
+    if (definitions.length > 1) appended.push({ text: "\n" });
+    appended.push({ text: `[^${label}]: ` }, { from: index + 2, to: end });
     cursor = end + 1;
     index = end;
   }
 
   if (definitions.length === 0) return source;
+  replacements?.push({ from: source.length, to: source.length, pieces: appended });
   output.push(source.slice(cursor));
-  return `${output.join("").replace(/[\t ]+$/, "")}\n\n${definitions.join("\n")}`;
+  return `${output.join("")}\n\n${definitions.join("\n")}`;
 }

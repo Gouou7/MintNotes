@@ -18,6 +18,10 @@ interface MintPresentationOptions {
 }
 
 function activeLiveTextSurface(editable: HTMLElement): HTMLElement | null {
+  const anchor = document.getSelection()?.anchorNode;
+  const parent = anchor instanceof HTMLElement ? anchor : anchor?.parentElement;
+  const selected = parent?.closest<HTMLElement>("p, h1, h2, h3, h4, h5, h6, td, th, code");
+  if (selected && editable.contains(selected)) return selected;
   const structured = editable.querySelector<HTMLElement>("pre[data-source-block] > code")
     ?? editable.querySelector<HTMLElement>(
       ".source-blockquote-node.is-source-editing .source-blockquote-source-code",
@@ -28,7 +32,8 @@ function activeLiveTextSurface(editable: HTMLElement): HTMLElement | null {
     );
   if (structured) return structured;
   const lastBlock = editable.lastElementChild;
-  return lastBlock instanceof HTMLElement && lastBlock.tagName === "P" ? lastBlock : null;
+  if (lastBlock instanceof HTMLElement && /^(P|H[1-6])$/.test(lastBlock.tagName)) return lastBlock;
+  return lastBlock?.querySelector<HTMLElement>("li:last-child p, td:last-child, th:last-child") ?? null;
 }
 
 function createMintEditor(
@@ -291,8 +296,9 @@ describe("Mint editor core public controller", () => {
       });
 
       editor.setSelectionOffset(prefix.length + caretInSyntax);
+      if (_name === "table") editor.setSourceMode(true);
       expect(host.querySelector("pre[data-source-block], pre[data-source-gap]")).not.toBeNull();
-      host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+      host.querySelector<HTMLElement>(editor.isSourceMode() ? "textarea" : ".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
         key: "Backspace",
         code: "Backspace",
         bubbles: true,
@@ -301,7 +307,7 @@ describe("Mint editor core public controller", () => {
 
       const expected = markdown.slice(0, deleteAt) + markdown.slice(deleteAt + 1);
       expect(editor.getMarkdown()).toBe(expected);
-      const editable = host.querySelector<HTMLElement>(".ProseMirror");
+      const editable = host.querySelector<HTMLElement>(editor.isSourceMode() ? "textarea" : ".ProseMirror");
       editable?.dispatchEvent(new KeyboardEvent("keydown", {
         key: "z",
         code: "KeyZ",
@@ -329,14 +335,15 @@ describe("Mint editor core public controller", () => {
     document.body.append(host);
     const changes: string[] = [];
     const editor = createEditor(host, {
-      initialContent: "- [ ] task",
+      initialContent: "- [ ] task\n\nafter",
       onChange: (markdown) => changes.push(markdown),
     });
+    editor.setSelectionOffset(editor.getMarkdown().length);
     const checkbox = host.querySelector<HTMLElement>(".checkbox");
     expect(checkbox).not.toBeNull();
     checkbox?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    expect(editor.getMarkdown()).toBe("- [x] task");
-    expect(changes).toEqual(["- [x] task"]);
+    expect(editor.getMarkdown()).toBe("- [x] task\n\nafter");
+    expect(changes).toEqual(["- [x] task\n\nafter"]);
 
     const editable = host.querySelector<HTMLElement>(".ProseMirror");
     editable?.dispatchEvent(new KeyboardEvent("keydown", {
@@ -346,7 +353,7 @@ describe("Mint editor core public controller", () => {
       bubbles: true,
       cancelable: true,
     }));
-    expect(editor.getMarkdown()).toBe("- [ ] task");
+    expect(editor.getMarkdown()).toBe("- [ ] task\n\nafter");
     editor.destroy();
   });
 
@@ -439,7 +446,9 @@ describe("Mint editor core public controller", () => {
           onChange: (next) => changes.push(next),
         });
         editor.setSelectionOffset(position);
-        host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+        if (_name === "table") editor.setSourceMode(true);
+        if (editor.isSourceMode() && key === "Enter") editor.insertMarkdown("\n");
+        else host.querySelector<HTMLElement>(editor.isSourceMode() ? "textarea" : ".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
           key,
           code: key,
           bubbles: true,
@@ -630,7 +639,7 @@ describe("Mint editor core public controller", () => {
 
     await typeNativeText(host, "#");
 
-    const sourceBlock = host.querySelector<HTMLElement>("pre[data-source-block]");
+    const sourceBlock = host.querySelector<HTMLElement>("h1");
     expect(sourceBlock?.textContent).toBe("#");
     expect(sourceBlock?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
     expect(editor.getMarkdown()).toBe("#");
@@ -639,7 +648,7 @@ describe("Mint editor core public controller", () => {
     await typeNativeText(host, " ");
     await composeNativeText(host, ["b", "biao", "标", "标题"]);
 
-    expect(host.querySelector("pre[data-source-block]")).toBe(sourceBlock);
+    expect(host.querySelector("h1")).toBe(sourceBlock);
     expect(sourceBlock?.textContent).toBe("# 标题");
     expect(sourceBlock?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
     expect(editor.getMarkdown()).toBe("# 标题");
@@ -649,11 +658,11 @@ describe("Mint editor core public controller", () => {
   });
 
   it.each([
-    ["heading", "#", "pre[data-source-block][data-source-kind='heading-1'] > code"],
-    ["bullet list", "- ", "pre[data-source-block][data-source-kind='bullet_list'] > code"],
-    ["ordered list", "1. ", "pre[data-source-block][data-source-kind='ordered_list'] > code"],
-    ["task list", "- [ ] ", "pre[data-source-block][data-source-kind='bullet_list'] > code"],
-    ["blockquote", ">", ".source-blockquote-node.is-source-editing .source-blockquote-source-code"],
+    ["heading", "#", "h1"],
+    ["bullet list", "- ", "li p"],
+    ["ordered list", "1. ", "li p"],
+    ["task list", "- [ ] ", "li p"],
+    ["blockquote", ">", "blockquote code"],
     ["horizontal rule", "---", "pre[data-source-block][data-source-kind='horizontal_rule'] > code"],
     ["TOC", "[TOC]", "pre[data-source-block][data-source-kind='toc'] > code"],
     ["reference definition", "[ref]: https://example.test", "pre[data-source-gap] > code"],
@@ -713,7 +722,7 @@ describe("Mint editor core public controller", () => {
     await composeNativeText(host, ["＃", "#"]);
 
     const source = host.querySelector<HTMLElement>(
-      "pre[data-source-block][data-source-kind='heading-1'] > code",
+      "h1",
     );
     expect(source?.textContent).toBe("#");
     expect(source?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
@@ -758,7 +767,7 @@ describe("Mint editor core public controller", () => {
   );
 
   it.each([
-    ["heading", "#x", "#", "pre[data-source-block][data-source-kind='heading-1'] > code"],
+    ["heading", "#x", "#", "h1"],
     ["horizontal rule", "---x", "---", "pre[data-source-block][data-source-kind='horizontal_rule'] > code"],
     ["TOC", "[TOC]x", "[TOC]", "pre[data-source-block][data-source-kind='toc'] > code"],
   ] as const)(
@@ -808,37 +817,25 @@ describe("Mint editor core public controller", () => {
     },
   );
 
-  it("keeps a pasted table's exact source and caret together after structural reparse", async () => {
+  it("keeps a pasted table rendered and composes in the selected cell", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const markdown = "| A | B |\n| --- | --- |\n| 一 | 二 |";
     const editor = createEditor(host);
     editor.focus();
-    const editable = host.querySelector<HTMLElement>(".ProseMirror");
-    if (!editable) throw new Error("Missing Live editor root");
     const event = new Event("paste", { bubbles: true, cancelable: true });
-    Object.defineProperty(event, "clipboardData", {
-      value: { getData: (type: string) => type === "text/plain" ? markdown : "" },
-    });
-
-    editable.dispatchEvent(event);
-
-    const source = host.querySelector<HTMLElement>(
-      "pre[data-source-block][data-source-kind='table'] > code",
-    );
+    Object.defineProperty(event, "clipboardData", { value: { getData: () => markdown } });
+    host.querySelector(".ProseMirror")!.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
-    expect(source?.textContent).toBe(markdown);
-    expect(source?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
+    expect(host.querySelector("table")).not.toBeNull();
+    expect(host.querySelector("pre[data-source-kind=table]")).toBeNull();
     expect(editor.getMarkdown()).toBe(markdown);
-    expect(editor.getSelectionOffset()).toBe(markdown.length);
-
+    editor.setSelectionOffset(markdown.indexOf("二") + 1);
+    const cell = host.querySelector("td:last-child");
     await composeNativeText(host, ["b", "biaoti", "标题"]);
-
-    expect(host.querySelector("pre[data-source-block] > code")).toBe(source);
-    expect(source?.textContent).toBe(markdown + "标题");
-    expect(source?.contains(document.getSelection()?.anchorNode ?? null)).toBe(true);
-    expect(editor.getMarkdown()).toBe(markdown + "标题");
-    expect(editor.getSelectionOffset()).toBe((markdown + "标题").length);
+    expect(host.querySelector("td:last-child")).toBe(cell);
+    expect(editor.getMarkdown()).toBe(markdown.replace("二", "二标题"));
+    expect(editor.getSelectionOffset()).toBe(markdown.indexOf("二") + 3);
     editor.destroy();
   });
 
@@ -881,11 +878,11 @@ describe("Mint editor core public controller", () => {
       onChange: (next) => changes.push(next),
     });
     editor.setSelectionOffset(initial.length);
-    const sourceBlock = host.querySelector("pre[data-source-block]");
+    const sourceBlock = host.querySelector("h1");
 
     await composeNativeText(host, ["z", "zhong", "中", "中文"]);
 
-    expect(host.querySelector("pre[data-source-block]")).toBe(sourceBlock);
+    expect(host.querySelector("h1")).toBe(sourceBlock);
     expect(editor.getMarkdown()).toBe(`${initial}中文`);
     expect(editor.getSelectionOffset()).toBe(`${initial}中文`.length);
     expect(changes).toEqual([`${initial}中文`]);
@@ -897,11 +894,11 @@ describe("Mint editor core public controller", () => {
     document.body.append(host);
     const editor = createEditor(host, { initialContent: "# Heading" });
     editor.setSelectionOffset("# Heading".length);
-    const sourceBlock = host.querySelector("pre[data-source-block]");
+    const sourceBlock = host.querySelector("h1");
 
     await typeNativeText(host, " text");
 
-    expect(host.querySelector("pre[data-source-block]")).toBe(sourceBlock);
+    expect(host.querySelector("h1")).toBe(sourceBlock);
     expect(editor.getMarkdown()).toBe("# Heading text");
     expect(editor.getSelectionOffset()).toBe("# Heading text".length);
     editor.destroy();
@@ -936,7 +933,7 @@ describe("Mint editor core public controller", () => {
       });
 
       expect(editor.getMarkdown()).toBe(markdown);
-      expect(host.querySelector(".ProseMirror > h1")?.textContent).toBe("Valid before");
+      expect(host.querySelector(".ProseMirror > h1")?.textContent).toBe("# Valid before");
       expect(host.querySelector("strong")?.textContent).toBe("valid after");
       expect(changes).toEqual([]);
       editor.destroy();
@@ -1021,9 +1018,8 @@ describe("Mint editor core public controller", () => {
     expect(editor.getMarkdown()).toBe(markdown);
     editor.setSelectionOffset("# First\n".length);
     expect(editor.getSelectionOffset()).toBe("# First\n".length);
-    expect(host.querySelector<HTMLElement>("pre[data-source-block]")?.dataset.sourceKind)
-      .toBe("heading-1");
-    expect(host.querySelector("pre[data-source-block]")?.textContent).toBe("# Second");
+    expect(host.querySelector("h1:last-of-type .syntax-hint")?.textContent).toBe("# ");
+    expect(host.querySelector("h1:last-of-type")?.textContent).toBe("# Second");
     expect(editor.getMarkdown()).toBe(markdown);
     editor.destroy();
   });
@@ -1052,7 +1048,7 @@ describe("Mint editor core public controller", () => {
     ],
     ["ordered", "1. one\n2. two\n\n3. three", "1. one\n2. two", "3. three"],
     ["task", "- [ ] one\n- [x] two\n\n- [ ] three", "- [ ] one\n- [x] two", "- [ ] three"],
-  ] as const)("puts only the selected %s list block into editing state across an authored gap", (
+  ] as const)("activates only the selected %s list line across an authored gap", (
     _kind,
     markdown,
     firstBlock,
@@ -1063,12 +1059,12 @@ describe("Mint editor core public controller", () => {
     const editor = createEditor(host, { initialContent: markdown });
 
     editor.setSelectionOffset(markdown.indexOf("one") + 1);
-    expect(host.querySelectorAll(".ProseMirror > pre[data-source-block]")).toHaveLength(1);
-    expect(host.querySelector(".ProseMirror > pre[data-source-block]")?.textContent).toBe(firstBlock);
+    expect(host.querySelectorAll(".ProseMirror > pre[data-source-block]")).toHaveLength(0);
+    expect(host.querySelector("li .syntax-hint")?.parentElement?.textContent).toBe(firstBlock.split("\n")[0]);
 
     editor.setSelectionOffset(markdown.indexOf("three") + 1);
-    expect(host.querySelectorAll(".ProseMirror > pre[data-source-block]")).toHaveLength(1);
-    expect(host.querySelector(".ProseMirror > pre[data-source-block]")?.textContent).toBe(secondBlock);
+    expect(host.querySelectorAll(".ProseMirror > pre[data-source-block]")).toHaveLength(0);
+    expect(host.querySelector("li .syntax-hint")?.parentElement?.textContent).toBe(secondBlock);
     expect(editor.getMarkdown()).toBe(markdown);
     editor.destroy();
   });
@@ -1108,7 +1104,7 @@ describe("Mint editor core public controller", () => {
         expect(editor.getMarkdown()).toBe(markdown);
 
         editor.setSelectionOffset(markdown.length);
-        expect(host.querySelector("pre[data-source-block]")?.textContent).toBe("# Second");
+        expect(host.querySelector("h1:last-of-type")?.textContent).toBe("# Second");
         expect(editor.getMarkdown()).toBe(markdown);
         editor.destroy();
         host.remove();
@@ -1122,7 +1118,7 @@ describe("Mint editor core public controller", () => {
     ["table", "| a |\n| --- |\n| b |", ".ProseMirror > table"],
     ["TOC", "[TOC]", ".ProseMirror > .toc"],
   ] as const)(
-    "carries the rendered %s height into transient source editing",
+    "preserves the rendered %s surface or its measured height during editing",
     (_name, syntax, selector) => {
       const host = document.createElement("div");
       document.body.append(host);
@@ -1140,10 +1136,15 @@ describe("Mint editor core public controller", () => {
         value: () => ({ height: 73.256 }),
       });
 
-      editor.setSelectionOffset(prefix.length + 1);
+      editor.setSelectionOffset(prefix.length + (_name === "table" ? syntax.indexOf("a") : 1));
       const source = host.querySelector<HTMLElement>("pre[data-source-block]");
-      expect(source?.dataset.sourceLayoutHeight).toBe("73.26");
-      expect(source?.style.minHeight).toBe("73.26px");
+      if (_name === "TOC") {
+        expect(source?.dataset.sourceLayoutHeight).toBe("73.26");
+        expect(source?.style.minHeight).toBe("73.26px");
+      } else {
+        expect(host.querySelector(selector)).toBe(rendered);
+        expect(source).toBeNull();
+      }
       expect(editor.getMarkdown()).toBe(markdown);
       expect(changes).toEqual([]);
 
@@ -1233,8 +1234,7 @@ describe("Mint editor core public controller", () => {
 
       editor.setSelectionOffset(markdown.length);
 
-      expect(host.querySelector("pre[data-source-block]")?.getAttribute("data-source-kind"))
-        .toBe(`heading-${level}`);
+      expect(host.querySelector(`h${level} .syntax-hint`)?.textContent).toBe(`${"#".repeat(level)} `);
       expect(editor.getMarkdown()).toBe(markdown);
       editor.destroy();
     },
@@ -1793,7 +1793,7 @@ describe("Mint editor core public controller", () => {
     expect(editor.getSelectionOffset()).toBe(calloutFrom - 3);
     expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
     expect(editor.getSelectionOffset()).toBe(quoteTo);
-    expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
+    expect(host.querySelector("blockquote p .syntax-hint")).not.toBeNull();
 
     expect(editor.getMarkdown()).toBe(markdown);
     expect(changes).toEqual([]);
@@ -1830,7 +1830,7 @@ describe("Mint editor core public controller", () => {
     });
 
     editor.setSelectionOffset(listFrom + 2);
-    expect(host.querySelector("pre[data-source-block]")).not.toBeNull();
+    expect(host.querySelector("li .syntax-hint")).not.toBeNull();
     expect(pressNavigationKey(host, "ArrowLeft")).toBe(true);
     expect(editor.getSelectionOffset()).toBe(listFrom + 1);
     expect(pressNavigationKey(host, "ArrowLeft")).toBe(true);
@@ -1889,7 +1889,7 @@ describe("Mint editor core public controller", () => {
       const plainBefore = Array.from(host.querySelectorAll("p"))
         .find((node) => node.textContent === "plain");
       const secondHeading = Array.from(host.querySelectorAll<HTMLElement>("h1"))
-        .find((node) => node.textContent === "Second");
+        .find((node) => node.textContent === "# Second");
       let heightReads = 0;
       if (secondHeading) Object.defineProperty(secondHeading, "getBoundingClientRect", {
         configurable: true,
@@ -1903,11 +1903,11 @@ describe("Mint editor core public controller", () => {
         expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
       }
 
-      const active = host.querySelector<HTMLElement>("pre[data-source-block]");
+      const active = host.querySelector<HTMLElement>("h1:last-of-type");
       expect(active?.textContent).toBe("# Second");
-      expect(active?.style.minHeight).toBe("41.25px");
+      expect(active).toBe(secondHeading);
       expect(heightReads).toBeLessThanOrEqual(1);
-      expect(host.querySelector("h1")?.textContent).toBe("First");
+      expect(host.querySelector("h1")?.textContent).toBe("# First");
       expect(Array.from(host.querySelectorAll("p"))
         .find((node) => node.textContent === "plain")).toBe(plainBefore);
       expect(editor.getSelectionOffset()).toBeGreaterThanOrEqual(secondFrom);
@@ -1993,7 +1993,7 @@ describe("Mint editor core public controller", () => {
     }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(host.querySelector("pre[data-source-block]")?.textContent).toBe("### Title");
+    expect(host.querySelector("h3")?.textContent).toBe("### Title");
     expect(editor.getSelectionOffset()).toBe(headingFrom + "### ".length + 2);
     expect(editor.getMarkdown()).toBe(markdown);
     editor.destroy();
@@ -2057,7 +2057,7 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("reveals every block in a completed pointer range and copies canonical Markdown", async () => {
+  it("reveals endpoint markers in a completed pointer range and copies canonical Markdown", async () => {
     const host = document.createElement("div");
     document.body.append(host);
     const markdown = "# First\n\nmiddle\n\n## Second";
@@ -2094,8 +2094,8 @@ describe("Mint editor core public controller", () => {
     }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(Array.from(host.querySelectorAll("pre[data-source-block]"))
-      .map((node) => node.textContent)).toEqual(["# First", "## Second"]);
+    expect(Array.from(host.querySelectorAll("h1 .syntax-hint, h2 .syntax-hint"))
+      .map((node) => node.textContent)).toEqual(["# ", "## "]);
 
     let copied = "";
     const copy = new Event("copy", { bubbles: true, cancelable: true });
@@ -2151,7 +2151,7 @@ describe("Mint editor core public controller", () => {
     selection?.addRange(range);
     host.querySelector<HTMLElement>(".ProseMirror")?.dispatchEvent(new Event("selectionchange"));
 
-    expect(pressNavigationKey(host, "ArrowRight")).toBe(false);
+    expect(pressNavigationKey(host, "ArrowRight")).toBe(true);
     expect(host.querySelector("pre[data-source-block]")).toBeNull();
     expect(host.querySelector("table")).not.toBeNull();
     expect(editor.getMarkdown()).toBe(markdown);
@@ -2169,11 +2169,9 @@ describe("Mint editor core public controller", () => {
     });
     const surface = host.querySelector<HTMLElement>(".ProseMirror");
 
-    expect(host.querySelector(".source-blockquote-source")?.hasAttribute("hidden")).toBe(true);
+    editor.setSelectionOffset(3);
     surface?.dispatchEvent(new FocusEvent("focus"));
-
-    expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
-    expect(host.querySelector(".source-blockquote-source")?.hasAttribute("hidden")).toBe(false);
+    expect(host.querySelector("blockquote .syntax-hint")?.textContent).toBe("> ");
     expect(editor.getMarkdown()).toBe(markdown);
     expect(changes).toEqual([]);
     editor.destroy();
@@ -2279,45 +2277,22 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it("preserves quote lines when native editing creates block DOM", async () => {
-    for (const fixture of [
-      {
-        initial: "> [!note] \n> \n> callout ",
-        dom: "&gt; [!note] <div>&gt; test</div><div>&gt; callout </div>",
-        expected: "> [!note] \n> test\n> callout ",
-      },
-      {
-        initial: "> quote\n> \n> tail",
-        dom: "&gt; quote<div>&gt; test</div><div>&gt; tail</div>",
-        expected: "> quote\n> test\n> tail",
-      },
-    ]) {
-      const host = document.createElement("div");
-      document.body.append(host);
-      const changes: string[] = [];
-      const editor = createMintEditor(host, {
-        initialContent: fixture.initial,
-        onChange: (next) => changes.push(next),
-      });
-      const source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
-      if (!source) throw new Error("Missing source-backed quote content");
-
-      source.innerHTML = fixture.dom;
-      source.dispatchEvent(new InputEvent("input", {
-        inputType: "insertText",
-        data: "test",
-        bubbles: true,
-      }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      expect(editor.getMarkdown()).toBe(fixture.expected);
-      expect(changes.at(-1)).toBe(fixture.expected);
-      expect(host.querySelector(".source-blockquote-source")?.textContent).toBe(fixture.expected);
-      expect(host.querySelector(".source-blockquote-source-code")?.querySelector("div, br")).toBeNull();
-      editor.destroy();
-      host.remove();
-    }
+  it("rejects a native mutation whose source line boundaries cannot be mapped", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const markdown = "> [!note]\n> body";
+    const changes: string[] = [];
+    const editor = createMintEditor(host, { initialContent: markdown, onChange: (source) => changes.push(source) });
+    editor.setSelectionOffset(markdown.length);
+    editor.focus();
+    const literal = host.querySelector<HTMLElement>(".source-blockquote-source-code")!;
+    literal.innerHTML = "<div>&gt; [!note]</div><div>&gt; changed</div>";
+    host.querySelector(".ProseMirror")!.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(editor.isSourceMode()).toBe(true);
+    expect(editor.getMarkdown()).toBe(markdown);
+    expect(changes).toEqual([]);
+    editor.destroy();
   });
 
   it("inserts and deletes text on a middle quote line before native DOM mutation", () => {
@@ -2392,8 +2367,8 @@ describe("Mint editor core public controller", () => {
     const editor = createMintEditor(host, { initialContent: "> quote" });
     const editable = host.querySelector<HTMLElement>(".ProseMirror");
     editor.setSelectionOffset(1);
-    const source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
-    const text = source?.firstChild;
+    const source = host.querySelector<HTMLElement>("blockquote p");
+    const text = source?.querySelector(".syntax-hint")?.firstChild;
     if (!editable || !source || !text) throw new Error("Missing active quote source");
     const range = document.createRange();
     range.setStart(text, 1);

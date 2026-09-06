@@ -1,3 +1,4 @@
+import { presentationSelection, presentationSelectionTouches } from "../core/presentation-selection";
 import type { Node as PMNode, Schema } from "prosemirror-model";
 import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
@@ -103,6 +104,7 @@ export function createCalloutExtension(
 
   return {
     id: "mint-callout",
+    sourceLineUnits: [{ nodeType: "quote_container", matches: (source) => sourceCallouts(source).some((marker) => marker.lineFrom === 0) }],
     createPlugins: ({ schema }) => [calloutDecorationPlugin(schema)],
     sourceBlockPresentations: [presentation],
     commands: {
@@ -163,11 +165,28 @@ function calloutDecorationPlugin(schema: Schema): Plugin {
       decorations(state) {
         const decorations: Decoration[] = [];
         state.doc.descendants((node, position) => {
-          if (node.type !== schema.nodes.blockquote) return;
-          const marker = sourceCallouts(node.textContent).find((candidate) => candidate.lineFrom === 0);
+          if (node.type !== schema.nodes.blockquote && node.type !== schema.nodes.quote_container) return;
+          const marker = sourceCallouts(node.type === schema.nodes.quote_container ? String(node.attrs.sourceText ?? "") : node.textContent).find((candidate) => candidate.lineFrom === 0);
           if (!marker) return;
+          const composite = node.type === schema.nodes.quote_container;
+          const editing = presentationSelectionTouches(presentationSelection(state), position, position + node.nodeSize);
+          if (composite && !editing && node.firstChild?.isTextblock) {
+            const from = position + 2 + marker.from;
+            decorations.push(Decoration.inline(from, from + marker.size, { class: "syntax-hidden" }));
+            decorations.push(Decoration.widget(from, (view) => {
+              const title = document.createElement("strong");
+              title.className = "callout-header";
+              title.textContent = marker.parsed.title;
+              title.addEventListener("mousedown", (event) => event.preventDefault());
+              title.addEventListener("click", () => {
+                view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, from + marker.size)));
+                view.focus();
+              });
+              return title;
+            }, { key: `callout-title-${position}-${marker.parsed.title}` }));
+          }
           decorations.push(Decoration.node(position, position + node.nodeSize, {
-            class: `live-callout callout-${marker.parsed.kind}${marker.parsed.color ? ` callout-color-${marker.parsed.color}` : ""}`,
+            class: `live-callout${composite ? " markdown-callout" : ""} callout-${marker.parsed.kind}${marker.parsed.color ? ` callout-color-${marker.parsed.color}` : ""}`,
             "data-callout-type": marker.parsed.rawType,
             "data-callout-title": marker.parsed.title,
           }));

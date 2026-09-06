@@ -125,7 +125,10 @@ export function collectPlugins(
   schema: Schema,
   context: FeaturePluginContext,
 ): Plugin[] {
-  return ALL_FEATURES.flatMap((f) => f.plugins?.(schema, context) ?? []);
+  return ALL_FEATURES.flatMap((f) => (
+    context.canonicalSource && ["heading", "list", "task", "ref-def", "auto-pair"].includes(f.name)
+      ? [] : f.plugins?.(schema, context) ?? []
+  ));
 }
 // Inline features, priority-sorted. Consumed by inline-parse orchestration,
 // normalize (mark sync), decorations (which marks use the inline path),

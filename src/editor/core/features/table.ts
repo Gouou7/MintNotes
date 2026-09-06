@@ -2,24 +2,13 @@ import type { Node as PMNode, Schema } from "prosemirror-model";
 import { Plugin, TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 
-import type { FeatureSpec } from "./_types";
+import type { FeatureSpec, FeaturePluginContext } from "./_types";
 import { SOURCE_FROM_ATTR, SOURCE_TEXT_ATTR, SOURCE_TO_ATTR } from "../source";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
+import type { EditorControlIcon } from "../extension";
+import type { SourceTransaction } from "../source";
 
-// GFM table — phase 1 (parse / serialize / display only). Live editor
-// input (typing `| col |` etc.) and cell navigation (Tab between cells,
-// add row / column buttons) are deferred to phase 2.
-//
-// Schema:
-//   table → table_row+ → table_cell+
-//   table_cell carries `{header: boolean, align: "left"|"center"|"right"|null}`
-//   (alignment from the GFM `:---:` divider; header inferred from
-//   md-it's th_open vs td_open tokens — first row's cells carry it).
-//
-// Round-trip: doc-level only. md-it produces resolved tokens; we emit
-// canonical `| col1 | col2 |\n| --- | --- |\n| ... |` shape on save.
-// Bare-pipe and column-width-padded variants are accepted on input;
-// output is normalized.
+// GFM cells own exact authored ranges. Toolbar actions submit source transactions.
 
 export function parseAlignFromStyle(style: string | null): string | null {
   if (!style) return null;
@@ -39,10 +28,6 @@ function alignDelim(align: string | null, width: number): string {
   return "-".repeat(w);
 }
 
-// Precompute the inline serialization of a cell — needed twice (column
-// width measurement, then actual emission). We render via the same
-// inline serializer the rest of the doc uses, but into a sandbox so
-// pmPos/markers from the outer state don't leak.
 // ---------------- toolbar plugin ----------------
 //
 // Floating toolbar shown when the cursor is inside a table. Carries:
@@ -50,7 +35,7 @@ function alignDelim(align: string | null, width: number): string {
 //     and numeric R × C inputs to resize the table.
 //   * 3 align buttons → set `align` on every cell in the cursor's
 //     current column.
-//   * trash → delete the whole table (replaced by an empty paragraph).
+//   * trash → remove exactly the authored table range.
 //
 // The toolbar lives at `document.body` (position: fixed, viewport
 // coords). Position is recomputed every PM transaction from the table
@@ -82,63 +67,52 @@ function authoredTable(info: TableInfo): AuthoredTable | null {
     : null;
 }
 
-type AuthoredTableLine = { cells: string[]; outerPipes: boolean };
+type AuthoredTableLine = { cells: string[]; prefix: string; suffix: string; leftPipe: boolean; rightPipe: boolean };
 
 function splitAuthoredTableLine(line: string): AuthoredTableLine {
-  const outerPipes = /^\s*\|/.test(line) && /\|\s*$/.test(line);
+  const prefix = /^(?:(?:[\t ]*>[\t ]?)+|[\t ]*)/.exec(line)![0];
+  const body = line.slice(prefix.length);
   const cells: string[] = [];
-  let cell = "";
-  let escaped = false;
-  for (const character of line) {
-    if (escaped) {
-      cell += character;
-      escaped = false;
-      continue;
-    }
-    if (character === "\\") {
-      cell += character;
-      escaped = true;
-      continue;
-    }
-    if (character === "|") {
-      cells.push(cell);
-      cell = "";
-    } else {
-      cell += character;
-    }
+  let cursor = 0;
+  let slashes = 0;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === "|" && slashes % 2 === 0) { cells.push(body.slice(cursor, i)); cursor = i + 1; }
+    slashes = body[i] === "\\" ? slashes + 1 : 0;
   }
-  cells.push(cell);
-  if (outerPipes) {
-    cells.shift();
-    cells.pop();
-  }
-  return { cells, outerPipes };
+  cells.push(body.slice(cursor));
+  const leftPipe = body.startsWith("|");
+  const rightPipe = cells.length > 1 && !cells.at(-1)!.trim();
+  const suffix = rightPipe ? cells.pop()! : "";
+  if (leftPipe) cells.shift();
+  return { cells, prefix, suffix, leftPipe, rightPipe };
 }
 
 function joinAuthoredTableLine(line: AuthoredTableLine): string {
-  const joined = line.cells.join("|");
-  return line.outerPipes ? `|${joined}|` : joined;
+  return line.prefix + (line.leftPipe ? "|" : "") + line.cells.join("|") + (line.rightPipe ? "|" : "") + line.suffix;
 }
 
+function tableSourceLines(source: string): { text: string; eol: string }[] {
+  return [...source.matchAll(/([^\r\n]*)(\r\n|\r|\n|$)/g)].filter((match) => match[0].length)
+    .map((match) => ({ text: match[1]!, eol: match[2]! }));
+}
+
+/** Rows counts visible rows (including the header), never the delimiter line. */
 export function resizeAuthoredTableSource(source: string, rows: number, cols: number): string {
   if (rows < 1 || cols < 1) return source;
-  const lines = source.split("\n");
-  const parsed = lines.map(splitAuthoredTableLine);
-  const outerPipes = parsed[0]?.outerPipes ?? true;
-  const resized: AuthoredTableLine[] = [];
-  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-    const existing = parsed[rowIndex];
+  const lines = tableSourceLines(source);
+  const parsed = lines.map((line) => splitAuthoredTableLine(line.text));
+  const template = parsed[0];
+  if (!template) return source;
+  const eol = lines.find((line) => line.eol)?.eol ?? "\n";
+  const result: string[] = [];
+  for (let row = 0; row <= rows; row++) {
+    const existing = parsed[row];
     const cells = existing ? existing.cells.slice(0, cols) : [];
-    while (cells.length < cols) cells.push(rowIndex === 1 ? " --- " : " ");
-    resized.push({ cells, outerPipes: existing?.outerPipes ?? outerPipes });
+    while (cells.length < cols) cells.push(row === 1 ? " --- " : " ");
+    const line = { ...(existing ?? template), cells };
+    result.push(joinAuthoredTableLine(line) + (row < rows ? lines[row]?.eol || eol : ""));
   }
-  if (rows === 1) {
-    resized.push({
-      cells: Array.from({ length: cols }, () => " --- "),
-      outerPipes,
-    });
-  }
-  return resized.map(joinAuthoredTableLine).join("\n");
+  return result.join("");
 }
 
 export function alignAuthoredTableSource(
@@ -146,9 +120,9 @@ export function alignAuthoredTableSource(
   column: number,
   align: "left" | "center" | "right" | null,
 ): string {
-  const lines = source.split("\n");
+  const lines = tableSourceLines(source);
   if (lines.length < 2) return source;
-  const divider = splitAuthoredTableLine(lines[1]!);
+  const divider = splitAuthoredTableLine(lines[1]!.text);
   const cell = divider.cells[column];
   if (cell === undefined) return source;
   const leading = /^\s*/.exec(cell)?.[0] ?? "";
@@ -163,8 +137,8 @@ export function alignAuthoredTableSource(
         ? `:${dashes}:`
         : dashes;
   divider.cells[column] = `${leading}${marker}${trailing}`;
-  lines[1] = joinAuthoredTableLine(divider);
-  return lines.join("\n");
+  lines[1]!.text = joinAuthoredTableLine(divider);
+  return lines.map((line) => line.text + line.eol).join("");
 }
 
 function bindTableSourceTransaction(
@@ -172,7 +146,8 @@ function bindTableSourceTransaction(
   table: AuthoredTable,
   replacement: string,
 ): void {
-  const head = table.from + replacement.length;
+  const header = splitAuthoredTableLine(replacement.split(/\r\n|\r|\n/)[0] ?? "");
+  const head = table.from + header.prefix.length + (header.leftPipe ? 1 : 0) + (/^[\t ]*/.exec(header.cells[0] ?? "")?.[0].length ?? 0);
   tr.setMeta(SOURCE_TRANSACTION_META, {
     edits: [{ from: table.from, to: table.to, insert: replacement }],
     selection: { anchor: head, head },
@@ -200,23 +175,40 @@ function findTableAtSelection(state: import("prosemirror-state").EditorState): T
   };
 }
 
+/** Explicit row commands retain all existing cells, delimiters and line endings. */
+export function tableRowCommand(state: import("prosemirror-state").EditorState, event: KeyboardEvent): SourceTransaction | null {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey) return null;
+  const insert = event.key === "Enter" && !event.shiftKey;
+  const remove = event.key === "Backspace" && event.shiftKey;
+  if (!insert && !remove) return null;
+  const info = findTableAtSelection(state);
+  const table = info && authoredTable(info);
+  if (!info || !table) return null;
+  const lines = tableSourceLines(table.source);
+  const current = info.rowIdx === 0 ? 0 : info.rowIdx + 1;
+  const eol = lines.find((line) => line.eol)?.eol ?? "\n";
+  if (insert) {
+    const at = info.rowIdx === 0 ? 2 : current + 1;
+    const template = splitAuthoredTableLine(lines[current]!.text);
+    const text = joinAuthoredTableLine({ ...template, cells: template.cells.map(() => " ") });
+    if (at === lines.length) lines[at - 1]!.eol = eol;
+    lines.splice(at, 0, { text, eol: at < lines.length ? eol : "" });
+  } else if (info.rowIdx > 0) {
+    lines.splice(current, 1);
+    if (current === lines.length) lines.at(-1)!.eol = "";
+  }
+  const replacement = lines.map((line) => line.text + line.eol).join("");
+  const tr = state.tr;
+  bindTableSourceTransaction(tr, table, replacement);
+  return tr.getMeta(SOURCE_TRANSACTION_META) as SourceTransaction;
+}
+
 function applyAlignToColumn(
   view: EditorView,
   info: TableInfo,
   align: "left" | "center" | "right" | null,
 ): void {
   const tr = view.state.tr;
-  let pos = info.pos + 1; // inside table
-  info.node.forEach((row) => {
-    let cellPos = pos + 1; // inside row
-    row.forEach((cell, _o, idx) => {
-      if (idx === info.cellIdx) {
-        tr.setNodeMarkup(cellPos, null, { ...cell.attrs, align });
-      }
-      cellPos += cell.nodeSize;
-    });
-    pos += row.nodeSize;
-  });
   const table = authoredTable(info);
   if (!table) return;
   bindTableSourceTransaction(
@@ -229,13 +221,7 @@ function applyAlignToColumn(
 }
 
 function deleteTable(view: EditorView, info: TableInfo): void {
-  const schema = view.state.schema;
   const tr = view.state.tr;
-  const start = info.pos;
-  const end = start + info.node.nodeSize;
-  const para = schema.nodes.paragraph.create();
-  tr.replaceWith(start, end, para);
-  tr.setSelection(TextSelection.create(tr.doc, start + 1));
   const table = authoredTable(info);
   if (!table) return;
   bindTableSourceTransaction(tr, table, "");
@@ -250,49 +236,7 @@ function resizeTable(
   cols: number,
 ): void {
   if (rows < 1 || cols < 1) return;
-  const schema = view.state.schema;
-  const old = info.node;
-  const oldRows: PMNode[] = [];
-  old.forEach((r) => oldRows.push(r));
-
-  const newRows: PMNode[] = [];
-  for (let r = 0; r < rows; r++) {
-    const oldRow = oldRows[r];
-    const oldCells: PMNode[] = [];
-    if (oldRow) oldRow.forEach((c) => oldCells.push(c));
-    const cells: PMNode[] = [];
-    for (let c = 0; c < cols; c++) {
-      const oldCell = oldCells[c];
-      const isHeader = r === 0;
-      // Reuse alignment from the corresponding column in the old
-      // header row (if any) so resizing preserves user intent.
-      const headerRowOld = oldRows[0];
-      const align =
-        headerRowOld && c < headerRowOld.childCount
-          ? (headerRowOld.child(c).attrs.align as string | null)
-          : null;
-      const content = oldCell ? oldCell.content : null;
-      cells.push(
-        schema.nodes.table_cell.create(
-          { header: isHeader, align },
-          content,
-        ),
-      );
-    }
-    newRows.push(schema.nodes.table_row.create(null, cells));
-  }
-  const newTable = schema.nodes.table.create(null, newRows);
   const tr = view.state.tr;
-  const start = info.pos;
-  const end = start + old.nodeSize;
-  tr.replaceWith(start, end, newTable);
-  // Place cursor inside the first body cell (or first cell if rows=1).
-  const firstBodyCell =
-    start + 1 + newRows[0]!.nodeSize + (rows > 1 ? 2 : -newRows[0]!.nodeSize + 2);
-  // ^ if rows>1: tableStart+1 (table) + headerSize + 1 (row open) + 1 (cell open)
-  //   if rows=1: tableStart+1 (table) + 1 (row open) + 1 (cell open)
-  const safePos = Math.min(firstBodyCell, tr.doc.content.size);
-  tr.setSelection(TextSelection.create(tr.doc, safePos));
   const table = authoredTable(info);
   if (!table) return;
   bindTableSourceTransaction(tr, table, resizeAuthoredTableSource(table.source, rows, cols));
@@ -300,46 +244,38 @@ function resizeTable(
   view.focus();
 }
 
-function svgIcon(paths: string, viewBox = "0 0 24 24"): SVGElement {
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", viewBox);
-  svg.setAttribute("width", "16");
-  svg.setAttribute("height", "16");
-  svg.innerHTML = paths;
-  return svg;
-}
-
-function buildToolbar(view: EditorView, getInfo: () => TableInfo | null): {
+function buildToolbar(view: EditorView, getInfo: () => TableInfo | null, renderIcon?: FeaturePluginContext["renderControlIcon"]): {
   root: HTMLElement;
   popup: HTMLElement;
+  destroy(): void;
 } {
   const root = document.createElement("div");
   root.className = "table-toolbar";
+  const iconCleanup: Array<() => void> = [];
+  const mountIcon = (target: HTMLElement, name: EditorControlIcon) => {
+    const icon = renderIcon!(name);
+    target.append(icon.element);
+    iconCleanup.push(icon.destroy);
+  };
 
   const grid = document.createElement("button");
   grid.type = "button";
   grid.className = "table-tb-btn";
   grid.title = "Resize";
-  grid.appendChild(
-    svgIcon(
-      `<rect x='4' y='4' width='6' height='6' fill='currentColor'/>
-       <rect x='14' y='4' width='6' height='6' fill='currentColor'/>
-       <rect x='4' y='14' width='6' height='6' fill='currentColor'/>
-       <rect x='14' y='14' width='6' height='6' fill='currentColor'/>`,
-    ),
-  );
+  if (renderIcon) mountIcon(grid, "table-size");
+  else grid.textContent = "Resize";
 
   const sep = document.createElement("span");
   sep.className = "table-tb-sep";
 
-  const mkAlign = (a: "left" | "center" | "right", lines: string) => {
+  const mkAlign = (a: "left" | "center" | "right") => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "table-tb-btn";
     b.title = `Align ${a}`;
     b.dataset.align = a;
-    b.appendChild(svgIcon(lines));
+    if (renderIcon) mountIcon(b, `align-${a}`);
+    else b.textContent = a;
     b.addEventListener("mousedown", (e) => e.preventDefault());
     b.addEventListener("click", () => {
       const info = getInfo();
@@ -347,24 +283,9 @@ function buildToolbar(view: EditorView, getInfo: () => TableInfo | null): {
     });
     return b;
   };
-  const alignL = mkAlign(
-    "left",
-    `<line x1='4' y1='6' x2='20' y2='6' stroke='currentColor' stroke-width='2'/>
-     <line x1='4' y1='12' x2='14' y2='12' stroke='currentColor' stroke-width='2'/>
-     <line x1='4' y1='18' x2='18' y2='18' stroke='currentColor' stroke-width='2'/>`,
-  );
-  const alignC = mkAlign(
-    "center",
-    `<line x1='4' y1='6' x2='20' y2='6' stroke='currentColor' stroke-width='2'/>
-     <line x1='7' y1='12' x2='17' y2='12' stroke='currentColor' stroke-width='2'/>
-     <line x1='5' y1='18' x2='19' y2='18' stroke='currentColor' stroke-width='2'/>`,
-  );
-  const alignR = mkAlign(
-    "right",
-    `<line x1='4' y1='6' x2='20' y2='6' stroke='currentColor' stroke-width='2'/>
-     <line x1='10' y1='12' x2='20' y2='12' stroke='currentColor' stroke-width='2'/>
-     <line x1='6' y1='18' x2='20' y2='18' stroke='currentColor' stroke-width='2'/>`,
-  );
+  const alignL = mkAlign("left");
+  const alignC = mkAlign("center");
+  const alignR = mkAlign("right");
 
   const spacer = document.createElement("span");
   spacer.className = "table-tb-spacer";
@@ -373,12 +294,8 @@ function buildToolbar(view: EditorView, getInfo: () => TableInfo | null): {
   trash.type = "button";
   trash.className = "table-tb-btn table-tb-trash";
   trash.title = "Delete table";
-  trash.appendChild(
-    svgIcon(
-      `<path d='M5 7h14M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 12a2 2 0 002 2h6a2 2 0 002-2l1-12'
-        stroke='currentColor' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/>`,
-    ),
-  );
+  if (renderIcon) mountIcon(trash, "table-delete");
+  else trash.textContent = "Delete";
   trash.addEventListener("mousedown", (e) => e.preventDefault());
   trash.addEventListener("click", () => {
     const info = getInfo();
@@ -510,21 +427,21 @@ function buildToolbar(view: EditorView, getInfo: () => TableInfo | null): {
     popup.style.display = "block";
   });
 
-  return { root, popup };
+  return { root, popup, destroy: () => iconCleanup.splice(0).forEach((cleanup) => cleanup()) };
 }
 
-function tableToolbarPlugin(): Plugin {
+function tableToolbarPlugin(renderIcon?: FeaturePluginContext["renderControlIcon"]): Plugin {
   return new Plugin({
     view(view) {
       let info: TableInfo | null = null;
       // Lazy: toolbar DOM is only built and appended when this view is
       // both focused and on a table. Unfocused views (every case-card
       // in the harness with a table seed) never create toolbar DOM.
-      let toolbar: { root: HTMLElement; popup: HTMLElement } | null = null;
+      let toolbar: ReturnType<typeof buildToolbar> | null = null;
 
       const ensureMounted = () => {
         if (!toolbar) {
-          toolbar = buildToolbar(view, () => info);
+          toolbar = buildToolbar(view, () => info, renderIcon);
         }
         if (!toolbar.root.isConnected) {
           document.body.appendChild(toolbar.root);
@@ -574,6 +491,7 @@ function tableToolbarPlugin(): Plugin {
           update();
         },
         destroy() {
+          toolbar?.destroy();
           window.removeEventListener("scroll", onScroll, true);
           window.removeEventListener("resize", onScroll);
           view.dom.removeEventListener("focusin", update);
@@ -695,7 +613,7 @@ export const table: FeatureSpec = {
 
   mdItPlugins: [(md) => md.enable("table")],
 
-  plugins: () => [tableToolbarPlugin()],
+  plugins: (_schema, context) => [tableToolbarPlugin(context.renderControlIcon)],
 
   keymap: (schema: Schema) => ({
     // Cell navigation. Tab / Shift-Tab move the cursor row-major; at the

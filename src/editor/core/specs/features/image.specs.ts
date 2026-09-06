@@ -16,9 +16,9 @@ export const imageSpecs: FeatureSpecs = {
         { at: 5, expect: "![alt|]" },
         { at: 6, expect: "![alt]|" },                               // ] skip-over
         // ( auto-pair → image recognized (empty src), source visible,
-        // file-input between ( and ).
-        { at: 7, expect: "<img-icon/>![alt](<file-input/>|)" },
-        // typing src char hides the file-input; loaded <img> appears
+        // Empty source stays directly editable; attachments use the product pipeline.
+        { at: 7, expect: "<img-icon/>![alt](|)" },
+        // Typing a source URL displays the image preview.
         // BELOW the source (placed at end of span in DOM order).
         { at: 8, expect: "<img-icon/>![alt](u|)<img:u>alt</img>" },
         // ) skip-over keeps cursor on span boundary → still inside.
@@ -36,7 +36,7 @@ export const imageSpecs: FeatureSpecs = {
       events: ["!", "[", "]", "(", "u", "r", "l", ")", " "],
       checkpoints: [
         { at: 3, expect: "![]|" },
-        { at: 4, expect: "<img-icon/>![](<file-input/>|)" },
+        { at: 4, expect: "<img-icon/>![](|)" },
         { at: 5, expect: "<img-icon/>![](u|)<img:u></img>" },
         { at: 8, expect: "<img-icon/>![](url)<img:url></img>|" },
         // Stable view: empty alt → <img> alt="" → pretty empty children.

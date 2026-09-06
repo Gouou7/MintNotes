@@ -1,10 +1,10 @@
+import { ReadingSource, readingSelection, rehypeReadingSource, type ReadingReplacement } from "./reading-source";
 import { Check, Copy } from "lucide-react";
 import { Children, isValidElement, type CSSProperties, type HTMLAttributes, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { AppIcon } from "../components/AppIcon";
-import { materializeAttachmentUrls } from "../features/attachmentFormat";
 import { useI18n } from "../i18n";
 import { CalloutBlock } from "./Callout";
 import {
@@ -20,7 +20,7 @@ import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
 import { materializeInlineFootnotesForReading } from "./inlineFootnotes";
 import { remarkReadingHighlight } from "./reading-highlight";
 import { remarkReadingListSpacing } from "./reading-list-spacing";
-import { stripCommentsForReading } from "./extensions/comment";
+import { commentSourceRanges } from "./extensions/comment";
 import { displayCodeLanguage } from "./core/fenced-code-source";
 import { navigateToDocumentFragment } from "./core/fragment-navigation";
 import { MathFormula, MermaidDiagram } from "./richRenderers";
@@ -87,28 +87,57 @@ export function ReadingEditor({
   markdown,
   wrapCodeBlocks = true,
   attachmentUrls = new Map(),
-  onWikiLink
+  onWikiLink,
+  onSelectionChange
 }: {
   markdown: string;
   wrapCodeBlocks?: boolean;
   attachmentUrls?: Map<string, string>;
   onWikiLink?: (target: string) => void;
+  onSelectionChange?: (selection: { anchor: number; head: number }) => void;
 }) {
+  const [sourceFallback, setSourceFallback] = useState(false);
+  useEffect(() => setSourceFallback(false), [markdown]);
   const { t } = useI18n();
   const renderId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const footnoteLabelId = `mint-footnote-${renderId}-label`;
   const articleRef = useRef<HTMLElement>(null);
   const allowedAttachmentUrls = new Set(attachmentUrls.values());
   const frontmatter = parseFrontmatter(markdown);
-  const renderedMarkdown = materializeInlineFootnotesForReading(
-    materializeSingleLineDisplayMathForReading(
-      stripCommentsForReading(materializeAttachmentUrls(frontmatter.body, attachmentUrls))
-    )
-  );
+  let projection = ReadingSource.authored(frontmatter.body, markdown.length - frontmatter.body.length);
+  projection = projection.replace(commentSourceRanges(projection.text).map((range) => ({
+    ...range, pieces: [],
+  })));
+  const mathReplacements: ReadingReplacement[] = [];
+  materializeSingleLineDisplayMathForReading(projection.text, mathReplacements);
+  projection = projection.replace(mathReplacements);
+  const footnoteReplacements: ReadingReplacement[] = [];
+  materializeInlineFootnotesForReading(projection.text, footnoteReplacements);
+  projection = projection.replace(footnoteReplacements);
+  const renderedMarkdown = projection.text;
+  const rememberSelection = () => {
+    const selected = articleRef.current && readingSelection(articleRef.current);
+    if (selected) onSelectionChange?.(selected);
+  };
 
   return (
-    <article ref={articleRef} className={`reading-editor${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
-      <FrontmatterProperties markdown={markdown} />
+    <article ref={articleRef} onMouseUp={rememberSelection} onKeyUp={rememberSelection} onCopy={(event) => {
+      const selected = articleRef.current && readingSelection(articleRef.current);
+      if (!selected) {
+        const native = articleRef.current?.ownerDocument.getSelection();
+        if (native && !native.isCollapsed && articleRef.current?.contains(native.anchorNode)) {
+          event.preventDefault();
+          setSourceFallback(true);
+        }
+        return;
+      }
+      event.clipboardData.setData("text/plain", markdown.slice(Math.min(selected.anchor, selected.head), Math.max(selected.anchor, selected.head)));
+      event.preventDefault();
+    }} className={`reading-editor${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
+      {sourceFallback ? <pre className="reading-source-fallback"><span
+        data-source-offsets={Array.from({ length: markdown.length + 1 }, (_, i) => i).join(",")}
+        data-source-ends={Array.from({ length: markdown.length + 1 }, (_, i) => i).join(",")}
+      >{markdown}</span></pre> : <><FrontmatterProperties markdown={markdown} />
       <ReactMarkdown
         remarkPlugins={[
           remarkMath,
@@ -118,13 +147,14 @@ export function ReadingEditor({
           remarkWikiLinks,
           remarkReadingListSpacing,
         ]}
+        rehypePlugins={[[rehypeReadingSource, { projection }]]}
         skipHtml
         remarkRehypeOptions={{ clobberPrefix: `mint-footnote-${renderId}-` }}
         urlTransform={(url, key, node) => (
           key === "href" && url.startsWith("mint-wikilink:")
             ? url
             :
-          key === "src" && node.tagName === "img" && allowedAttachmentUrls.has(url)
+          key === "src" && node.tagName === "img" && (allowedAttachmentUrls.has(url) || url.startsWith("webmd-attachment:"))
             ? url
             : defaultUrlTransform(url)
         )}
@@ -177,10 +207,10 @@ export function ReadingEditor({
               : [String(properties?.className ?? "")];
             const textChild = child && "children" in child ? child.children?.[0] : undefined;
             if (classNames.includes("math-display") && textChild && "value" in textChild) {
-              return <MathFormula source={String(textChild.value ?? "")} displayMode />;
+              return <div data-source-atomic="true" data-source-from={Number(node?.properties["data-source-from"])} data-source-to={Number(node?.properties["data-source-to"])}><MathFormula source={String(textChild.value ?? "")} displayMode /></div>;
             }
             if (classNames.includes("language-mermaid") && textChild && "value" in textChild) {
-              return <MermaidDiagram source={String(textChild.value ?? "").replace(/\n$/, "")} />;
+              return <div data-source-atomic="true" data-source-from={Number(node?.properties["data-source-from"])} data-source-to={Number(node?.properties["data-source-to"])}><MermaidDiagram source={String(textChild.value ?? "").replace(/\n$/, "")} /></div>;
             }
             const language = classNames
               .find((className) => className.startsWith("language-"))
@@ -190,7 +220,7 @@ export function ReadingEditor({
           code: ({ node: _node, className, children, ...props }) => {
             const classNames = className?.split(/\s+/) ?? [];
             return classNames.includes("math-inline")
-              ? <MathFormula source={renderedText(children)} />
+              ? <span {...props} data-source-atomic="true"><MathFormula source={renderedText(children)} /></span>
               : <code {...props} className={className}>{children}</code>;
           },
           a: ({ node, href, children, ...props }) => {
@@ -224,14 +254,16 @@ export function ReadingEditor({
             return <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
           },
           img: ({ node: _node, src, alt, ...props }) => {
-            return src
-              ? <img {...props} src={src} alt={alt ?? ""} />
+            const attachment = /^webmd-attachment:([0-9a-f-]{36})$/i.exec(src ?? "");
+            const displaySource = attachment ? attachmentUrls.get(attachment[1].toLowerCase()) : src;
+            return displaySource
+              ? <img {...props} src={displaySource} alt={alt ?? ""} />
               : <span className="attachment-placeholder">{t("app.attachmentNotLoaded", { name: alt ?? "" })}</span>;
           }
         }}
       >
         {renderedMarkdown}
-      </ReactMarkdown>
+      </ReactMarkdown></>}
     </article>
   );
 }

@@ -22,7 +22,7 @@
  * here is just enough to make source mode usable out of the box;
  * consumers can override with their own font / colors. */
 .typora-web-wrap { display: block; }
-.typora-web-editor-host { display: block; }
+.typora-web-editor-host:not([hidden]) { display: block; }
 .typora-web-source {
   display: block;
   width: 100%;
@@ -271,22 +271,8 @@
 
 /* ─── Image edit-mode UI ─────────────────────────────────────────── */
 .ProseMirror .image-icon { display: inline-block; user-select: none; }
-.ProseMirror .image-icon::before { content: "🖼️"; font-size: 0.9em; margin-right: 2px; }
-.ProseMirror .image-icon.broken::before {
-  content: "🖼️"; filter: grayscale(1) brightness(0.7); opacity: 0.6;
-}
-.ProseMirror .image-icon.broken::after {
-  content: "⚠"; color: #c43; font-size: 0.8em; margin-right: 2px;
-}
-.ProseMirror .file-input {
-  display: inline-block;
-  cursor: pointer;
-  user-select: none;
-  font-size: 0.9em;
-  margin: 0 2px;
-  opacity: 0.6;
-}
-.ProseMirror .file-input:hover { opacity: 1; }
+.ProseMirror .image-icon { color: inherit; vertical-align: middle; margin-right: 3px; }
+.ProseMirror .image-icon.broken { color: var(--muted, #777); }
 .ProseMirror img.image-render {
   display: block;
   max-width: 100%;

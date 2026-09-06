@@ -1,3 +1,4 @@
+import type { RenderControlIcon } from "./extension";
 import type { Node as PMNode } from "prosemirror-model";
 import { EditorState, Plugin } from "prosemirror-state";
 import { keymap } from "prosemirror-keymap";
@@ -16,6 +17,8 @@ import type { EditorExtension } from "./extension";
 import { extensionPresentationPlugin } from "./presentation";
 import { livePresentationSelectionPlugin } from "./presentation-selection";
 import { sourceGapNavigationPlugin } from "./source-navigation";
+import { sourceLinePresentationPlugin } from "./source-line-presentation";
+import { sourceProjectionViews } from "./source-projection-views";
 
 // Open `<a>` links on Cmd/Ctrl+click. Inside contenteditable, a plain
 // click moves the caret instead of navigating — opting in to the
@@ -42,6 +45,8 @@ function openLinkOnModClickPlugin(): Plugin {
 }
 
 export function defaultPlugins(options: {
+  canonicalSource?: boolean;
+  renderControlIcon?: RenderControlIcon;
   cursorWidget?: boolean;
   extensions?: readonly EditorExtension[];
   resolveImageSource?: (source: string) => string | null | undefined;
@@ -66,10 +71,11 @@ export function defaultPlugins(options: {
   );
   const featureKeymap = collectKeymaps(schema);
   const plugins: Plugin[] = [
-    history(),
-    keymap({ "Mod-z": undo, "Mod-y": redo, "Mod-Shift-z": redo }),
-    markdownInputRules(),
-    spaceBreaksStoredMarks(),
+    ...(options.canonicalSource ? [sourceProjectionViews(schema)] : []),
+    ...(options.canonicalSource ? [] : [history(),
+      keymap({ "Mod-z": undo, "Mod-y": redo, "Mod-Shift-z": redo }),
+      markdownInputRules(), spaceBreaksStoredMarks()]),
+    sourceLinePresentationPlugin(extensions.flatMap((extension) => extension.sourceLineUnits ?? [])),
     livePresentationSelectionPlugin(),
     manualEscapeDecorationPlugin(),
     ...extensions.flatMap((extension) => extension.createPlugins?.({ schema }) ?? []),
@@ -79,6 +85,8 @@ export function defaultPlugins(options: {
     // watchers see the post-normalize doc) and before syntaxHints (so any
     // extra decorations merge into PM's decoration pipeline naturally).
     ...collectPlugins(schema, {
+      canonicalSource: options.canonicalSource,
+      renderControlIcon: options.renderControlIcon,
       resolveImageSource,
       sourceBlockPresentations,
     }),
@@ -86,14 +94,16 @@ export function defaultPlugins(options: {
       inline: inlinePresentations,
       block: blockPresentations,
     }),
-    syntaxHintsPlugin(),
+    syntaxHintsPlugin(options.renderControlIcon),
     openLinkOnModClickPlugin(),
   ];
   if (cursorWidget) plugins.push(cursorRenderPlugin());
   // Feature keymap wins over baseKeymap — features that override Enter /
   // Backspace for block exits rely on this ordering.
-  if (Object.keys(featureKeymap).length > 0) plugins.push(keymap(featureKeymap));
-  plugins.push(keymap(baseKeymap));
+  if (!options.canonicalSource) {
+    if (Object.keys(featureKeymap).length > 0) plugins.push(keymap(featureKeymap));
+    plugins.push(keymap(baseKeymap));
+  }
   return plugins;
 }
 

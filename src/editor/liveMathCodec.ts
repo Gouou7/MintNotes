@@ -1,3 +1,4 @@
+import type { ReadingReplacement } from "./reading-source";
 const QUOTE_PREFIX = /^((?:[ \t]*>[ \t]?)*)(.*)$/;
 const FENCE = /^([ \t]*)(`{3,}|~{3,})([^`]*)$/;
 
@@ -39,12 +40,15 @@ function closingFence(content: string, marker: string): boolean {
     && [...trimmed].every((character) => character === marker[0]);
 }
 
-export function materializeSingleLineDisplayMathForReading(markdown: string): string {
+export function materializeSingleLineDisplayMathForReading(markdown: string, replacements?: ReadingReplacement[]): string {
   const lines = splitLines(markdown);
   const output: SourceLine[] = [];
   let fence: { prefix: string; marker: string } | null = null;
 
+  let offset = 0;
   for (const sourceLine of lines) {
+    const from = offset;
+    offset += sourceLine.text.length + sourceLine.eol.length;
     const line = splitQuoteLine(sourceLine.text);
     if (fence) {
       output.push(sourceLine);
@@ -63,6 +67,14 @@ export function materializeSingleLineDisplayMathForReading(markdown: string): st
       continue;
     }
     const insertedEol = sourceLine.eol || "\n";
+    const openingEnd = from + line.prefix.length + math[1]!.length + 2;
+    const bodyEnd = openingEnd + math[2]!.length;
+    replacements?.push({ from, to: offset, pieces: [
+      { from, to: openingEnd }, { text: insertedEol + line.prefix },
+      { from: openingEnd, to: bodyEnd }, { text: insertedEol + line.prefix + math[1] },
+      { from: bodyEnd, to: bodyEnd + 2 },
+      { from: from + sourceLine.text.length, to: offset },
+    ] });
     output.push(
       { text: `${line.prefix}${math[1]}$$`, eol: insertedEol },
       { text: `${line.prefix}${math[2]}`, eol: insertedEol },

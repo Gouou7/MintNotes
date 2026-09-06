@@ -1,3 +1,4 @@
+import { readingPosition } from "./reading-source";
 interface MdPosition {
   readonly start?: { readonly offset?: number };
   readonly end?: { readonly offset?: number };
@@ -115,27 +116,30 @@ function findHighlight(children: MdNode[], source: string): HighlightRange | nul
   return null;
 }
 
-function textNode(value: string): MdNode[] {
-  return value ? [{ type: "text", value }] : [];
+function textNode(value: string, source: string, from?: number): MdNode[] {
+  return value ? [{ type: "text", value, ...(from !== undefined ? { position: readingPosition(source, from, from + value.length) } : {}) }] : [];
 }
 
-function wrapHighlight(children: MdNode[], range: HighlightRange): MdNode[] {
+function wrapHighlight(children: MdNode[], range: HighlightRange, source: string): MdNode[] {
   const { open, close } = range;
   const openValue = children[open.childIndex]?.value ?? "";
   const closeValue = children[close.childIndex]?.value ?? "";
+  const openStart = children[open.childIndex]?.position?.start?.offset;
+  const closeStart = children[close.childIndex]?.position?.start?.offset;
+  const at = (from: number | undefined, offset: number) => from === undefined ? undefined : from + offset;
   const before = [
     ...children.slice(0, open.childIndex),
-    ...textNode(openValue.slice(0, open.offset)),
+    ...textNode(openValue.slice(0, open.offset), source, openStart),
   ];
   const inside = open.childIndex === close.childIndex
-    ? textNode(openValue.slice(open.offset + 2, close.offset + close.length - 2))
+    ? textNode(openValue.slice(open.offset + 2, close.offset + close.length - 2), source, at(openStart, open.offset + 2))
     : [
-        ...textNode(openValue.slice(open.offset + 2)),
+        ...textNode(openValue.slice(open.offset + 2), source, at(openStart, open.offset + 2)),
         ...children.slice(open.childIndex + 1, close.childIndex),
-        ...textNode(closeValue.slice(0, close.offset + close.length - 2)),
+        ...textNode(closeValue.slice(0, close.offset + close.length - 2), source, closeStart),
       ];
   const after = [
-    ...textNode(closeValue.slice(close.offset + close.length)),
+    ...textNode(closeValue.slice(close.offset + close.length), source, at(closeStart, close.offset + close.length)),
     ...children.slice(close.childIndex + 1),
   ];
   return [
@@ -150,7 +154,7 @@ function transformHighlights(node: MdNode, source: string): void {
   for (const child of node.children) transformHighlights(child, source);
   let range = findHighlight(node.children, source);
   while (range) {
-    node.children = wrapHighlight(node.children, range);
+    node.children = wrapHighlight(node.children, range, source);
     range = findHighlight(node.children, source);
   }
 }

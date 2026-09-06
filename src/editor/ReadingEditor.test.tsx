@@ -36,8 +36,7 @@ describe("ReadingEditor", () => {
       <I18nProvider><ReadingEditor markdown={"*斜体* and _italic_"} /></I18nProvider>
     );
 
-    expect(html).toContain("<em>斜体</em>");
-    expect(html).toContain("<em>italic</em>");
+    expect([...new DOMParser().parseFromString(html, "text/html").querySelectorAll("em")].map((node) => node.textContent)).toEqual(["斜体", "italic"]);
   });
 
   it("renders highlights with nested inline formatting", () => {
@@ -45,7 +44,9 @@ describe("ReadingEditor", () => {
       <I18nProvider><ReadingEditor markdown={"这是 ==高亮中包含 **粗体** 的文本。=="} /></I18nProvider>
     );
 
-    expect(html).toContain("这是 <mark>高亮中包含 <strong>粗体</strong> 的文本。</mark>");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    expect(doc.querySelector("mark")?.textContent).toBe("高亮中包含 粗体 的文本。");
+    expect(doc.querySelector("mark strong")?.textContent).toBe("粗体");
     expect(html).not.toContain("==");
   });
 
@@ -54,7 +55,7 @@ describe("ReadingEditor", () => {
       <I18nProvider><ReadingEditor markdown={"`==code==` and \\==literal=="} /></I18nProvider>
     );
 
-    expect(html).toContain("<code>==code==</code>");
+    expect(new DOMParser().parseFromString(html, "text/html").querySelector("code")?.textContent).toBe("==code==");
     expect(html).toContain("==literal==");
     expect(html).not.toContain("<mark>");
   });

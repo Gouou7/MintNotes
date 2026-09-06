@@ -42,7 +42,7 @@ test("typing a closing fence in the middle reparses the entire remaining documen
   expect(editor.getMarkdown()).toBe(
     "```ts\nbefore\n```\n# after\n```\n\noutside",
   );
-  expect(host.querySelector(".ProseMirror > h1")?.textContent).toBe("after");
+  expect(host.querySelector(".ProseMirror > h1")?.textContent).toBe("# after");
   expect(host.querySelectorAll(".ProseMirror > pre:not([data-source-gap])")).toHaveLength(2);
   editor.destroy();
   host.remove();

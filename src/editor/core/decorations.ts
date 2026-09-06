@@ -1,3 +1,4 @@
+import type { RenderControlIcon } from "./extension";
 // Cursor-aware syntax hints — Typora's signature visual: when the cursor sits
 // inside a mark range, show the source delimiters (*, **, `, ~~, [, ]) as a
 // gray hint; when it leaves, hide them.
@@ -9,7 +10,7 @@
 // whether to show it gray (cursor inside the surrounding span) or hide it
 // (cursor outside).
 
-import { Plugin, PluginKey, type EditorState } from "prosemirror-state";
+import { Plugin, PluginKey, TextSelection, type EditorState } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 
 import { getDelims, getExtras, getWidgets, type WidgetDecoration } from "./normalize";
@@ -60,44 +61,7 @@ const widgetBuilders: Record<string, (attrs: Record<string, string>) => HTMLElem
     el.className = "html-break-render";
     return el;
   },
-  "file-input": (attrs) => {
-    // Wrapping element: PM marks widgets contenteditable=false but a real
-    // <input type="file"> still misbehaves inside contenteditable (focus
-    // tug-of-war with the surrounding editable area, observed as input
-    // hangs in Chromium). We render a non-editable <span> trigger that
-    // lazily spawns a detached <input> on click.
-    const el = document.createElement("span");
-    el.className = "file-input";
-    el.setAttribute("contenteditable", "false");
-    el.textContent = "📎";
-    el.addEventListener("mousedown", (e) => {
-      // Prevent focus from leaving the editor.
-      e.preventDefault();
-    });
-    el.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const input = document.createElement("input");
-      input.type = "file";
-      if (attrs.accept) input.accept = attrs.accept;
-      input.style.display = "none";
-      input.addEventListener("change", () => {
-        // Bubble up via a synthetic CustomEvent on the trigger so the
-        // image plugin (which delegates from the editor root) can pick
-        // it up uniformly with the input's own `change`.
-        el.dispatchEvent(
-          new CustomEvent("file-input-pick", {
-            bubbles: true,
-            detail: { files: input.files },
-          }),
-        );
-        document.body.removeChild(input);
-      });
-      document.body.appendChild(input);
-      input.click();
-    });
-    return el;
-  },
+
 };
 
 function buildWidget(w: WidgetDecoration): HTMLElement {
@@ -115,10 +79,11 @@ function buildWidget(w: WidgetDecoration): HTMLElement {
   // an image span).
   el.setAttribute("contenteditable", "false");
   el.setAttribute("data-pos", String(w.pos));
+  if (w.kind === "image-render") el.setAttribute("data-image-from", String(w.spanFrom));
   return el;
 }
 
-function buildDecorationSet(state: EditorState): DecorationSet {
+function buildDecorationSet(state: EditorState, renderIcon?: RenderControlIcon): DecorationSet {
   const decos: Decoration[] = [];
   const selection = presentationSelection(state);
   state.doc.descendants((node, position) => {
@@ -210,12 +175,33 @@ function buildDecorationSet(state: EditorState): DecorationSet {
     );
     if (w.when === "inside" && !selectionTouchesSpan) continue;
     if (w.when === "outside" && selectionTouchesSpan) continue;
-    const dom = buildWidget(w);
+    let destroyIcon: (() => void) | undefined;
+    const dom = (view: import("prosemirror-view").EditorView) => {
+      const element = buildWidget(w);
+      if (w.kind === "image-icon") {
+        if (renderIcon) {
+          const icon = renderIcon(w.attrs?.broken ? "image-unavailable" : "image");
+          element.append(icon.element);
+          destroyIcon = icon.destroy;
+        }
+        else element.textContent = w.attrs?.broken ? "Image unavailable: " : "Image: ";
+      }
+      if (w.kind === "image-render") {
+        element.addEventListener("mousedown", (event) => event.preventDefault());
+        element.addEventListener("click", (event) => {
+          event.preventDefault();
+          view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, w.spanFrom)));
+          view.focus();
+        });
+      }
+      return element;
+    };
     decos.push(
       Decoration.widget(w.pos, dom, {
         side: w.side ?? -1,
         key: `${w.kind}@${w.pos}${w.key ? `:${w.key}` : ""}`,
         ignoreSelection: true,
+        destroy: () => destroyIcon?.(),
         // PM should not forward DOM events bubbled out of the widget
         // back as editor input — otherwise input/keydown fired around
         // the widget mount can land in handleTextInput and re-trigger
@@ -230,12 +216,12 @@ function buildDecorationSet(state: EditorState): DecorationSet {
 
 const syntaxHintsKey = new PluginKey<DecorationSet>("syntaxHints");
 
-export function syntaxHintsPlugin(): Plugin<DecorationSet> {
+export function syntaxHintsPlugin(renderIcon?: RenderControlIcon): Plugin<DecorationSet> {
   return new Plugin<DecorationSet>({
     key: syntaxHintsKey,
     state: {
-      init: (_, state) => buildDecorationSet(state),
-      apply: (_tr, _old, _oldState, newState) => buildDecorationSet(newState),
+      init: (_, state) => buildDecorationSet(state, renderIcon),
+      apply: (_tr, _old, _oldState, newState) => buildDecorationSet(newState, renderIcon),
     },
     props: {
       decorations(state) {

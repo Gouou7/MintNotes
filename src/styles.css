@@ -195,8 +195,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .live-editor-document, .reading-editor { width: min(900px, calc(100% - 48px)); min-height: 100%; margin: 0 auto; padding: 46px 24px 120px; color: var(--text); }
 .live-editor-document { position: relative; display: flex; flex-direction: column; }
+.live-editor-document[hidden] { display: none; }
+.live-editor-document.mode-live .ProseMirror > yaml-block,
+.live-editor-document.mode-live .ProseMirror > pre[data-source-kind="front_matter"] { display: none; }
+.live-editor-document .typora-web-source { width: 100%; margin: 0; padding: 0; color: var(--text); background: transparent; font-size: calc(15px + var(--font-adjust)); }
+.markdown-editor-host blockquote[data-source-container] { margin: 0; border-left: 3px solid var(--document-divider); padding-left: 14px; }
 .markdown-editor-host { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.markdown-editor-host > .typora-web-wrap, .markdown-editor-host .typora-web-editor-host { display: flex; flex: 1; flex-direction: column; }
+.markdown-editor-host > .typora-web-wrap, .markdown-editor-host .typora-web-editor-host:not([hidden]) { display: flex; flex: 1; flex-direction: column; }
 .markdown-editor-host.is-empty::before { content: attr(data-empty-hint); position: absolute; z-index: 2; top: 0; left: 0; padding-left: 10px; border-left: 2px solid var(--accent); color: var(--muted); font-size: calc(15px + var(--font-adjust)); line-height: 1.7; pointer-events: none; }
 .markdown-editor-host.is-empty:focus-within::before { display: none; }
 .source-editor { display: block; width: min(900px, calc(100% - 48px)); height: 100%; min-height: 0; margin: 0 auto; padding: 46px 24px 120px; border: 0; resize: none; outline: 0; overflow: auto; color: var(--text); caret-color: var(--text-strong); background: transparent; font: 15px/1.75 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; tab-size: 2; }
@@ -735,3 +740,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .user-actions { justify-content: flex-start; }
   .recovery-actions { grid-template-columns: 1fr; }
 }
+
+.markdown-editor-host .ProseMirror li.source-list-editing { list-style-type: none; }
+.markdown-editor-host .ProseMirror blockquote.markdown-callout { border: 1px solid var(--callout-color); border-radius: 10px; background: var(--callout-soft); padding: 15px 17px; }

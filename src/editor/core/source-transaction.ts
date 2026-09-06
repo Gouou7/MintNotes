@@ -98,6 +98,7 @@ export function transactionSourceEffect(
     reparseDerivedDocument = true;
   }
   const positions = SourcePositionMap.fromDocument(before, canonicalSource);
+  if (!positions.hasExactDocumentBoundary(step.from) || !positions.hasExactDocumentBoundary(step.to)) return { kind: "unsupported" };
   const from = positions.documentToSource(step.from, "right");
   const to = positions.documentToSource(step.to, "left");
   if (to < from) return { kind: "unsupported" };

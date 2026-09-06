@@ -9,13 +9,13 @@ describe("authored table source commands", () => {
   const source = "| name | value |\n| :--- | ---: |\n| a\\|b | 1 |";
 
   it("resizes without rewriting retained cell spellings or escaped pipes", () => {
-    expect(resizeAuthoredTableSource(source, 4, 3)).toBe([
+    expect(resizeAuthoredTableSource(source, 3, 3)).toBe([
       "| name | value | |",
       "| :--- | ---: | --- |",
       "| a\\|b | 1 | |",
       "| | | |",
     ].join("\n"));
-    expect(resizeAuthoredTableSource(source, 2, 1)).toBe([
+    expect(resizeAuthoredTableSource(source, 1, 1)).toBe([
       "| name |",
       "| :--- |",
     ].join("\n"));

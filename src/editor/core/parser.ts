@@ -25,6 +25,7 @@ import {
   SOURCE_TO_ATTR,
 } from "./source";
 import { sourceFingerprint } from "./source-fingerprint";
+import { projectTableSource } from "./table-source";
 
 const md: MarkdownIt = new MarkdownIt("commonmark", { html: false });
 for (const plugin of collectMdItPlugins()) md.use(plugin);
@@ -328,6 +329,11 @@ export class ParserState {
 
   constructor(private readonly protectedCharacterRestoration: ReadonlyMap<string, string> = new Map()) {}
 
+  literalInline(source: string, from: number, to: number): void {
+    this.top().attrs = { ...this.top().attrs, sourceLiteral: true, sourceFrom: from, sourceTo: to, sourceText: source };
+    this.addText(source);
+  }
+
   private top(): Frame {
     return this.stack[this.stack.length - 1]!;
   }
@@ -365,8 +371,33 @@ export class ParserState {
   closeNode(): void {
     const frame = this.stack.pop();
     if (!frame) throw new Error("closeNode: stack underflow");
-    const node = frame.type.createAndFill(frame.attrs, frame.content);
+    let node = frame.type.createAndFill(frame.attrs, frame.content);
+    if (node?.type.name === "table" && typeof frame.attrs?.sourceText === "string") {
+      node = projectTableSource(node, frame.attrs.sourceText, Number(frame.attrs.sourceFrom))
+        ?? schema.nodes.source_block.create({ kind: "unmapped-table", ...frame.attrs }, schema.text(frame.attrs.sourceText));
+    }
     if (!node) throw new Error(`parser: cannot fill <${frame.type.name}>`);
+    if (node.type.name === "list_item" && typeof frame.attrs?.sourceText === "string" && node.firstChild?.type.name === "paragraph" && !node.firstChild.textContent && node.firstChild.attrs.sourceFrom === null) {
+      const paragraph = schema.nodes.paragraph.createChecked({ ...frame.attrs, sourceLiteral: true }, schema.text(frame.attrs.sourceText));
+      node = node.copy(Fragment.from([paragraph, ...frame.content.slice(1)]));
+    }
+    if (node.type.name === "quote_container" && typeof frame.attrs?.sourceText === "string") {
+      const from = Number(frame.attrs.sourceFrom);
+      const to = Number(frame.attrs.sourceTo);
+      const children: PMNode[] = [];
+      let cursor = from;
+      node.forEach((child) => {
+        const childFrom = Number(child.attrs.sourceFrom);
+        const childTo = Number(child.attrs.sourceTo);
+        if (child.attrs.sourceFrom !== null && Number.isInteger(childFrom) && childFrom > cursor) {
+          children.push(sourceGapNode(frame.attrs!.sourceText.slice(cursor - from, childFrom - from), cursor, childFrom, to + 1));
+        }
+        children.push(child);
+        if (child.attrs.sourceTo !== null && Number.isInteger(childTo)) cursor = childTo;
+      });
+      if (cursor < to) children.push(sourceGapNode(frame.attrs.sourceText.slice(cursor - from), cursor, to, to + 1));
+      node = node.type.createChecked(node.attrs, children);
+    }
     this.top().content.push(node);
   }
 
@@ -647,6 +678,15 @@ function sourceGapNode(
 }
 
 function withSourceRange(node: PMNode, range: SourceBlockRange, source: string): PMNode {
+  if (node.isTextblock && node.type.name !== "source_gap") {
+    node = node.type.createChecked({ ...node.attrs,
+      sourceLiteral: ["paragraph", "heading"].includes(node.type.name),
+    }, source ? schema.text(source) : undefined);
+  }
+  if (node.type.name === "table") {
+    node = projectTableSource(node, source, range.from)
+      ?? schema.nodes.source_block.create({ kind: "unmapped-table" }, schema.text(source));
+  }
   return node.type.createChecked({
     ...node.attrs,
     [SOURCE_FROM_ATTR]: range.from,
@@ -679,7 +719,9 @@ function restoreParagraphLineEndings(node: PMNode, source: string): PMNode {
 }
 
 function addSourceGaps(doc: PMNode, tokens: readonly Token[], source: string): PMNode {
-  if (!source) return doc;
+  if (!source) return schema.nodes.doc.createChecked(null, [schema.nodes.paragraph.create({
+    sourceFrom: 0, sourceTo: 0, sourceText: "", sourceLiteral: true,
+  })]);
   const ranges = topLevelSourceRanges(tokens, source);
   if (ranges.length === 0) {
     return schema.nodes.doc.createChecked(null, [sourceGapNode(source, 0, source.length, source.length)]);
@@ -732,15 +774,58 @@ export function parse(src: string, options: ParseOptions = {}): PMNode {
   );
   const state = new ParserState(protectedSource.restoration);
   const listHasItem: boolean[] = [];
+  const compositeQuotes: number[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
     if (token.type === "blockquote_open") {
       const source = sourceForBlockquote(token, src);
-      state.push(schema.nodes.blockquote.createChecked(
-        { liveSyntaxState: LIVE_SYNTAX_RENDERING },
-        source ? schema.text(source) : undefined,
-      ));
-      index = blockquoteCloseIndex(tokens, index);
+      const close = blockquoteCloseIndex(tokens, index);
+      const composite = options.sourceGaps !== false && (
+        !/^[\t >]*\[!/.test(source) || tokens.slice(index, close).some((part) => part.type === "table_open")
+      );
+      if (composite) {
+        const from = lines[token.map![0]]!.from;
+        const last = lines[token.map![1] - 1]!;
+        const to = last.from + last.text.length;
+        state.openNode(schema.nodes.quote_container, { sourceFrom: from, sourceTo: to, sourceText: src.slice(from, to) });
+        compositeQuotes.push(token.level);
+      } else {
+        state.push(schema.nodes.blockquote.createChecked(
+          { liveSyntaxState: LIVE_SYNTAX_RENDERING }, source ? schema.text(source) : undefined,
+        ));
+        index = close;
+      }
+      continue;
+    }
+    if (token.type === "blockquote_close" && compositeQuotes.at(-1) === token.level) {
+      state.closeNode();
+      compositeQuotes.pop();
+      continue;
+    }
+    if (options.sourceGaps !== false && token.type === "inline" && token.map && (
+      listHasItem.length > 0 || compositeQuotes.length > 0 || tokens[index - 1]?.type === "heading_open"
+    )) {
+      const from = lines[token.map[0]]?.from ?? 0;
+      const lastLine = lines[token.map[1] - 1]!;
+      const to = lastLine.from + lastLine.text.length;
+      state.literalInline(src.slice(from, to), from, to);
+      continue;
+    }
+    if (options.sourceGaps !== false && token.type === "table_open" && token.map) {
+      const from = lines[token.map[0]]!.from;
+      const last = lines[token.map[1] - 1]!;
+      const to = last.from + last.text.length;
+      state.openNode(schema.nodes.table, { sourceFrom: from, sourceTo: to, sourceText: src.slice(from, to) });
+      continue;
+    }
+    if (options.sourceGaps !== false && token.type === "list_item_open" && token.map) {
+      const line = lines[token.map[0]]!;
+      let sourceGapBefore = 0;
+      if (listHasItem.at(-1)) {
+        for (let row = token.map[0] - 1; row >= 0 && !lines[row]!.text.trim(); row--) sourceGapBefore++;
+      }
+      state.openNode(schema.nodes.list_item, { sourceGapBefore, sourceFrom: line.from, sourceTo: line.from + line.text.length, sourceText: line.text });
+      if (listHasItem.length) listHasItem[listHasItem.length - 1] = true;
       continue;
     }
     if (token.type === "bullet_list_open" || token.type === "ordered_list_open") {

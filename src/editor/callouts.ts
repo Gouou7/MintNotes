@@ -1,3 +1,4 @@
+import { readingPosition } from "./reading-source";
 export type CalloutKind =
   | "note"
   | "abstract"
@@ -137,6 +138,7 @@ function parseCalloutAppearance(value: string): { title: string; color?: Callout
 
 interface MdNode {
   type: string;
+  position?: { start: { offset: number }; end: { offset: number } };
   value?: string;
   children?: MdNode[];
   data?: {
@@ -146,7 +148,7 @@ interface MdNode {
 
 const MDAST_MARKER = /^\[!([a-z0-9_-]+)\]([+-]?)(?:[ \t]+([^\r\n]*))?(?:\r?\n|$)/i;
 
-function transformMdast(node: MdNode) {
+function transformMdast(node: MdNode, source: string) {
   if (node.type === "blockquote") {
     const paragraph = node.children?.[0];
     const firstText = paragraph?.type === "paragraph" ? paragraph.children?.[0] : undefined;
@@ -156,6 +158,12 @@ function transformMdast(node: MdNode) {
         const parsed = parseCalloutMarker(`[!${marker[1]}]${marker[2] ?? ""}${marker[3] ? ` ${marker[3]}` : ""}`);
         if (parsed) {
           firstText.value = firstText.value.slice(marker[0].length);
+          if (firstText.position) {
+            let start = firstText.position.start.offset + marker[0].length;
+            const prefix = /^(?:[\t ]*>[\t ]?)+/.exec(source.slice(start))?.[0] ?? "";
+            start += prefix.length;
+            firstText.position = readingPosition(source, start, firstText.position.end.offset);
+          }
           if (!firstText.value) paragraph?.children?.shift();
           if (paragraph?.children?.length === 0) node.children?.shift();
           node.data ??= {};
@@ -172,9 +180,9 @@ function transformMdast(node: MdNode) {
       }
     }
   }
-  for (const child of node.children ?? []) transformMdast(child);
+  for (const child of node.children ?? []) transformMdast(child, source);
 }
 
 export function remarkCallouts() {
-  return (tree: MdNode) => transformMdast(tree);
+  return (tree: MdNode, file: { value?: unknown }) => transformMdast(tree, String(file.value ?? ""));
 }

@@ -24,6 +24,12 @@ vi.mock("./extensions/wikilink", () => ({
 }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+function mockEditor(overrides: Partial<EditorController> = {}): EditorController {
+  return { setSourceMode: vi.fn(), isSourceMode: () => false, isComposing: () => false, getSelectionOffset: () => 0,
+    getSelection: () => ({ anchor: 0, head: 0 }), setSelection: vi.fn(), replaceMarkdown: vi.fn(),
+    ...overrides } as unknown as EditorController;
+}
+
 const attachmentId = "11111111-1111-4111-8111-111111111111";
 
 afterEach(() => {
@@ -61,11 +67,11 @@ function transferEvent(
 
 describe("MarkdownEditor live mode", () => {
   it("toggles visual code wrapping without rebuilding the editor", async () => {
-    const editor = {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as EditorController;
+    });
     vi.mocked(createEditor).mockReturnValue(editor);
     const container = document.createElement("div");
     document.body.append(container);
@@ -88,11 +94,11 @@ describe("MarkdownEditor live mode", () => {
 
   it("exposes focus and shows a non-persistent hint for an empty note", async () => {
     localStorage.setItem("webmd-notes-language", "en");
-    const editor = {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as EditorController;
+    });
     vi.mocked(createEditor).mockReturnValue(editor);
     const container = document.createElement("div");
     document.body.append(container);
@@ -116,7 +122,7 @@ describe("MarkdownEditor live mode", () => {
   });
 
   it("refreshes an asynchronously resolved attachment without rebuilding or refocusing the editor", async () => {
-    const editor = {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       getMarkdown: vi.fn(),
@@ -126,7 +132,7 @@ describe("MarkdownEditor live mode", () => {
       refreshPresentation: vi.fn(),
       setMarkdown: vi.fn(),
       toggleSource: vi.fn()
-    } as unknown as EditorController;
+    });
     let resolveImageSource: ((source: string) => string | null | undefined) | undefined;
     vi.mocked(createEditor).mockImplementation((_host, options) => {
       resolveImageSource = options?.resolveImageSource;
@@ -158,12 +164,12 @@ describe("MarkdownEditor live mode", () => {
     await act(async () => root.unmount());
   });
 
-  it("materializes attachments when the live editor is created and canonicalizes changes", async () => {
-    const editor = {
+  it("keeps attachment resolution out of authored changes", async () => {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as EditorController;
+    });
     let editorChange: ((markdown: string) => void) | undefined;
     vi.mocked(createEditor).mockImplementation((_host, options) => {
       editorChange = options?.onChange;
@@ -185,23 +191,23 @@ describe("MarkdownEditor live mode", () => {
     ));
 
     expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe(`![image](webmd-attachment:${attachmentId})`);
-    act(() => editorChange?.(`![image](${blobUrl})`));
+    act(() => editorChange?.(`![image](webmd-attachment:${attachmentId})`));
     expect(onChange).not.toHaveBeenCalled();
 
-    act(() => editorChange?.(`text\n\n![image](${blobUrl})`));
+    act(() => editorChange?.(`text\n\n![image](webmd-attachment:${attachmentId})`));
     expect(onChange).toHaveBeenCalledWith(`text\n\n![image](webmd-attachment:${attachmentId})`);
-    act(() => editorChange?.(`text\n\n![image](${blobUrl})`));
+    act(() => editorChange?.(`text\n\n![image](webmd-attachment:${attachmentId})`));
     expect(onChange).toHaveBeenCalledOnce();
 
     await act(async () => root.unmount());
   });
 
   it("applies Markdown inserted outside the live editor", async () => {
-    const editor = {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as EditorController;
+    });
     vi.mocked(createEditor).mockReturnValue(editor);
     const blobUrl = "blob:http://localhost/inserted-image";
     const container = document.createElement("div");
@@ -226,13 +232,13 @@ describe("MarkdownEditor live mode", () => {
   });
 
   it("inserts dragged and pasted clipboard images", async () => {
-    const editor = {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       getMarkdownOffsetAtPoint: vi.fn(() => 7),
       insertMarkdown: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as EditorController;
+    });
     vi.mocked(createEditor).mockReturnValue(editor);
     const onImageInsert = vi.fn(async () => `\n![image](webmd-attachment:${attachmentId})\n`);
     const image = new File(["image"], "image.png", { type: "image/png" });
@@ -276,11 +282,11 @@ describe("MarkdownEditor live mode", () => {
   });
 
   it("keeps frontmatter outside the live editor without materializing callout syntax", async () => {
-    const editor = {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as EditorController;
+    });
     let editorChange: ((markdown: string) => void) | undefined;
     vi.mocked(createEditor).mockImplementation((_host, options) => {
       editorChange = options?.onChange;
@@ -300,9 +306,9 @@ describe("MarkdownEditor live mode", () => {
       /></I18nProvider>
     ));
 
-    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe("> [!TIP]\n> Body");
+    expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).toBe(markdown);
     expect(vi.mocked(createEditor).mock.calls[0]?.[1]?.initialContent).not.toContain("==`");
-    act(() => editorChange?.("> [!TIP]\n> Changed"));
+    act(() => editorChange?.("---\nversion:\n---\n> [!TIP]\n> Changed"));
     expect(onChange).toHaveBeenCalledWith("---\nversion:\n---\n> [!TIP]\n> Changed");
     expect(container.textContent).toContain("Note properties");
 
@@ -310,11 +316,11 @@ describe("MarkdownEditor live mode", () => {
   });
 
   it("keeps an empty callout body stable without rebuilding the live editor", async () => {
-    const editor = {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as EditorController;
+    });
     let editorChange: ((markdown: string) => void) | undefined;
     vi.mocked(createEditor).mockImplementation((_host, options) => {
       editorChange = options?.onChange;
@@ -343,11 +349,11 @@ describe("MarkdownEditor live mode", () => {
   });
 
   it("passes canonical multiline math directly to Live mode and forwards WikiLink navigation", async () => {
-    const editor = {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as EditorController;
+    });
     let editorChange: ((markdown: string) => void) | undefined;
     vi.mocked(createEditor).mockImplementation((_host, options) => {
       editorChange = options?.onChange;
@@ -390,11 +396,11 @@ describe("MarkdownEditor live mode", () => {
   });
 
   it("passes a React Callout preview renderer into the presentation extension", async () => {
-    const editor = {
+    const editor = mockEditor({
       destroy: vi.fn(),
       focus: vi.fn(),
       setMarkdown: vi.fn()
-    } as unknown as EditorController;
+    });
     vi.mocked(createEditor).mockReturnValue(editor);
     const container = document.createElement("div");
     document.body.append(container);
@@ -424,6 +430,7 @@ describe("MarkdownEditor live mode", () => {
 
 describe("MarkdownEditor source mode", () => {
   it("inserts a dragged image at the captured source selection", async () => {
+    vi.mocked(createEditor).mockImplementation((await vi.importActual<typeof import("./core/lib")>("./core/lib")).createEditor);
     let finishInsertion: ((insertion: string) => void) | undefined;
     const onImageInsert = vi.fn(() => new Promise<string>((resolve) => {
       finishInsertion = resolve;
@@ -465,6 +472,7 @@ describe("MarkdownEditor source mode", () => {
   });
 
   it("pastes a clipboard image while leaving ordinary text paste untouched", async () => {
+    vi.mocked(createEditor).mockImplementation((await vi.importActual<typeof import("./core/lib")>("./core/lib")).createEditor);
     const onImageInsert = vi.fn(async () => "![clipboard](webmd-attachment:image)");
     const onChange = vi.fn();
     const image = new File(["image"], "clipboard.png", { type: "image/png" });
@@ -506,7 +514,7 @@ describe("MarkdownEditor source mode", () => {
 });
 
 describe("MarkdownEditor reading mode", () => {
-  it("renders the reading editor without creating an editable controller or emitting changes", async () => {
+  it("renders a read-only surface while retaining the editor session", async () => {
     const onChange = vi.fn();
     vi.mocked(createEditor).mockClear();
     const container = document.createElement("div");
@@ -520,8 +528,8 @@ describe("MarkdownEditor reading mode", () => {
     ));
 
     expect(container.querySelector(".reading-editor h1")?.textContent).toBe("Reading");
-    expect(container.querySelector("textarea")).toBeNull();
-    expect(createEditor).not.toHaveBeenCalled();
+    expect(container.querySelector(".live-editor-document")?.hasAttribute("hidden")).toBe(true);
+    expect(createEditor).toHaveBeenCalledOnce();
     expect(onChange).not.toHaveBeenCalled();
 
     await act(async () => root.unmount());

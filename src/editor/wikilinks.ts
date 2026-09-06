@@ -1,8 +1,10 @@
+import { readingPosition } from "./reading-source";
 import type { OpenDocument } from "../types";
 
 interface MdNode {
   type: string;
   value?: string;
+  position?: { start: { offset: number }; end: { offset: number } };
   url?: string;
   children?: MdNode[];
   data?: { hProperties?: Record<string, unknown> };
@@ -22,7 +24,8 @@ export function parseWikiLinkTarget(target: string): WikiLinkTarget {
   };
 }
 
-function wikiLinkNodes(value: string): MdNode[] | null {
+function wikiLinkNodes(value: string, source: string, offset?: number): MdNode[] | null {
+  const position = (from: number, to: number) => offset === undefined ? undefined : readingPosition(source, offset + from, offset + to);
   const pattern = /(!?)\[\[([^\]\n]+)\]\]/g;
   const output: MdNode[] = [];
   let cursor = 0;
@@ -30,15 +33,16 @@ function wikiLinkNodes(value: string): MdNode[] | null {
 
   while ((match = pattern.exec(value))) {
     if (match[1]) continue;
-    if (match.index > cursor) output.push({ type: "text", value: value.slice(cursor, match.index) });
+    if (match.index > cursor) output.push({ type: "text", value: value.slice(cursor, match.index), position: position(cursor, match.index) });
     const parts = match[2].split("|");
     const target = (parts.shift() ?? "").trim();
     const label = parts.join("|").trim() || target;
     if (!target) continue;
     output.push({
       type: "link",
+      position: position(match.index, match.index + match[0].length),
       url: `mint-wikilink:${encodeURIComponent(target)}`,
-      children: [{ type: "text", value: label }],
+      children: [{ type: "text", value: label, position: position(match.index + match[0].lastIndexOf(label), match.index + match[0].lastIndexOf(label) + label.length) }],
       data: {
         hProperties: {
           className: "wiki-link",
@@ -50,18 +54,18 @@ function wikiLinkNodes(value: string): MdNode[] | null {
   }
 
   if (!output.length) return null;
-  if (cursor < value.length) output.push({ type: "text", value: value.slice(cursor) });
+  if (cursor < value.length) output.push({ type: "text", value: value.slice(cursor), position: position(cursor, value.length) });
   return output;
 }
 
-function transformWikiLinks(node: MdNode) {
+function transformWikiLinks(node: MdNode, source: string) {
   if (!node.children || node.type === "link" || node.type === "code" || node.type === "inlineCode") return;
   const children: MdNode[] = [];
   for (const child of node.children) {
     if (child.type === "text" && typeof child.value === "string") {
-      children.push(...(wikiLinkNodes(child.value) ?? [child]));
+      children.push(...(wikiLinkNodes(child.value, source, child.position && child.position.end.offset - child.position.start.offset === child.value.length ? child.position.start.offset : undefined) ?? [child]));
     } else {
-      transformWikiLinks(child);
+      transformWikiLinks(child, source);
       children.push(child);
     }
   }
@@ -69,7 +73,7 @@ function transformWikiLinks(node: MdNode) {
 }
 
 export function remarkWikiLinks() {
-  return (tree: MdNode) => transformWikiLinks(tree);
+  return (tree: MdNode, file: { value?: unknown } = {}) => transformWikiLinks(tree, String(file.value ?? ""));
 }
 
 export function resolveWikiLink(

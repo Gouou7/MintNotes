@@ -106,6 +106,8 @@ export interface EditorExtension {
   readonly id: string;
   /** Declarative, core-hosted presentation behavior for new extensions. */
   readonly presentations?: ExtensionPresentations;
+  /** Expand literal lines as one unit while keeping nested table cells native. */
+  readonly sourceLineUnits?: readonly { nodeType: string; matches(source: string): boolean }[];
   /**
    * Transitional low-level hook for core-coupled extensions such as Callout.
    * New presentation extensions must use `presentations` instead.
@@ -116,3 +118,8 @@ export interface EditorExtension {
   /** Transitional source-block hook used by the source-backed blockquote view. */
   readonly sourceBlockPresentations?: readonly SourceBlockPresentation[];
 }
+
+/** Product-owned control artwork; no editor view or mutation capability. */
+export type EditorControlIcon = "image" | "image-unavailable" | "table-size" | "table-delete" | "align-left" | "align-center" | "align-right";
+
+export type RenderControlIcon = (name: EditorControlIcon) => { element: HTMLElement; destroy(): void };

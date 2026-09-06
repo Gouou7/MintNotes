@@ -1,3 +1,4 @@
+import type { RenderControlIcon } from "../extension";
 // FeatureSpec — one file per Typora syntax.
 //
 // A feature contributes its pieces across every cross-cutting seam:
@@ -36,6 +37,8 @@ export type TokenHandler = (
 ) => void;
 
 export type FeaturePluginContext = {
+  canonicalSource?: boolean;
+  renderControlIcon?: RenderControlIcon;
   resolveImageSource?: InlinePresentationContext["resolveImageSource"];
   sourceBlockPresentations?: readonly SourceBlockPresentation[];
 };

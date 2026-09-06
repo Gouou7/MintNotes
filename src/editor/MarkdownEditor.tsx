@@ -1,10 +1,13 @@
+import { AlignCenter, AlignLeft, AlignRight, Image as ImageIcon, ImageOff, TableProperties, Trash2 } from "lucide-react";
+import { AppIcon } from "../components/AppIcon";
 import {
   forwardRef,
   type ClipboardEvent as ReactClipboardEvent,
   type DragEvent,
   useImperativeHandle,
   useEffect,
-  useRef
+  useRef,
+  useState
 } from "react";
 import { createRoot } from "react-dom/client";
 import { createEditor, type Editor as EditorController } from "./core/lib";
@@ -18,7 +21,7 @@ import { createWikiLinkExtension } from "./extensions/wikilink";
 import { I18nProvider, useI18n } from "../i18n";
 import type { WorkspaceEditorMode } from "../types";
 import { FrontmatterProperties } from "./FrontmatterProperties";
-import { parseFrontmatter, replaceFrontmatterBody } from "./frontmatter";
+import { parseFrontmatter } from "./frontmatter";
 import { ReadingEditor } from "./ReadingEditor";
 import { renderMathInto, renderMermaidInto } from "./richRenderers";
 
@@ -40,95 +43,46 @@ export interface MarkdownEditorHandle {
   setSelectionOffset: (offset: number) => void;
 }
 
-export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function MarkdownEditor(props, ref) {
-  if (props.mode === "source") return <SourceEditor {...props} ref={ref} />;
-  if (props.mode === "reading") return <ReadingEditor
-    markdown={props.markdown}
-    wrapCodeBlocks={props.wrapCodeBlocks}
-    attachmentUrls={props.attachmentUrls}
-    onWikiLink={props.onWikiLink}
-  />;
-  return <LiveEditor {...props} ref={ref} />;
-});
-
-const SourceEditor = forwardRef<MarkdownEditorHandle, Props>(function SourceEditor({ markdown, onChange, onImageInsert }, ref) {
-  const { t } = useI18n();
-  const textarea = useRef<HTMLTextAreaElement>(null);
-  useImperativeHandle(ref, () => ({
-    focus: () => textarea.current?.focus(),
-    getSelectionOffset: () => textarea.current?.selectionStart ?? markdown.length,
-    setSelectionOffset: (offset) => {
-      const target = textarea.current;
-      if (target) target.setSelectionRange(offset, offset);
-    }
-  }), [markdown.length]);
-  const insertImage = async (file: File, start: number, end: number) => {
-    if (!onImageInsert) return;
-    const insertion = await onImageInsert(file);
-    if (insertion === null) return;
-    const currentMarkdown = textarea.current?.value ?? markdown;
-    onChange(currentMarkdown.slice(0, start) + insertion + currentMarkdown.slice(end));
-  };
-  const drop = async (event: DragEvent<HTMLTextAreaElement>) => {
-    const file = imageFileFromTransfer(event.dataTransfer);
-    if (!file || !onImageInsert) return;
-    event.preventDefault();
-    const start = event.currentTarget.selectionStart ?? markdown.length;
-    const end = event.currentTarget.selectionEnd ?? start;
-    await insertImage(file, start, end);
-  };
-  const paste = async (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-    const file = imageFileFromTransfer(event.clipboardData);
-    if (!file || !onImageInsert) return;
-    event.preventDefault();
-    const start = event.currentTarget.selectionStart ?? markdown.length;
-    const end = event.currentTarget.selectionEnd ?? start;
-    await insertImage(file, start, end);
-  };
-  return (
-    <textarea
-      ref={textarea}
-      className="source-editor"
-      value={markdown}
-      onChange={(event) => onChange(event.target.value)}
-      onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
-      onDrop={(event) => void drop(event)}
-      onPaste={(event) => void paste(event)}
-      aria-label={t("app.markdownSource")}
-      placeholder={t("app.emptyNoteHint")}
-      spellCheck={false}
-      autoFocus
-    />
-  );
-});
-
-const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({ markdown, onChange, attachmentUrls = new Map(), attachmentsPending = false, onImageInsert, onWikiLink, emptyHint, wrapCodeBlocks = true }, ref) {
+export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function MarkdownEditor({ markdown, mode, onChange, attachmentUrls = new Map(), attachmentsPending = false, onImageInsert, onWikiLink, emptyHint, wrapCodeBlocks = true }, ref) {
   const frontmatter = parseFrontmatter(markdown);
+  const [displayMode, setDisplayMode] = useState(mode);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorController | null>(null);
   const changeRef = useRef(onChange);
-  const attachmentUrlHistoryRef = useRef(new Map<string, string>());
   const attachmentUrlsRef = useRef(attachmentUrls);
   const attachmentsPendingRef = useRef(attachmentsPending);
-  const frontmatterRef = useRef(frontmatter);
   const editorMarkdownRef = useRef(markdown);
   const wikiLinkRef = useRef(onWikiLink);
   changeRef.current = onChange;
   attachmentUrlsRef.current = attachmentUrls;
   attachmentsPendingRef.current = attachmentsPending;
-  frontmatterRef.current = frontmatter;
   wikiLinkRef.current = onWikiLink;
   useImperativeHandle(ref, () => ({
     focus: () => editorRef.current?.focus(),
     getSelectionOffset: () => editorRef.current?.getSelectionOffset() ?? editorMarkdownRef.current.length,
     setSelectionOffset: (offset) => editorRef.current?.setSelectionOffset(offset)
   }), []);
-  for (const [attachmentId, url] of attachmentUrls) attachmentUrlHistoryRef.current.set(url, attachmentId);
 
   useEffect(() => {
     if (!hostRef.current) return;
     const editor = createEditor(hostRef.current, {
-      initialContent: frontmatter.body,
+      initialContent: markdown,
+      renderControlIcon: (name) => {
+        const icons = { image: ImageIcon, "image-unavailable": ImageOff, "table-size": TableProperties, "table-delete": Trash2, "align-left": AlignLeft, "align-center": AlignCenter, "align-right": AlignRight };
+        const container = document.createElement("span");
+        const root = createRoot(container);
+        root.render(<AppIcon icon={icons[name]} size={16} />);
+        return { element: container, destroy: () => queueMicrotask(() => root.unmount()) };
+      },
+      onSourceModeChange: (source) => setDisplayMode(source ? "source" : modeRef.current === "reading" ? "reading" : "live"),
+      onCompositionChange: (composing) => {
+        if (!composing) {
+          editorRef.current?.setSourceMode(modeRef.current === "source");
+          setDisplayMode(modeRef.current);
+        }
+      },
       extensions: [
         createCommentExtension(),
         createCalloutExtension({
@@ -163,19 +117,14 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
           ?? (attachmentsPendingRef.current ? null : undefined);
       },
       onChange: (next) => {
-        let canonicalBody = next;
-        for (const [url, attachmentId] of attachmentUrlHistoryRef.current) {
-          canonicalBody = canonicalBody.split(url).join(`webmd-attachment:${attachmentId}`);
-        }
-        const canonical = replaceFrontmatterBody(frontmatterRef.current, canonicalBody);
-        const previousMarkdown = editorMarkdownRef.current;
-        if (canonical === previousMarkdown) return;
-        editorMarkdownRef.current = canonical;
-        changeRef.current(canonical);
+        if (next === editorMarkdownRef.current) return;
+        editorMarkdownRef.current = next;
+        changeRef.current(next);
       }
     });
     editorRef.current = editor;
-    editor.focus();
+    editor.setSourceMode(modeRef.current === "source");
+    if (modeRef.current !== "reading") editor.focus();
     return () => {
       editorRef.current = null;
       editor.destroy();
@@ -188,8 +137,15 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
     // below. Only authored Markdown changes rebuild the editor document.
     if (markdown === editorMarkdownRef.current) return;
     editorMarkdownRef.current = markdown;
-    editorRef.current.setMarkdown(frontmatter.body);
-  }, [markdown, frontmatter.body]);
+    editorRef.current.setMarkdown(markdown);
+  }, [markdown]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (editor?.isComposing()) return;
+    editor?.setSourceMode(mode === "source");
+    setDisplayMode(mode);
+  }, [mode]);
 
   useEffect(() => {
     editorRef.current?.refreshPresentation?.();
@@ -200,10 +156,14 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
     if (!file || !onImageInsert || !editorRef.current) return;
     event.preventDefault();
     event.stopPropagation();
-    const offset = editorRef.current.getMarkdownOffsetAtPoint(event.clientX, event.clientY);
+    const editor = editorRef.current;
+    const selection = editor.isSourceMode() ? editor.getSelection() : null;
+    const offset = editor.getMarkdownOffsetAtPoint(event.clientX, event.clientY);
     const insertion = await onImageInsert(file);
     if (insertion === null) return;
-    editorRef.current?.insertMarkdown(insertion, offset);
+    if (editorRef.current !== editor) return;
+    if (selection) { editor.setSelection(selection); editor.insertMarkdown(insertion); }
+    else editor.insertMarkdown(insertion, offset);
   };
   const paste = async (event: ReactClipboardEvent<HTMLDivElement>) => {
     const file = imageFileFromTransfer(event.clipboardData);
@@ -218,23 +178,26 @@ const LiveEditor = forwardRef<MarkdownEditorHandle, Props>(function LiveEditor({
 
   const changeProperties = (next: string) => {
     if (next === editorMarkdownRef.current) return;
-    editorMarkdownRef.current = next;
-    frontmatterRef.current = parseFrontmatter(next);
-    changeRef.current(next);
+    editorRef.current?.replaceMarkdown(next, editorRef.current.getSelectionOffset());
   };
 
   return (
-    <div className={`live-editor-document${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
-      {frontmatter.status !== "absent" && <FrontmatterProperties markdown={markdown} editable onChange={changeProperties} />}
+    <>
+    <div hidden={displayMode === "reading"} className={`live-editor-document mode-${displayMode}${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
+      {displayMode === "live" && frontmatter.status !== "absent" && <FrontmatterProperties markdown={markdown} editable onChange={changeProperties} />}
       <div
         ref={hostRef}
         className={`markdown-editor-host${emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? " is-empty" : ""}`}
         data-empty-hint={emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? emptyHint : undefined}
         onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
-        onDrop={(event) => void drop(event)}
-        onPaste={(event) => void paste(event)}
+        onDropCapture={(event) => void drop(event)}
+        onPasteCapture={(event) => void paste(event)}
       />
     </div>
+    {displayMode === "reading" && <ReadingEditor markdown={markdown} wrapCodeBlocks={wrapCodeBlocks}
+      attachmentUrls={attachmentUrls} onWikiLink={onWikiLink}
+      onSelectionChange={(selection) => editorRef.current?.setSelection(selection)} />}
+    </>
   );
 });
 

@@ -144,6 +144,12 @@ const coreNodes: Record<string, NodeSpec> = {
     toDOM: (node) => [`h${node.attrs.level as number}`, 0],
   },
 
+  quote_container: {
+    group: "block", content: "block+", defining: true,
+    parseDOM: [{ tag: "blockquote[data-source-container]" }],
+    toDOM: () => ["blockquote", { "data-source-container": "quote" }, 0],
+  },
+
   blockquote: {
     group: "block",
     content: "text*",
@@ -282,11 +288,12 @@ const coreMarks: Record<string, MarkSpec> = {};
 
 function withSourceRangeAttrs(nodes: Record<string, NodeSpec>): Record<string, NodeSpec> {
   return Object.fromEntries(Object.entries(nodes).map(([name, spec]) => {
-    if (!(spec.group ?? "").split(/\s+/).includes("block")) return [name, spec];
+    if (!(spec.group ?? "").split(/\s+/).includes("block") && !["table_cell", "list_item"].includes(name)) return [name, spec];
     return [name, {
       ...spec,
       attrs: {
         ...(spec.attrs ?? {}),
+        sourceLiteral: { default: false },
         [SOURCE_FROM_ATTR]: { default: null },
         [SOURCE_TO_ATTR]: { default: null },
         [SOURCE_TEXT_ATTR]: { default: null },

@@ -1,4 +1,5 @@
 import type { SourceSelection, SourceTransaction } from "./source";
+import { adjacentGrapheme } from "./source-text";
 
 type LiveSourceKey = "Enter" | "Backspace" | "Delete" | "Tab";
 
@@ -167,8 +168,8 @@ export function liveSourceKeyTransaction(
   if (from !== to) return transaction(selection, from, to, "", "delete");
   if (key === "Backspace") {
     if (from === 0) return null;
-    return transaction(selection, from - 1, from, "", "delete");
+    return transaction(selection, adjacentGrapheme(source, from, -1), from, "", "delete");
   }
   if (to === source.length) return null;
-  return transaction(selection, to, to + 1, "", "delete");
+  return transaction(selection, to, adjacentGrapheme(source, to, 1), "", "delete");
 }
