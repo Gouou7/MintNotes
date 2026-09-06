@@ -51,7 +51,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | 用户可感知的行为变化 | 同一次修改中更新 [docs/guide.md](docs/guide.md) |
 | 持久化、同步、加密、认证、隔离、CSP、元数据边界 | 先读 [docs/system-design.md](docs/system-design.md)，修改须获允许 |
 | 编辑器行为、显示、交互与验收 | 先读 [docs/editor-architecture.md](docs/editor-architecture.md)，修改须获允许 |
-| Docker、配置、代理、备份、恢复、升级 | 更新 [docs/self-hosting.md](docs/self-hosting.md)，并检查 `.env.example`、`docker-compose.yml`、`deploy/nginx.conf.example` 等相关配置 |
+| Docker、pnpm、配置、代理、备份、恢复、升级、发布 | 更新 [docs/deployment.md](docs/deployment.md)，并检查 `.env.example`、`docker-compose.yml`、`deploy/nginx.conf.example` 等相关配置 |
 | 已发布版本的变化 | [CHANGELOG.md](CHANGELOG.md)，发布标签须有对应的带日期版本记录 |
 
 - 每次更改代码后，按需更改对应文档。

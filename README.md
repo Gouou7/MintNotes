@@ -1,61 +1,82 @@
 # Mint Notes
 
-Mint Notes 是一款轻量、可自托管的多用户 Markdown 笔记 PWA，也是一个使用 AI 开发的玩具级项目。编辑内容会先在浏览器中加密保存，再由后台同步；服务器只保存无法直接读取的密文。
+<p align="center">
+  <img src="public/icon.svg" alt="Mint Notes" width="128" height="128">
+</p>
+
+Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户、PWA 离线编辑和跨设备同步。
 
 ## 主要能力
 
-- 提供实时、源码和阅读三种编辑模式，支持数学公式、Mermaid、WikiLink、Callout 与 YAML 属性。
-- 可以用文件夹、搜索、排序和固定功能整理笔记，并提供笔记锁、回收站、加密历史与图片附件。
-- 支持多用户、恢复密钥、已记住设备、可选的本地 PIN、离线编辑和后台同步。
-- 可以导入或导出 Markdown 与 ZIP，并保留目录结构和附件。
-- 客户端采用 React 和 TypeScript，服务端采用 Fastify 和 SQLite，无需额外部署数据库或对象存储。
+- **Markdown 编辑：**提供实时、源码和阅读三种模式，支持 GFM、数学公式、Mermaid、WikiLink、Callout 与 YAML Front Matter。
+- **笔记整理：**支持文件夹、搜索、排序、固定、笔记锁、回收站、加密历史和图片附件。
+- **本地优先：**编辑内容先加密写入浏览器的 IndexedDB，离线时仍可继续使用，恢复网络后在后台同步。
+- **账户与恢复：**支持多用户、恢复密钥、已记住设备和可选的本地 PIN。
+- **数据迁移：**可以导入或导出 Markdown 与 ZIP，并保留目录结构和附件。
+- **简单部署：**React／TypeScript 客户端与 Fastify／SQLite 服务端打包在同一容器中，无需额外部署数据库或对象存储。
 
 ## Docker 快速开始
 
-需要 Docker Engine、Docker Compose v2、HTTPS 域名和反向代理。
+生产部署需要 Docker Engine、Docker Compose v2、HTTPS 域名和反向代理。
 
-```bash
-cp .env.example .env
-mkdir -p notes-data
-docker compose config
-docker compose up --build -d
-```
+1. 复制环境变量模板：
 
-在 `.env` 中把 `APP_ORIGIN` 改为实际 HTTPS 源；Linux 用户还应让 `PUID`、`PGID` 与 `notes-data` 所有者一致。打开站点后，第一个账户会成为管理员。恢复密钥只显示一次，请立即保存；投入使用前应测试一次明文导出和服务器备份。
+   ```bash
+   cp .env.example .env
+   ```
 
-完整配置、反向代理、升级和恢复流程见[自托管指南](docs/self-hosting.md)。
+2. 编辑 `.env`，将 `APP_ORIGIN` 改为用户实际访问的 HTTPS 源，例如 `https://notes.example.com`。Linux 用户还应让 `PUID`、`PGID` 与 `notes-data` 目录的所有者一致。
 
-## 开发与发布
+3. 创建数据目录并启动服务：
 
-本地开发需要 Node.js 22+，并使用 `package.json` 指定的 pnpm 版本（当前为 11.9.0）：
+   ```bash
+   mkdir -p notes-data
+   docker compose config
+   docker compose up --build -d
+   docker compose ps
+   ```
+
+Compose 默认仅在主机的 `127.0.0.1:8787` 监听，请通过 HTTPS 反向代理对外提供服务。第一次打开站点时创建的账户会成为管理员；恢复密钥只显示一次，请立即保存。
+
+投入使用前，建议测试一次明文导出和服务器备份。完整配置、反向代理、升级和恢复流程见[部署指南](docs/deployment.md)。
+
+## 技术概览
+
+- 客户端：React、TypeScript、Vite、ProseMirror、Dexie／IndexedDB
+- 服务端：Fastify、SQLite
+- 内容处理：Markdown、KaTeX、Mermaid
+- 部署：Docker Compose、单容器、非 root 用户
+
+## 本地开发
+
+需要 Node.js 22+，并使用 `package.json#packageManager` 指定的 pnpm 版本（当前为 11.9.0）。
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Vite 默认运行在 `http://localhost:5173`，并将 `/api` 转发到 `http://127.0.0.1:8787` 的 Fastify 服务。提交代码前至少运行 `pnpm typecheck` 和 `pnpm test`；涉及生产构建时再运行 `pnpm build`。加密 Worker 和 API 的集成检查依赖构建产物，应在构建后分别运行 `pnpm test:crypto-worker` 和 `pnpm test:smoke`。
+Vite 默认运行在 `http://localhost:5173`，并将 `/api` 转发到 `http://127.0.0.1:8787` 的 Fastify 服务。
 
-稳定 Git 标签 `vMAJOR.MINOR.PATCH` 是应用版本的唯一来源，`package.json` 中的 `0.0.0` 不是发布版本。发布前应在 `CHANGELOG.md` 中加入带日期的对应版本，并在准确的标签上运行：
+常用检查命令：
 
-```bash
-pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm test
-APP_VERSION="$(node scripts/release-version.mjs "$(git describe --tags --exact-match)")" pnpm build
-pnpm test:crypto-worker
-pnpm test:smoke
-docker compose config
-```
-
-镜像发布及升级注意事项见[自托管指南](docs/self-hosting.md#发布镜像)。
+| 命令 | 用途 |
+| --- | --- |
+| `pnpm typecheck` | 检查客户端与服务端 TypeScript |
+| `pnpm test` | 运行 Vitest 测试 |
+| `pnpm build` | 构建客户端与服务端 |
+| `pnpm test:crypto-worker` | 检查加密 Worker；运行前需重新构建 |
+| `pnpm test:smoke` | 检查 API；运行前需重新构建 |
 
 ## 文档
 
-- [使用指南](docs/guide.md)：当前已经提供的功能，以及账户、编辑器、同步、附件、历史和数据迁移的实际行为。
-- [自托管指南](docs/self-hosting.md)：部署、配置、备份、恢复与升级。
-- [系统设计](docs/system-design.md)：按功能说明系统结构、数据流、安全保证与限制，并引用独立的编辑器设计原则。
-- [变更日志](CHANGELOG.md)
+| 文档 | 内容 |
+| --- | --- |
+| [使用指南](docs/guide.md) | 账户、编辑器、同步、附件、历史与数据迁移 |
+| [部署指南](docs/deployment.md) | 部署、配置、备份、恢复、升级与发布 |
+| [系统设计](docs/system-design.md) | 系统结构、数据流、安全保证与限制 |
+| [编辑器架构](docs/editor-architecture.md) | Markdown 编辑器的设计原则与验收要求 |
+| [变更日志](CHANGELOG.md) | 已发布版本的功能变化 |
 
 ## 许可证
 
