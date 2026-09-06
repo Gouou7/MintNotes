@@ -1295,6 +1295,48 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
+  it("keeps the caret on a visible trailing line across repeated Enter and typing", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, { initialContent: "line" });
+    const editable = host.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) throw new Error("Missing Live editor");
+    const enter = () => editable.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      code: "Enter",
+      bubbles: true,
+      cancelable: true,
+    }));
+    editor.setSelectionOffset("line".length);
+
+    enter();
+    expect(editor.getMarkdown()).toBe("line\n");
+    expect(editor.getSelectionOffset()).toBe("line\n".length);
+    let trailingGap = editable.lastElementChild instanceof HTMLElement
+      && editable.lastElementChild.matches("pre[data-source-gap]")
+      ? editable.lastElementChild
+      : null;
+    expect(trailingGap?.querySelector("br.ProseMirror-trailingBreak")).not.toBeNull();
+
+    enter();
+    expect(editor.getMarkdown()).toBe("line\n\n");
+    expect(editor.getSelectionOffset()).toBe("line\n\n".length);
+    trailingGap = editable.lastElementChild instanceof HTMLElement
+      && editable.lastElementChild.matches("pre[data-source-gap]")
+      ? editable.lastElementChild
+      : null;
+    expect(trailingGap?.querySelectorAll("br[data-source-gap-eol]")).toHaveLength(1);
+    expect(trailingGap?.querySelector("br.ProseMirror-trailingBreak")).not.toBeNull();
+
+    await typeBrowserTextAtSelection(host, "next");
+    expect(editor.getMarkdown()).toBe("line\n\nnext");
+    expect(editor.getSelectionOffset()).toBe("line\n\nnext".length);
+    expect(editable.lastElementChild?.textContent).toBe("next");
+
+    editor.destroy();
+    host.remove();
+  });
+
   it("requests caret scrolling after keyboard, text, clipboard, and history edits", async () => {
     const host = document.createElement("div");
     document.body.append(host);

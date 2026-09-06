@@ -79,6 +79,13 @@
   overflow: hidden;
 }
 .ProseMirror pre[data-source-gap] br.ProseMirror-trailingBreak { display: none; }
+/* A trailing source gap is also the editable line after the last authored
+ * line ending. Keep ProseMirror's caret host visible there so every Enter
+ * advances by one displayed row. Inter-block gaps keep it hidden because the
+ * following block already owns the next displayed line. */
+.ProseMirror > pre[data-source-gap]:last-child br.ProseMirror-trailingBreak {
+  display: inline;
+}
 /* Source-gap rows are the only Live-mode block separators. Theme margins
  * must not add a second, non-authored gap around them. */
 .ProseMirror .hr-node-view {
@@ -125,7 +132,6 @@
   width: var(--source-prefix-width);
   margin-inline-start: calc(-1 * min(max(0px, calc(var(--source-prefix-width) - var(--source-prefix-body-offset))), var(--source-prefix-gutter)));
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: var(--markdown-body-font-size, 1rem);
   white-space: pre;
   tab-size: 4;
   user-select: text;

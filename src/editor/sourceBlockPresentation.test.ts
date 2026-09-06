@@ -51,7 +51,26 @@ describe("transient source-block typography", () => {
   });
 });
 
-describe("Setext heading marker typography", () => {
+describe("heading marker typography", () => {
+  it.each(["h1", "h2", "h3", "h4", "h5", "h6"])(
+    "keeps an editing ATX %s marker at the heading size",
+    (tag) => {
+      const style = document.createElement("style");
+      style.textContent = editorStyles;
+      const host = document.createElement("div");
+      host.className = "markdown-editor-host";
+      host.innerHTML = `<div class="ProseMirror"><${tag}><span class="syntax-hint source-line-prefix"># </span>Title</${tag}></div>`;
+      document.head.append(style);
+      document.body.append(host);
+      mounted.push(style, host);
+
+      const heading = host.querySelector<HTMLElement>(tag)!;
+      const marker = host.querySelector<HTMLElement>(".source-line-prefix")!;
+
+      expect(getComputedStyle(marker).fontSize).toBe(getComputedStyle(heading).fontSize);
+    },
+  );
+
   it.each(["h1", "h2"])("puts the hidden %s marker on its own body-sized line", (tag) => {
     const style = document.createElement("style");
     style.textContent = editorStyles;
