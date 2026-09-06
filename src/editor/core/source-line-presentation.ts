@@ -13,6 +13,14 @@ export function sourceLinePresentationPlugin(units: NonNullable<EditorExtension[
         const output: Decoration[] = [];
         const selection = presentationSelection(state);
         state.doc.descendants((node, pos) => {
+          if (
+            node.type.name === "quote_container"
+            && presentationSelectionTouches(selection, pos, pos + node.nodeSize)
+          ) {
+            output.push(Decoration.node(pos, pos + node.nodeSize, { class: "source-quote-editing" }));
+          }
+        });
+        state.doc.descendants((node, pos) => {
           if (!node.attrs.sourceLiteral && !(node.type.name === "source_gap" && String(node.attrs.sourceText ?? "").includes(">"))) return;
           const ancestors = state.doc.resolve(pos + 1);
           let blockEditing = false;
@@ -20,7 +28,9 @@ export function sourceLinePresentationPlugin(units: NonNullable<EditorExtension[
           for (let depth = 1; depth < ancestors.depth; depth++) {
             const ancestor = ancestors.node(depth);
             inContainer ||= ancestor.type.name === "list_item" || ancestor.type.name === "quote_container";
-            if (units.some((unit) => unit.nodeType === ancestor.type.name && unit.matches(String(ancestor.attrs.sourceText ?? "")))) {
+            const wholeContainerUnit = ancestor.type.name === "quote_container"
+              || units.some((unit) => unit.nodeType === ancestor.type.name && unit.matches(String(ancestor.attrs.sourceText ?? "")));
+            if (wholeContainerUnit) {
               blockEditing ||= presentationSelectionTouches(selection, ancestors.before(depth), ancestors.after(depth));
             }
           }

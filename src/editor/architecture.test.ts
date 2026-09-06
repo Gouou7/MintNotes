@@ -112,15 +112,18 @@ describe("editor architecture acceptance", () => {
     const quotes = () => host.querySelectorAll("blockquote[data-source-container]");
     const markerCount = quote.split(/\r\n|\r|\n/).length;
     expect(quotes().length).toBeGreaterThan(0);
+    expect(host.querySelector("blockquote.source-quote-editing")).toBeNull();
     expect(host.querySelector("blockquote p")).toBeNull();
     expect(host.querySelectorAll("blockquote .source-line-prefix-hidden")).toHaveLength(markerCount);
 
     editor.setSelection({ anchor: from, head: to });
+    expect(host.querySelector("blockquote.source-quote-editing")).not.toBeNull();
     expect(host.querySelectorAll("blockquote .source-line-prefix")).toHaveLength(markerCount);
     expect(clipboard("copy")).toBe(quote);
     expect(editor.getSelection()).toEqual({ anchor: from, head: to });
     editor.setSelectionOffset(source.length);
     expect(quotes().length).toBeGreaterThan(0);
+    expect(host.querySelector("blockquote.source-quote-editing")).toBeNull();
     expect(host.querySelectorAll("blockquote .source-line-prefix-hidden")).toHaveLength(markerCount);
     expect(editor.getMarkdown()).toBe(source);
     expect(onChange).not.toHaveBeenCalled();
@@ -132,6 +135,35 @@ describe("editor architecture acceptance", () => {
     expect(editor.getMarkdown()).toBe(source);
     expect(editor.getSelectionOffset()).toBe(to);
     expect(host.querySelector("blockquote p")).toBeNull();
+  });
+
+  it("uses each quote block separated by an ordinary blank line as one editing unit", () => {
+    const first = "> first\n>\n> third";
+    const second = "> fourth\n> fifth";
+    const source = `${first}\n\n${second}`;
+    const { editor, host, onChange } = setup(source);
+    const visibleMarkers = () => [...host.querySelectorAll<HTMLElement>("blockquote .source-line-prefix")]
+      .map((marker) => marker.textContent);
+    const hiddenMarkers = () => host.querySelectorAll("blockquote .source-line-prefix-hidden");
+
+    editor.setSelectionOffset(source.indexOf("third") + 2);
+    expect(visibleMarkers()).toEqual(["> ", ">", "> "]);
+    expect(hiddenMarkers()).toHaveLength(2);
+    expect([...host.querySelectorAll("blockquote")].map((quote) => quote.classList.contains("source-quote-editing")))
+      .toEqual([true, false]);
+
+    editor.setSelectionOffset(source.indexOf("fifth") + 2);
+    expect(visibleMarkers()).toEqual(["> ", "> "]);
+    expect(hiddenMarkers()).toHaveLength(3);
+    expect([...host.querySelectorAll("blockquote")].map((quote) => quote.classList.contains("source-quote-editing")))
+      .toEqual([false, true]);
+
+    editor.setSelectionOffset(first.length + 1);
+    expect(visibleMarkers()).toEqual([]);
+    expect(hiddenMarkers()).toHaveLength(5);
+    expect(host.querySelector("blockquote.source-quote-editing")).toBeNull();
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("reveals continuation indentation without removing the first line's rendered bullet", () => {

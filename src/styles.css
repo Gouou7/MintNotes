@@ -237,6 +237,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .reading-editor h1:first-child { margin-top: 0; }
 .markdown-editor-host .ProseMirror blockquote,
 .reading-editor .markdown-quote { border-left-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+.markdown-editor-host .ProseMirror blockquote[data-source-container].source-quote-editing { border-left-color: transparent; }
 .reading-editor .markdown-quote { margin: 1em 0; padding: 0 0 0 1em; border-left-width: 3px; border-left-style: solid; }
 .reading-editor code { padding: .14em .32em; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; }
 .reading-editor pre { overflow: auto; padding: 16px; border-radius: 8px; }

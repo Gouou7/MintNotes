@@ -47,11 +47,13 @@ describe("empty quote marker visibility", () => {
         const gap = marker.closest<HTMLElement>("pre[data-source-gap]")!;
         expect(getComputedStyle(gap).overflow).toBe("visible");
       }
+      expect(getComputedStyle(host.querySelector("blockquote")!).borderLeftColor).toBe("transparent");
       editor.setSelectionOffset(source.length);
       const hidden = host.querySelectorAll<HTMLElement>("blockquote .source-line-prefix-hidden");
       expect(hidden).toHaveLength(markers.length);
       for (const marker of hidden) expect(getComputedStyle(marker).width).toBe("0px");
       expect(getComputedStyle(host.querySelector("blockquote")!).borderLeftStyle).toBe("solid");
+      expect(getComputedStyle(host.querySelector("blockquote")!).borderLeftColor).not.toBe("transparent");
       expect(editor.getMarkdown()).toBe(source);
     } finally {
       editor.destroy();
