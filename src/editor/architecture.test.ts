@@ -104,6 +104,87 @@ describe("editor architecture acceptance", () => {
     expect(host.querySelector("pre[data-source-kind=bullet_list]")).toBeNull();
   });
 
+  it.each([
+    ["# **bold**", "h1 strong", "bold"],
+    ["- *italic*", "li em", "italic"],
+    ["  - ~~deleted~~", "li s", "deleted"],
+    ["> ==highlighted==", "blockquote mark", "highlighted"],
+    ["- [x] **task**", "li strong", "task"],
+  ])("reveals %j on the existing styled text surface", (line, selector, body) => {
+    const source = `${line}\n\nafter`;
+    const { editor, host, onChange, input, undo, clipboard } = setup(source);
+    editor.setSelectionOffset(source.length);
+    const styledBody = host.querySelector(selector)!;
+    expect(styledBody.textContent).toBe(body);
+
+    editor.setSelection({ anchor: 0, head: line.length });
+    expect(host.querySelector(selector)).toBe(styledBody);
+    expect(host.querySelector("pre[data-source-block]")).toBeNull();
+    const prefix = host.querySelector<HTMLElement>(".source-line-prefix")!;
+    expect(prefix.hasAttribute("style")).toBe(false);
+    expect(host.querySelector(".source-task-checkbox")).toBeNull();
+    expect(clipboard("copy")).toBe(line);
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
+
+    input("替换");
+    expect(editor.getMarkdown()).toBe("替换\n\nafter");
+    undo();
+    expect(editor.getMarkdown()).toBe(source);
+    expect(editor.getSelection()).toEqual({ anchor: 0, head: line.length });
+  });
+
+  it.each(["- ", "+ ", "* ", "1. ", "1) ", "> "])(
+    "keeps newly recognized %j source on the document text surface",
+    (marker) => {
+      const { editor, host, input, undo } = setup("");
+      for (const character of marker) input(character);
+      expect(editor.getMarkdown()).toBe(marker);
+      expect(editor.getSelectionOffset()).toBe(marker.length);
+      expect(host.querySelector(".source-text-editing")?.textContent).toBe(marker);
+      expect(host.querySelector(".source-line-prefix")?.textContent).toBe(marker);
+      input("正文");
+      expect(editor.getMarkdown()).toBe(`${marker}正文`);
+      undo();
+      expect(editor.getMarkdown()).toBe(marker);
+    },
+  );
+
+  it.each([
+    ["- first\n  continuation\n  - nested", "continuation", 1],
+    ["- first\n  continuation\n  - nested", "nested", 2],
+    ["> - first\n>   - nested", "nested", 2],
+    ["- first\n\n  > nested", "nested", 1],
+    ["> > nested", "nested", 0],
+  ] as const)("aligns the active line in %j without changing authored indentation", (block, word, listDepth) => {
+    const source = `${block}\n\nafter`;
+    const { editor, host, onChange, clipboard } = setup(source);
+    editor.setSelectionOffset(source.indexOf(word) + 2);
+    const line = [...host.querySelectorAll<HTMLElement>(".source-text-editing")]
+      .find((node) => node.textContent?.includes(word))!;
+    expect(line.style.getPropertyValue("--source-list-depth")).toBe(String(listDepth));
+    expect(line.querySelector(".source-line-prefix")?.hasAttribute("style")).toBe(false);
+    editor.setSelection({ anchor: 0, head: block.length });
+    expect(clipboard("copy")).toBe(block);
+    editor.setSelectionOffset(source.length);
+    expect(host.querySelector("li .source-text-editing, blockquote .source-text-editing")).toBeNull();
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps the inactive list line's indentation when editing a lazy continuation", () => {
+    const source = "- first\n  continuation\nlazy continuation\n\nafter";
+    const { editor, host } = setup(source);
+    editor.setSelectionOffset(source.indexOf("continuation") + 2);
+    expect(host.querySelector("li.source-list-editing")).toBeNull();
+    expect(host.querySelector(".source-line-prefix-hidden.source-rendered-indent")?.textContent).toBe("- ");
+    expect(host.querySelector(".source-rendered-indent[aria-hidden]")).not.toBeNull();
+    expect(host.querySelector(".source-line-prefix")?.textContent).toBe("  ");
+    editor.setSelectionOffset(source.length);
+    expect(host.querySelector(".source-rendered-indent")).toBeNull();
+    expect(editor.getMarkdown()).toBe(source);
+  });
+
   it.each([">", "> ", ">\n>", "> \r\n>\r\n>  ", "> >"])("toggles empty quote markers without adding a paragraph for %j", (quote) => {
     const source = `before\n\n${quote}\n\nafter`;
     const from = source.indexOf(">");

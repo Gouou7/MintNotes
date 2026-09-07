@@ -48,6 +48,7 @@
 .ProseMirror {
   outline: none;
   min-height: 168px;
+  --markdown-list-indent: calc(var(--markdown-body-font-size, 16px) * 1.6);
 }
 .ProseMirror[contenteditable="true"]:focus { outline: none; }
 .ProseMirror pre[data-source-gap] {
@@ -64,8 +65,7 @@
   tab-size: inherit;
 }
 .ProseMirror pre[data-source-gap] > code { font: inherit; white-space: inherit; }
-/* Quote markers hang into the container gutter. Ordinary pre overflow would
- * clip them even while their source-line decoration is in editing state. */
+/* Empty quote lines share the ordinary text surface, including its caret. */
 .ProseMirror pre[data-source-gap]:not([data-source-gap-structural]) { overflow: visible; }
 .ProseMirror [data-source-gap-hidden] { display: none; }
 .ProseMirror pre[data-source-gap-structural] {
@@ -127,16 +127,10 @@
  * becomes visible as soon as the cursor enters the span. */
 .ProseMirror .syntax-hidden { font-size: 0; line-height: 0; vertical-align: baseline; }
 
-/* Source prefixes hang into existing indentation rather than adding the
- * authored indent to the rendered container indent. A task keeps the same
- * 14px checkbox + 8px gap when its source replaces the widget. */
+/* Revealed markers are ordinary inline source text. Let their actual glyphs
+ * and whitespace take up space in the same font as the surrounding body. */
 .ProseMirror .source-line-prefix {
-  display: inline-block;
-  width: var(--source-prefix-width);
-  margin-inline-start: calc(-1 * min(max(0px, calc(var(--source-prefix-width) - var(--source-prefix-body-offset))), var(--source-prefix-gutter)));
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  white-space: pre;
-  tab-size: 4;
+  white-space: break-spaces;
   user-select: text;
 }
 /* Tab stops can retain width even at font-size: 0. Collapse the prefix box too. */
@@ -145,6 +139,24 @@
   width: 0;
   overflow: hidden;
 }
+
+/* Align the editable textblock itself with the document's source origin.
+ * Only rendered list containers contribute an offset; authored prefixes never
+ * do. Auto block width also lets wrapped source use the full text column. */
+.ProseMirror .source-text-editing {
+  margin-inline-start: calc(-1 * var(--source-list-depth, 0) * var(--markdown-list-indent));
+}
+.ProseMirror .source-rendered-indent {
+  display: inline-block;
+  width: calc(var(--source-list-depth, 0) * var(--markdown-list-indent));
+  user-select: none;
+}
+.ProseMirror li.source-list-editing { list-style-type: none; }
+.ProseMirror blockquote[data-source-container].source-quote-editing {
+  padding: 0;
+  border: 0;
+}
+.ProseMirror pre.cb-source-editing { padding: 0; border: 0; background: transparent; }
 
 /* A Setext underline is a second authored source line. It uses body metrics
  * instead of heading metrics; rendering hides only its ink so the line keeps

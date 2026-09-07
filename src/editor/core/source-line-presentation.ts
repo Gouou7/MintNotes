@@ -3,7 +3,8 @@ import { Decoration, DecorationSet } from "prosemirror-view";
 import { presentationSelection, presentationSelectionTouches } from "./presentation-selection";
 import { SOURCE_TRANSACTION_META } from "./source-transaction";
 import type { EditorExtension } from "./extension";
-import { sourceLinePrefix, sourceLinePrefixStyle } from "./source-line-prefix";
+import { sourceLinePrefix } from "./source-line-prefix";
+import { isLiveSyntaxEditing } from "./live-syntax-state";
 
 /** Block markers share the same authored text surface as the styled body. */
 export function sourceLinePresentationPlugin(units: NonNullable<EditorExtension["sourceLineUnits"]> = []): Plugin {
@@ -13,26 +14,45 @@ export function sourceLinePresentationPlugin(units: NonNullable<EditorExtension[
         const output: Decoration[] = [];
         const selection = presentationSelection(state);
         state.doc.descendants((node, pos) => {
-          if (
-            node.type.name === "quote_container"
-            && presentationSelectionTouches(selection, pos, pos + node.nodeSize)
-          ) {
+          if (node.type.name !== "quote_container") return;
+          let editing = presentationSelectionTouches(selection, pos, pos + node.nodeSize);
+          const ancestors = state.doc.resolve(pos);
+          for (let depth = 1; depth <= ancestors.depth && !editing; depth++) {
+            if (ancestors.node(depth).type.name === "quote_container") {
+              editing = presentationSelectionTouches(selection, ancestors.before(depth), ancestors.after(depth));
+            }
+          }
+          if (editing) {
             output.push(Decoration.node(pos, pos + node.nodeSize, { class: "source-quote-editing" }));
           }
         });
         state.doc.descendants((node, pos) => {
-          if (!node.attrs.sourceLiteral && !(node.type.name === "source_gap" && String(node.attrs.sourceText ?? "").includes(">"))) return;
+          const literal = node.attrs.sourceLiteral
+            || (node.type.name === "source_gap" && String(node.attrs.sourceText ?? "").includes(">"));
+          const sourceBlock = node.type.name === "source_block"
+            || (["code_block", "blockquote"].includes(node.type.name) && isLiveSyntaxEditing(node.attrs.liveSyntaxState));
+          if (!literal && !sourceBlock) return;
           const ancestors = state.doc.resolve(pos + 1);
           let blockEditing = false;
           let inContainer = false;
+          let listDepth = 0;
           for (let depth = 1; depth < ancestors.depth; depth++) {
             const ancestor = ancestors.node(depth);
+            if (ancestor.type.name === "bullet_list" || ancestor.type.name === "ordered_list") listDepth++;
             inContainer ||= ancestor.type.name === "list_item" || ancestor.type.name === "quote_container";
             const wholeContainerUnit = ancestor.type.name === "quote_container"
               || units.some((unit) => unit.nodeType === ancestor.type.name && unit.matches(String(ancestor.attrs.sourceText ?? "")));
             if (wholeContainerUnit) {
               blockEditing ||= presentationSelectionTouches(selection, ancestors.before(depth), ancestors.after(depth));
             }
+          }
+          const alignSource = () => output.push(Decoration.node(pos, pos + node.nodeSize, {
+            class: "source-text-editing",
+            style: `--source-list-depth: ${listDepth}`,
+          }));
+          if (!literal) {
+            alignSource();
+            return;
           }
           const text = node.type.name === "source_gap" ? String(node.attrs.sourceText) : node.textContent;
           const setextHeading = node.type.name === "heading" && node.attrs.style === "setext";
@@ -41,12 +61,15 @@ export function sourceLinePresentationPlugin(units: NonNullable<EditorExtension[
           if (setextHeading) {
             output.push(Decoration.node(pos, pos + node.nodeSize, { class: "setext-heading" }));
           }
-          for (const line of text.matchAll(/[^\r\n]+/g)) {
+          const lines = [...text.matchAll(/[^\r\n]+/g)];
+          const isEditing = (line: RegExpMatchArray) => blockEditing || setextHeadingEditing
+            || presentationSelectionTouches(selection, pos + 1 + line.index!, pos + 1 + line.index! + line[0].length);
+          const textEditing = lines.some(isEditing);
+          if (textEditing) alignSource();
+          for (const line of lines) {
             const start = pos + 1 + line.index;
             const end = start + line[0].length;
-            const editing = blockEditing
-              || setextHeadingEditing
-              || presentationSelectionTouches(selection, start, end);
+            const editing = isEditing(line);
             const prefix = sourceLinePrefix(line[0], inContainer);
             const task = /^\[([ xX])\][\t ]+/.exec(line[0].slice(prefix.length));
             if (editing) {
@@ -61,9 +84,21 @@ export function sourceLinePresentationPlugin(units: NonNullable<EditorExtension[
               const marker = prefix + (task?.[0] ?? "");
               output.push(Decoration.inline(start, start + marker.length, {
                 class: "syntax-hint source-line-prefix",
-                style: sourceLinePrefixStyle(marker, ancestors, !!task),
               }));
-            } else if (prefix) output.push(Decoration.inline(start, start + prefix.length, { class: "syntax-hidden source-line-prefix-hidden" }));
+            } else if (prefix) output.push(Decoration.inline(start, start + prefix.length, {
+              class: `syntax-hidden source-line-prefix-hidden${textEditing && listDepth ? " source-rendered-indent" : ""}`,
+            }));
+            // One textblock can contain an active source line and an inactive
+            // lazy continuation with no authored prefix. Only the rendered
+            // line needs its container indentation after the block is aligned.
+            if (!editing && !prefix && textEditing && listDepth) {
+              output.push(Decoration.widget(start, () => {
+                const spacer = document.createElement("span");
+                spacer.className = "source-rendered-indent";
+                spacer.setAttribute("aria-hidden", "true");
+                return spacer;
+              }, { side: -1, key: `rendered-indent-${start}` }));
+            }
             if (node.type.name === "heading") {
               const suffix = setextHeading
                 ? line.index + line[0].length === text.length

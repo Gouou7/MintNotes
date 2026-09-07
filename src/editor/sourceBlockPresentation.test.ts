@@ -28,6 +28,29 @@ afterEach(() => {
 });
 
 describe("empty quote marker visibility", () => {
+  it("removes every nested quote gutter when the outer quote is the editing unit", () => {
+    const sourceBlock = mountSource("paragraph");
+    const host = sourceBlock.closest<HTMLElement>(".markdown-editor-host")!;
+    host.replaceChildren();
+    const source = "> first\n> > nested\n> last\n\nafter";
+    const editor = createEditor(host, { initialContent: source });
+    try {
+      editor.setSelectionOffset(source.indexOf("first") + 2);
+      const quotes = [...host.querySelectorAll("blockquote[data-source-container]")];
+      expect(quotes).toHaveLength(2);
+      for (const quote of quotes) {
+        expect(getComputedStyle(quote).paddingLeft).toBe("0px");
+        expect(getComputedStyle(quote).borderLeftWidth).toBe("0px");
+      }
+      editor.setSelectionOffset(source.length);
+      for (const quote of quotes) {
+        expect(getComputedStyle(quote).paddingLeft).not.toBe("0px");
+        expect(getComputedStyle(quote).borderLeftStyle).toBe("solid");
+      }
+      expect(editor.getMarkdown()).toBe(source);
+    } finally { editor.destroy(); }
+  });
+
   it.each(["> ", ">\n>\n> ", "> > "])("does not clip editing markers for %j", (quote) => {
     const style = document.createElement("style");
     style.textContent = editorStyles;
@@ -47,7 +70,8 @@ describe("empty quote marker visibility", () => {
         const gap = marker.closest<HTMLElement>("pre[data-source-gap]")!;
         expect(getComputedStyle(gap).overflow).toBe("visible");
       }
-      expect(getComputedStyle(host.querySelector("blockquote")!).borderLeftColor).toBe("transparent");
+      expect(getComputedStyle(host.querySelector("blockquote")!).borderLeftWidth).toBe("0px");
+      expect(getComputedStyle(host.querySelector("blockquote")!).paddingLeft).toBe("0px");
       editor.setSelectionOffset(source.length);
       const hidden = host.querySelectorAll<HTMLElement>("blockquote .source-line-prefix-hidden");
       expect(hidden).toHaveLength(markers.length);
@@ -112,6 +136,11 @@ describe("heading marker typography", () => {
       const marker = host.querySelector<HTMLElement>(".source-line-prefix")!;
 
       expect(getComputedStyle(marker).fontSize).toBe(getComputedStyle(heading).fontSize);
+      expect(getComputedStyle(marker).fontFamily).toBe(getComputedStyle(heading).fontFamily);
+      expect(getComputedStyle(marker).display).not.toBe("inline-block");
+      expect(getComputedStyle(marker).width).toBe("");
+      expect(getComputedStyle(marker).marginInlineStart).toBe("");
+      expect(getComputedStyle(marker).whiteSpace).toBe("break-spaces");
     },
   );
 

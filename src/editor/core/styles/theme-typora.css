@@ -108,7 +108,7 @@
 .ProseMirror ul,
 .ProseMirror ol {
   margin: 0;
-  padding-left: 1.6em;
+  padding-left: var(--markdown-list-indent);
 }
 .ProseMirror ul ul,
 .ProseMirror ul ol,
