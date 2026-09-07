@@ -48,6 +48,7 @@ import {
   LIVE_POINTER_SELECTION_META,
   LIVE_PRESENTATION_SYNC_META,
   markLiveNavigation,
+  hasVisualLineInDirection,
   verticalSourceOffset,
   type LiveNavigationIntent,
 } from "./source-navigation";
@@ -756,13 +757,7 @@ export function createEditor(
     const { selection } = state;
     const node = selection.$from.parent;
     if (!selection.empty || (node.type.name !== "source_block" && !node.attrs.sourceLiteral)) return false;
-    if (node.attrs.sourceLiteral) {
-      try {
-        const caret = view.coordsAtPos(selection.head);
-        const boundary = view.coordsAtPos(direction < 0 ? selection.$from.start() : selection.$from.end());
-        if (direction < 0 ? caret.top > boundary.bottom : caret.bottom < boundary.top) return false;
-      } catch { /* Layout-free test environments use authored line navigation. */ }
-    }
+    if (hasVisualLineInDirection(view, direction)) return false;
     const blockPos = selection.$from.before();
     const targetOffset = verticalSourceOffset(
       node.textContent,
@@ -1169,7 +1164,7 @@ export function createEditor(
         }
       },
       handleKeyDown(_view, event) {
-        if (event.isComposing || event.keyCode === 229) return false;
+        if (view.composing || event.isComposing || event.keyCode === 229) return false;
         const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
         const mod = isMac ? event.metaKey : event.ctrlKey;
         if (
@@ -1182,7 +1177,7 @@ export function createEditor(
           event.preventDefault();
           return true;
         }
-        const tableAction = tableNavigation(view.state, canonicalMarkdown, currentSelection(), event);
+        const tableAction = tableNavigation(view, canonicalMarkdown, currentSelection(), event);
         if (tableAction) {
           if ("edits" in tableAction) applyAndRenderCanonicalTransaction(tableAction);
           else setLiveSelection(tableAction, true);
@@ -1300,7 +1295,7 @@ export function createEditor(
               : event.inputType === "deleteContentForward" ? "Delete" : "Enter";
             const keyboard = new KeyboardEvent("keydown", { key, shiftKey: event.inputType === "insertLineBreak" });
             const selected = currentSelection();
-            const table = tableNavigation(view.state, canonicalMarkdown, selected, keyboard);
+            const table = tableNavigation(view, canonicalMarkdown, selected, keyboard);
             const action = table ?? liveSourceKeyTransaction(canonicalMarkdown, selected, key, keyboard.shiftKey);
             if (action && "edits" in action) applyAndRenderCanonicalTransaction(action);
             else if (action) setLiveSelection(action);

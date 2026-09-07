@@ -1,7 +1,9 @@
 import type { EditorState } from "prosemirror-state";
+import type { EditorView } from "prosemirror-view";
 import type { SourceSelection, SourceTransaction } from "./source";
 import { adjacentGrapheme } from "./source-text";
 import { tableRowCommand } from "./features/table";
+import { hasVisualLineInDirection } from "./source-navigation";
 
 export function selectedTableCells(state: EditorState): { from: number; to: number; row: number; column: number }[] {
   const cells: { from: number; to: number; row: number; column: number }[] = [];
@@ -20,8 +22,9 @@ export function selectedTableCells(state: EditorState): { from: number; to: numb
 }
 
 export function tableNavigation(
-  state: EditorState, source: string, selection: SourceSelection, event: KeyboardEvent,
+  view: EditorView, source: string, selection: SourceSelection, event: KeyboardEvent,
 ): SourceSelection | SourceTransaction | null {
+  const { state } = view;
   const command = tableRowCommand(state, event);
   if (command) return command;
   const cells = selectedTableCells(state);
@@ -31,6 +34,10 @@ export function tableNavigation(
   if (event.metaKey || event.ctrlKey || event.altKey) return null;
   const direction = ["ArrowLeft", "ArrowUp", "Backspace"].includes(event.key) || event.key === "Tab" && event.shiftKey ? -1 : 1;
   const collapsed = selection.anchor === selection.head;
+  if (["ArrowUp", "ArrowDown"].includes(event.key)) {
+    if (!collapsed && !event.shiftKey) return null;
+    if (hasVisualLineInDirection(view, direction)) return null;
+  }
   const moveTo = (offset: number): SourceSelection => ({ anchor: event.shiftKey && event.key !== "Tab" ? selection.anchor : offset, head: offset });
   if (["Backspace", "Delete"].includes(event.key)) {
     if (collapsed && selection.head === (direction < 0 ? cell.from : cell.to)) return selection;

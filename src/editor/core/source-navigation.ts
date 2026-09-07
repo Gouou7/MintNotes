@@ -1,6 +1,7 @@
 import type { Node as PMNode } from "prosemirror-model";
 import { Plugin, Selection, TextSelection } from "prosemirror-state";
 import type { EditorState, Transaction } from "prosemirror-state";
+import type { EditorView } from "prosemirror-view";
 
 import { SOURCE_BLOCK_PRESENTATION_META } from "./extension";
 import { SOURCE_FROM_ATTR, SOURCE_TEXT_ATTR, SOURCE_TO_ATTR } from "./source";
@@ -8,6 +9,26 @@ import { SOURCE_FROM_ATTR, SOURCE_TEXT_ATTR, SOURCE_TO_ATTR } from "./source";
 export const LIVE_NAVIGATION_META = "live-source-navigation";
 export const LIVE_POINTER_SELECTION_META = "live-pointer-selection";
 export const LIVE_PRESENTATION_SYNC_META = "live-presentation-sync";
+
+/** Preserve native visual-row navigation until the editable text boundary. */
+export function hasVisualLineInDirection(
+  view: EditorView,
+  direction: -1 | 1,
+  end = view.state.selection.$head.end(),
+): boolean {
+  const { $head } = view.state.selection;
+  if (!$head.parent.isTextblock) return false;
+  const boundary = direction < 0 ? $head.start() : end;
+  try {
+    const caret = view.coordsAtPos($head.pos);
+    const edge = view.coordsAtPos(boundary, direction < 0 ? 1 : -1);
+    if (caret.bottom <= caret.top || edge.bottom <= edge.top) return false;
+    return direction < 0 ? caret.top >= edge.bottom : caret.bottom <= edge.top;
+  } catch {
+    // Detached or layout-free surfaces retain the source navigation fallback.
+    return false;
+  }
+}
 
 export interface LiveNavigationIntent {
   readonly anchor?: number;
@@ -100,6 +121,7 @@ export function sourceGapNavigationPlugin(): Plugin {
   return new Plugin({
     props: {
       handleKeyDown(view, event) {
+        if (view.composing || event.isComposing || event.keyCode === 229) return false;
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
         if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
         const { state } = view;
@@ -114,6 +136,7 @@ export function sourceGapNavigationPlugin(): Plugin {
             }
           : adjacentSourceGap(state, direction);
         if (!currentGap) return false;
+        if (hasVisualLineInDirection(view, direction)) return false;
         const { gap, gapPos, offset } = currentGap;
         const source = String(gap.attrs[SOURCE_TEXT_ATTR] ?? "");
         const targetOffset = verticalSourceOffset(source, offset, direction);

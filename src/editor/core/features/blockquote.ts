@@ -16,6 +16,7 @@ import {
   LIVE_POINTER_SELECTION_META,
   LIVE_PRESENTATION_SYNC_META,
   markLiveNavigation,
+  hasVisualLineInDirection,
   selectionOutsideBlock,
 } from "../source-navigation";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
@@ -140,6 +141,7 @@ function moveBlockquoteSourceVertically(view: EditorView, direction: -1 | 1): bo
     || !isLiveSyntaxEditing(selection.$from.parent.attrs.liveSyntaxState)
   ) return false;
 
+  if (hasVisualLineInDirection(view, direction)) return false;
   const text = selection.$from.parent.textContent;
   const offset = selection.$from.parentOffset;
   const lineStart = text.lastIndexOf("\n", offset - 1) + 1;
@@ -336,6 +338,7 @@ function blockquotePlugin(
     },
     props: {
       handleKeyDown(view, event) {
+        if (view.composing || event.isComposing || event.keyCode === 229) return false;
         if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
           return false;
         }

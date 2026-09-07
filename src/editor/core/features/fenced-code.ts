@@ -19,6 +19,7 @@ import {
   LIVE_POINTER_SELECTION_META,
   LIVE_PRESENTATION_SYNC_META,
   markLiveNavigation,
+  hasVisualLineInDirection,
   selectionOutsideBlock,
 } from "../source-navigation";
 import type { FeatureSpec } from "./_types";
@@ -360,6 +361,14 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
   if (!selection.empty || selection.$from.parent.type.name !== "code_block") return false;
   const node = selection.$from.parent;
   if (!isFencedCodeEditing(node)) return false;
+  const parsed = parseFencedCodeSource(node.textContent);
+  // Keep the explicit closing-fence entry below: Chromium can paint a caret
+  // before its syntax span on the preceding body row. All body rows, including
+  // wrapped rows and authored newlines, otherwise use native vertical motion.
+  const nativeEnd = parsed?.closingFrom != null && selection.$from.parentOffset < parsed.closingFrom
+    ? selection.$from.start() + parsed.bodyTo
+    : selection.$from.end();
+  if (hasVisualLineInDirection(view, direction, nativeEnd)) return false;
 
   const text = node.textContent;
   const offset = selection.$from.parentOffset;
@@ -395,25 +404,15 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
     return true;
   }
 
-  const boundary = direction < 0 ? blockPos : blockPos + node.nodeSize;
   const outside = selectionOutsideBlock(state, blockPos, node, direction);
-  const tr = state.tr;
-  if (outside) {
-    tr.setSelection(outside);
-  } else if (direction > 0) {
-    const paragraph = state.schema.nodes.paragraph?.createAndFill();
-    if (!paragraph) return false;
-    tr.insert(boundary, paragraph);
-    tr.setSelection(TextSelection.create(tr.doc, boundary + 1));
-  } else {
-    return false;
-  }
+  if (!outside) return false;
+  const tr = state.tr.setSelection(outside);
   tr.setMeta(SOURCE_BLOCK_PRESENTATION_META, true);
   const navigation = markLiveNavigation(tr, {
     direction,
     scroll: true,
   });
-  view.dispatch(tr.docChanged ? navigation.scrollIntoView() : navigation);
+  view.dispatch(navigation);
   return true;
 }
 
@@ -485,6 +484,7 @@ function fencedCodeSourcePlugin(): Plugin {
         );
       },
       handleKeyDown(view, event) {
+        if (view.composing || event.isComposing || event.keyCode === 229) return false;
         if (
           event.key === "Backspace"
           && !event.shiftKey
