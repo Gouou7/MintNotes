@@ -12,8 +12,8 @@ export const blockquoteSpecs: FeatureSpecs = {
         { at: 1, expect: ">|" },
         { at: 2, expect: "> |" },
         { at: 3, expect: "> a|" },
-        { at: 4, expect: "<bq>> a\n> |</bq>" },
-        { at: 5, expect: "<bq>> a\n> b|</bq>" },
+        { at: 4, expect: "<bq><g>> </g>a\n<g>> </g>|</bq>" },
+        { at: 5, expect: "<bq><g>> </g>a\n<g>> </g>b|</bq>" },
       ],
     },
     {
@@ -22,8 +22,8 @@ export const blockquoteSpecs: FeatureSpecs = {
       seed: "> a",
       events: ["<Enter>", "b"],
       checkpoints: [
-        { at: 1, expect: "<bq>> a\n> |</bq>" },
-        { at: 2, expect: "<bq>> a\n> b|</bq>" },
+        { at: 1, expect: "<bq><g>> </g>a\n<g>> </g>|</bq>" },
+        { at: 2, expect: "<bq><g>> </g>a\n<g>> </g>b|</bq>" },
       ],
     },
     {
@@ -32,7 +32,7 @@ export const blockquoteSpecs: FeatureSpecs = {
       seed: "> a",
       events: ["<Enter>", "<Enter>"],
       checkpoints: [
-        { at: 1, expect: "<bq>> a\n> |</bq>" },
+        { at: 1, expect: "<bq><g>> </g>a\n<g>> </g>|</bq>" },
         { at: 2, expect: "<bq>a</bq>\n|" },
       ],
     },
@@ -42,7 +42,7 @@ export const blockquoteSpecs: FeatureSpecs = {
       seed: "> ab",
       events: ["<Home>", "<ArrowRight>", "<ArrowRight>", "<ArrowRight>", "<Enter>"],
       checkpoints: [
-        { at: 5, expect: "<bq>> a\n> |b</bq>" },
+        { at: 5, expect: "<bq><g>> </g>a\n<g>> </g>|b</bq>" },
       ],
     },
   ],

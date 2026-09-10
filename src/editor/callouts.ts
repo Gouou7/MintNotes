@@ -158,11 +158,17 @@ function transformMdast(node: MdNode, source: string) {
         const parsed = parseCalloutMarker(`[!${marker[1]}]${marker[2] ?? ""}${marker[3] ? ` ${marker[3]}` : ""}`);
         if (parsed) {
           firstText.value = firstText.value.slice(marker[0].length);
-          if (firstText.position) {
-            let start = firstText.position.start.offset + marker[0].length;
-            const prefix = /^(?:[\t ]*>[\t ]?)+/.exec(source.slice(start))?.[0] ?? "";
-            start += prefix.length;
-            firstText.position = readingPosition(source, start, firstText.position.end.offset);
+          if (firstText.value && firstText.position) {
+            const { start, end } = firstText.position;
+            // MDAST text has already decoded escapes/entities and trimmed line
+            // endings. Locate the body in authored source, not by decoded length.
+            const lineEnding = /\r\n|\r|\n/.exec(source.slice(start.offset, end.offset));
+            if (lineEnding) {
+              let bodyFrom = start.offset + lineEnding.index + lineEnding[0].length;
+              const prefix = /^(?:[\t ]*>[\t ]?)+/.exec(source.slice(bodyFrom))?.[0] ?? "";
+              bodyFrom += prefix.length;
+              firstText.position = readingPosition(source, bodyFrom, end.offset);
+            }
           }
           if (!firstText.value) paragraph?.children?.shift();
           if (paragraph?.children?.length === 0) node.children?.shift();

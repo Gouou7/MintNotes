@@ -39,6 +39,12 @@ describe("reading clipboard source provenance", () => {
     ["==highlight==", "highlight", "highlight"],
     ["[[target|label]]", "label", "label"],
     ["> [!note]\n> body", "body", "body"],
+    ["> [!note] \n> body", "body", "body"],
+    ["> [!note]\t\n> body", "body", "body"],
+    ["> [!note] \r\n> body", "body", "body"],
+    ["> [!note] \n>\n> body", "body", "body"],
+    ["> [!note] A &amp; B\n> body", "body", "body"],
+    ["> > [!note] \n> > body\n> > tail", "body\ntail", "body\n> > tail"],
     ["> one\n> two", "one\ntwo", "one\n> two"],
   ])("copies exact source for %j", async (source, displayed, expected) => {
     const { root, leaf, select, copy } = await setup(source);

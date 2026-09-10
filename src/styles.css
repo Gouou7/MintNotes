@@ -237,7 +237,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .reading-editor h1:first-child { margin-top: 0; }
 .markdown-editor-host .ProseMirror blockquote,
 .reading-editor .markdown-quote { border-left-color: color-mix(in srgb, var(--accent) 38%, transparent); }
-.markdown-editor-host .ProseMirror blockquote[data-source-container].source-quote-editing { padding: 0; border: 0; }
+.markdown-editor-host .ProseMirror blockquote[data-source-container].source-quote-editing { padding: 0; border: 0; color: var(--text); }
+.markdown-editor-host .ProseMirror blockquote .source-line-prefix,
+.markdown-editor-host .ProseMirror .source-blockquote-source .source-line-prefix,
+.markdown-editor-host .ProseMirror .source-callout-marker { color: var(--muted); user-select: text; }
 .reading-editor .markdown-quote { margin: 1em 0; padding: 0 0 0 1em; border-left-width: 3px; border-left-style: solid; }
 .reading-editor code { padding: .14em .32em; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; }
 .reading-editor pre { overflow: auto; padding: 16px; border-radius: 8px; }

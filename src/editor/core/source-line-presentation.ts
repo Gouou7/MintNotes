@@ -52,6 +52,16 @@ export function sourceLinePresentationPlugin(units: NonNullable<EditorExtension[
           }));
           if (!literal) {
             alignSource();
+            if (node.type.name === "blockquote") {
+              for (const line of node.textContent.matchAll(/[^\r\n]+/g)) {
+                const prefix = /^(?: {0,3}>[\t ]?)+/.exec(line[0])?.[0];
+                if (!prefix) continue;
+                const from = pos + 1 + line.index;
+                output.push(Decoration.inline(from, from + prefix.length, {
+                  class: "syntax-hint source-line-prefix",
+                }));
+              }
+            }
             return;
           }
           const text = node.type.name === "source_gap" ? String(node.attrs.sourceText) : node.textContent;

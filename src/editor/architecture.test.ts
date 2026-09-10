@@ -29,6 +29,30 @@ function setup(source: string, options: EditorOptions = {}) {
 }
 
 describe("editor architecture acceptance", () => {
+  it.each([
+    ["> [!note] \n> body\n> tail", ["> ", "[!note]", "> ", "> "]],
+    ["> [!tip]- Custom title\n> body", ["> ", "[!tip]-", "> "]],
+    ["> body\n>\n> tail", ["> ", ">", "> "]],
+    ["> [!note]\n> body\n>\n> | A | B |\n> | - | - |\n> | x | y |", ["> ", "[!note]", "> ", ">"]],
+  ] as const)("dims only the editing markers in %j and preserves source edits", (quote, markers) => {
+    const source = `before\n\n${quote}\n\nafter`;
+    const { editor, host, onChange, input, undo, clipboard } = setup(source, { extensions: [createCalloutExtension()] });
+    const offset = source.indexOf("body") + 2;
+    editor.setSelectionOffset(offset);
+    expect([...host.querySelectorAll(".syntax-hint")].map((node) => node.textContent)).toEqual(markers);
+    expect(editor.getSelectionOffset()).toBe(offset);
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
+    input("字");
+    expect(editor.getMarkdown()).toBe(source.replace("body", "bo字dy"));
+    editor.setSelectionOffset(source.length + 1);
+    undo();
+    expect(editor.getMarkdown()).toBe(source);
+    expect(editor.getSelectionOffset()).toBe(offset);
+    editor.setSelection({ anchor: source.indexOf("body"), head: source.indexOf("body") + 4 });
+    expect(clipboard("copy")).toBe("body");
+  });
+
   it.each(["😀", "👨‍👩‍👧‍👦", "e\u0301", "🇨🇳", "👍🏽"])("moves and deletes %s as one character with one undo", (character) => {
     const { editor, key, undo } = setup(`a${character}b`);
     editor.setSelectionOffset(1);

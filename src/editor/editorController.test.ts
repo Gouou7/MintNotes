@@ -950,11 +950,12 @@ describe("Mint editor core public controller", () => {
     ["nested list", "- 一级\n    - 二级", "li li p"],
     ["task list", "- [ ] 任务", "li p"],
     ["quote", "> 引用", "blockquote p"],
+    ["callout", "> [!note] \n> 正文", ".source-blockquote-source-code"],
   ])("keeps Chinese IME composition stable inside an editing %s", async (_name, initial, selector) => {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: string[] = [];
-    const editor = createEditor(host, {
+    const editor = createMintEditor(host, {
       initialContent: initial,
       onChange: (next) => changes.push(next),
     });
@@ -2569,14 +2570,23 @@ describe("Mint editor core public controller", () => {
     expect(focusCalloutMarker(editor, 0)).toBe(true);
 
     let source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
-    let text = source?.firstChild;
-    if (!source || !text) throw new Error("Missing editable quote source");
+    if (!source) throw new Error("Missing editable quote source");
+    const selectSourceOffset = (surface: HTMLElement, offset: number) => {
+      const walker = document.createTreeWalker(surface, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        const length = text.textContent?.length ?? 0;
+        if (offset > length) { offset -= length; continue; }
+        const range = document.createRange();
+        range.setStart(text, offset);
+        range.collapse(true);
+        document.getSelection()?.removeAllRanges();
+        document.getSelection()?.addRange(range);
+        return;
+      }
+      throw new Error("Missing quote source offset");
+    };
     const insertAt = initial.indexOf("\n> ") + 3;
-    let range = document.createRange();
-    range.setStart(text, insertAt);
-    range.collapse(true);
-    document.getSelection()?.removeAllRanges();
-    document.getSelection()?.addRange(range);
+    selectSourceOffset(source, insertAt);
     const insert = new InputEvent("beforeinput", {
       inputType: "insertText",
       data: "test",
@@ -2592,14 +2602,9 @@ describe("Mint editor core public controller", () => {
     expect(editor.getSelectionOffset()).toBe(insertAt + "test".length);
 
     source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
-    text = source?.firstChild;
-    if (!source || !text) throw new Error("Missing updated quote source");
+    if (!source) throw new Error("Missing updated quote source");
     const deleteFrom = inserted.indexOf("test");
-    range = document.createRange();
-    range.setStart(text, deleteFrom + 4);
-    range.collapse(true);
-    document.getSelection()?.removeAllRanges();
-    document.getSelection()?.addRange(range);
+    selectSourceOffset(source, deleteFrom + 4);
     for (let index = 0; index < 4; index += 1) {
       source = host.querySelector<HTMLElement>(".source-blockquote-source-code");
       if (!source) throw new Error("Missing quote source while deleting");

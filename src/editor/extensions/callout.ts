@@ -8,7 +8,7 @@ import type {
   EditorExtension,
   SourceBlockPresentation,
 } from "../core/lib";
-import { LIVE_SYNTAX_EDITING, SOURCE_BLOCK_PRESENTATION_META } from "../core/lib";
+import { isLiveSyntaxEditing, LIVE_SYNTAX_EDITING, SOURCE_BLOCK_PRESENTATION_META } from "../core/lib";
 import { markLiveNavigation } from "../core/source-navigation";
 import { parseCalloutMarker, type CalloutMarker } from "../callouts";
 
@@ -166,10 +166,25 @@ function calloutDecorationPlugin(schema: Schema): Plugin {
         const decorations: Decoration[] = [];
         state.doc.descendants((node, position) => {
           if (node.type !== schema.nodes.blockquote && node.type !== schema.nodes.quote_container) return;
-          const marker = sourceCallouts(node.type === schema.nodes.quote_container ? String(node.attrs.sourceText ?? "") : node.textContent).find((candidate) => candidate.lineFrom === 0);
-          if (!marker) return;
           const composite = node.type === schema.nodes.quote_container;
-          const editing = presentationSelectionTouches(presentationSelection(state), position, position + node.nodeSize);
+          const source = composite ? String(node.attrs.sourceText ?? "") : node.textContent;
+          const sourceMarkers = sourceCallouts(source);
+          const marker = sourceMarkers.find((candidate) => candidate.lineFrom === 0);
+          if (!marker) return;
+          const editing = composite
+            ? presentationSelectionTouches(presentationSelection(state), position, position + node.nodeSize)
+            : isLiveSyntaxEditing(node.attrs.liveSyntaxState);
+          if (editing) {
+            const markers = composite ? [marker] : sourceMarkers;
+            for (const sourceMarker of markers) {
+              const syntax = /^\[![a-z0-9_-]+\][+-]?/i.exec(source.slice(sourceMarker.from));
+              if (!syntax || (composite && !node.firstChild?.isTextblock)) continue;
+              const from = position + (composite ? 2 : 1) + sourceMarker.from;
+              decorations.push(Decoration.inline(from, from + syntax[0].length, {
+                class: "syntax-hint source-callout-marker",
+              }));
+            }
+          }
           if (composite && !editing && node.firstChild?.isTextblock) {
             const from = position + 2 + marker.from;
             decorations.push(Decoration.inline(from, from + marker.size, { class: "syntax-hidden" }));
