@@ -291,6 +291,9 @@ function withSourceRangeAttrs(nodes: Record<string, NodeSpec>): Record<string, N
     if (!(spec.group ?? "").split(/\s+/).includes("block") && !["table_cell", "list_item"].includes(name)) return [name, spec];
     return [name, {
       ...spec,
+      // Rich text blocks contain authored Markdown, so native DOM input must
+      // preserve line endings just as code/source surfaces already do.
+      ...(spec.content === "inline*" ? { whitespace: "pre" as const } : {}),
       attrs: {
         ...(spec.attrs ?? {}),
         sourceLiteral: { default: false },

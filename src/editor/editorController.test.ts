@@ -585,7 +585,7 @@ describe("Mint editor core public controller", () => {
 
     expect(editor.getMarkdown()).toBe("```ts\n");
     expect(editor.getSelectionOffset()).toBe(6);
-    expect(host.querySelector(".ProseMirror > pre > code")?.textContent).toBe("```ts");
+    expect(host.querySelector(".ProseMirror > pre > code")?.textContent).toBe("```ts\n");
     expect(changes.at(-1)).toBe("```ts\n");
     editor.destroy();
   });
@@ -1035,7 +1035,7 @@ describe("Mint editor core public controller", () => {
     editor.destroy();
   });
 
-  it.each(INVALID_SOURCE_FIDELITY_STRINGS)(
+  it.each(INVALID_SOURCE_FIDELITY_STRINGS.filter((source) => !source.startsWith("```")))(
     "keeps valid neighbors rendered around the smallest literal fallback for %j",
     (invalid) => {
       const markdown = `# Valid before\n\n${invalid}\n\n**valid after**`;
@@ -1354,6 +1354,107 @@ describe("Mint editor core public controller", () => {
       editor.destroy();
     },
   );
+
+  it.each(["- ", "* ", "+ ", "1. ", "1) ", "- [ ] "])("keeps the empty %s list caret after Tab and Shift+Tab", async (prefix) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const source = `${prefix}first`;
+    const editor = createEditor(host, { initialContent: source });
+    editor.setSelectionOffset(source.length);
+    editor.focus();
+    const editable = host.querySelector<HTMLElement>(".ProseMirror")!;
+    const press = (key: string, shiftKey = false) => editable.dispatchEvent(new KeyboardEvent("keydown", {
+      key, shiftKey, bubbles: true, cancelable: true,
+    }));
+    press("Enter");
+    const continued = editor.getMarkdown();
+    expect(editor.getSelectionOffset()).toBe(continued.length);
+    press("Tab");
+    const indented = continued.replace("\n", "\n    ");
+    expect(editor.getMarkdown()).toBe(indented);
+    expect(editor.getSelectionOffset()).toBe(indented.length);
+    expect(editable.querySelector("h1, h2, h3, h4, h5, h6")).toBeNull();
+    expect(editable.querySelectorAll("li")).toHaveLength(2);
+    expect(editable.querySelector("li li p")?.textContent).toBe(indented.split("\n")[1]);
+    editable.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z", ctrlKey: true, bubbles: true, cancelable: true,
+    }));
+    expect(editor.getMarkdown()).toBe(continued);
+    expect(editor.getSelectionOffset()).toBe(continued.length);
+    press("Tab");
+    press("Tab", true);
+    expect(editor.getMarkdown()).toBe(continued);
+    expect(editor.getSelectionOffset()).toBe(continued.length);
+    press("Tab");
+    await typeBrowserTextAtSelection(host, "child");
+    expect(editor.getMarkdown()).toBe(`${indented}child`);
+    await composeNativeText(host, ["zhong", "中文"]);
+    expect(editor.getMarkdown()).toBe(`${indented}child中文`);
+    expect(editor.getSelectionOffset()).toBe(indented.length + "child中文".length);
+    expect(editable.querySelector("h1, h2, h3, h4, h5, h6")).toBeNull();
+    expect(editable.querySelectorAll("li")).toHaveLength(2);
+    editor.destroy();
+  });
+
+  it("preserves a soft line break through native input after Enter", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const source = "这是一行内容";
+    const editor = createEditor(host, { initialContent: source });
+    editor.setSelectionOffset(source.length);
+    editor.focus();
+    host.querySelector<HTMLElement>(".ProseMirror")!.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter", bubbles: true, cancelable: true,
+    }));
+    await typeNativeTextAtSelection(host, "这是换行后紧接着的一行");
+    const expected = `${source}\n这是换行后紧接着的一行`;
+    expect(editor.getMarkdown()).toBe(expected);
+    expect(editor.getSelectionOffset()).toBe(expected.length);
+    expect(host.querySelector(".ProseMirror > p")?.textContent).toBe(expected);
+    await composeNativeText(host, ["zhong", "中", "中文"]);
+    expect(editor.getMarkdown()).toBe(`${expected}中文`);
+    expect(editor.getSelectionOffset()).toBe(expected.length + 2);
+    host.querySelector<HTMLElement>(".ProseMirror")!.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z", ctrlKey: true, bubbles: true, cancelable: true,
+    }));
+    expect(editor.getMarkdown()).toBe(expected);
+    expect(editor.getSelectionOffset()).toBe(expected.length);
+    editor.destroy();
+  });
+
+  it.each(["```", "~~~", "````ts"])("keeps an unclosed %s fence through blank rows and later Markdown", (fence) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const source = `${fence}\nfirst\n\n# still code\n\n- still code\n\n`;
+    const editor = createEditor(host, { initialContent: source });
+    expect(editor.getMarkdown()).toBe(source);
+    const code = host.querySelector(".ProseMirror pre code");
+    expect(code?.textContent).toBe(source);
+    expect(host.querySelectorAll(".ProseMirror > pre")).toHaveLength(1);
+    editor.destroy();
+  });
+
+  it("ends code styling at an authored closing fence and restores it on undo", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const source = "```\nfirst\n\n# still code\n\nlast";
+    const editor = createEditor(host, { initialContent: source });
+    const offset = source.indexOf("\n# still code");
+    editor.setSelectionOffset(offset);
+    editor.focus();
+    await typeBrowserTextAtSelection(host, "```");
+    expect(editor.getMarkdown()).toBe(source.slice(0, offset) + "```" + source.slice(offset));
+    expect(host.querySelector(".ProseMirror > h1")?.textContent).toBe("# still code");
+    expect(host.querySelector(".ProseMirror pre > code")?.textContent).toBe("```\nfirst\n```");
+    host.querySelector<HTMLElement>(".ProseMirror")!.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "z", ctrlKey: true, bubbles: true, cancelable: true,
+    }));
+    expect(editor.getMarkdown()).toBe(source.slice(0, offset) + "``" + source.slice(offset));
+    expect(editor.getSelectionOffset()).toBe(offset + 2);
+    expect(host.querySelector(".ProseMirror > h1")).toBeNull();
+    expect(host.querySelector(".ProseMirror pre > code")?.textContent).toBe(editor.getMarkdown());
+    editor.destroy();
+  });
 
   it("applies Enter as one canonical source transaction and reparses the Live view", () => {
     const host = document.createElement("div");

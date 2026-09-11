@@ -1,5 +1,7 @@
 import MarkdownIt from "markdown-it";
 import Token from "markdown-it/lib/token.mjs";
+import type StateBlock from "markdown-it/lib/rules_block/state_block.mjs";
+import type { RuleBlock } from "markdown-it/lib/parser_block.mjs";
 import {
   Fragment,
   Mark,
@@ -31,7 +33,6 @@ const md: MarkdownIt = new MarkdownIt("commonmark", { html: false });
 for (const plugin of collectMdItPlugins()) md.use(plugin);
 const parserSourceProtectors = collectParserSourceProtectors();
 
-const LITERAL_FENCE_SENTINEL = "\uE000";
 const INCOMPLETE_BLOCK_CHARACTERS = new Set(["*", "+", "-", ".", ")", "="]);
 
 type SourceLine = { text: string; from: number };
@@ -205,62 +206,11 @@ function restoreProtectedCharacters(
   text: string,
   restoration: ReadonlyMap<string, string>,
 ): string {
-  let restored = text.replaceAll(LITERAL_FENCE_SENTINEL, "`");
+  let restored = text;
   for (const [sentinel, character] of restoration) {
     restored = restored.replaceAll(sentinel, character);
   }
   return restored;
-}
-
-function recoverableBlockLine(line: string): boolean {
-  return /^(?: {0,3}(?:#{1,6}(?:\s|$)|>|[-+*]\s|\d+[.)]\s)|(?:\*\*|__).+(?:\*\*|__)$|\[[^\]]+\]:|\|)/.test(line);
-}
-
-/**
- * CommonMark lets an unclosed fence consume the rest of the document. Live
- * mode instead keeps an invalid fence literal when a later blank-line block is
- * clearly valid Markdown. Replacing one delimiter character with a same-size
- * private sentinel affects parsing only; ParserState restores the authored
- * character immediately, and source ranges are still calculated from `src`.
- */
-function protectRecoverableUnclosedFences(source: string): string {
-  const lines = sourceLines(source);
-  const protectedOffsets: number[] = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const open = /^( {0,3})(`{3,}|~{3,})/.exec(lines[index]!.text);
-    if (!open) continue;
-    const marker = open[2]!;
-    const markerChar = marker[0]!;
-    let closed = false;
-    for (let next = index + 1; next < lines.length; next += 1) {
-      const close = /^( {0,3})(`{3,}|~{3,})([\t ]*)$/.exec(lines[next]!.text);
-      if (close && close[2]![0] === markerChar && close[2]!.length >= marker.length) {
-        closed = true;
-        index = next;
-        break;
-      }
-    }
-    if (closed) continue;
-    let hasRecovery = false;
-    for (let next = index + 1; next + 1 < lines.length; next += 1) {
-      if (lines[next]!.text.trim()) continue;
-      let candidate = next + 1;
-      while (candidate < lines.length && !lines[candidate]!.text.trim()) candidate += 1;
-      if (candidate < lines.length && recoverableBlockLine(lines[candidate]!.text)) {
-        hasRecovery = true;
-        break;
-      }
-    }
-    if (hasRecovery) protectedOffsets.push(lines[index]!.from + open[1]!.length);
-  }
-  if (protectedOffsets.length === 0) return source;
-  let protectedSource = source;
-  for (const offset of protectedOffsets.sort((left, right) => right - left)) {
-    protectedSource = protectedSource.slice(0, offset)
-      + LITERAL_FENCE_SENTINEL
-      + protectedSource.slice(offset + 1);
-  }
-  return protectedSource;
 }
 
 // markdown-it normally exposes an escaped character without the authored
@@ -277,6 +227,33 @@ md.core.ruler.after("inline", "preserve_manual_escapes", (state) => {
   }
 });
 
+function isNestedListItem(state: StateBlock, line: number): boolean {
+  if (state.listIndent < 0 || line >= state.lineMax) return false;
+  const indent = state.sCount[line]! - state.blkIndent;
+  if (indent < 0 || indent > 3) return false;
+  const text = state.src.slice(state.bMarks[line]! + state.tShift[line]!, state.eMarks[line]);
+  // A separator distinguishes list items (including empty ones) from
+  // unfinished markers. Nested ordered items retain their authored number
+  // when Enter followed by Tab moves them under the preceding item.
+  return /^(?:[-+*]|\d{1,9}[.)])[\t ]+/.test(text);
+}
+
+function paragraphEndLine(state: StateBlock, startLine: number, endLine: number, stopAtSetext = false): number {
+  const terminatorRules = state.md.block.ruler.getRules("paragraph");
+  let nextLine = startLine + 1;
+  for (; nextLine < endLine && !state.isEmpty(nextLine); nextLine++) {
+    if (state.sCount[nextLine]! - state.blkIndent > 3) continue;
+    if (state.sCount[nextLine]! < 0) continue;
+    if (isNestedListItem(state, nextLine)) break;
+    if (stopAtSetext && state.sCount[nextLine]! >= state.blkIndent) {
+      const text = state.src.slice(state.bMarks[nextLine]! + state.tShift[nextLine]!, state.eMarks[nextLine]);
+      if (/^(?:=+|-+)[\t ]*$/.test(text)) break;
+    }
+    if (terminatorRules.some((rule) => rule(state, nextLine, endLine, true))) break;
+  }
+  return nextLine;
+}
+
 // Preserve trailing whitespace inside paragraphs.
 //
 // The default paragraph rule does `state.getLines(...).trim()` on the
@@ -286,24 +263,10 @@ md.core.ruler.after("inline", "preserve_manual_escapes", (state) => {
 // the same logic minus the trim, since the only whitespace we'd want to
 // strip (leading indent, trailing newline) is already handled by
 // `blkIndent` and getLines' `keepLastLF=false`.
-md.block.ruler.at("paragraph", function paragraphPreserveTrailing(state, startLine, endLine) {
-  const terminatorRules = state.md.block.ruler.getRules("paragraph");
+const paragraphPreserveTrailing: RuleBlock = (state, startLine, endLine) => {
   const oldParentType = state.parentType;
-  let nextLine = startLine + 1;
   state.parentType = "paragraph";
-
-  for (; nextLine < endLine && !state.isEmpty(nextLine); nextLine++) {
-    if (state.sCount[nextLine] - state.blkIndent > 3) continue;
-    if (state.sCount[nextLine] < 0) continue;
-    let terminate = false;
-    for (let i = 0; i < terminatorRules.length; i++) {
-      if (terminatorRules[i]!(state, nextLine, endLine, true)) {
-        terminate = true;
-        break;
-      }
-    }
-    if (terminate) break;
-  }
+  const nextLine = paragraphEndLine(state, startLine, endLine);
 
   const content = state.getLines(startLine, nextLine, state.blkIndent, false);
   state.line = nextLine;
@@ -317,6 +280,21 @@ md.block.ruler.at("paragraph", function paragraphPreserveTrailing(state, startLi
 
   state.parentType = oldParentType;
   return true;
+};
+md.block.ruler.at("paragraph", paragraphPreserveTrailing);
+
+// Enter followed by Tab creates an empty nested item. CommonMark otherwise
+// treats "- " as a Setext underline, and empty markers or ordered markers
+// above 1 as continuation text. End the parent paragraph first so the list
+// rule can own the new item and keep owning it when text is entered.
+md.block.ruler.before("lheading", "paragraph_before_nested_list", (state, startLine, endLine, silent) => {
+  if (silent || state.listIndent < 0) return false;
+  const oldParentType = state.parentType;
+  state.parentType = "paragraph";
+  const nextLine = paragraphEndLine(state, startLine, endLine, true);
+  state.parentType = oldParentType;
+  if (nextLine >= endLine || state.isEmpty(nextLine) || !isNestedListItem(state, nextLine)) return false;
+  return paragraphPreserveTrailing(state, startLine, endLine, false);
 });
 
 const featureTokens = collectParserTokens();
@@ -377,9 +355,19 @@ export class ParserState {
         ?? schema.nodes.source_block.create({ kind: "unmapped-table", ...frame.attrs }, schema.text(frame.attrs.sourceText));
     }
     if (!node) throw new Error(`parser: cannot fill <${frame.type.name}>`);
-    if (node.type.name === "list_item" && typeof frame.attrs?.sourceText === "string" && node.firstChild?.type.name === "paragraph" && !node.firstChild.textContent && node.firstChild.attrs.sourceFrom === null) {
+    // Only an actually empty list item needs its marker projected here.
+    // createAndFill may prepend a required paragraph before a heading; that
+    // synthetic paragraph must not cause us to discard the authored heading.
+    if (
+      node.type.name === "list_item"
+      && typeof frame.attrs?.sourceText === "string"
+      && frame.content.length === 0
+      && node.firstChild?.type.name === "paragraph"
+      && !node.firstChild.textContent
+      && node.firstChild.attrs.sourceFrom === null
+    ) {
       const paragraph = schema.nodes.paragraph.createChecked({ ...frame.attrs, sourceLiteral: true }, schema.text(frame.attrs.sourceText));
-      node = node.copy(Fragment.from([paragraph, ...frame.content.slice(1)]));
+      node = node.copy(Fragment.from(paragraph));
     }
     if (node.type.name === "quote_container" && typeof frame.attrs?.sourceText === "string") {
       const from = Number(frame.attrs.sourceFrom);
@@ -607,14 +595,18 @@ function topLevelSourceRanges(tokens: readonly Token[], source: string): SourceB
     // authored snapshot. Keep internal blank lines because a later nonblank
     // line still belongs to the same container.
     let lastContentLine = toLine - 1;
-    while (lastContentLine > fromLine) {
+    while (token.type !== "fence" && lastContentLine > fromLine) {
       const candidateStart = starts[lastContentLine] ?? source.length;
       const candidateEnd = contentEndOfLine(source, candidateStart);
       if (source.slice(candidateStart, candidateEnd).trim().length > 0) break;
       lastContentLine -= 1;
     }
     const lastLineStart = starts[lastContentLine] ?? source.length;
-    const to = contentEndOfLine(source, lastLineStart);
+    // An unclosed fence also owns trailing blank rows, including the final
+    // line ending. They must not turn into editable gaps outside the code.
+    const to = token.type === "fence" && !sourceFenceIsClosed(token, source)
+      ? starts[toLine] ?? source.length
+      : contentEndOfLine(source, lastLineStart);
     const previous = ranges.at(-1);
     if (previous?.from === from && previous.to === to) continue;
     ranges.push({ from, to });
@@ -766,9 +758,7 @@ export interface ParseOptions {
 }
 
 export function parse(src: string, options: ParseOptions = {}): PMNode {
-  const protectedSource = protectLiveParserSpellings(
-    protectRecoverableUnclosedFences(src),
-  );
+  const protectedSource = protectLiveParserSpellings(src);
   const lines = sourceLines(src);
   const tokens = splitTopLevelListBlocks(
     md.parse(protectedSource.parserSource, {}),
@@ -812,7 +802,11 @@ export function parse(src: string, options: ParseOptions = {}): PMNode {
       listHasItem.length > 0 || compositeQuotes.length > 0 || tokens[index - 1]?.type === "heading_open"
     )) {
       const from = lines[token.map[0]]?.from ?? 0;
-      const lastLine = lines[token.map[1] - 1]!;
+      // Setext inline tokens exclude the underline row. It is still authored
+      // text and must remain addressable inside lists and quotes as well.
+      const heading = tokens[index - 1];
+      const endLine = heading?.type === "heading_open" ? heading.map?.[1] ?? token.map[1] : token.map[1];
+      const lastLine = lines[endLine - 1]!;
       const to = lastLine.from + lastLine.text.length;
       state.literalInline(src.slice(from, to), from, to);
       continue;

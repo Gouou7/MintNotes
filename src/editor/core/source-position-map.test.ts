@@ -17,6 +17,58 @@ describe("canonical source position map", () => {
     },
   );
 
+  it.each(["- first\n    ---", "> title\n> ==="])(
+    "retains nested Setext content and every underline boundary for %j",
+    (source) => {
+      const doc = parse(source);
+      const map = SourcePositionMap.fromDocument(doc, source);
+      expect(doc.textContent).toBe(source);
+      for (let offset = 0; offset <= source.length; offset++) {
+        expect(map.hasExactSourceBoundary(offset)).toBe(true);
+        expect(map.documentToSource(map.sourceToDocument(offset))).toBe(offset);
+      }
+    },
+  );
+
+  it.each([
+    "- first\n    - ",
+    "- first\n    - \t",
+    "- first\n    continued\n    - ",
+    "- first\n    - second\n        - ",
+    "1. first\n    2. ",
+    "> - first\n>     - ",
+    "- first\r\n    - ",
+  ])("projects an empty nested item without turning its parent into a heading for %j", (source) => {
+    const doc = parse(source);
+    const headings: string[] = [];
+    const items: string[] = [];
+    doc.descendants((node) => {
+      if (node.type.name === "heading") headings.push(node.textContent);
+      if (node.type.name === "list_item") items.push(node.textContent);
+    });
+    expect(headings).toEqual([]);
+    expect(items.length).toBeGreaterThanOrEqual(2);
+    expect(items.at(-1)).toBe(source.split(/\r?\n/).at(-1));
+    const map = SourcePositionMap.fromDocument(doc, source);
+    const lastLineFrom = source.lastIndexOf("\n") + 1;
+    for (let offset = lastLineFrom; offset <= source.length; offset++) {
+      expect(map.hasExactSourceBoundary(offset)).toBe(true);
+      expect(map.documentToSource(map.sourceToDocument(offset))).toBe(offset);
+    }
+  });
+
+  it.each(["title\n- ", "- title\n    -- ", "- title\n    ===\n    - "])(
+    "retains genuine Setext headings for %j",
+    (source) => {
+      const headings: string[] = [];
+      parse(source).descendants((node) => {
+        if (node.type.name === "heading") headings.push(node.textContent);
+      });
+      expect(headings).toHaveLength(1);
+      expect(headings[0]).toContain("title");
+    },
+  );
+
   it("owns every heading delimiter boundary in both directions", () => {
     const source = "## heading ##";
     const map = SourcePositionMap.fromDocument(parse(source), source);
