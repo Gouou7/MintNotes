@@ -65,8 +65,14 @@
   tab-size: inherit;
 }
 .ProseMirror pre[data-source-gap] > code { font: inherit; white-space: inherit; }
-/* Empty quote lines share the ordinary text surface, including its caret. */
-.ProseMirror pre[data-source-gap]:not([data-source-gap-structural]) { overflow: visible; }
+/* Empty rows keep their block height, but shrink their selectable inline area
+ * to a short line-ending marker instead of painting selection to the editor edge. */
+.ProseMirror pre[data-source-gap]:not([data-source-gap-structural]) {
+  width: fit-content;
+  min-width: 0.5em;
+  max-width: 100%;
+  overflow: visible;
+}
 .ProseMirror [data-source-gap-hidden] { display: none; }
 .ProseMirror pre[data-source-gap-structural] {
   position: absolute;

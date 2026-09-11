@@ -92,6 +92,20 @@ describe("empty quote marker visibility", () => {
     expect(getComputedStyle(source).overflow).toBe("hidden");
     expect(getComputedStyle(source).height).toBe("0px");
   });
+
+  it("shrinks a visible empty-row selection without collapsing its block row", () => {
+    const source = mountSource("paragraph");
+    source.setAttribute("data-source-gap", "1");
+    source.removeAttribute("data-source-block");
+    source.closest<HTMLElement>(".ProseMirror")!.style.fontSize = "16px";
+    const style = getComputedStyle(source);
+
+    expect(style.display).toBe("block");
+    expect(style.width).toBe("fit-content");
+    expect(style.minWidth).toBe("8px");
+    expect(style.maxWidth).toBe("100%");
+    expect(style.overflow).toBe("visible");
+  });
 });
 
 describe("transient source-block typography", () => {
