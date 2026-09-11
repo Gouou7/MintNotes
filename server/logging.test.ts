@@ -37,7 +37,7 @@ function cookieHeader(setCookie: string | string[] | undefined): string {
 
 describe("server logging configuration", () => {
   it("validates LOG_LEVEL and defaults it to info", () => {
-    expect(loadServerConfig({ NODE_ENV: "production" }).logLevel).toBe("info");
+    expect(loadServerConfig({ NODE_ENV: "production", APP_ORIGIN: "https://notes.example.test" }).logLevel).toBe("info");
     expect(loadServerConfig({ NODE_ENV: "development", LOG_LEVEL: "debug" }).logLevel).toBe("debug");
     expect(() => loadServerConfig({ LOG_LEVEL: "verbose" })).toThrow("Invalid LOG_LEVEL: verbose");
   });
@@ -72,7 +72,7 @@ describe("HTTP and business logs", () => {
     const db = openDatabase(directory);
     const lines: string[] = [];
     const config = {
-      ...loadServerConfig({ NODE_ENV: "production", LOG_LEVEL: "debug" }),
+      ...loadServerConfig({ NODE_ENV: "production", APP_ORIGIN: "https://notes.example.test", LOG_LEVEL: "debug" }),
       dataDirectory: directory,
       allowRegistration: true,
       appOrigin: "https://notes.example.test",

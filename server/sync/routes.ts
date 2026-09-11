@@ -21,7 +21,7 @@ export function registerSyncRoutes(
   const { db, syncEvents, authenticate, config, logRefs } = dependencies;
   const syncClientHeader = z.string().uuid().optional();
 
-  app.get("/api/sync/events", { preHandler: authenticate }, async (request, reply) => {
+  app.get("/api/sync/events", { preHandler: authenticate, compress: false }, async (request, reply) => {
     const parsed = z.object({
       since: z.coerce.number().int().nonnegative().default(0),
       clientId: z.string().uuid()

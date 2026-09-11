@@ -77,7 +77,16 @@ export interface CryptoClient {
 export function createCryptoClient(): CryptoClient {
   const worker = new Worker(new URL("./crypto.worker.ts", import.meta.url), { type: "module" });
   let requestId = 0;
+  let unavailableError: Error | null = null;
   const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
+
+  const makeUnavailable = (message: string) => {
+    if (unavailableError) return;
+    unavailableError = new Error(message);
+    for (const entry of pending.values()) entry.reject(unavailableError);
+    pending.clear();
+    worker.terminate();
+  };
 
   worker.onmessage = (event: MessageEvent<{ id: number; result?: any; error?: string }>) => {
     const entry = pending.get(event.data.id);
@@ -86,12 +95,23 @@ export function createCryptoClient(): CryptoClient {
     if (event.data.error) entry.reject(new Error(event.data.error));
     else entry.resolve(event.data.result);
   };
+  worker.onerror = (event) => {
+    event.preventDefault();
+    makeUnavailable("Crypto worker became unavailable");
+  };
+  worker.onmessageerror = () => makeUnavailable("Crypto worker returned an unreadable response");
 
   const call = <T,>(operation: string, payload?: unknown, transfer: Transferable[] = []): Promise<T> => {
+    if (unavailableError) return Promise.reject(unavailableError);
     const id = ++requestId;
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject });
-      worker.postMessage({ id, operation, payload }, transfer);
+      try {
+        worker.postMessage({ id, operation, payload }, transfer);
+      } catch (error) {
+        pending.delete(id);
+        reject(error instanceof Error ? error : new Error("Unable to send request to crypto worker"));
+      }
     });
   };
 
@@ -119,12 +139,14 @@ export function createCryptoClient(): CryptoClient {
     encryptHistoryMetadata: (userId, noteId, historyId, capturedAt, metadata) => call("encryptHistoryMetadata", { userId, noteId, historyId, capturedAt, metadata }),
     decryptHistoryMetadata: (userId, noteId, historyId, capturedAt, ciphertext, nonce) => call("decryptHistoryMetadata", { userId, noteId, historyId, capturedAt, ciphertext, nonce }),
     createAttachment: (input) => call("createAttachment", input, [input.data]),
-    decryptAttachment: (userId, attachmentId, metadata, chunks) => call("decryptAttachment", { userId, attachmentId, metadata, chunks }),
+    decryptAttachment: (userId, attachmentId, metadata, chunks) => call(
+      "decryptAttachment",
+      { userId, attachmentId, metadata, chunks },
+      chunks.map((chunk) => chunk.ciphertext)
+    ),
     lock: () => call("lock"),
     dispose: () => {
-      worker.terminate();
-      for (const entry of pending.values()) entry.reject(new Error("Crypto worker was terminated"));
-      pending.clear();
+      makeUnavailable("Crypto worker was terminated");
     }
   };
 }

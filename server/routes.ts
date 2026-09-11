@@ -1,11 +1,9 @@
 import cookie from "@fastify/cookie";
+import compress from "@fastify/compress";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
-import fastifyStatic from "@fastify/static";
 import Fastify, { LogController } from "fastify";
-import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
 import { z } from "zod";
 import { openDatabase, runRegistrationTransaction, type AppDatabase } from "./database.js";
 import { loadServerConfig, type ServerConfig } from "./config.js";
@@ -31,6 +29,7 @@ import {
   registerHttpLogging,
   serverRequestId
 } from "./logging.js";
+import { registerWebRoutes } from "./web.js";
 
 export interface RouteApplicationOptions {
   config?: ServerConfig;
@@ -65,6 +64,7 @@ const {
 } = createSessionService(db, config, syncEvents);
 
 await app.register(cookie);
+await app.register(compress, { global: true, globalDecompression: false, threshold: 1024 });
 registerHttpLogging(app);
 app.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_request, body, done) => done(null, body));
 await app.register(rateLimit, { global: false });
@@ -588,11 +588,7 @@ registerAttachmentRoutes(app, { db, config, authenticate, logRefs });
 registerAdminRoutes(app, { db, syncEvents, requireAdmin, logRefs });
 registerHistoryRoutes(app, { db, config, authenticate, logRefs });
 
-const webRoot = resolve("dist");
-if (existsSync(webRoot)) {
-  await app.register(fastifyStatic, { root: webRoot, wildcard: false });
-  app.get("/*", async (_request, reply) => reply.sendFile("index.html"));
-}
+await registerWebRoutes(app);
 
 const maintenance = options.maintenance === false
   ? null

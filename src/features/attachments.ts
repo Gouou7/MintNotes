@@ -11,11 +11,13 @@ import {
 } from "../storage/database";
 import type { EncryptedAttachmentChunk, OpenAttachment, VaultAttachment } from "../types";
 import { detectImageMime } from "./attachmentFormat";
+import { mapWithConcurrency } from "./concurrency";
 
 export { attachmentIdsIn, attachmentMarkdown, extensionForMime } from "./attachmentFormat";
 
 export const ATTACHMENT_CHUNK_SIZE = 1024 * 1024;
 export const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+export const ATTACHMENT_TRANSFER_CONCURRENCY = 4;
 
 type ContinueOperation = () => boolean;
 
@@ -128,34 +130,45 @@ export async function ensureAttachmentChunks(
     throw new Error(`附件“${attachment.originalName}”的分块元数据不一致`);
   }
   const byIndex = new Map(stored.map((chunk) => [chunk.chunkIndex, chunk]));
+  const missingIndexes: number[] = [];
   for (let index = 0; index < attachment.chunkCount; index += 1) {
-    if (byIndex.has(index)) continue;
-    if (!navigator.onLine || !allowNetwork) throw new Error(`附件“${attachment.originalName}”尚未缓存，离线时无法读取`);
-    const downloaded = await downloadAttachmentChunk(`/api/attachments/${attachment.objectId}/chunks/${index}`);
-    requireActiveOperation(continueOperation);
-    const expectedVersion = storedVersions.values().next().value as number | undefined;
-    if (
-      downloaded.totalChunks !== attachment.chunkCount
-      || !Number.isInteger(downloaded.encryptionVersion)
-      || downloaded.encryptionVersion < 1
-      || (expectedVersion !== undefined && downloaded.encryptionVersion !== expectedVersion)
-    ) {
-      throw new Error(`附件“${attachment.originalName}”的远端分块元数据不一致`);
+    if (!byIndex.has(index)) missingIndexes.push(index);
+  }
+  if (missingIndexes.length && (!navigator.onLine || !allowNetwork)) {
+    throw new Error(`附件“${attachment.originalName}”尚未缓存，离线时无法读取`);
+  }
+  const downloadedChunks = await mapWithConcurrency(
+    missingIndexes,
+    ATTACHMENT_TRANSFER_CONCURRENCY,
+    async (index): Promise<LocalAttachmentChunk> => {
+      const downloaded = await downloadAttachmentChunk(`/api/attachments/${attachment.objectId}/chunks/${index}`);
+      requireActiveOperation(continueOperation);
+      if (
+        downloaded.totalChunks !== attachment.chunkCount
+        || !Number.isInteger(downloaded.encryptionVersion)
+        || downloaded.encryptionVersion < 1
+      ) {
+        throw new Error(`附件“${attachment.originalName}”的远端分块元数据不一致`);
+      }
+      return {
+        key: chunkKey(userId, attachment.objectId, index),
+        userId,
+        attachmentId: attachment.objectId,
+        chunkIndex: index,
+        totalChunks: downloaded.totalChunks,
+        ciphertext: downloaded.ciphertext,
+        nonce: downloaded.nonce,
+        encryptionVersion: downloaded.encryptionVersion,
+        updatedAt: new Date().toISOString()
+      };
     }
-    const local: LocalAttachmentChunk = {
-      key: chunkKey(userId, attachment.objectId, index),
-      userId,
-      attachmentId: attachment.objectId,
-      chunkIndex: index,
-      totalChunks: downloaded.totalChunks,
-      ciphertext: downloaded.ciphertext,
-      nonce: downloaded.nonce,
-      encryptionVersion: downloaded.encryptionVersion,
-      updatedAt: new Date().toISOString()
-    };
-    await localDb.attachmentChunks.put(local);
-    byIndex.set(index, local);
-    storedVersions.add(downloaded.encryptionVersion);
+  );
+  for (const chunk of downloadedChunks) storedVersions.add(chunk.encryptionVersion);
+  if (storedVersions.size > 1) throw new Error(`附件“${attachment.originalName}”的远端分块元数据不一致`);
+  requireActiveOperation(continueOperation);
+  if (downloadedChunks.length) {
+    await localDb.attachmentChunks.bulkPut(downloadedChunks);
+    for (const chunk of downloadedChunks) byIndex.set(chunk.chunkIndex, chunk);
   }
   if (byIndex.size !== attachment.chunkCount) throw new Error(`附件“${attachment.originalName}”不完整`);
   return [...byIndex.values()].sort((a, b) => a.chunkIndex - b.chunkIndex).map((chunk) => ({

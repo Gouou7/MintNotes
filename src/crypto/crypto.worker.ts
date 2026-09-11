@@ -544,11 +544,20 @@ async function handle(operation: string, payload: any): Promise<any> {
   }
 }
 
+function responseTransferables(operation: string, result: any): Transferable[] {
+  if (operation === "decryptAttachment" && result instanceof ArrayBuffer) return [result];
+  if (operation === "decryptProfileAvatar" && result?.data instanceof ArrayBuffer) return [result.data];
+  if (operation === "createAttachment" && Array.isArray(result?.chunks)) {
+    return result.chunks.map((chunk: EncryptedAttachmentChunk) => chunk.ciphertext);
+  }
+  return [];
+}
+
 self.onmessage = async (event: MessageEvent<RequestMessage>) => {
   const { id, operation, payload } = event.data;
   try {
     const result = await handle(operation, payload);
-    self.postMessage({ id, result });
+    self.postMessage({ id, result }, responseTransferables(operation, result));
   } catch (error) {
     self.postMessage({ id, error: error instanceof Error ? error.message : "Cryptographic operation failed" });
   }

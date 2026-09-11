@@ -1,4 +1,4 @@
-import { type CSSProperties, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, type CSSProperties, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownAZ,
   Copy,
@@ -32,17 +32,15 @@ import {
   clearPinRefreshGrant,
   hasDevicePin,
   markEndpointRevocationPending,
-  touchPinRefreshGrant
 } from "../../crypto/deviceUnlock";
 import { buildOutline, findOutlineHeading } from "../../editor/outline";
 import { ReadingEditor } from "../../editor/ReadingEditor";
 import { MarkdownEditor } from "../../editor/MarkdownEditor";
 import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/wikilinks";
-import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
+import { ATTACHMENT_TRANSFER_CONCURRENCY, attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
 import { AttachmentCloneService } from "../attachmentClone";
 import { documentPatchChanges } from "../documentPatch";
 import { exportMarkdownZip, exportSingleMarkdown, importFiles } from "../importExport";
-import { SettingsPanel } from "../SettingsPanel";
 import {
   SyncCoordinator,
   acknowledgeByObjectId,
@@ -51,7 +49,7 @@ import {
   type SyncIntent
 } from "../syncCoordinator";
 import { decryptAvailableLocalObjects, decryptFailureFingerprint, shouldCreateWelcomeNote } from "../vaultLoad";
-import { canMoveDocument, compareDocuments, descendantsOf, folderRevealPath, isFolderDropZone, lockedNoteInSelection, nextManualOrder, pinnedDocuments, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "../tree";
+import { canMoveDocument, compareDocuments, descendantsOf, folderRevealPath, isFolderDropZone, lockedNoteInSelection, nextManualOrder, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "../tree";
 import { derivedNoteLockState, effectiveEditorMode, isLockedNote } from "../noteLock";
 import { formatNoteTime } from "../noteTime";
 import {
@@ -67,15 +65,8 @@ import {
   shouldCaptureHistoryBaseline
 } from "../history";
 import { focusAndSelectName } from "../focusName";
+import { mapWithConcurrency } from "../concurrency";
 import { focusEditorFromTitle } from "./editorFocus";
-import { countText } from "../wordCount";
-import {
-  beginMobileDrawerGesture,
-  gestureBecameVertical,
-  gestureHasInwardHorizontalIntent,
-  openedDrawerFromGesture,
-  type MobileDrawerGesture
-} from "../mobileDrawerGesture";
 import { isLanguagePreference, translateError, useI18n, type Translate } from "../../i18n";
 import {
   DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
@@ -118,6 +109,10 @@ import { EmptyEditor, NoteToolbar } from "./NoteToolbar";
 import { useObjectPersistence } from "./useObjectPersistence";
 import { useDocumentSaveQueue } from "./useDocumentSaveQueue";
 import { useDocumentNavigation } from "./useDocumentNavigation";
+import { useVaultDerivedView } from "./useVaultDerivedView";
+import { useMobileDrawerGestures, useWorkspaceAutoLock } from "./useWorkspaceInteractions";
+
+const SettingsPanel = lazy(() => import("../SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
 import { hasPendingLocalObjectGraph, removePurgedLocalData } from "./localPurge";
 import { acknowledgeOutboxEntry } from "./outboxAcknowledgement";
 import { pullVaultChanges } from "./pullController";
@@ -968,8 +963,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const pushPending = async (): Promise<boolean> => {
     if (logoutStarted.current) return false;
     const chunkEntries = await localDb.attachmentOutbox.where("userId").equals(user.id).sortBy("generation");
-    for (const entry of chunkEntries) {
-      if (logoutStarted.current) return false;
+    await mapWithConcurrency(chunkEntries, ATTACHMENT_TRANSFER_CONCURRENCY, async (entry) => {
+      if (logoutStarted.current) return;
       await uploadAttachmentChunk(`/api/attachments/${entry.attachmentId}/chunks/${entry.chunkIndex}`, entry.ciphertext, {
         "X-WebMD-Nonce": entry.nonce,
         "X-WebMD-Total-Chunks": String(entry.totalChunks),
@@ -977,10 +972,11 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         "X-WebMD-Idempotency-Key": entry.idempotencyKey,
         "X-WebMD-Sync-Client": syncClientId.current
       });
-      if (logoutStarted.current) return false;
+      if (logoutStarted.current) return;
       const current = await localDb.attachmentOutbox.get(entry.key);
       if (current?.generation === entry.generation) await localDb.attachmentOutbox.delete(entry.key);
-    }
+    });
+    if (logoutStarted.current) return false;
 
     const storedEntries = await localDb.outbox.where("userId").equals(user.id).sortBy("generation");
     if (logoutStarted.current) return false;
@@ -1507,8 +1503,22 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     return () => window.cancelAnimationFrame(frame);
   }, [activeDocument?.objectId, editorSessionId]);
   const displayedMarkdown = historyPreview?.payload.markdown ?? activeDocument?.markdown ?? "";
-  const outline = useMemo(() => buildOutline(displayedMarkdown), [displayedMarkdown]);
-  const statistics = useMemo(() => countText(displayedMarkdown), [displayedMarkdown]);
+  const {
+    outline,
+    statistics,
+    trashItems,
+    searched,
+    treeChildren,
+    visibleTree,
+    pinned
+  } = useVaultDerivedView({
+    documents,
+    documentKey: historyPreview?.item.historyId ?? activeDocument?.objectId ?? "",
+    markdown: displayedMarkdown,
+    search,
+    expanded,
+    sortMode: preferences.sortMode
+  });
   const activeAttachmentIds = useMemo(() => [...new Set([
     ...(historyPreview?.payload.attachmentIds ?? activeDocument?.attachmentIds ?? []),
     ...attachmentIdsIn(displayedMarkdown)
@@ -1529,44 +1539,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   });
   const attachmentUrls = attachmentUrlController.urls;
   const attachmentUrlCache = attachmentUrlController.cache;
-
-  const visibleDocuments = useMemo(() => documents.filter((entry) => !entry.deleted), [documents]);
-  const trashItems = useMemo(() => documents.filter((entry) => entry.deleted), [documents]);
-  const searched = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
-    if (!normalized) return visibleDocuments;
-    const included = new Set(visibleDocuments.filter((entry) => `${entry.title}\n${entry.markdown}`.toLowerCase().includes(normalized)).map((entry) => entry.objectId));
-    for (const id of [...included]) {
-      let parentId = documentIndexRef.current.get(id)?.parentId;
-      while (parentId) {
-        included.add(parentId);
-        parentId = documentIndexRef.current.get(parentId)?.parentId;
-      }
-    }
-    return visibleDocuments.filter((entry) => included.has(entry.objectId));
-  }, [visibleDocuments, search, documents]);
-  const treeChildren = useMemo(() => {
-    const indexed = new Map<string | null, OpenDocument[]>();
-    for (const entry of searched) {
-      const siblings = indexed.get(entry.parentId) ?? [];
-      siblings.push(entry);
-      indexed.set(entry.parentId, siblings);
-    }
-    for (const siblings of indexed.values()) siblings.sort(compareDocuments(preferences.sortMode));
-    return indexed;
-  }, [searched, preferences.sortMode]);
-  const visibleTree = useMemo(() => {
-    const ordered: OpenDocument[] = [];
-    const visit = (parentId: string | null) => {
-      for (const entry of treeChildren.get(parentId) ?? []) {
-        ordered.push(entry);
-        if (entry.kind === "folder" && expanded.has(entry.objectId)) visit(entry.objectId);
-      }
-    };
-    visit(null);
-    return ordered;
-  }, [treeChildren, expanded]);
-  const pinned = useMemo(() => pinnedDocuments(searched, preferences.sortMode), [searched, preferences.sortMode]);
 
   const selectDocument = async (objectId: string) => {
     const currentActiveId = activeIdRef.current;
@@ -2327,28 +2299,12 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     void lock(false);
   };
 
-  const lockFunction = useRef(lock);
-  lockFunction.current = lock;
-  useEffect(() => {
-    if (!credential?.autoLockMinutes) return;
-    const timeoutMs = credential.autoLockMinutes * 60 * 1000;
-    let timer = 0;
-    let lastArm = 0;
-    const arm = () => { window.clearTimeout(timer); timer = window.setTimeout(() => void lockFunction.current(false), timeoutMs); };
-    const activity = () => {
-      const now = Date.now();
-      if (now - lastArm < 1000) return;
-      lastArm = now;
-      touchPinRefreshGrant(user.id, endpoint.id);
-      arm();
-    };
-    for (const eventName of ["pointermove", "pointerdown", "keydown", "input", "touchstart", "scroll"] as const) window.addEventListener(eventName, activity, { passive: true });
-    arm();
-    return () => {
-      window.clearTimeout(timer);
-      for (const eventName of ["pointermove", "pointerdown", "keydown", "input", "touchstart", "scroll"] as const) window.removeEventListener(eventName, activity);
-    };
-  }, [credential?.autoLockMinutes, endpoint.id, user.id]);
+  useWorkspaceAutoLock({
+    minutes: credential?.autoLockMinutes,
+    userId: user.id,
+    endpointId: endpoint.id,
+    onLock: () => void lock(false)
+  });
 
   useEffect(() => {
     const close = () => setContextMenu(null);
@@ -2357,56 +2313,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); };
   }, []);
 
-  useEffect(() => {
-    let gesture: (MobileDrawerGesture & { touchId: number }) | null = null;
-    const reset = () => {
-      gesture = null;
-      window.removeEventListener("touchmove", move);
-    };
-    const start = (event: TouchEvent) => {
-      if (
-        event.touches.length !== 1
-        || treeOpen
-        || outlineOpen
-        || settingsOpen
-        || !window.matchMedia("(max-width: 720px)").matches
-      ) {
-        reset();
-        return;
-      }
-      const touch = event.touches[0];
-      const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-      const beginning = beginMobileDrawerGesture(touch.clientX, touch.clientY, viewportWidth);
-      gesture = beginning ? { ...beginning, touchId: touch.identifier } : null;
-      if (gesture) window.addEventListener("touchmove", move, { passive: false });
-    };
-    const move = (event: TouchEvent) => {
-      if (!gesture) return;
-      const touch = [...event.touches].find((candidate) => candidate.identifier === gesture?.touchId);
-      if (!touch) {
-        reset();
-        return;
-      }
-      if (gestureHasInwardHorizontalIntent(gesture, touch.clientX, touch.clientY)) event.preventDefault();
-      const drawer = openedDrawerFromGesture(gesture, touch.clientX, touch.clientY);
-      if (drawer) {
-        setTreeOpen(drawer === "left");
-        setOutlineOpen(drawer === "right");
-        reset();
-        return;
-      }
-      if (gestureBecameVertical(gesture, touch.clientX, touch.clientY)) reset();
-    };
-    window.addEventListener("touchstart", start, { passive: true });
-    window.addEventListener("touchend", reset, { passive: true });
-    window.addEventListener("touchcancel", reset, { passive: true });
-    return () => {
-      window.removeEventListener("touchstart", start);
-      window.removeEventListener("touchmove", move);
-      window.removeEventListener("touchend", reset);
-      window.removeEventListener("touchcancel", reset);
-    };
-  }, [outlineOpen, settingsOpen, treeOpen]);
+  useMobileDrawerGestures({ treeOpen, outlineOpen, settingsOpen, setTreeOpen, setOutlineOpen });
 
   const jumpToHeading = (index: number) => {
     const item = outline[index];
@@ -2597,7 +2504,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
       {(treeOpen || outlineOpen) && <button className="drawer-scrim" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} aria-label={t("app.closeSidebars")} />}
       {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onToggleLock={toggleNoteLock} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
-      {settingsOpen && <SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} />}
+      {settingsOpen && <Suspense fallback={<div className="modal-backdrop"><section className="modal loading-shell" aria-label={t("settings.title")} aria-busy="true"><div className="spinner" /></section></div>}><SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} /></Suspense>}
       {message && <Toast notice={message} onDismiss={() => setMessage(null)} />}
     </div>
   );

@@ -67,7 +67,7 @@ pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。
 | `NODE_ENV` | 无 | pnpm 部署必须设为 `production`；Docker 镜像已内置。 |
 | `PUID` / `PGID` | `1000` | 仅用于 Docker Compose，指定容器用户与组。 |
 | `HOST` / `PORT` | `127.0.0.1` / `8787` | pnpm 部署的监听地址与端口；Compose 在容器内覆盖为 `0.0.0.0`，主机仍只暴露回环地址。 |
-| `APP_ORIGIN` | 无 | 生产必填，必须精确匹配公开源。 |
+| `APP_ORIGIN` | 无 | 生产必填，必须是精确匹配公开源的 HTTPS URL，不能含路径或末尾斜杠。 |
 | `ALLOW_REGISTRATION` | `false` | 首个管理员之后是否公开注册。 |
 | `MAX_ATTACHMENT_SIZE_MB` | `25` | 服务端限制；内置客户端仍固定为 25 MiB。 |
 | `USER_STORAGE_QUOTA_MB` | `2048` | 对象修订与附件分块的每用户配额。 |
@@ -78,9 +78,11 @@ pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。
 
 Docker 部署在 `.env` 中填写这些变量；pnpm 部署通过进程管理器注入。不要在任何环境文件中保存主密码、恢复密钥或保险库密钥。
 
+服务会在启动时严格校验端口、容量、会话时长和布尔开关；无效值会直接阻止启动，避免悄悄退回不符合预期的配置。生产模式缺少有效 `APP_ORIGIN` 时同样拒绝启动。
+
 ## 反向代理与日志
 
-以 [`deploy/nginx.conf.example`](../deploy/nginx.conf.example) 为起点，替换域名和证书路径。代理必须保留 Host 与协议；`APP_ORIGIN` 必须等于用户访问的完整 URL。`/api/sync/events` 是 SSE 长连接，应关闭代理缓冲与缓存并保留较长超时。流中断只会降低同步及时性。
+以 [`deploy/nginx.conf.example`](../deploy/nginx.conf.example) 为起点，替换域名和证书路径。代理必须保留 Host 与协议；`APP_ORIGIN` 必须等于用户访问的完整 URL。应用服务会协商压缩文本响应，对带内容哈希的静态资源发送一年不可变缓存，对应用入口和 Service Worker 要求重新验证；反向代理不应覆盖这些响应头。`/api/sync/events` 是 SSE 长连接，应关闭代理缓冲与缓存并保留较长超时。流中断只会降低同步及时性。
 
 生产日志写入 stdout，使用 JSON。Docker 部署可直接查看：
 
