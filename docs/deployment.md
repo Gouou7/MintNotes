@@ -16,7 +16,7 @@ Docker Compose 会以单个非 root 容器运行 Mint Notes，SQLite 数据保�
    cp .env.example .env
    ```
 
-2. 编辑 `.env`，至少将 `APP_ORIGIN` 改为用户实际访问的 HTTPS 源。Linux 用户还应让 `PUID`、`PGID` 与 `notes-data` 目录的所有者一致，且不得为 `0`；不要让数据目录全局可写。
+2. 保留 `.env` 中的 `APP_ORIGIN=` 和 `TRUST_PROXY=true` 即可使用标准 HTTPS 反向代理方案，无须重复填写访问域名。Linux 用户应让 `PUID`、`PGID` 与 `notes-data` 目录的所有者一致，且不得为 `0`；不要让数据目录全局可写。
 
 3. 创建数据目录、检查配置并启动：
 
@@ -27,7 +27,7 @@ Docker Compose 会以单个非 root 容器运行 Mint Notes，SQLite 数据保�
    docker compose ps
    ```
 
-Compose 默认仅在主机的 `127.0.0.1:8787` 监听。主机健康检查地址为 `http://127.0.0.1:8787/api/health`，预期返回 `{"ok":true}`。
+Compose 默认仅在主机的 `127.0.0.1:8787` 监听。主机健康检查地址为 `http://127.0.0.1:8787/api/health`，预期返回 `{"ok":true}`。按[反向代理与日志](#反向代理与日志)配置 HTTPS 域名和证书后访问应用；健康检查的 HTTP 地址不作为生产登录入口。
 
 ## pnpm 部署
 
@@ -52,7 +52,7 @@ pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。
    NODE_ENV=production \
    HOST=127.0.0.1 \
    PORT=8787 \
-   APP_ORIGIN=https://notes.example.com \
+   TRUST_PROXY=true \
    pnpm start
    ```
 
@@ -67,22 +67,26 @@ pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。
 | `NODE_ENV` | 无 | pnpm 部署必须设为 `production`；Docker 镜像已内置。 |
 | `PUID` / `PGID` | `1000` | 仅用于 Docker Compose，指定容器用户与组。 |
 | `HOST` / `PORT` | `127.0.0.1` / `8787` | pnpm 部署的监听地址与端口；Compose 在容器内覆盖为 `0.0.0.0`，主机仍只暴露回环地址。 |
-| `APP_ORIGIN` | 无 | 生产必填，必须是精确匹配公开源的 HTTPS URL，不能含路径或末尾斜杠。 |
+| `APP_ORIGIN` | 留空 | 可选固定来源限制；留空时按请求协议和 Host（含端口）自动校验同源。填写时必须是精确匹配公开源的 HTTPS URL，不能含路径或末尾斜杠。 |
 | `ALLOW_REGISTRATION` | `false` | 首个管理员之后是否公开注册。 |
 | `MAX_ATTACHMENT_SIZE_MB` | `25` | 服务端限制；内置客户端仍固定为 25 MiB。 |
 | `USER_STORAGE_QUOTA_MB` | `2048` | 对象修订与附件分块的每用户配额。 |
 | `USER_HISTORY_QUOTA_MB` | `256` | 独立历史配额。 |
 | `SESSION_TTL_HOURS` | `168` | 普通会话寿命。 |
-| `TRUST_PROXY` | `false` | 仅在受控反向代理后开启。 |
+| `TRUST_PROXY` | 标准部署为 `true` | 高级配置；Compose、`.env.example` 和上面的 pnpm 启动命令均已设置，无须修改。直接运行服务且未设置或留空时为 `false`。 |
 | `LOG_LEVEL` | `info` | `trace` 至 `fatal`、`silent`。 |
 
 Docker 部署在 `.env` 中填写这些变量；pnpm 部署通过进程管理器注入。不要在任何环境文件中保存主密码、恢复密钥或保险库密钥。
 
-服务会在启动时严格校验端口、容量、会话时长和布尔开关；无效值会直接阻止启动，避免悄悄退回不符合预期的配置。生产模式缺少有效 `APP_ORIGIN` 时同样拒绝启动。
+服务会在启动时严格校验端口、容量、会话时长和布尔开关；无效值会直接阻止启动，避免悄悄退回不符合预期的配置。`APP_ORIGIN` 未设置或留空不会阻止生产启动；显式填写无效值仍会拒绝启动。自动模式继续拒绝缺少 Origin、非 HTTPS 或跨源的状态更改请求，注册、登录、保存和同步不需要固定来源配置。
+
+`TRUST_PROXY` 决定是否信任代理转交的协议与客户端 IP，影响自动来源校验、登录限流和设备 IP 记录。标准部署默认开启，并要求代理覆盖转发头、后端端口仅供受控代理访问；不要将后端端口改为公网监听。直接本地开发保持关闭即可；旧部署若显式设置了 `false`，会保留该设置，改用自动来源校验时应与标准代理方案保持一致。
 
 ## 反向代理与日志
 
-以 [`deploy/nginx.conf.example`](../deploy/nginx.conf.example) 为起点，替换域名和证书路径。代理必须保留 Host 与协议；`APP_ORIGIN` 必须等于用户访问的完整 URL。应用服务会协商压缩文本响应，对带内容哈希的静态资源发送一年不可变缓存，对应用入口和 Service Worker 要求重新验证；反向代理不应覆盖这些响应头。`/api/sync/events` 是 SSE 长连接，应关闭代理缓冲与缓存并保留较长超时。流中断只会降低同步及时性。
+以 [`deploy/nginx.conf.example`](../deploy/nginx.conf.example) 为起点，替换所有 `notes.example.com`（包括 Host 检查）和证书路径。示例适用于单层 HTTPS 反向代理：拒绝未知域名，使用 `$http_host` 保留访问域名及非默认端口，覆盖 `X-Forwarded-Proto` 和 `X-Forwarded-For`，并清除客户端传入的 `X-Forwarded-Host`。如使用非默认 HTTPS 端口，还需调整监听端口及 HTTP 跳转目标。使用其他代理时也须满足相同要求；有 CDN 或多层代理时，应先按可信代理地址配置真实 IP 解析，不要直接信任客户端传入的转发链。
+
+`APP_ORIGIN` 留空即可自动校验访问来源；仅需固定一个来源时才填写用户访问的 HTTPS 源（含非默认端口）。应用服务会协商压缩文本响应，对带内容哈希的静态资源发送一年不可变缓存，对应用入口和 Service Worker 要求重新验证；反向代理不应覆盖这些响应头。`/api/sync/events` 是 SSE 长连接，应关闭代理缓冲与缓存并保留较长超时。流中断只会降低同步及时性。
 
 生产日志写入 stdout，使用 JSON。Docker 部署可直接查看：
 

@@ -99,7 +99,7 @@ IndexedDB `webmd-notes-v2` 保存加密对象、附件分块、历史、修订�
 
 ## Web 运行与内容安全
 
-生产环境必须使用 HTTPS、精确的 `APP_ORIGIN` 和严格 CSP。状态更改同时依赖 `SameSite=Strict` Cookie 与 Origin 检查；代理与配置方法见[部署指南](deployment.md#反向代理与日志)。
+生产环境必须使用 HTTPS 和严格 CSP。`APP_ORIGIN` 默认留空，状态更改按请求协议与 Host（含端口）校验同源，并拒绝缺少 Origin 或非 HTTPS 来源的请求；显式设置时按固定的 HTTPS 源精确匹配。状态更改同时依赖 `SameSite=Strict` Cookie 与 Origin 检查。标准部署开启代理信任，由受控代理限制可接受的域名、保留 Host 并覆盖转发头，后端仅允许受控入口访问；代理与配置方法见[部署指南](deployment.md#反向代理与日志)。
 
 原始 HTML、可执行嵌入、运行时 CDN 脚本和远程字体禁用。KaTeX 与 Mermaid 从本地包运行；JavaScript `unsafe-eval` 禁用。新增分析、远程来源、原始 HTML 或可执行嵌入前，必须重新审查 CSP 与本文的数据和信任边界。
 

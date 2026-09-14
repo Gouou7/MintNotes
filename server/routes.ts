@@ -8,6 +8,7 @@ import { z } from "zod";
 import { openDatabase, runRegistrationTransaction, type AppDatabase } from "./database.js";
 import { loadServerConfig, type ServerConfig } from "./config.js";
 import { createSessionService } from "./auth/sessionService.js";
+import { registerOriginProtection } from "./auth/originProtection.js";
 import { registerAttachmentRoutes } from "./attachments/routes.js";
 import { registerAdminRoutes } from "./admin/routes.js";
 import { registerHistoryRoutes } from "./history/routes.js";
@@ -91,22 +92,7 @@ await app.register(helmet, {
 app.decorateRequest("sessionUser", null);
 app.decorateRequest("sessionContext", null);
 
-app.addHook("onRequest", async (request, reply) => {
-  if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
-  const origin = request.headers.origin;
-  if (!origin) {
-    if (config.production || config.appOrigin) {
-      logEvent(request.log, "warn", "security.origin_rejected", { reason: "missing" });
-      return reply.code(403).send({ error: "Origin header required for state change" });
-    }
-    return;
-  }
-  const allowed = config.appOrigin ?? `${request.protocol}://${request.headers.host}`;
-  if (origin !== allowed) {
-    logEvent(request.log, "warn", "security.origin_rejected", { reason: "mismatch" });
-    return reply.code(403).send({ error: "Cross-origin state change rejected" });
-  }
-});
+registerOriginProtection(app, config);
 
 const secretField = z.string().min(20).max(1024);
 const envelopeField = z.string().min(16).max(2_000_000);

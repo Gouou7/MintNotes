@@ -24,11 +24,10 @@ services:
       USER_HISTORY_QUOTA_MB: ${USER_HISTORY_QUOTA_MB:-256}
       # Ordinary session lifetime in hours.
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
-      # Enable only behind a controlled reverse proxy that sets forwarded
-      # scheme and host headers correctly.
-      TRUST_PROXY: ${TRUST_PROXY:-false}
-      # Must exactly match the browser origin, including scheme and any
-      # non-default port; for direct local access use http://localhost:8787.
+      # Advanced: the standard HTTPS proxy overwrites forwarded headers;
+      # the loopback-only port below prevents public backend access.
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      # Optional fixed HTTPS origin. Empty enables automatic same-origin checks.
       APP_ORIGIN: ${APP_ORIGIN:-}
     ports:
       # Bind only to host loopback. Put an HTTPS reverse proxy in front for

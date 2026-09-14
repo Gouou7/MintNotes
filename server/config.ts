@@ -39,10 +39,7 @@ function booleanEnvironmentValue(name: string, value: string | undefined, fallba
 }
 
 function applicationOrigin(value: string | undefined, production: boolean): string | undefined {
-  if (!value) {
-    if (production) throw new Error("APP_ORIGIN is required in production");
-    return undefined;
-  }
+  if (!value) return undefined;
   let parsed: URL;
   try {
     parsed = new URL(value);

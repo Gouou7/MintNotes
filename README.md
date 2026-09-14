@@ -25,7 +25,7 @@ Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户�
    cp .env.example .env
    ```
 
-2. 编辑 `.env`，将 `APP_ORIGIN` 改为用户实际访问的 HTTPS 源，例如 `https://notes.example.com`。Linux 用户还应让 `PUID`、`PGID` 与 `notes-data` 目录的所有者一致。
+2. `APP_ORIGIN` 默认留空，`TRUST_PROXY` 已按标准反向代理方案预设，无需修改这两个参数。Linux 用户应让 `.env` 中的 `PUID`、`PGID` 与 `notes-data` 目录的所有者一致。
 
 3. 创建数据目录并启动服务：
 
@@ -36,7 +36,7 @@ Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户�
    docker compose ps
    ```
 
-Compose 默认仅在主机的 `127.0.0.1:8787` 监听，请通过 HTTPS 反向代理对外提供服务。第一次打开站点时创建的账户会成为管理员；恢复密钥只显示一次，请立即保存。
+Compose 默认仅在主机的 `127.0.0.1:8787` 监听，请按[反向代理示例](deploy/nginx.conf.example)配置域名和证书，通过 HTTPS 对外提供服务。第一次打开站点时创建的账户会成为管理员；恢复密钥只显示一次，请立即保存。
 
 投入使用前，建议测试一次明文导出和服务器备份。完整配置、反向代理、升级和恢复流程见[部署指南](docs/deployment.md)。
 

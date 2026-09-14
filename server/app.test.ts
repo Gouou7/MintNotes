@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseEnv } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { loadServerConfig } from "./config";
@@ -35,6 +36,75 @@ function registrationBody(username: string) {
 }
 
 describe("createApp", () => {
+  it.each(["notes.example.test", "notes.example.test:8443"])("supports registration, login and sync at %s with the unchanged deployment environment", async (host) => {
+    const directory = mkdtempSync(join(tmpdir(), "mint-notes-default-deployment-test-"));
+    temporaryDirectories.push(directory);
+    const db = openDatabase(directory);
+    const config = {
+      ...loadServerConfig({
+        ...parseEnv(readFileSync(".env.example", "utf8")),
+        NODE_ENV: "production",
+        LOG_LEVEL: "silent"
+      }),
+      dataDirectory: directory
+    };
+    expect(config.appOrigin).toBeUndefined();
+    expect(config.trustProxy).toBe(true);
+    const app = await createApp({ config, db, maintenance: false });
+    try {
+      const proxyHeaders = {
+        host,
+        origin: `https://${host}`,
+        "x-forwarded-proto": "https",
+        "x-forwarded-for": "192.0.2.10"
+      };
+      const registration = await app.inject({
+        method: "POST", url: "/api/auth/register", headers: proxyHeaders, payload: registrationBody("alpha")
+      });
+      expect(registration.statusCode).toBe(201);
+      const cookies = registration.headers["set-cookie"];
+      expect(Array.isArray(cookies)).toBe(true);
+      for (const cookie of cookies as string[]) {
+        expect(cookie).toContain("Secure");
+        expect(cookie).toContain("HttpOnly");
+        expect(cookie).toContain("SameSite=Strict");
+      }
+      const login = await app.inject({
+        method: "POST", url: "/api/auth/login", headers: proxyHeaders,
+        payload: { username: "alpha", authSecret: registrationBody("alpha").authSecret }
+      });
+      expect(login.statusCode).toBe(200);
+      expect(db.prepare("SELECT DISTINCT ip_address FROM trusted_endpoints").all()).toEqual([{ ip_address: "192.0.2.10" }]);
+      const headers = { ...proxyHeaders, cookie: cookieHeader(login.headers["set-cookie"]) };
+      const objectId = "00000000-0000-4000-8000-000000000123";
+      const payload = {
+        objectType: "note", ciphertext: "A".repeat(32), nonce: "z".repeat(24), encryptionVersion: 1,
+        baseRevision: 0, idempotencyKey: crypto.randomUUID(), deleted: false
+      };
+      expect((await app.inject({
+        method: "PUT", url: `/api/objects/${objectId}`, headers: { ...headers, origin: "https://evil.example.test" }, payload
+      })).statusCode).toBe(403);
+      expect((await app.inject({ method: "PUT", url: `/api/objects/${objectId}`, headers, payload })).statusCode).toBe(200);
+      const pull = await app.inject({ method: "GET", url: "/api/sync?since=0", headers });
+      expect(pull.statusCode).toBe(200);
+      expect(pull.json().changes).toEqual([expect.objectContaining({ objectId, ciphertext: payload.ciphertext })]);
+
+      // Separate clients behind the same proxy retain separate login rate limits.
+      const invalidLogin = (ip: string) => app.inject({
+        method: "POST", url: "/api/auth/login", headers: { ...proxyHeaders, "x-forwarded-for": ip },
+        payload: { username: "unknown", authSecret: "invalid-client-secret-000001" }
+      });
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        expect((await invalidLogin("192.0.2.11")).statusCode).toBe(401);
+      }
+      expect((await invalidLogin("192.0.2.11")).statusCode).toBe(429);
+      expect((await invalidLogin("192.0.2.12")).statusCode).toBe(401);
+    } finally {
+      await app.close();
+      db.close();
+    }
+  });
+
   it("registers security hooks and keeps object reads scoped to the authenticated account", async () => {
     const directory = mkdtempSync(join(tmpdir(), "mint-notes-app-test-"));
     temporaryDirectories.push(directory);
