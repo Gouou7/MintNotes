@@ -124,9 +124,9 @@ const messages = {
   },
   "lock.title": { en: "Notes locked", "zh-CN": "笔记已锁定", "zh-TW": "筆記已鎖定" },
   "lock.offline": {
-    en: "Offline mode · enter the local PIN to open cached notes. Master-password unlock requires the server.",
-    "zh-CN": "离线模式 · 输入本机 PIN 可打开缓存笔记；主密码解锁需要连接服务器。",
-    "zh-TW": "離線模式 · 輸入本機 PIN 可開啟快取筆記；主密碼解鎖需要連線伺服器。"
+    en: "Offline · Master password unlock is temporarily unavailable",
+    "zh-CN": "离线 · 暂无法使用主密码解锁",
+    "zh-TW": "離線 · 暫無法使用主密碼解鎖"
   },
   "lock.devicePin": { en: "Device PIN", "zh-CN": "本机 PIN", "zh-TW": "本機 PIN" },
   "lock.unlocking": { en: "Unlocking…", "zh-CN": "正在解锁…", "zh-TW": "正在解鎖…" },
@@ -142,9 +142,9 @@ const messages = {
 
   "settings.title": { en: "Settings", "zh-CN": "设置", "zh-TW": "設定" },
   "settings.localOnly": {
-    en: "Local-only mode · server account and synchronization controls will be available after the session is verified.",
-    "zh-CN": "仅本地模式 · 会话重新验证后，服务器账户和同步控制才会恢复。",
-    "zh-TW": "僅本機模式 · 工作階段重新驗證後，伺服器帳戶與同步控制才會恢復。"
+    en: "Offline · Some settings cannot be changed",
+    "zh-CN": "离线 · 某些设置无法更改",
+    "zh-TW": "離線 · 某些設定無法變更"
   },
   "settings.close": { en: "Close settings", "zh-CN": "关闭设置", "zh-TW": "關閉設定" },
   "settings.general": { en: "General", "zh-CN": "常规", "zh-TW": "一般" },
@@ -335,13 +335,15 @@ const messages = {
   },
   "settings.version": { en: "Version", "zh-CN": "版本", "zh-TW": "版本" },
   "settings.aboutDescription": {
-    en: "Mint Notes is a toy-grade project developed with AI. Its goal is to provide a note-taking experience that is lightweight to deploy, secure to store, and simple to use. It supports responsive PWA layouts and end-to-end encryption, so you can safely deploy your notes service on a remote server and edit notes using the Markdown syntax you know.",
-    "zh-CN": "Mint Notes 是一款使用 AI 开发的玩具级项目。目标是提供轻量部署、安全储存、简单使用的笔记体验。本项目支持 PWA 自适应布局，采用端到端加密，你可以安全地将笔记服务部署在远程服务器，并使用你熟悉的 Markdown 语法进行笔记编辑。",
-    "zh-TW": "Mint Notes 是一款使用 AI 開發的玩具級專案。目標是提供輕量部署、安全儲存、簡單使用的筆記體驗。本專案支援 PWA 自適應版面配置，採用端對端加密，你可以安全地將筆記服務部署在遠端伺服器，並使用你熟悉的 Markdown 語法進行筆記編輯。"
+    en: "Mint Notes is a lightweight, self-hosted Markdown notes app with multi-user support, offline PWA editing, and cross-device sync.",
+    "zh-CN": "Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户、PWA 离线编辑和跨设备同步。",
+    "zh-TW": "Mint Notes 是一款自託管的輕量 Markdown 筆記應用程式，支援多使用者、PWA 離線編輯和跨裝置同步。"
   },
   "settings.acknowledgements": { en: "Acknowledgements", "zh-CN": "致谢", "zh-TW": "致謝" },
-  "settings.editorCoreOrigin": { en: "Editor core origin", "zh-CN": "编辑器核心来源", "zh-TW": "編輯器核心來源" },
-  "settings.iconLibrary": { en: "Icon library", "zh-CN": "图标包", "zh-TW": "圖示套件" },
+  "settings.editorCoreOrigin": { en: "Upstream project for the editor core", "zh-CN": "编辑器核心的上游项目", "zh-TW": "編輯器核心的上游專案" },
+  "settings.mathFormulaRendering": { en: "Used to render mathematical formulas", "zh-CN": "用于渲染数学公式", "zh-TW": "用於算繪數學公式" },
+  "settings.diagramRendering": { en: "Used to render diagrams", "zh-CN": "用于渲染图表", "zh-TW": "用於算繪圖表" },
+  "settings.iconLibrary": { en: "Used for interface icons", "zh-CN": "用于界面图标", "zh-TW": "用於介面圖示" },
 
   "notice.loadDevicesFailed": { en: "Unable to load device sessions", "zh-CN": "无法加载设备会话", "zh-TW": "無法載入裝置工作階段" },
   "notice.loadTrashRetentionFailed": { en: "Unable to load trash retention settings", "zh-CN": "无法加载回收站保留设置", "zh-TW": "無法載入垃圾桶保留設定" },

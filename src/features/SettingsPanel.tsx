@@ -675,6 +675,8 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
             <p className="settings-help">{t("settings.aboutHelp")}</p>
             <ul className="about-credits">
               <li><a href="https://github.com/Yuyz0112/typora-web" target="_blank" rel="noreferrer">typora-web</a><span>{t("settings.editorCoreOrigin")}</span></li>
+              <li><a href="https://katex.org/" target="_blank" rel="noreferrer">KaTeX</a><span>{t("settings.mathFormulaRendering")}</span></li>
+              <li><a href="https://mermaid.js.org/" target="_blank" rel="noreferrer">Mermaid</a><span>{t("settings.diagramRendering")}</span></li>
               <li><a href="https://lucide.dev" target="_blank" rel="noreferrer">Lucide React</a><span>{t("settings.iconLibrary")}</span></li>
             </ul>
           </div>}

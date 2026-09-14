@@ -523,14 +523,21 @@ describe("SettingsPanel", () => {
     const container = await renderSettings();
     await act(async () => button(container, "关于").click());
     expect(container.querySelector(".about-product")?.textContent).toContain(`Mint Notes版本 ${APP_VERSION}`);
-    expect(container.querySelector(".about-introduction")?.textContent).toContain("Mint Notes 是一款使用 AI 开发的玩具级项目");
+    expect(container.querySelector(".about-introduction")?.textContent).toBe("Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户、PWA 离线编辑和跨设备同步。");
     expect(container.querySelector(".about-feedback")).toBeNull();
     expect(container.textContent).not.toContain("如果你发现 Bug 或者有功能建议");
     expect(container.textContent).toContain("致谢");
-    expect(container.querySelector(".about-credits")?.textContent).toContain("typora-web编辑器核心来源");
-    expect(container.querySelector(".about-credits")?.textContent).toContain("Lucide React图标包");
+    expect([...container.querySelectorAll(".about-credits li")].map((item) => item.textContent)).toEqual([
+      "typora-web编辑器核心的上游项目",
+      "KaTeX用于渲染数学公式",
+      "Mermaid用于渲染图表",
+      "Lucide React用于界面图标"
+    ]);
+    expect(container.querySelector(".about-credits")?.textContent).not.toContain("许可证");
     expect(container.querySelector(".about-list")).toBeNull();
     expect(container.querySelector("a[href='https://github.com/Yuyz0112/typora-web']")).toBeTruthy();
+    expect(container.querySelector("a[href='https://katex.org/']")).toBeTruthy();
+    expect(container.querySelector("a[href='https://mermaid.js.org/']")).toBeTruthy();
     expect(container.querySelector("a[href='https://lucide.dev']")).toBeTruthy();
   });
 
