@@ -20,6 +20,7 @@ import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
 import { materializeInlineFootnotesForReading } from "./inlineFootnotes";
 import { remarkReadingHighlight } from "./reading-highlight";
 import { remarkReadingListSpacing } from "./reading-list-spacing";
+import { remarkReadingSetext } from "./reading-setext";
 import { commentSourceRanges } from "./extensions/comment";
 import { displayCodeLanguage } from "./core/fenced-code-source";
 import { navigateToDocumentFragment } from "./core/fragment-navigation";
@@ -140,6 +141,7 @@ export function ReadingEditor({
       >{markdown}</span></pre> : <><FrontmatterProperties markdown={markdown} />
       <ReactMarkdown
         remarkPlugins={[
+          remarkReadingSetext,
           remarkMath,
           remarkGfm,
           remarkReadingHighlight,

@@ -57,7 +57,7 @@ describe("canonical source position map", () => {
     }
   });
 
-  it.each(["title\n- ", "- title\n    -- ", "- title\n    ===\n    - "])(
+  it.each(["title\n--- ", "- title\n    --- ", "- title\n    ===\n    - "])(
     "retains genuine Setext headings for %j",
     (source) => {
       const headings: string[] = [];
@@ -66,6 +66,19 @@ describe("canonical source position map", () => {
       });
       expect(headings).toHaveLength(1);
       expect(headings[0]).toContain("title");
+    },
+  );
+
+  it.each(["title\n-   ", "title\n= ", "- title\n    -- \t", "> title\n> = ", "title\r\n== \t"])(
+    "keeps short underlines out of headings and preserves source boundaries for %j",
+    (source) => {
+      const doc = parse(source);
+      doc.descendants((node) => { expect(node.type.name).not.toBe("heading"); });
+      const map = SourcePositionMap.fromDocument(doc, source);
+      for (let offset = 0; offset <= source.length; offset++) {
+        expect(map.hasExactSourceBoundary(offset)).toBe(true);
+        expect(map.documentToSource(map.sourceToDocument(offset))).toBe(offset);
+      }
     },
   );
 

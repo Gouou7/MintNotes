@@ -29,6 +29,25 @@ function setup(source: string, options: EditorOptions = {}) {
 }
 
 describe("editor architecture acceptance", () => {
+  it.each(["-", "="])("reparses a padded Setext %s underline at three markers and undoes exactly", (marker) => {
+    const source = `Title\n${marker.repeat(2)}   `;
+    const offset = source.indexOf("\n") + 3;
+    const { editor, host, onChange, input, undo } = setup(source);
+    expect(host.querySelector("h1, h2")).toBeNull();
+    editor.setSelectionOffset(offset);
+    expect(editor.getSelectionOffset()).toBe(offset);
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
+    input(marker);
+    expect(host.querySelector(marker === "=" ? "h1" : "h2")).not.toBeNull();
+    expect(editor.getMarkdown()).toBe(`Title\n${marker.repeat(3)}   `);
+    expect(editor.getSelectionOffset()).toBe(offset + 1);
+    undo();
+    expect(host.querySelector("h1, h2")).toBeNull();
+    expect(editor.getMarkdown()).toBe(source);
+    expect(editor.getSelectionOffset()).toBe(offset);
+  });
+
   it.each([
     ["> [!note] \n> body\n> tail", ["> ", "[!note]", "> ", "> "]],
     ["> [!tip]- Custom title\n> body", ["> ", "[!tip]-", "> "]],

@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { buildOutline, findOutlineHeading } from "./outline";
 
 describe("buildOutline", () => {
+  it.each(["", " ", "   ", "\t", " \t "])("requires three Setext markers with suffix %j", (suffix) => {
+    const markdown = ["-", "--", "=", "==", "---", "===", "----", "===="]
+      .map((marker) => `Title ${marker}\n${marker}${suffix}`).join("\n\n");
+    expect(buildOutline(markdown).map(({ text, level }) => ({ text, level }))).toEqual([
+      { text: "Title ---", level: 2 },
+      { text: "Title ===", level: 1 },
+      { text: "Title ----", level: 2 },
+      { text: "Title ====", level: 1 },
+    ]);
+  });
+
   it("extracts heading levels and removes common inline markers", () => {
     expect(buildOutline("# Title\n\n## **Bold** and [link](https://example.com)\n### `Code`"))
       .toEqual([

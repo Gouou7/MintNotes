@@ -156,7 +156,8 @@ describe("parser: block nodes", () => {
     },
   );
 
-  test.each(["Title\n=", "Title\n==", "Title\n-", "Title\n--"])(
+  test.each(["=", "==", "-", "--"].flatMap((marker) =>
+    ["", " ", "   ", "\t", " \t "].map((suffix) => `Title\n${marker}${suffix}`)))(
     "keeps short Setext candidate %j literal until the third underline",
     (markdown) => {
       const doc = parseMarkdown(markdown);

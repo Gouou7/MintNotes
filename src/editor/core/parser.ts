@@ -20,6 +20,7 @@ import {
 import { parseFencedCodeSource } from "./fenced-code-source";
 import { LIVE_SYNTAX_EDITING, LIVE_SYNTAX_RENDERING } from "./live-syntax-state";
 import { schema } from "./schema";
+import { setextHeadingLevel, strictSetextHeadings } from "./setext-heading";
 import {
   SOURCE_FINGERPRINT_ATTR,
   SOURCE_FROM_ATTR,
@@ -30,6 +31,7 @@ import { sourceFingerprint } from "./source-fingerprint";
 import { projectTableSource } from "./table-source";
 
 const md: MarkdownIt = new MarkdownIt("commonmark", { html: false });
+md.use(strictSetextHeadings);
 for (const plugin of collectMdItPlugins()) md.use(plugin);
 const parserSourceProtectors = collectParserSourceProtectors();
 
@@ -247,7 +249,7 @@ function paragraphEndLine(state: StateBlock, startLine: number, endLine: number,
     if (isNestedListItem(state, nextLine)) break;
     if (stopAtSetext && state.sCount[nextLine]! >= state.blkIndent) {
       const text = state.src.slice(state.bMarks[nextLine]! + state.tShift[nextLine]!, state.eMarks[nextLine]);
-      if (/^(?:=+|-+)[\t ]*$/.test(text)) break;
+      if (setextHeadingLevel(text) !== null) break;
     }
     if (terminatorRules.some((rule) => rule(state, nextLine, endLine, true))) break;
   }

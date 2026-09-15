@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import type { OutlineItem } from "../types";
 import { parseFrontmatter } from "./frontmatter";
+import { strictSetextHeadings } from "./core/setext-heading";
 
 interface MarkdownLine {
   text: string;
@@ -19,7 +20,7 @@ function markdownLines(markdown: string): MarkdownLine[] {
   return lines;
 }
 
-const outlineParser = new MarkdownIt({ html: false });
+const outlineParser = new MarkdownIt({ html: false }).use(strictSetextHeadings);
 
 function headingText(source: string): string {
   return source

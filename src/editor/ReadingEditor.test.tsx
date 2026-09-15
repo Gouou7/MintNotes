@@ -15,6 +15,38 @@ afterEach(() => {
 });
 
 describe("ReadingEditor", () => {
+  it.each(["", " ", "   ", "\t", " \t "])("requires three Setext markers with suffix %j", (suffix) => {
+    const markdown = ["-", "--", "=", "==", "---", "===", "----", "===="]
+      .map((marker) => `Title ${marker}\n${marker}${suffix}`).join("\n\n");
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadingEditor markdown={markdown} /></I18nProvider>
+    );
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    expect([...doc.querySelectorAll("h1, h2")].map((node) => [node.tagName, node.textContent])).toEqual([
+      ["H2", "Title ---"], ["H1", "Title ==="], ["H2", "Title ----"], ["H1", "Title ===="],
+    ]);
+    expect([...doc.querySelectorAll("p")].map((node) => node.textContent?.trim())).toEqual([
+      "Title -\n-", "Title --\n--", "Title =\n=", "Title ==\n==",
+    ]);
+  });
+
+  it.each([
+    ["> Title\n> = \t", []],
+    ["- Title\n  -- \t", []],
+    ["> Title\n> === \t", [["H1", "Title"]]],
+    ["- Title\n  --- \t", [["H2", "Title"]]],
+    ["Title\n== \ncontinued\n===", [["H1", "Title\n== \ncontinued"]]],
+    ["Title\n-=-", []],
+    ["Title\n- - -", []],
+    ["```md\nTitle\n= \n```", []],
+  ] as const)("preserves container and paragraph parsing for %j", (markdown, headings) => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadingEditor markdown={markdown} /></I18nProvider>
+    );
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    expect([...doc.querySelectorAll("h1, h2")].map((node) => [node.tagName, node.textContent])).toEqual(headings);
+  });
+
   it("enables visual code wrapping by default without changing code text", () => {
     const source = "const_very_long_authored_line_without_breaks_1234567890";
     const markdown = `\`\`\`ts\n${source}\n\`\`\``;
