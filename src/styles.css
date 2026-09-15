@@ -26,9 +26,9 @@
   --highlight-text: #4a3d00;
   --document-divider: #deddd8;
   --glass-blur: 12px;
-  --glass-opacity: 92%;
-  --glass-muted: #66655e;
-  --glass-warning-text: #805900;
+  --glass-opacity: 80%;
+  --glass-muted: #4f4e48;
+  --glass-warning-text: #674600;
   --danger: #ae3030;
   --danger-soft: #fff0f0;
   --warning-bg: #fff8df;
@@ -67,9 +67,9 @@
   --highlight-bg: #d8bf5a;
   --highlight-text: #211d09;
   --document-divider: #30302d;
-  --glass-opacity: 90%;
-  --glass-muted: #b2b1aa;
-  --glass-warning-text: #e3b866;
+  --glass-opacity: 80%;
+  --glass-muted: #d0cfc9;
+  --glass-warning-text: #edc779;
   --danger: #ff8b8b;
   --danger-soft: #492424;
   --warning-bg: #413719;
@@ -90,7 +90,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .tree-pane, .outline-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--sidebar); border-color: var(--border); z-index: 20; color: var(--text); }
 .tree-pane { grid-column: 1; }
 .pane-resizer-left { grid-column: 2; }
-.note-pane { grid-column: 3; }
+.note-pane { --editor-inset-top: var(--note-toolbar-height); --editor-inset-bottom: var(--note-status-height); position: relative; grid-column: 3; min-width: 0; min-height: 0; width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); }
+.note-pane-top, .note-pane-bottom { position: absolute; right: 0; left: 0; z-index: 5; }
+.note-pane-top { top: 0; }
+.note-pane-bottom { bottom: 0; }
 .pane-resizer-right { grid-column: 4; }
 .outline-pane { grid-column: 5; }
 .pane-resizer { position: relative; min-width: 0; cursor: col-resize; touch-action: none; background: var(--border); z-index: 25; transition: background .12s ease, box-shadow .12s ease; }

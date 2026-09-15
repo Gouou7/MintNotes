@@ -41,4 +41,9 @@ describe("installed PWA shell", () => {
   it("places transient notifications below the top toolbar", () => {
     expect(styles).toMatch(/\.toast-notice\s*\{[^}]*top: calc\(73px \+ var\(--safe-area-top\)\)/s);
   });
+
+  it("keeps the editor pane constrained so the document owns vertical scrolling", () => {
+    expect(styles).toMatch(/\.note-pane\s*\{[^}]*height: 100%;[^}]*overflow: hidden;[^}]*display: flex;[^}]*flex-direction: column;/s);
+    expect(styles).toMatch(/\.editor-area\s*\{[^}]*flex: 1;[^}]*overflow: auto;/s);
+  });
 });
