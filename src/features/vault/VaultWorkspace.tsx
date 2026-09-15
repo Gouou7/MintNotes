@@ -106,6 +106,7 @@ import type {
 } from "../../types";
 import { ContextMenu, draggedDocumentIds, TreeDocumentIcon, TreeLevel, type TreeDropTarget } from "./VaultTree";
 import { EmptyEditor, NoteToolbar } from "./NoteToolbar";
+import { NotePaneLayout } from "./NotePaneLayout";
 import { useObjectPersistence } from "./useObjectPersistence";
 import { useDocumentSaveQueue } from "./useDocumentSaveQueue";
 import { useDocumentNavigation } from "./useDocumentNavigation";
@@ -2398,7 +2399,9 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
       <PaneResizer label={t("app.resizeLeft")} side="left" value={preferences.treeWidth} min={TREE_WIDTH_MIN} max={TREE_WIDTH_MAX} onResize={(treeWidth) => setPreferences((current) => ({ ...current, treeWidth }))} />
 
-      <main className="note-pane">
+      <NotePaneLayout
+        editorArea={documentNavigation.editorArea}
+        toolbar={<>
         <NoteToolbar
           titleInput={titleInput}
           active={Boolean(activeDocument)}
@@ -2432,7 +2435,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
               if (latest) patchDocument(noteId, { markdown: latest.markdown + attachmentMarkdown(attachment.objectId, attachment.originalName) }, 0);
             }).catch((error) => showMessage(translateError(error, t, "notice.attachmentSaveFailed"), "critical"));
           }} />
-        {historyPreview && <div className="history-preview-banner">
+        </>}
+        historyBanner={historyPreview && <div className="history-preview-banner">
           <span><AppIcon icon={HistoryIcon} size={16} /><strong>{t("history.preview")}</strong><small>{formatNoteTime(historyPreview.item.capturedAt)}</small></span>
           <div>
             <button onClick={() => setHistoryPreview(null)}>{t("history.exitPreview")}</button>
@@ -2441,7 +2445,14 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
             <button className="danger" disabled={!canDeleteHistory(historyPreview.item)} onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={historyPreview.item.protected ? t("history.protectedDeleteHint") : t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} size={14} /></button>
           </div>
         </div>}
-        <div className="editor-area" ref={documentNavigation.editorArea}>
+        status={<footer className="status-bar">
+          <span className="status-meta" title={activeDocument ? `${t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })} · ${t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })} · ${statusDetail}` : statusDetail}>
+            {activeDocument && <span className="status-note-time"><span>{t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })}</span><span aria-hidden="true">·</span><span>{t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })}</span>{statusLabel && <span aria-hidden="true">·</span>}</span>}
+            {statusLabel && <span className={`status-${syncStatus.visible}`}>{statusLabel}</span>}
+          </span>
+          <span className="status-count" title={t("app.countHelp")}>{t("app.count", { words: statistics.words, characters: statistics.characters })}</span>
+        </footer>}
+      >
           {activeDocument ? historyPreview
             ? <ReadingEditor markdown={historyPreview.payload.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
             : <MarkdownEditor ref={documentNavigation.editorSurface} key={`${editorSessionId}:${effectiveMode}`} markdown={activeDocument.markdown} mode={effectiveMode} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={(markdown) => {
@@ -2458,15 +2469,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
               }
             }} />
             : <EmptyEditor />}
-        </div>
-        <footer className="status-bar">
-          <span className="status-meta" title={activeDocument ? `${t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })} · ${t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })} · ${statusDetail}` : statusDetail}>
-            {activeDocument && <span className="status-note-time"><span>{t("app.createdAt", { date: formatNoteTime(activeDocument.createdAt) })}</span><span aria-hidden="true">·</span><span>{t("app.updatedAt", { date: formatNoteTime(activeDocument.updatedAt) })}</span>{statusLabel && <span aria-hidden="true">·</span>}</span>}
-            {statusLabel && <span className={`status-${syncStatus.visible}`}>{statusLabel}</span>}
-          </span>
-          <span className="status-count" title={t("app.countHelp")}>{t("app.count", { words: statistics.words, characters: statistics.characters })}</span>
-        </footer>
-      </main>
+      </NotePaneLayout>
 
       <PaneResizer label={t("app.resizeRight")} side="right" value={preferences.outlineWidth} min={OUTLINE_WIDTH_MIN} max={OUTLINE_WIDTH_MAX} onResize={(outlineWidth) => setPreferences((current) => ({ ...current, outlineWidth }))} />
 

@@ -22,6 +22,7 @@ import { I18nProvider, useI18n } from "../i18n";
 import type { WorkspaceEditorMode } from "../types";
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter } from "./frontmatter";
+import { editorScrollViewport } from "./scrollViewport";
 import { ReadingEditor } from "./ReadingEditor";
 import { renderMathInto, renderMermaidInto } from "./richRenderers";
 
@@ -69,6 +70,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
     if (!hostRef.current) return;
     const editor = createEditor(hostRef.current, {
       initialContent: markdown,
+      getScrollViewport: () => {
+        const area = hostRef.current?.closest<HTMLElement>(".editor-area");
+        return area ? editorScrollViewport(area) : null;
+      },
       renderControlIcon: (name) => {
         const icons = { image: ImageIcon, "image-unavailable": ImageOff, "table-size": TableProperties, "table-delete": Trash2, "align-left": AlignLeft, "align-center": AlignCenter, "align-right": AlignRight };
         const container = document.createElement("span");

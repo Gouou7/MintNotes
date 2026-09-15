@@ -6,6 +6,7 @@
 
 export { createEditor } from "./editor-api";
 export type { Editor, EditorOptions } from "./editor-api";
+export type { EditorScrollViewport } from "./scroll-viewport";
 export type {
   BlockPresentationMatch,
   BlockPresentationSearchContext,

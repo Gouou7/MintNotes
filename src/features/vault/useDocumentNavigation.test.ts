@@ -65,6 +65,24 @@ describe("document navigation", () => {
       .toEqual(["One", "## Two", "Three"]);
   });
 
+  it("positions headings inside the visible area below chrome and a resized history banner", () => {
+    const scroller = document.createElement("div");
+    document.body.append(scroller);
+    const heading = document.createElement("h2");
+    const scrollTo = vi.fn();
+    scroller.scrollTo = scrollTo;
+    scroller.style.scrollPaddingTop = "105px";
+    scroller.style.scrollPaddingBottom = "28px";
+    dimensions(scroller, { scrollTop: 500, scrollHeight: 3000, clientHeight: 600 });
+    scroller.getBoundingClientRect = () => ({ top: 100 } as DOMRect);
+    heading.getBoundingClientRect = () => ({ top: 900 } as DOMRect);
+    scrollElementToViewportPosition(scroller, heading);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1008.2, behavior: "smooth" });
+    scroller.style.scrollPaddingTop = "153px";
+    scrollElementToViewportPosition(scroller, heading);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 979.4, behavior: "smooth" });
+  });
+
   it("estimates the source heading position around the same forty-percent band", () => {
     const textarea = document.createElement("textarea");
     textarea.value = Array.from({ length: 101 }, (_, index) => `line ${index}`).join("\n");

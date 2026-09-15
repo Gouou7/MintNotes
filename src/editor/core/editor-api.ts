@@ -27,6 +27,8 @@ import {
 } from "./live-syntax-state";
 import { SourcePositionMap } from "./source-position-map";
 import { sourceFingerprint } from "./source-fingerprint";
+import { revealScrollRect, type EditorScrollViewport } from "./scroll-viewport";
+import { textareaCaretRect } from "./textarea-caret";
 import {
   CanonicalSource,
   SOURCE_FINGERPRINT_ATTR,
@@ -54,6 +56,8 @@ import {
 } from "./source-navigation";
 
 export interface EditorOptions {
+  /** Optional consumer-owned scroll surface with obscured top/bottom edges. */
+  getScrollViewport?: () => EditorScrollViewport | null;
   renderControlIcon?: RenderControlIcon;
   /** Initial markdown the editor opens with. Defaults to empty. */
   initialContent?: string;
@@ -122,6 +126,20 @@ export function createEditor(
   let inSource = false;
   let pendingSourceMode: boolean | null = null;
   let sourceComposing = false;
+  let sourceScrollFrame: number | null = null;
+
+  function scheduleSourceReveal(): void {
+    if (!options.getScrollViewport || sourceScrollFrame !== null || sourceComposing) return;
+    sourceScrollFrame = requestAnimationFrame(() => {
+      sourceScrollFrame = null;
+      if (!inSource || sourceComposing) return;
+      const viewport = options.getScrollViewport?.();
+      if (!viewport) return;
+      const head = textareaSelection(sourceTextarea).head;
+      const rect = textareaCaretRect(sourceTextarea, head);
+      if (rect) revealScrollRect(viewport, rect);
+    });
+  }
   let sourceInputSelection: SourceSelection = { anchor: 0, head: 0 };
   let canonicalMarkdown = options.initialContent ?? "";
   type SourceHistoryEntry = { source: string; selection: { anchor: number; head: number } };
@@ -884,6 +902,7 @@ export function createEditor(
       sourceInputSelection = selection;
       autoSizeSource();
     } else reparsePresentation(view.state, selection, true, scrollToSelection);
+    if (inSource && scrollToSelection) scheduleSourceReveal();
   }
 
   function sourceSelectionForState(state: EditorState): { anchor: number; head: number } {
@@ -1068,6 +1087,14 @@ export function createEditor(
     const state = base.apply(base.tr.setSelection(TextSelection.atStart(doc)));
     const v: EditorView = new EditorView(editorHost, {
       state,
+      handleScrollToSelection(current) {
+        const viewport = options.getScrollViewport?.();
+        if (!viewport) return false;
+        if (current.composing || pendingComposition) return true;
+        const rect = current.coordsAtPos(current.state.selection.head);
+        if (rect.bottom > rect.top) revealScrollRect(viewport, rect);
+        return true;
+      },
       dispatchTransaction(tr) {
         if (pendingComposition && tr.getMeta(INLINE_PRESENTATION_META) && !tr.docChanged && !tr.selectionSet) {
           presentationRefreshPending = true;
@@ -1441,6 +1468,7 @@ export function createEditor(
     const clamped = Math.max(0, Math.min(offset, canonicalMarkdown.length));
     if (inSource) {
       selectSourceTextarea({ anchor: clamped, head: clamped });
+      scheduleSourceReveal();
       return;
     }
     enterSourceEditingAtBoundary(clamped, { scroll: true });
@@ -1521,11 +1549,17 @@ export function createEditor(
     }
     sourceInputSelection = sourceTextareaSelection();
     autoSizeSource();
+    scheduleSourceReveal();
   };
   sourceTextarea.addEventListener("beforeinput", () => {
     if (!sourceComposing) sourceInputSelection = sourceTextareaSelection();
   });
   sourceTextarea.addEventListener("input", () => { if (!sourceComposing) commitSourceInput(); });
+  sourceTextarea.addEventListener("keyup", (event) => {
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
+      scheduleSourceReveal();
+    }
+  });
   sourceTextarea.addEventListener("compositionstart", () => {
     sourceInputSelection = sourceTextareaSelection();
     sourceComposing = true;
@@ -1640,6 +1674,7 @@ export function createEditor(
       if (pendingComposition) finalizeComposition();
       if (compositionFinalizeTimer !== null) clearTimeout(compositionFinalizeTimer);
       if (pointerSelectionCommitTimer !== null) clearTimeout(pointerSelectionCommitTimer);
+      if (sourceScrollFrame !== null) cancelAnimationFrame(sourceScrollFrame);
       pointerSelectionActive = false;
       window.removeEventListener("keydown", onKey);
       blockResizeObserver?.disconnect();

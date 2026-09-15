@@ -97,11 +97,11 @@ export function HistoryPanel({
         }}>
           {renamingId === item.historyId
             ? <div className="history-select history-renaming">
-                <span className="history-row-icon"><AppIcon icon={item.captureKind === "restore-safety" ? RotateCcw : Clock3} size={15} />{item.protected && <ProtectionBadge label={t("history.protectedBadge")} />}</span>
+                <span className="history-row-icon"><AppIcon icon={item.captureKind === "restore-safety" ? RotateCcw : Clock3} size={15} />{item.protected && <ProtectionBadge icon={ShieldCheck} label={t("history.protectedBadge")} />}</span>
                 <TreeRenameInput className="history-rename-input" initialValue={item.name || formatDateTime(item.capturedAt)} label={t("history.rename")} onCommit={(name) => onRename(item, name)} onCancel={onRenameCancel} />
               </div>
             : <button className="history-select" onClick={() => onSelect(item)}>
-                <span className="history-row-icon"><AppIcon icon={item.captureKind === "restore-safety" ? RotateCcw : Clock3} size={15} />{item.protected && <ProtectionBadge label={t("history.protectedBadge")} />}</span>
+                <span className="history-row-icon"><AppIcon icon={item.captureKind === "restore-safety" ? RotateCcw : Clock3} size={15} />{item.protected && <ProtectionBadge icon={ShieldCheck} label={t("history.protectedBadge")} />}</span>
                 <span><strong>{item.name || formatDateTime(item.capturedAt)}</strong><small>{formatDateTime(item.capturedAt)} · {kindLabel(item.captureKind, t)}{item.pending ? ` · ${t("history.pending")}` : ""}</small></span>
               </button>}
           <button className="history-actions" onClick={(event) => {

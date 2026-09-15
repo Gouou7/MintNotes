@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import type { MarkdownEditorHandle } from "../../editor/MarkdownEditor";
 import type { OutlineItem, WorkspaceEditorMode } from "../../types";
+import { editorScrollViewport } from "../../editor/scrollViewport";
+import { visibleScrollBounds, type EditorScrollViewport } from "../../editor/core/scroll-viewport";
+import { textareaCaretRect } from "../../editor/core/textarea-caret";
 
 export const HEADING_VIEWPORT_POSITION = 0.4;
 
@@ -32,9 +35,11 @@ export function scrollElementToViewportPosition(
   const scrollerRect = scroller.getBoundingClientRect();
   const targetRect = target.getBoundingClientRect();
   const targetTop = scroller.scrollTop + targetRect.top - scrollerRect.top;
+  const viewport = editorScrollViewport(scroller);
+  const bounds = visibleScrollBounds(viewport);
   const maximum = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   scroller.scrollTo({
-    top: clamp(targetTop - scroller.clientHeight * HEADING_VIEWPORT_POSITION, 0, maximum),
+    top: clamp(targetTop - viewport.top - bounds.height * HEADING_VIEWPORT_POSITION, 0, maximum),
     behavior
   });
 }
@@ -47,7 +52,15 @@ export function renderedHeadingElements(editorArea: HTMLElement): HTMLElement[] 
     .filter((element): element is HTMLElement => element instanceof HTMLElement && element.matches(RENDERED_HEADING_SELECTOR));
 }
 
-export function sourceHeadingScrollTop(textarea: HTMLTextAreaElement, sourceLine: number): number {
+export function sourceHeadingScrollTop(textarea: HTMLTextAreaElement, sourceLine: number, viewport?: EditorScrollViewport): number {
+  if (viewport) {
+    const lines = textarea.value.split("\n");
+    const offset = lines.slice(0, Math.max(0, sourceLine)).reduce((sum, line) => sum + line.length + 1, 0);
+    const caret = textareaCaretRect(textarea, offset);
+    const bounds = visibleScrollBounds(viewport);
+    if (caret) return clamp(viewport.element.scrollTop + caret.top - bounds.top - bounds.height * HEADING_VIEWPORT_POSITION,
+      0, Math.max(0, viewport.element.scrollHeight - viewport.element.clientHeight));
+  }
   const lineCount = Math.max(1, textarea.value.split(/\r\n|\r|\n/).length);
   const lineProgress = lineCount > 1 ? clamp(sourceLine / (lineCount - 1), 0, 1) : 0;
   const estimatedHeadingTop = textarea.scrollHeight * lineProgress;
@@ -106,10 +119,11 @@ export function useDocumentNavigation(mode: WorkspaceEditorMode): DocumentNaviga
   const jumpToHeading = useCallback((item: OutlineItem, behavior: ScrollBehavior = "smooth"): boolean => {
     const area = editorArea.current;
     if (!area) return false;
-    const sourceEditor = area.querySelector<HTMLTextAreaElement>(".source-editor");
-    if (sourceEditor) {
+    const sourceEditor = area.querySelector<HTMLTextAreaElement>(".typora-web-source:not([hidden]), .source-editor");
+    if (modeRef.current === "source" && sourceEditor) {
       editorSurface.current?.setSelectionOffset(item.sourceOffset);
-      sourceEditor.scrollTo({ top: sourceHeadingScrollTop(sourceEditor, item.sourceLine), behavior });
+      const scroller = documentScrollElement(area);
+      scroller.scrollTo({ top: sourceHeadingScrollTop(sourceEditor, item.sourceLine, editorScrollViewport(scroller)), behavior });
       return true;
     }
 

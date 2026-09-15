@@ -52,9 +52,12 @@ async function renderHistory(overrides: Partial<Parameters<typeof HistoryPanel>[
 }
 
 describe("HistoryPanel", () => {
-  it("reuses the protected badge and disables deletion in the three-action menu", async () => {
+  it("uses a shield for the protected badge and disables deletion in the three-action menu", async () => {
     const { container, props } = await renderHistory();
-    expect(container.querySelector(".protection-badge")?.getAttribute("title")).toBe("Protected history");
+    const badge = container.querySelector(".protection-badge");
+    expect(badge?.getAttribute("title")).toBe("Protected history");
+    expect(badge?.querySelector(".lucide-shield-check")).not.toBeNull();
+    expect(badge?.querySelector(".lucide-lock-keyhole")).toBeNull();
     await act(async () => (container.querySelector("button[aria-label='History actions']") as HTMLButtonElement).click());
     const menuButtons = [...container.querySelectorAll(".history-context-menu button")] as HTMLButtonElement[];
     expect(menuButtons.map((button) => button.textContent?.trim())).toEqual(["Rename", "Remove protection", "Delete this version"]);
