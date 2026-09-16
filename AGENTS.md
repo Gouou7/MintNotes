@@ -19,7 +19,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `scripts/`、`.github/workflows/` | 集成检查、版本校验与镜像发布 |
 | `Dockerfile`、`docker-compose.yml`、`deploy/`、`.env.example` | 容器、反向代理示例与配置模板 |
 | `public/` | 随应用发布的静态资源与第三方许可声明 |
-| `docs/` | 使用、系统设计、编辑器原则与自托管文档 |
+| `docs/` | 系统设计、编辑器原则与自托管文档 |
 
 测试与实现相邻，命名为 `*.test.ts`／`*.test.tsx`；编辑器还保留 `core/upstream-tests/` 与 `core/specs/`。`dist/`、`server-dist/` 是构建产物；`data/`、`notes-data/`、`backups/` 是运行数据，不作为源码维护或提交。
 
@@ -39,7 +39,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 
 开发端口默认是 Vite `5173`、API `8787`，Vite 代理 `/api`。开发数据库位于 `data/notes.sqlite`，由服务启动时初始化。当前没有独立的 lint／format 脚本，不要假定 `pnpm lint` 或 `pnpm format` 可用。
 
-发布版本取自稳定 Git 标签 `vMAJOR.MINOR.PATCH`，由 `scripts/release-version.mjs` 校验并通过 `APP_VERSION` 注入构建。不要把 `package.json` 的 `0.0.0` 改成发布版本，也不要移动已公开标签；完整流程见 [README.md](README.md#开发与发布)。
+发布版本取自稳定 Git 标签 `vMAJOR.MINOR.PATCH`，由 `scripts/release-version.mjs` 校验并通过 `APP_VERSION` 注入构建。不要把 `package.json` 的 `0.0.0` 改成发布版本，也不要移动已公开标签；完整流程见[部署指南](docs/deployment.md#发布镜像)。
 
 ## 文档路由
 
@@ -47,15 +47,15 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 
 | 任务 | 文档与维护要求 |
 | --- | --- |
-| 产品概述、快速开始、开发、发布 | [README.md](README.md) |
-| 用户可感知的行为变化 | 同一次修改中更新 [docs/guide.md](docs/guide.md) |
+| 产品概述、功能摘要、快速开始、开发命令与必要风险提示 | [README.md](README.md)，入口、能力或开发流程变化时更新 |
 | 持久化、同步、加密、认证、隔离、CSP、元数据边界 | 先读 [docs/system-design.md](docs/system-design.md)，修改须获允许 |
 | 编辑器行为、显示、交互与验收 | 先读 [docs/editor-architecture.md](docs/editor-architecture.md)，修改须获允许 |
 | Docker、pnpm、配置、代理、备份、恢复、升级、发布 | 更新 [docs/deployment.md](docs/deployment.md)，并检查 `.env.example`、`docker-compose.yml`、`deploy/nginx.conf.example` 等相关配置 |
-| 已发布版本的变化 | [CHANGELOG.md](CHANGELOG.md)，发布标签须有对应的带日期版本记录 |
+| 版本新增、调整与修复 | [CHANGELOG.md](CHANGELOG.md)，代码修改时更新未发布记录；发布标签须有对应的带日期版本记录 |
 
-- 每次更改代码后，按需更改对应文档。
-- `docs/system-design.md` 和 `docs/editor-architecture.md`为指导性文档，一般任务原则上不修改，确需修改时询问用户许可。
+- 每次更改代码后，即时更新 `CHANGELOG.md`，并按上述职责检查相关文档；纯文档整理不单独记录为版本功能变化。
+- `docs/system-design.md` 和 `docs/editor-architecture.md` 是指导性文档，记录已采纳的设计及实现必须满足的约束。普通修复遵循现有规范，不逐条追加修复细节；确需改变或补充设计约束时，须先获得用户许可。
+- 不再维护独立使用指南。规范按领域归入系统设计或编辑器架构；具体实现参数由代码和测试承载，属于产品承诺或安全边界的参数才写入规范。
 - 原则与实现冲突时，暂停，先询问用户。
 
 ## 模块边界
@@ -105,4 +105,3 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 
 - 各文档主要使用中文，提交信息也使用中文。
 - 除非重大改动，一般修复性改动无须使用“电脑操作”进行检查，只进行基础检查，具体功能检查交由用户。
-- 每次对代码进行修改后应即时更新 CHANGELOG.md。
