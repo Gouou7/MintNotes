@@ -126,6 +126,7 @@ import {
   type SyncFailure
 } from "./useSyncStatus";
 import { useVaultModel } from "./useVaultModel";
+import { useWorkspaceSelection } from "./useWorkspaceSelection";
 import { attachmentGraphSignature, useAttachmentUrls } from "./useAttachmentUrls";
 import { VaultHistoryController, type HistoryIndexEnvelope } from "./historyController";
 import {
@@ -216,11 +217,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     upsertAttachment
   } = useVaultModel();
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const activeIdRef = useRef<string | null>(null);
+  const { activeId, activeIdRef, activateDocument, selectedIds, setSelectedIds, selectionAnchor } = useWorkspaceSelection();
   const [editorSessionId, setEditorSessionId] = useState(0);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const selectionAnchor = useRef<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
   const [mode, setMode] = useState<EditorMode>("live");
   const [search, setSearch] = useState("");
@@ -507,10 +505,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     }
   };
 
-  useEffect(() => {
-    activeIdRef.current = activeId;
-  }, [activeId]);
-
   const updateAvatarUrl = (avatar: { mime: string; data: ArrayBuffer } | null) => {
     if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current);
     const next = avatar ? URL.createObjectURL(new Blob([avatar.data], { type: avatar.mime })) : null;
@@ -704,8 +698,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       if (previousActiveId && previousActiveId !== document.objectId) applyDeferredActiveRemote(previousActiveId);
       if (options.focusName) pendingTitleFocus.current = document.objectId;
       setMode("live");
-      activeIdRef.current = document.objectId;
-      setActiveId(document.objectId);
+      activateDocument(document.objectId);
       setEditorSessionId((current) => current + 1);
       if (options.focusName) setTreeOpen(false);
     }
@@ -745,10 +738,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     }
     requestPush("structural");
     if (rebindActive && activeIdRef.current === entry.objectId) {
-      activeIdRef.current = persisted.objectId;
-      setActiveId(persisted.objectId);
-      setSelectedIds(new Set([persisted.objectId]));
-      selectionAnchor.current = persisted.objectId;
+      activateDocument(persisted.objectId);
     }
     showMessage(t("notice.documentConflict", { title: local.title }), "critical");
     return persisted;
@@ -787,10 +777,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (result.activeConflictId) {
       deferredActiveRemoteId.current = null;
       deferredActiveRemote.current = null;
-      activeIdRef.current = result.activeConflictId;
-      setActiveId(result.activeConflictId);
-      setSelectedIds(new Set([result.activeConflictId]));
-      selectionAnchor.current = result.activeConflictId;
+      activateDocument(result.activeConflictId);
     } else if (result.deferredActive) {
       deferredActiveRemoteId.current = result.deferredActive.objectId;
       deferredActiveRemote.current = result.deferredActive.document;
@@ -1328,15 +1315,9 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         }
         const restoredActiveId = resolveDeviceActiveNoteId(loadedPreferences.activeNoteId, documentsRef.current);
         if (restoredActiveId) {
-          activeIdRef.current = restoredActiveId;
-          setActiveId(restoredActiveId);
-          setSelectedIds(new Set([restoredActiveId]));
-          selectionAnchor.current = restoredActiveId;
+          activateDocument(restoredActiveId);
         } else {
-          activeIdRef.current = null;
-          setActiveId(null);
-          setSelectedIds(new Set());
-          selectionAnchor.current = null;
+          activateDocument(null);
           setPreferences((current) => ({
             ...current,
             activeNoteId: null,
@@ -1550,8 +1531,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       setEditorSessionId((current) => current + 1);
     }
     setHistoryPreview(null);
-    activeIdRef.current = objectId;
-    setActiveId(objectId);
+    activateDocument(objectId);
     setTreeOpen(false);
   };
 
@@ -1692,8 +1672,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     }
     for (const attachment of ownedAttachments) await persistObject({ ...attachment, deleted, dirty: true });
     if (deleted && ids.has(activeIdRef.current ?? "")) {
-      activeIdRef.current = null;
-      setActiveId(null);
+      activateDocument(null);
       setEditorSessionId((current) => current + 1);
     }
     setSelectedIds((current) => new Set([...current].filter((id) => !ids.has(id))));
@@ -1843,10 +1822,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     const previousActiveId = activeIdRef.current;
     if (previousActiveId && previousActiveId !== persisted.objectId) applyDeferredActiveRemote(previousActiveId);
     setMode("live");
-    activeIdRef.current = persisted.objectId;
-    setActiveId(persisted.objectId);
-    setSelectedIds(new Set([persisted.objectId]));
-    selectionAnchor.current = persisted.objectId;
+    activateDocument(persisted.objectId);
     setEditorSessionId((current) => current + 1);
     requestPush("structural");
     return persisted.objectId;
@@ -2094,10 +2070,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         historyPreview.payload.markdown,
         historyPreview.payload.attachmentIds
       );
-      activeIdRef.current = persisted.objectId;
-      setActiveId(persisted.objectId);
-      setSelectedIds(new Set([persisted.objectId]));
-      selectionAnchor.current = persisted.objectId;
+      activateDocument(persisted.objectId);
       setHistoryPreview(null);
       setEditorSessionId((value) => value + 1);
       requestPush("structural");
