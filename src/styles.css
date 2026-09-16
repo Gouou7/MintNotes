@@ -213,6 +213,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .live-editor-document .typora-web-source { width: 100%; margin: 0; padding: 0; color: var(--text); background: transparent; font-size: calc(15px + var(--font-adjust)); }
 .markdown-editor-host blockquote[data-source-container] { margin: 0; border-left: 3px solid var(--document-divider); padding-left: 14px; }
 .markdown-editor-host { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+/* Body editing uses the caret and selection as focus cues in both modes. */
+.markdown-editor-host .typora-web-source:focus,
+.markdown-editor-host .typora-web-source:focus-visible,
+.markdown-editor-host .ProseMirror:focus,
+.markdown-editor-host .ProseMirror:focus-visible { outline: none; }
 .markdown-editor-host > .typora-web-wrap, .markdown-editor-host .typora-web-editor-host:not([hidden]) { display: flex; flex: 1; flex-direction: column; }
 .markdown-editor-host.is-empty::before { content: attr(data-empty-hint); position: absolute; z-index: 2; top: 0; left: 0; padding-left: 10px; border-left: 2px solid var(--accent); color: var(--muted); font-size: calc(15px + var(--font-adjust)); line-height: 1.7; pointer-events: none; }
 .markdown-editor-host.is-empty:focus-within::before { display: none; }
