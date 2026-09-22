@@ -6,12 +6,15 @@ const html = readFileSync(resolve("index.html"), "utf8");
 const styles = readFileSync(resolve("src/styles.css"), "utf8");
 
 describe("installed PWA shell", () => {
-  it("requests an edge-to-edge iOS status area", () => {
+  it("requests a non-translucent iOS status bar while retaining device safe areas", () => {
     const document = new DOMParser().parseFromString(html, "text/html");
 
     expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toContain("viewport-fit=cover");
     expect(document.querySelector('meta[name="apple-mobile-web-app-capable"]')?.getAttribute("content")).toBe("yes");
-    expect(document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute("content")).toBe("black-translucent");
+    expect(document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute("content")).toBe("default");
+    expect(document.querySelector("body > .pwa-status-surface")?.getAttribute("aria-hidden")).toBe("true");
+    expect(styles).toMatch(/\.pwa-status-surface\s*\{[^}]*position: fixed;[^}]*height: max\(1px, var\(--safe-area-top\)\);[^}]*background: var\(--surface\);/s);
+    expect(styles).toMatch(/@media \(display-mode: standalone\)\s*\{\s*html \{ height: 100dvh; \}/);
   });
 
   it("keeps primary mobile surfaces inside every device safe area", () => {

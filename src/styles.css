@@ -78,10 +78,14 @@
 
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; touch-action: pan-x pan-y; }
+/* 非透明状态栏由系统占位；独立窗口使用实际视口高度，避免底部超出屏幕。 */
+@media (display-mode: standalone) {
+  html { height: 100dvh; }
+}
 body { color: var(--text); background: var(--surface); }
-/* 给 WebKit 独立的固定实色顶边，抑制系统滚动边缘模糊；仅覆盖状态栏安全区。
-   放在 #root 外，避免工具栏的 backdrop-filter 改变固定定位的包含块。 */
-.pwa-status-surface { position: fixed; top: 0; right: 0; left: 0; height: var(--safe-area-top); background: var(--surface); pointer-events: none; z-index: 6; }
+/* 为系统状态栏背景取色提供实色顶边；安全区为零时仍保留 1px，不占布局空间。
+   模糊覆盖由 index.html 的非透明状态栏配置处理，不能靠网页背景遮挡系统层。 */
+.pwa-status-surface { position: fixed; top: 0; right: 0; left: 0; height: max(1px, var(--safe-area-top)); background: var(--surface); pointer-events: none; z-index: 6; }
 button, input, textarea, select { font: inherit; color: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 

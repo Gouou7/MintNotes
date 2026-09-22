@@ -43,6 +43,7 @@ import { SOURCE_TRANSACTION_META, transactionSourceEffect } from "./source-trans
 import { adjacentGrapheme, changedSourceRange, selectTextarea, textareaSelection, TextareaSourceMap } from "./source-text";
 import { selectedTableCells, tableNavigation } from "./table-navigation";
 import { SourceComposition } from "./source-composition";
+import { nativeTextInputRange } from "./native-input-range";
 import { liveSourceKeyTransaction } from "./live-source-commands";
 import { resolveSourceBlockEditingPresentation } from "./presentation";
 import {
@@ -1042,7 +1043,7 @@ export function createEditor(
   ): boolean {
     const positions = sourcePositionMapForState(view.state);
     const from = positions.documentToSource(fromPosition, "right");
-    const to = positions.documentToSource(toPosition, "left");
+    const to = fromPosition === toPosition ? from : positions.documentToSource(toPosition, "left");
     if (to < from) return true;
     const head = from + text.length;
     const nextSource = canonicalMarkdown.slice(0, from)
@@ -1058,9 +1059,9 @@ export function createEditor(
         ? { reparseDerivedDocument: true }
         : {}),
     };
+    const tr = view.state.tr.insertText(text, fromPosition, toPosition);
     view.dispatch(
-      view.state.tr
-        .insertText(text, fromPosition, toPosition)
+      tr.setSelection(TextSelection.near(tr.doc.resolve(fromPosition + text.length)))
         .setMeta(SOURCE_TRANSACTION_META, sourceTransaction)
         .scrollIntoView(),
     );
@@ -1329,9 +1330,15 @@ export function createEditor(
             event.preventDefault();
             return true;
           }
-          if (!["insertText", "insertReplacementText"].includes(event.inputType) || !event.data) return false;
-          applyLiveTextInput(view.state.selection.from, view.state.selection.to, event.data);
+          if (!["insertText", "insertReplacementText"].includes(event.inputType)) return false;
+          const text = event.data ?? event.dataTransfer?.getData("text/plain");
+          if (text == null) return false;
+          // Dictation/autocorrect can replace earlier text while the caret stays
+          // collapsed at its end. The browser target, not that caret, owns the edit.
+          const target = nativeTextInputRange(view, event, sourcePositionMapForState(view.state));
           event.preventDefault();
+          if (target) applyLiveTextInput(target.from, target.to, text);
+          else setSourceMode(true);
           return true;
         },
         copy: (_view, event) => {
