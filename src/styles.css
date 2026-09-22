@@ -77,19 +77,19 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; touch-action: pan-x pan-y; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; touch-action: pan-x pan-y; }
 /* 非透明状态栏由系统占位；独立窗口使用实际视口高度，避免底部超出屏幕。 */
 @media (display-mode: standalone) {
   html { height: 100dvh; }
 }
 body { color: var(--text); background: var(--surface); }
 /* 为系统状态栏背景取色提供实色顶边；安全区为零时仍保留 1px，不占布局空间。
-   模糊覆盖由 index.html 的非透明状态栏配置处理，不能靠网页背景遮挡系统层。 */
+   顶部工具栏另行固定到视口，不能靠此背景遮挡系统层。 */
 .pwa-status-surface { position: fixed; top: 0; right: 0; left: 0; height: max(1px, var(--safe-area-top)); background: var(--surface); pointer-events: none; z-index: 6; }
 button, input, textarea, select { font: inherit; color: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.app-shell { --font-adjust: 0px; --tree-track: var(--tree-width, 272px); --tree-resizer-track: 1px; --outline-track: var(--outline-width, 236px); --outline-resizer-track: 1px; display: grid; grid-template-columns: var(--tree-track) var(--tree-resizer-track) minmax(0, 1fr) var(--outline-resizer-track) var(--outline-track); width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--surface); font-size: calc(14px + var(--font-adjust)); }
+.app-shell { --font-adjust: 0px; --tree-track: var(--tree-width, 272px); --tree-resizer-track: 1px; --outline-track: var(--outline-width, 236px); --outline-resizer-track: 1px; --note-pane-left: calc(var(--tree-track) + var(--tree-resizer-track)); --note-pane-right: calc(var(--outline-track) + var(--outline-resizer-track)); --safe-area-bottom: var(--workspace-safe-area-bottom, env(safe-area-inset-bottom, 0px)); --note-status-height: calc(28px + var(--safe-area-bottom)); position: fixed; top: var(--workspace-viewport-top, 0px); left: 0; display: grid; grid-template-columns: var(--tree-track) var(--tree-resizer-track) minmax(0, 1fr) var(--outline-resizer-track) var(--outline-track); width: 100%; height: var(--workspace-viewport-height, 100%); min-height: 0; overflow: hidden; background: var(--surface); font-size: calc(14px + var(--font-adjust)); }
 .app-shell.tree-collapsed { --tree-track: 0px; --tree-resizer-track: 0px; }
 .app-shell.outline-collapsed { --outline-track: 0px; --outline-resizer-track: 0px; }
 .tree-collapsed > .tree-pane, .outline-collapsed > .outline-pane { visibility: hidden; overflow: hidden; border: 0; }
@@ -98,9 +98,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .tree-pane { grid-column: 1; }
 .pane-resizer-left { grid-column: 2; }
 .note-pane { --editor-inset-top: var(--note-toolbar-height); --editor-inset-bottom: var(--note-status-height); position: relative; grid-column: 3; min-width: 0; min-height: 0; width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); }
-.note-pane-top, .note-pane-bottom { position: absolute; right: 0; left: 0; z-index: 5; }
-.note-pane-top { top: 0; }
-.note-pane-bottom { bottom: 0; }
+.note-pane-top { position: fixed; top: var(--workspace-viewport-top, 0px); right: var(--note-pane-right); left: var(--note-pane-left); z-index: 5; }
+.note-pane-bottom { position: absolute; right: 0; bottom: 0; left: 0; z-index: 5; }
 .pane-resizer-right { grid-column: 4; }
 .outline-pane { grid-column: 5; }
 .pane-resizer { position: relative; min-width: 0; cursor: col-resize; touch-action: none; background: var(--border); z-index: 25; transition: background .12s ease, box-shadow .12s ease; }
@@ -689,22 +688,22 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .context-selection-count { margin: 1px 4px 4px; padding: 5px 4px 7px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: calc(11px + var(--font-adjust)); }
 
 @media (max-width: 1100px) {
-  .app-shell, .app-shell.outline-collapsed { grid-template-columns: var(--tree-track) var(--tree-resizer-track) minmax(0, 1fr); }
+  .app-shell, .app-shell.outline-collapsed { --note-pane-right: 0px; grid-template-columns: var(--tree-track) var(--tree-resizer-track) minmax(0, 1fr); }
   .outline-pane, .outline-collapsed > .outline-pane { visibility: hidden; }
-  .outline-pane { position: fixed; top: 0; right: 0; bottom: 0; width: min(300px, 85vw); transform: translateX(101%); transition: transform .2s ease, visibility 0s .2s; }
+  .outline-pane { position: fixed; top: var(--workspace-viewport-top, 0px); right: 0; height: var(--workspace-viewport-height, 100%); width: min(300px, 85vw); transform: translateX(101%); transition: transform .2s ease, visibility 0s .2s; }
   .pane-resizer-right { display: none; }
   .app-shell.outline-open .outline-pane { visibility: visible; transform: translateX(0); transition-delay: 0s; }
   .mobile-outline-close { display: block; }
   .right-pane-collapse { display: none; }
   .right-pane-toggle { display: grid; }
-  .drawer-scrim { position: fixed; inset: 0; z-index: 15; border: 0; background: rgba(0,0,0,.35); }
+  .drawer-scrim { position: fixed; top: var(--workspace-viewport-top, 0px); right: 0; left: 0; height: var(--workspace-viewport-height, 100%); z-index: 15; border: 0; background: rgba(0,0,0,.35); }
   .outline-open .drawer-scrim { display: block; }
 }
 
 @media (max-width: 720px) {
-  .app-shell, .app-shell.tree-collapsed, .app-shell.outline-collapsed, .app-shell.tree-collapsed.outline-collapsed { display: block; }
+  .app-shell, .app-shell.tree-collapsed, .app-shell.outline-collapsed, .app-shell.tree-collapsed.outline-collapsed { --note-pane-left: 0px; display: block; }
   .tree-pane, .tree-collapsed > .tree-pane { visibility: hidden; }
-  .tree-pane { position: fixed; top: 0; left: 0; bottom: 0; width: min(310px, 88vw); transform: translateX(-101%); transition: transform .2s ease, visibility 0s .2s; }
+  .tree-pane { position: fixed; top: var(--workspace-viewport-top, 0px); left: 0; height: var(--workspace-viewport-height, 100%); width: min(310px, 88vw); transform: translateX(-101%); transition: transform .2s ease, visibility 0s .2s; }
   .tree-more { opacity: 1; }
   .pane-resizer { display: none; }
   .app-shell.tree-open .tree-pane { visibility: visible; transform: translateX(0); transition-delay: 0s; }

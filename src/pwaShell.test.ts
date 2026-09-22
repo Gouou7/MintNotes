@@ -10,6 +10,7 @@ describe("installed PWA shell", () => {
     const document = new DOMParser().parseFromString(html, "text/html");
 
     expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toContain("viewport-fit=cover");
+    expect(document.querySelector('meta[name="viewport"]')?.getAttribute("content")).toContain("interactive-widget=resizes-content");
     expect(document.querySelector('meta[name="apple-mobile-web-app-capable"]')?.getAttribute("content")).toBe("yes");
     expect(document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute("content")).toBe("default");
     expect(document.querySelector("body > .pwa-status-surface")?.getAttribute("aria-hidden")).toBe("true");
@@ -19,7 +20,7 @@ describe("installed PWA shell", () => {
 
   it("keeps primary mobile surfaces inside every device safe area", () => {
     expect(styles).toContain("--safe-area-top: env(safe-area-inset-top, 0px)");
-    expect(styles).toMatch(/\.app-shell\s*\{[^}]*height: 100%;/s);
+    expect(styles).toMatch(/\.app-shell\s*\{[^}]*height: var\(--workspace-viewport-height, 100%\);/s);
     expect(styles).toMatch(/\.note-toolbar\s*\{[^}]*var\(--safe-area-top\)/s);
     expect(styles).toMatch(/\.side-header\s*\{[^}]*var\(--safe-area-top\)/s);
     expect(styles).toMatch(/\.side-footer\s*\{[^}]*var\(--safe-area-bottom\)/s);
@@ -48,5 +49,8 @@ describe("installed PWA shell", () => {
   it("keeps the editor pane constrained so the document owns vertical scrolling", () => {
     expect(styles).toMatch(/\.note-pane\s*\{[^}]*height: 100%;[^}]*overflow: hidden;[^}]*display: flex;[^}]*flex-direction: column;/s);
     expect(styles).toMatch(/\.editor-area\s*\{[^}]*flex: 1;[^}]*overflow: auto;/s);
+    expect(styles).toMatch(/html, body, #root\s*\{[^}]*overflow: hidden;[^}]*overscroll-behavior: none;/s);
+    expect(styles).toMatch(/\.app-shell\s*\{[^}]*position: fixed;[^}]*top: var\(--workspace-viewport-top, 0px\);/s);
+    expect(styles).toMatch(/\.note-pane-top\s*\{[^}]*position: fixed;[^}]*right: var\(--note-pane-right\);[^}]*left: var\(--note-pane-left\);/s);
   });
 });

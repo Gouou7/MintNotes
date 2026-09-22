@@ -1,6 +1,7 @@
 import type { DeviceUnlockCredential } from "../../storage/database";
 import type { AuthEndpoint, User } from "../../types";
 import { VaultWorkspace } from "./VaultWorkspace";
+import { useWorkspaceViewport } from "./useWorkspaceViewport";
 
 export interface VaultAppProps {
   user: User;
@@ -14,5 +15,6 @@ export interface VaultAppProps {
 }
 
 export function VaultApp(props: VaultAppProps) {
+  useWorkspaceViewport();
   return <VaultWorkspace {...props} />;
 }
