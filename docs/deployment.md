@@ -105,7 +105,7 @@ pnpm 部署应由进程管理器收集和轮转 stdout／stderr。日志保留�
 SQLite 使用 WAL，禁止直接复制运行中的 `notes.sqlite`。Docker 部署使用：
 
 ```bash
-docker compose exec notes pnpm backup
+docker compose exec notes node server-dist/backup.js
 docker compose cp notes:/data/backups/mint-notes-YYYY-MM-DDTHH-MM-SS-sssZ.sqlite ./backups/
 ```
 
@@ -144,3 +144,5 @@ docker compose config
 ```
 
 官方镜像同时发布 `linux/amd64`、`linux/arm64` 的不可变版本标签与 `latest`；生产应固定版本或摘要。已公开标签不得移动，失败版本应发布补丁版本。
+
+镜像构建阶段安装完整依赖并生成前端资源，运行阶段只保留服务端生产依赖、`dist` 和 `server-dist`；仅供浏览器打包使用的依赖归入 `devDependencies`，必须先构建再执行 `pnpm prune --prod`。文件复制时直接设置所有者，避免递归修改所有者产生重复镜像层。

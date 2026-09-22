@@ -38,6 +38,9 @@ RUN set -eu; \
   test -e node_modules/better-sqlite3; \
   test ! -e node_modules/vitest; \
   test ! -e node_modules/pino-pretty; \
+  test ! -e node_modules/react; \
+  test ! -e node_modules/mermaid; \
+  test ! -e node_modules/lucide-react; \
   apt-get purge -y --auto-remove python3 make g++
 
 FROM node:22-bookworm-slim AS runtime
@@ -51,11 +54,11 @@ LABEL org.opencontainers.image.title="Mint Notes" \
   org.opencontainers.image.source="https://github.com/Gouou7/MintNotes" \
   org.opencontainers.image.revision=$VCS_REF \
   org.opencontainers.image.version=$APP_VERSION
-COPY package.json ./
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/server-dist ./server-dist
-RUN mkdir -p /data && chown -R node:node /app /data
+COPY --chown=node:node package.json ./
+COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/server-dist ./server-dist
+RUN mkdir -p /data && chown node:node /data
 USER node
 EXPOSE 8787
 CMD ["node", "server-dist/index.js"]
