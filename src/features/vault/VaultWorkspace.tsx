@@ -2299,7 +2299,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     : visibleSyncStatusText(syncStatus.visible, t);
   const statusDetail = syncStatusDetailText(syncStatus, t);
   return (
-    <div className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
+    <div className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${settingsOpen ? "settings-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
       <aside className="tree-pane">
         <header className="side-header"><img className="brand-small" src="/icon.svg" alt="" aria-hidden="true" /><strong>Mint Notes</strong><button className="tree-pane-collapse" onClick={() => setPreferences({ ...preferences, treeCollapsed: true })} title={t("app.collapseDirectory")} aria-label={t("app.collapseDirectory")}><AppIcon icon={PanelLeftClose} /></button><button onClick={() => setTreeOpen(false)} className="mobile-tree-close" aria-label={t("app.closeDirectory")}><AppIcon icon={PanelLeftClose} /></button></header>
         {pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>
