@@ -36,26 +36,7 @@ export function canMoveDocument(documents: OpenDocument[], objectId: string, par
   return !parentId || !descendantsOf(documents, objectId).has(parentId);
 }
 
-export function siblingTitleExists(
-  documents: OpenDocument[],
-  title: string,
-  parentId: string | null,
-  exceptObjectId?: string
-): boolean {
-  return documents.some((entry) => (
-    !entry.deleted
-    && entry.parentId === parentId
-    && entry.objectId !== exceptObjectId
-    && entry.title === title
-  ));
-}
-
-export function uniqueSiblingTitle(documents: OpenDocument[], title: string, parentId: string | null): string {
-  if (!siblingTitleExists(documents, title, parentId)) return title;
-  let suffix = 2;
-  while (siblingTitleExists(documents, `${title} ${suffix}`, parentId)) suffix += 1;
-  return `${title} ${suffix}`;
-}
+export { siblingTitleExists, uniqueSiblingTitle } from "./siblingNames";
 
 export function compareDocuments(mode: SortMode) {
   return (a: OpenDocument, b: OpenDocument): number => {

@@ -1,0 +1,21 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, expect, it, vi } from "vitest";
+import { I18nProvider } from "../i18n";
+import { ImportResultPanel } from "./ImportResultPanel";
+(globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
+let root:Root;
+afterEach(async()=>{if(root) await act(async()=>root.unmount());document.body.replaceChildren();vi.restoreAllMocks();});
+it('shows renamed names, retained references and partial failure without using HTML from input',async()=>{
+  const container=document.createElement('div');document.body.append(container);root=createRoot(container);
+  const close=vi.fn();
+  await act(async()=>root.render(<I18nProvider><ImportResultPanel onClose={close} result={{completed:[{objectId:'1',title:'note 2',originalTitle:'note',kind:'note',source:'archive/note.md'}],warnings:[{source:'archive/note.md',reference:'<script>alert(1)</script>',code:'missingImage'}],failure:{source:'other.md',code:'writeFailed'},pending:['other.md']}}/></I18nProvider>));
+  const dialog=container.querySelector('dialog')!;
+  expect(dialog.open).toBe(true);
+  expect(dialog.textContent).toContain('note 2');
+  expect(dialog.textContent).toContain('other.md');
+  expect(dialog.textContent).toContain('<script>alert(1)</script>');
+  expect(dialog.querySelector('script')).toBeNull();
+  await act(async()=>container.querySelector('button')!.click());
+  expect(close).toHaveBeenCalledTimes(1);
+});

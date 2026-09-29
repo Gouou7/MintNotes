@@ -40,7 +40,11 @@ import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/wikilinks";
 import { ATTACHMENT_TRANSFER_CONCURRENCY, attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
 import { AttachmentCloneService } from "../attachmentClone";
 import { documentPatchChanges } from "../documentPatch";
-import { exportMarkdownZip, exportSingleMarkdown, importFiles } from "../importExport";
+import { useImportExport } from "./useImportExport";
+import { ImportResultPanel } from "../ImportResultPanel";
+import { makeDocument } from "./documentFactory";
+import { NameReservations } from "../siblingNames";
+import { useSiblingNameRepair } from "./useSiblingNameRepair";
 import {
   SyncCoordinator,
   acknowledgeByObjectId,
@@ -156,33 +160,6 @@ const TREE_WIDTH_MIN = 220;
 const TREE_WIDTH_MAX = 420;
 const OUTLINE_WIDTH_MIN = 200;
 const OUTLINE_WIDTH_MAX = 420;
-function makeDocument(
-  documents: OpenDocument[],
-  kind: "note" | "folder",
-  title: string,
-  parentId: string | null,
-  markdown = ""
-): OpenDocument {
-  const now = new Date().toISOString();
-  return {
-    objectId: crypto.randomUUID(),
-    kind,
-    title,
-    markdown,
-    parentId,
-    tags: [],
-    favorite: false,
-    locked: false,
-    deleted: false,
-    createdAt: now,
-    updatedAt: now,
-    manualOrder: nextManualOrder(documents, parentId),
-    attachmentIds: [],
-    schemaVersion: 2,
-    serverRevision: 0,
-    dirty: true
-  };
-}
 
 function synchronizationFailure(error: unknown, t: Translate): SyncFailure {
   return error instanceof ApiError
@@ -216,6 +193,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     upsertDocument,
     upsertAttachment
   } = useVaultModel();
+  const nameReservations = useRef(new NameReservations());
+  const nameDocuments = () => [...documentsRef.current, ...nameReservations.current.documents()];
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const { activeId, activeIdRef, activateDocument, selectedIds, setSelectedIds, selectionAnchor } = useWorkspaceSelection();
   const [editorSessionId, setEditorSessionId] = useState(0);
@@ -671,7 +650,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
   const createDocument = async (kind: "note" | "folder", title: string, parentId: string | null, markdown = "", options: CreateDocumentOptions = {}) => {
     const defaultTitle = kind === "note" ? t("app.untitled") : t("app.newFolder");
-    const documentTitle = uniqueSiblingTitle(documentsRef.current, title.trim() || defaultTitle, parentId);
+    const documentTitle = uniqueSiblingTitle(nameDocuments(), title.trim() || defaultTitle, parentId);
     const document = makeDocument(documentsRef.current, kind, documentTitle, parentId, markdown);
     const activate = options.activate !== false;
     if (options.focusName) setSearch("");
@@ -770,6 +749,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (logoutStarted.current) return result.failedObjectIds;
     if (result.documentUpserts.size || result.removedDocumentIds.size) {
       replaceDocuments(mergeByObjectId(documentsRef.current, result.documentUpserts.values(), result.removedDocumentIds));
+      for (const id of result.documentUpserts.keys()) nameReservations.current.release(id);
     }
     if (result.attachmentUpserts.size || result.removedAttachmentIds.size) {
       replaceAttachments(mergeByObjectId(attachmentsRef.current, result.attachmentUpserts.values(), result.removedAttachmentIds));
@@ -1096,6 +1076,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     sourceAttachmentIds: readonly string[],
     options: { commitState?: boolean } = {}
   ): Promise<OpenDocument> => {
+    document = nameReservations.current.reserve(documentsRef.current, document);
     const attachmentCloner = new AttachmentCloneService({
       resolveAttachment: (attachmentId) => attachmentIndexRef.current.get(attachmentId),
       readAttachment: (attachment) => decryptAttachmentBlob(
@@ -1117,18 +1098,21 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       removeAttachment: (attachmentId) => removePurgedLocal(attachmentId)
     });
     let cloned: Awaited<ReturnType<AttachmentCloneService["clone"]>> | null = null;
+    let persistedCopy = false;
     try {
       cloned = await attachmentCloner.clone({
         sourceMarkdown,
         sourceAttachmentIds,
         targetNoteId: document.objectId
       });
-      return await persistObject({
+      const persisted = await persistObject({
         ...document,
         markdown: cloned.markdown,
         attachmentIds: cloned.attachmentIds,
         dirty: true
       }, options);
+      persistedCopy = true;
+      return persisted;
     } catch (error) {
       if (cloned) {
         await Promise.allSettled(cloned.attachments.map((attachment) => (
@@ -1136,6 +1120,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         )));
       }
       throw error;
+    } finally {
+      if (!persistedCopy || options.commitState !== false) nameReservations.current.release(document.objectId);
     }
   };
 
@@ -1658,26 +1644,27 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (!ids.size) return;
     if (!deleted) {
       const restoring = documentsRef.current.filter((entry) => ids.has(entry.objectId));
-      const conflict = restoring.find((entry, index) => (
-        documentsRef.current.some((sibling) => !sibling.deleted && !ids.has(sibling.objectId) && sibling.parentId === entry.parentId && sibling.title === entry.title)
-        || restoring.some((sibling, siblingIndex) => siblingIndex < index && sibling.parentId === entry.parentId && sibling.title === entry.title)
-      ));
+      const conflict = nameReservations.current.claim(documentsRef.current, restoring.map((entry) => ({ ...entry, deleted: false })));
       if (conflict) return showMessage(t("notice.restoreNameConflict", { title: conflict.title }));
     }
-    const noteIds = new Set([...ids].filter((id) => documentsRef.current.find((entry) => entry.objectId === id)?.kind === "note"));
-    const ownedAttachments = attachmentsRef.current.filter((entry) => noteIds.has(entry.ownerNoteId));
-    for (const id of ids) {
-      const document = documentsRef.current.find((entry) => entry.objectId === id);
-      if (document) await persistObject({ ...document, deleted, dirty: true });
+    try {
+      const noteIds = new Set([...ids].filter((id) => documentsRef.current.find((entry) => entry.objectId === id)?.kind === "note"));
+      const ownedAttachments = attachmentsRef.current.filter((entry) => noteIds.has(entry.ownerNoteId));
+      for (const id of ids) {
+        const document = documentsRef.current.find((entry) => entry.objectId === id);
+        if (document) await persistObject({ ...document, deleted, dirty: true });
+      }
+      for (const attachment of ownedAttachments) await persistObject({ ...attachment, deleted, dirty: true });
+      if (deleted && ids.has(activeIdRef.current ?? "")) {
+        activateDocument(null);
+        setEditorSessionId((current) => current + 1);
+      }
+      setSelectedIds((current) => new Set([...current].filter((id) => !ids.has(id))));
+      if (selectionAnchor.current && ids.has(selectionAnchor.current)) selectionAnchor.current = null;
+      requestPush("structural");
+    } finally {
+      if (!deleted) for (const id of ids) nameReservations.current.release(id);
     }
-    for (const attachment of ownedAttachments) await persistObject({ ...attachment, deleted, dirty: true });
-    if (deleted && ids.has(activeIdRef.current ?? "")) {
-      activateDocument(null);
-      setEditorSessionId((current) => current + 1);
-    }
-    setSelectedIds((current) => new Set([...current].filter((id) => !ids.has(id))));
-    if (selectionAnchor.current && ids.has(selectionAnchor.current)) selectionAnchor.current = null;
-    requestPush("structural");
   };
 
   const requestPurgeDocuments = (objectIds: string[]) => {
@@ -1742,19 +1729,20 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (!canMoveDocument(documentsRef.current, objectId, parentId)) return showMessage(t("notice.moveIntoDescendant"));
     const moving = documentsRef.current.find((entry) => entry.objectId === objectId);
     if (!moving) return;
-    if (moving.parentId !== parentId && siblingTitleExists(documentsRef.current, moving.title, parentId, objectId)) {
-      return showMessage(t("notice.moveNameConflict", { title: moving.title }));
-    }
-    if (preferences.sortMode === "manual") {
-      for (const change of reorderedSiblings(documentsRef.current, objectId, parentId, beforeId)) {
-        const document = documentsRef.current.find((entry) => entry.objectId === change.objectId);
-        if (document && (document.parentId !== change.parentId || document.manualOrder !== change.manualOrder)) await persistObject({ ...document, ...change, dirty: true });
+    const conflict = nameReservations.current.claim(documentsRef.current, [{ ...moving, parentId }]);
+    if (conflict) return showMessage(t("notice.moveNameConflict", { title: moving.title }));
+    try {
+      if (preferences.sortMode === "manual") {
+        for (const change of reorderedSiblings(documentsRef.current, objectId, parentId, beforeId)) {
+          const document = documentsRef.current.find((entry) => entry.objectId === change.objectId);
+          if (document && (document.parentId !== change.parentId || document.manualOrder !== change.manualOrder)) await persistObject({ ...document, ...change, dirty: true });
+        }
+      } else {
+        await persistObject({ ...moving, parentId, manualOrder: nextManualOrder(documentsRef.current, parentId), dirty: true });
       }
-    } else {
-      await persistObject({ ...moving, parentId, manualOrder: nextManualOrder(documentsRef.current, parentId), dirty: true });
-    }
-    if (parentId) setExpanded((current) => new Set(current).add(parentId));
-    requestPush("structural");
+      if (parentId) setExpanded((current) => new Set(current).add(parentId));
+      requestPush("structural");
+    } finally { nameReservations.current.release(objectId); }
   };
 
   const moveDocuments = async (objectIds: string[], parentId: string | null, beforeId: string | null = null) => {
@@ -1763,33 +1751,29 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     const moving = roots.map((id) => documentsRef.current.find((entry) => entry.objectId === id)).filter(Boolean) as OpenDocument[];
     const movingTreeIds = new Set(roots.flatMap((id) => [...descendantsOf(documentsRef.current, id)]));
     if (parentId && movingTreeIds.has(parentId)) return showMessage(t("notice.batchMoveIntoDescendant"));
-    const duplicateTitle = moving.find((entry, index) => moving.some((other, otherIndex) => otherIndex < index && other.title === entry.title));
-    const destinationConflict = moving.find((entry) => documentsRef.current.some((sibling) => (
-      !sibling.deleted && !movingTreeIds.has(sibling.objectId) && sibling.parentId === parentId && sibling.title === entry.title
-    )));
-    if (duplicateTitle || destinationConflict) {
-      const title = (duplicateTitle ?? destinationConflict)!.title;
-      return showMessage(t("notice.batchMoveNameConflict", { title }));
-    }
-    if (preferences.sortMode === "manual") {
-      beforeId = resolveManualDropBeforeId(documentsRef.current, movingTreeIds, parentId, beforeId);
-      let changed = false;
-      for (const change of reorderedSiblingBatch(documentsRef.current, roots, parentId, beforeId)) {
-        const document = documentsRef.current.find((entry) => entry.objectId === change.objectId);
-        if (document && (document.parentId !== change.parentId || document.manualOrder !== change.manualOrder)) {
-          changed = true;
-          await persistObject({ ...document, ...change, dirty: true });
+    const conflict = nameReservations.current.claim(documentsRef.current, moving.map((entry) => ({ ...entry, parentId })));
+    if (conflict) return showMessage(t("notice.batchMoveNameConflict", { title: conflict.title }));
+    try {
+      if (preferences.sortMode === "manual") {
+        beforeId = resolveManualDropBeforeId(documentsRef.current, movingTreeIds, parentId, beforeId);
+        let changed = false;
+        for (const change of reorderedSiblingBatch(documentsRef.current, roots, parentId, beforeId)) {
+          const document = documentsRef.current.find((entry) => entry.objectId === change.objectId);
+          if (document && (document.parentId !== change.parentId || document.manualOrder !== change.manualOrder)) {
+            changed = true;
+            await persistObject({ ...document, ...change, dirty: true });
+          }
         }
+        if (changed) {
+          if (parentId) setExpanded((current) => new Set(current).add(parentId!));
+          requestPush("structural");
+        }
+      } else {
+        for (const entry of moving) await moveDocument(entry.objectId, parentId, beforeId);
       }
-      if (changed) {
-        if (parentId) setExpanded((current) => new Set(current).add(parentId!));
-        requestPush("structural");
-      }
-    } else {
-      for (const entry of moving) await moveDocument(entry.objectId, parentId, beforeId);
-    }
-    setSelectedIds(new Set(roots));
-    selectionAnchor.current = roots[roots.length - 1] ?? null;
+      setSelectedIds(new Set(roots));
+      selectionAnchor.current = roots[roots.length - 1] ?? null;
+    } finally { for (const entry of moving) nameReservations.current.release(entry.objectId); }
   };
 
   const addAttachment = async (noteId: string, file: File) => {
@@ -1815,7 +1799,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       return folderId;
     }
     const parentId = parentOverride === undefined ? source.parentId : parentOverride;
-    const title = uniqueSiblingTitle(documentsRef.current, `${source.title} ${t("app.copySuffix")}`, parentId);
+    const title = uniqueSiblingTitle(nameDocuments(), `${source.title} ${t("app.copySuffix")}`, parentId);
     const copy = makeDocument(documentsRef.current, "note", title, parentId, source.markdown);
     copy.locked = derivedNoteLockState(source, "explicit-copy");
     const persisted = await persistDocumentCopy(copy, source.markdown, source.attachmentIds);
@@ -2029,8 +2013,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       const current = documentIndexRef.current.get(activeDocument.objectId);
       if (!current) return;
       await saveHistorySnapshot(current, "restore-safety");
-      const title = siblingTitleExists(documentsRef.current, historyPreview.payload.title, current.parentId, current.objectId)
-        ? uniqueSiblingTitle(documentsRef.current, historyPreview.payload.title, current.parentId)
+      const title = siblingTitleExists(nameDocuments(), historyPreview.payload.title, current.parentId, current.objectId)
+        ? uniqueSiblingTitle(nameDocuments(), historyPreview.payload.title, current.parentId)
         : historyPreview.payload.title;
       const restored = await persistObject({
         ...current,
@@ -2101,7 +2085,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       return false;
     }
     if (title === target.title) return true;
-    if (siblingTitleExists(documentsRef.current, title, target.parentId, target.objectId)) {
+    if (siblingTitleExists(nameDocuments(), title, target.parentId, target.objectId)) {
       showMessage(t("notice.renameConflict", { title }));
       return false;
     }
@@ -2168,57 +2152,38 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
   const renameDocument = (objectId: string) => beginTreeRename(objectId);
 
-  const exportRoot = async (objectId: string | null = null) => {
-    const root = objectId ? documentsRef.current.find((entry) => entry.objectId === objectId) : null;
-    const label = root ? `“${root.title}”` : t("notice.allNotes");
-    if (!window.confirm(t("notice.exportConfirm", { label }))) return;
-    if (root?.kind === "note" && !attachmentIdsIn(root.markdown).length) return exportSingleMarkdown(root);
-    await exportMarkdownZip(
-      documentsRef.current,
-      attachmentsRef.current,
-      (attachment) => decryptAttachmentBlob(user.id, attachment, () => !logoutStarted.current, serverSessionVerified),
-      objectId
-    );
-  };
-
-  const exportDocuments = async (objectIds: string[]) => {
-    const roots = selectionRoots(documentsRef.current, objectIds);
-    if (roots.length === 1) return exportRoot(roots[0]);
-    if (!roots.length || !window.confirm(t("notice.exportSelectionConfirm", { count: roots.length }))) return;
-    await exportMarkdownZip(
-      documentsRef.current,
-      attachmentsRef.current,
-      (attachment) => decryptAttachmentBlob(user.id, attachment, () => !logoutStarted.current, serverSessionVerified),
-      roots
-    );
-  };
-
-  const handleImport = async (files: File[]) => {
-    if (!files.length) return;
-    try {
-      showMessage(t("notice.importing"), "info");
-      const count = await importFiles(files, {
-        createFolder: (title, parentId) => createDocument("folder", title, parentId),
-        createNote: (title, markdown, parentId) => createDocument("note", title, parentId, markdown),
-        attachImage: async (noteId, file) => (await addAttachment(noteId, file)).objectId,
-        updateNote: async (noteId, markdown, attachmentIds) => {
-          const note = documentsRef.current.find((entry) => entry.objectId === noteId);
-          if (note) await persistObject({ ...note, markdown, attachmentIds, dirty: true });
-        }
-      });
-      showMessage(t("notice.imported", { count }), "info");
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.importFailed"));
-    }
-  };
+  const importExport = useImportExport({
+    userId: user.id, getDocuments: () => documentsRef.current, getAttachments: () => attachmentsRef.current,
+    reservations: nameReservations.current, isActive: () => !logoutStarted.current,
+    readAttachment: (attachment, isActive, signal) => decryptAttachmentBlob(user.id, attachment, isActive, serverSessionVerifiedRef.current, signal),
+    publish: (document, importedAttachments) => {
+      for (const attachment of importedAttachments) upsertAttachment(attachment);
+      upsertDocument(document);
+      requestPush("structural");
+    },
+    onImported: selectDocument,
+    onResult: () => setSettingsOpen(false), notify: showMessage, t
+  });
+  const { exportRoot, exportDocuments, handleImport } = importExport;
+  useSiblingNameRepair({
+    documents, enabled: workspaceLoaded && !logoutStarted.current, getDocuments: () => documentsRef.current,
+    queueDocument, onRepair: (count) => showMessage(t("transfer.namesRepaired", { count }), "info")
+  });
 
   const lock = async (logout = false) => {
     if (logoutStarted.current) return;
+    await importExport.cancel();
     clearPinRefreshGrant();
     if (!logout) {
-      await finishHistorySession(true);
-      await documentSaveQueue.flushAll();
-      await objectPersistence.drainAll();
+      try {
+        await finishHistorySession(true);
+        await documentSaveQueue.flushAll();
+        await objectPersistence.drainAll();
+      } catch (error) {
+        importExport.resume();
+        showMessage(translateError(error, t, "notice.localSaveFailed"), "critical");
+        return;
+      }
     } else {
       logoutStarted.current = true;
       objectPersistence.pause();
@@ -2229,6 +2194,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       } catch (error) {
         logoutStarted.current = false;
         objectPersistence.resume();
+        importExport.resume();
         for (const document of documentsRef.current) {
           if (document.dirty) queueDocument(document, 0);
         }
@@ -2479,6 +2445,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       </aside>
 
       {(treeOpen || outlineOpen) && <button className="drawer-scrim" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} aria-label={t("app.closeSidebars")} />}
+      {importExport.result && <ImportResultPanel result={importExport.result} onClose={importExport.dismiss} />}
       {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onToggleLock={toggleNoteLock} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
       {settingsOpen && <Suspense fallback={<div className="modal-backdrop"><section className="modal loading-shell" aria-label={t("settings.title")} aria-busy="true"><div className="spinner" /></section></div>}><SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} /></Suspense>}
       {message && <Toast notice={message} onDismiss={() => setMessage(null)} />}

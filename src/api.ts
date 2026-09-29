@@ -43,8 +43,9 @@ export async function uploadAttachmentChunk(path: string, ciphertext: ArrayBuffe
   }
 }
 
-export async function downloadAttachmentChunk(path: string): Promise<{ ciphertext: ArrayBuffer; nonce: string; totalChunks: number; encryptionVersion: number }> {
-  const response = await fetch(path, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(30_000) });
+export async function downloadAttachmentChunk(path: string, signal?: AbortSignal): Promise<{ ciphertext: ArrayBuffer; nonce: string; totalChunks: number; encryptionVersion: number }> {
+  const timeout = AbortSignal.timeout(30_000);
+  const response = await fetch(path, { credentials: "same-origin", cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   if (!response.ok) {
     const data = await response.json().catch(() => ({})) as { error?: string };
     throw new ApiError(data.error ?? `Attachment download failed (${response.status})`, response.status, data);

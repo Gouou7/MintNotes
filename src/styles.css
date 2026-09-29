@@ -815,3 +815,14 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
     backdrop-filter: none;
   }
 }
+
+.import-result { width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; color: var(--text); background: var(--surface-raised); border: 1px solid var(--border); border-radius: 14px; }
+.import-result::backdrop { background: rgba(8,7,10,.62); }
+.import-result > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.import-result h2 { margin: 0; font-size: 1.1rem; }
+.import-result-body { padding: 0 20px 20px; overflow-wrap: anywhere; }
+.import-result summary { cursor: pointer; padding: 12px 0; }
+.import-result table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.import-result td, .import-result th { text-align: start; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--border); }
+.import-result-issue { display: flex; flex-direction: column; gap: 4px; margin-block: 12px; }
+.import-result code { white-space: pre-wrap; }

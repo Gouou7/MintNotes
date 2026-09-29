@@ -25,12 +25,12 @@ function requireActiveOperation(continueOperation?: ContinueOperation): void {
   if (continueOperation && !continueOperation()) throw new DOMException("Operation cancelled", "AbortError");
 }
 
-export async function createLocalAttachment(
+export async function prepareLocalAttachment(
   userId: string,
   ownerNoteId: string,
   file: File,
   continueOperation?: ContinueOperation
-): Promise<OpenAttachment> {
+) {
   requireActiveOperation(continueOperation);
   if (file.size <= 0) throw new Error("附件为空");
   if (file.size > MAX_ATTACHMENT_SIZE) throw new Error("单个附件不能超过 25 MiB");
@@ -77,45 +77,47 @@ export async function createLocalAttachment(
     idempotencyKey: crypto.randomUUID(),
     generation: Date.now() * 1000 + result.chunks.length
   };
-  await localDb.transaction("rw", [
-    localDb.objects,
-    localDb.outbox,
-    localDb.attachmentChunks,
-    localDb.attachmentOutbox
-  ], async () => {
+  const chunks: LocalAttachmentChunk[] = [];
+  const chunkOutbox: AttachmentOutboxEntry[] = [];
+  for (const chunk of result.chunks) {
+    const local: LocalAttachmentChunk = {
+      key: chunkKey(userId, attachmentId, chunk.chunkIndex), userId, attachmentId,
+      chunkIndex: chunk.chunkIndex, totalChunks: chunk.totalChunks,
+      ciphertext: chunk.ciphertext, nonce: chunk.nonce, encryptionVersion: chunk.encryptionVersion, updatedAt: now
+    };
+    chunks.push(local);
+    chunkOutbox.push({ ...local, idempotencyKey: crypto.randomUUID(), generation: Date.now() * 1000 + chunk.chunkIndex });
+  }
+  const attachment: OpenAttachment = { ...result.metadata, objectId: attachmentId, serverRevision: 0, dirty: true };
+  return { attachment, localObject, objectOutbox, chunks, chunkOutbox };
+}
+
+export type PreparedAttachment = Awaited<ReturnType<typeof prepareLocalAttachment>>;
+
+/** Caller may compose this with the note write inside an existing Dexie transaction. */
+export async function writePreparedAttachment(prepared: PreparedAttachment): Promise<void> {
+  for (const chunk of prepared.chunks) await localDb.attachmentChunks.put(chunk);
+  for (const entry of prepared.chunkOutbox) await localDb.attachmentOutbox.put(entry);
+  await localDb.objects.put(prepared.localObject);
+  await localDb.outbox.put(prepared.objectOutbox);
+}
+
+export async function createLocalAttachment(userId: string, ownerNoteId: string, file: File, continueOperation?: ContinueOperation): Promise<OpenAttachment> {
+  const prepared = await prepareLocalAttachment(userId, ownerNoteId, file, continueOperation);
+  await localDb.transaction("rw", [localDb.objects, localDb.outbox, localDb.attachmentChunks, localDb.attachmentOutbox], async () => {
     requireActiveOperation(continueOperation);
-    for (const chunk of result.chunks) {
-      const key = chunkKey(userId, attachmentId, chunk.chunkIndex);
-      const local: LocalAttachmentChunk = {
-        key,
-        userId,
-        attachmentId,
-        chunkIndex: chunk.chunkIndex,
-        totalChunks: chunk.totalChunks,
-        ciphertext: chunk.ciphertext,
-        nonce: chunk.nonce,
-        encryptionVersion: chunk.encryptionVersion,
-        updatedAt: now
-      };
-      const outbox: AttachmentOutboxEntry = {
-        ...local,
-        idempotencyKey: crypto.randomUUID(),
-        generation: Date.now() * 1000 + chunk.chunkIndex
-      };
-      await localDb.attachmentChunks.put(local);
-      await localDb.attachmentOutbox.put(outbox);
-    }
-    await localDb.objects.put(localObject);
-    await localDb.outbox.put(objectOutbox);
+    await writePreparedAttachment(prepared);
+    requireActiveOperation(continueOperation);
   });
-  return { ...result.metadata, objectId: attachmentId, serverRevision: 0, dirty: true };
+  return prepared.attachment;
 }
 
 export async function ensureAttachmentChunks(
   userId: string,
   attachment: OpenAttachment,
   continueOperation?: ContinueOperation,
-  allowNetwork = navigator.onLine
+  allowNetwork = navigator.onLine,
+  signal?: AbortSignal
 ): Promise<EncryptedAttachmentChunk[]> {
   requireActiveOperation(continueOperation);
   const stored = await localDb.attachmentChunks.where("[userId+attachmentId]").equals([userId, attachment.objectId]).toArray();
@@ -141,7 +143,8 @@ export async function ensureAttachmentChunks(
     missingIndexes,
     ATTACHMENT_TRANSFER_CONCURRENCY,
     async (index): Promise<LocalAttachmentChunk> => {
-      const downloaded = await downloadAttachmentChunk(`/api/attachments/${attachment.objectId}/chunks/${index}`);
+      requireActiveOperation(continueOperation);
+      const downloaded = await downloadAttachmentChunk(`/api/attachments/${attachment.objectId}/chunks/${index}`, signal);
       requireActiveOperation(continueOperation);
       if (
         downloaded.totalChunks !== attachment.chunkCount
@@ -185,9 +188,10 @@ export async function decryptAttachmentBlob(
   userId: string,
   attachment: OpenAttachment,
   continueOperation?: ContinueOperation,
-  allowNetwork = navigator.onLine
+  allowNetwork = navigator.onLine,
+  signal?: AbortSignal
 ): Promise<Blob> {
-  const chunks = await ensureAttachmentChunks(userId, attachment, continueOperation, allowNetwork);
+  const chunks = await ensureAttachmentChunks(userId, attachment, continueOperation, allowNetwork, signal);
   requireActiveOperation(continueOperation);
   const bytes = await cryptoClient.decryptAttachment(userId, attachment.objectId, attachment, chunks);
   requireActiveOperation(continueOperation);
