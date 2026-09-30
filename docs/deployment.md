@@ -6,6 +6,14 @@
 
 无论选择哪种方式，生产环境都必须通过 HTTPS 反向代理访问，并让应用服务只监听回环地址或受保护的内部网络。
 
+- [Docker Compose 部署](#docker-compose-部署)
+- [pnpm 部署](#pnpm-部署)
+- [生产配置](#生产配置)
+- [反向代理与日志](#反向代理与日志)
+- [备份](#备份)
+- [恢复与升级](#恢复与升级)
+- [发布镜像](#发布镜像)
+
 ## Docker Compose 部署
 
 Docker Compose 会以单个非 root 容器运行 Mint Notes，SQLite 数据保存在主机的 `notes-data` 目录，并挂载到容器的 `/data`。
@@ -74,6 +82,7 @@ pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。
 | `USER_HISTORY_QUOTA_MB` | `256` | 独立历史配额。 |
 | `SESSION_TTL_HOURS` | `168` | 普通会话寿命。 |
 | `TRUST_PROXY` | 标准部署为 `true` | 高级配置；Compose、`.env.example` 和上面的 pnpm 启动命令均已设置，无须修改。直接运行服务且未设置或留空时为 `false`。 |
+| `BACKUP_DIR` | `/data/backups` | 仅 pnpm 部署使用；备份输出目录，须为运行账户可写。Docker 部署固定写入容器的 `/data/backups`。 |
 | `LOG_LEVEL` | `info` | `trace` 至 `fatal`、`silent`。 |
 
 Docker 部署在 `.env` 中填写这些变量；pnpm 部署通过进程管理器注入。不要在任何环境文件中保存主密码、恢复密钥或保险库密钥。
@@ -86,7 +95,7 @@ Docker 部署在 `.env` 中填写这些变量；pnpm 部署通过进程管理器
 
 以 [`deploy/nginx.conf.example`](../deploy/nginx.conf.example) 为起点，替换所有 `notes.example.com`（包括 Host 检查）和证书路径。示例适用于单层 HTTPS 反向代理：拒绝未知域名，使用 `$http_host` 保留访问域名及非默认端口，覆盖 `X-Forwarded-Proto` 和 `X-Forwarded-For`，并清除客户端传入的 `X-Forwarded-Host`。如使用非默认 HTTPS 端口，还需调整监听端口及 HTTP 跳转目标。使用其他代理时也须满足相同要求；有 CDN 或多层代理时，应先按可信代理地址配置真实 IP 解析，不要直接信任客户端传入的转发链。
 
-`APP_ORIGIN` 留空即可自动校验访问来源；仅需固定一个来源时才填写用户访问的 HTTPS 源（含非默认端口）。应用服务会协商压缩文本响应，对带内容哈希的静态资源发送一年不可变缓存，对应用入口和 Service Worker 要求重新验证；反向代理不应覆盖这些响应头。`/api/sync/events` 是 SSE 长连接，应关闭代理缓冲与缓存并保留较长超时。流中断只会降低同步及时性。
+`APP_ORIGIN` 留空即可自动校验访问来源；仅需固定一个来源时才填写用户访问的 HTTPS 源（含非默认端口）。应用服务会协商压缩文本响应，对带内容哈希的静态资源发送一年不可变缓存，对应用入口和 Service Worker 要求重新验证；反向代理不应覆盖这些响应头。`/api/sync/events` 是服务器发送事件（SSE）长连接，应关闭代理缓冲与缓存并保留较长超时。流中断只会降低同步及时性。
 
 生产日志写入 stdout，使用 JSON。Docker 部署可直接查看：
 
@@ -102,7 +111,7 @@ pnpm 部署应由进程管理器收集和轮转 stdout／stderr。日志保留�
 
 备份必须同时覆盖两层：服务器密文数据库用于恢复账户与同步状态，用户侧明文 Markdown ZIP 用于可移植恢复；恢复密钥应另行保存。
 
-SQLite 使用 WAL，禁止直接复制运行中的 `notes.sqlite`。Docker 部署使用：
+SQLite 使用预写日志（WAL），不得直接复制运行中的 `notes.sqlite`。Docker 部署使用：
 
 ```bash
 docker compose exec notes node server-dist/backup.js
@@ -115,7 +124,7 @@ pnpm 部署应从项目根目录、以应用服务账户运行：
 NODE_ENV=production pnpm backup
 ```
 
-pnpm 部署默认把备份写入 `/data/backups`；可通过 `BACKUP_DIR` 指定另一个由服务账户可写的目录。备份命令会输出文件路径和 SHA-256；复制后应再次核对摘要，并在应用数据目录之外保存至少一份加密副本。可从每日 7 份、每周 4 份、每月 12 份开始，再按恢复目标调整。
+pnpm 部署默认把备份写入 `/data/backups`；可通过 `BACKUP_DIR` 指定另一个由服务账户可写的目录。备份命令会输出文件路径和 SHA-256；复制后应再次核对摘要，并在应用数据目录之外保存至少一份加密副本。保留策略可先取每日 7 份、每周 4 份、每月 12 份，再按恢复目标调整。
 
 ## 恢复与升级
 
@@ -125,7 +134,7 @@ pnpm 部署默认把备份写入 `/data/backups`；可通过 `BACKUP_DIR` 指定
 
 升级 Docker 部署时，先备份，再更新 `docker-compose.yml` 中固定的镜像版本或摘要，拉取镜像并重新启动。升级 pnpm 部署时，先备份并准备新的稳定标签，在独立目录完成 `pnpm install --frozen-lockfile`、构建和 `pnpm prune --prod`，停止旧进程后切换工作目录并启动新版本；确认恢复正常前保留旧构建目录。
 
-iOS 主屏幕应用使用非透明系统状态栏；工作区与顶部工具栏固定到可见视口，软键盘弹出时底部状态栏随可见区域调整。系统边缘效果仍需在具体 iOS 版本上验证，不能仅凭状态栏配置或网页背景判断模糊已消除。旧桌面图标可能保留安装时的状态栏配置，刷新或更新 Service Worker 不一定能改变它；若需重新添加主屏幕应用，应先确认所有更改和附件已同步并导出备份，再从 Safari 打开更新后的站点操作，不要在有未同步内容时移除应用或清除站点数据。
+iOS 上的主屏幕应用可能保留安装时的状态栏配置，刷新或更新 Service Worker 不一定能改变它。需要重新添加主屏幕应用时，先确认所有更改与附件已同步并导出备份，再从 Safari 打开更新后的站点执行操作；不要在有未同步内容时移除应用或清除站点数据。客户端在这部分的行为约束见[系统设计](system-design.md#布局滚动与焦点)。
 
 当前版本只支持服务器 schema v2 和浏览器数据库 `webmd-notes-v2`，不会迁移 v2 之前的数据。升级不兼容旧版本时，应从旧部署导出完整 Markdown ZIP、创建在线备份，再以全新 `/data` 启动并导入。启用历史保护或 v2 用户名信封后，不得回滚到不了解相应格式的版本；需要整体回退时恢复升级前备份。
 

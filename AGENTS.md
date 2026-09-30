@@ -36,6 +36,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `pnpm exec vitest run src/editor/architecture.test.ts` | 定向运行单个测试文件；按任务替换路径 |
 | `pnpm build` | 构建客户端与服务端；也可用 `pnpm build:web`／`pnpm build:server` 分别构建 |
 | `pnpm start` | 运行已构建的服务端 |
+| `pnpm backup` | 对已构建的服务端执行 SQLite 在线备份；构建后运行，输出路径与摘要 |
 
 开发端口默认是 Vite `5173`、API `8787`，Vite 代理 `/api`。开发数据库位于 `data/notes.sqlite`，由服务启动时初始化。当前没有独立的 lint／format 脚本，不要假定 `pnpm lint` 或 `pnpm format` 可用。
 
@@ -48,7 +49,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | 任务 | 文档与维护要求 |
 | --- | --- |
 | 产品概述、功能摘要、快速开始、开发命令与必要风险提示 | [README.md](README.md)，入口、能力或开发流程变化时更新 |
-| 持久化、同步、加密、认证、隔离、CSP、元数据边界 | 先读 [docs/system-design.md](docs/system-design.md)，修改须获允许 |
+| 持久化、同步、加密、认证、隔离、内容安全策略（CSP）、元数据边界 | 先读 [docs/system-design.md](docs/system-design.md)，修改须获允许 |
 | 编辑器行为、显示、交互与验收 | 先读 [docs/editor-architecture.md](docs/editor-architecture.md)，修改须获允许 |
 | Docker、pnpm、配置、代理、备份、恢复、升级、发布 | 更新 [docs/deployment.md](docs/deployment.md)，并检查 `.env.example`、`docker-compose.yml`、`deploy/nginx.conf.example` 等相关配置 |
 | 版本新增、调整与修复 | [CHANGELOG.md](CHANGELOG.md)，代码修改时更新未发布记录；发布标签须有对应的带日期版本记录 |
@@ -70,7 +71,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 ## 不变量
 
 - **正文只有一份**：原始 Markdown 是唯一可编辑、可持久化、可交换的正文。解析树、DOM 与渲染结果都是派生状态；编辑必须经准确、原子的源码事务提交，操作范围外的空格、换行和标记写法保持原样。
-- **展示不改正文**：模式切换、源码显隐和异步渲染不触发保存、同步或内容撤销记录。编辑器改动同时验证源码、选区、撤销与输入法组合输入；无法准确映射时先回退到源码，具体验收遵守 [编辑器架构原则](docs/editor-architecture.md)。
+- **展示不改正文**：模式切换、源码显隐和异步渲染不触发保存、同步或内容撤销记录；无法准确映射时先回退到源码，具体验收遵守 [编辑器架构原则](docs/editor-architecture.md)。
 - **本地保存不等网络**：顺序为内存 → 浏览器加密 → 原子写入 IndexedDB 对象与发件箱 → 后台上传。同一用户、同一对象的持久写入串行；旧异步结果或上传确认不能覆盖新编辑或删掉较新的发件箱条目。
 - **同步可重试**：沿用服务器修订、持久游标、`baseRevision` 与幂等键。拉取页全部通过认证、解密并原子落库后才推进游标；Service Worker 与 SSE 只改善可用性，不承担正确性。
 - **冲突与清理不丢数据**：不按设备时间决定冲突胜者；保留服务器版本，将本地版本连同附件保存为独立冲突副本。冲突、删除和清理不得静默移除唯一剩余修订；永久清除必须遵守墓碑、待同步数据和受保护历史的检查。
@@ -84,7 +85,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 - **锁定与离线**：锁定清除解密内存与 Blob URL，保留密文和发件箱；登出还删除当前用户本地密文、发件箱及设备凭据。离线身份快照只允许本地路由，同一已记住端点经 `/api/auth/me` 验证前，禁用同步、SSE、远程附件、账户和管理请求。
 - **内容安全**：禁用原始 HTML、可执行嵌入、运行时 CDN 脚本与远程字体。新增网络源、分析或嵌入前，审查系统设计中的数据边界与 CSP。图片附件按签名验证栅格格式，拒绝 SVG；内置客户端上限为 25 MiB。
 - **日志**：复用 `server/logging.ts` 的结构化事件、安全错误与脱敏引用。不要直接记录请求／响应、原始 URL／查询、IP、用户名、完整 ID、标头、正文、凭据、密文、nonce 或附件字节。
-- **兼容与数据维护**：`webmd-*` 存储、Cookie、标头、AAD、附件 URL 与导出标识符都是兼容协议，不随品牌名调整；更改须有保留数据的迁移。`webmd-notes-v2` 名称与 Dexie 内部版本号不是一回事，不得自动删除 v2 前数据库。SQLite 保持 WAL；在线备份使用 `server/backup.ts`（构建后 `pnpm backup`），不直接复制运行中的数据库。
+- **兼容与数据维护**：`webmd-*` 存储、Cookie、标头、AAD、附件 URL 与导出标识符都是兼容协议，不随品牌名调整；更改须有保留数据的迁移。`webmd-notes-v2` 名称与 Dexie 内部版本号不是一回事，不得自动删除 v2 前数据库。SQLite 保持 WAL；在线备份使用 `server/backup.ts`（构建后 `pnpm backup`），不要直接复制运行中的数据库。
 
 ## 验证
 
@@ -103,5 +104,5 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 
 ## 其他要求
 
-- 各文档主要使用中文，提交信息也使用中文。
+- 各文档主要使用中文。
 - 除非重大改动，一般修复性改动无须使用“电脑操作”进行检查，只进行基础检查，具体功能检查交由用户。
