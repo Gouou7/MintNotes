@@ -23,6 +23,7 @@ const widgetBuilders: Record<string, (attrs: Record<string, string>) => HTMLElem
   "image-icon": (attrs) => {
     const el = document.createElement("span");
     el.className = attrs.broken ? "image-icon broken" : "image-icon";
+    if (attrs.src) el.setAttribute("data-image-src", attrs.src);
     return el;
   },
   emoji: (attrs) => {

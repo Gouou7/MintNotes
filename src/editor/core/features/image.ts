@@ -7,6 +7,7 @@ import {
   type InlineSpan,
 } from "../inline-parse";
 import type { FeatureSpec, InlineFeatureSpec } from "./_types";
+import { createImageReconnectRetry, isImageRetrySurfaceActive } from "../image-reconnect-retry";
 
 // image in Typora-pilot (method B) mode.
 //
@@ -64,7 +65,7 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
     const resolvedSource = presentation?.resolveImageSource?.(src);
     const pendingSource = resolvedSource === null;
     const displaySource = pendingSource ? "" : resolvedSource ?? src;
-    const presentationKey = pendingSource ? "pending" : resolvedSource;
+    const presentationKey = pendingSource ? "pending" : displaySource;
     const title = m[3] ?? null;
     const alt = m[1]!;
     const span: InlineSpan = {
@@ -99,7 +100,8 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
       pos: openFrom,
       kind: "image-icon",
       side: 1,
-      attrs: status === "error" ? { broken: "1" } : undefined,
+      key: `${status === "error" ? "broken" : "ready"}:${displaySource}`,
+      attrs: status === "error" ? { broken: "1", src: displaySource } : undefined,
     };
 
     if (!editMode) {
@@ -139,14 +141,26 @@ function imageLoadProbePlugin(): Plugin {
     view(editorView) {
       let destroyed = false;
       const owned = new Set<string>();
-      const probe = (src: string): void => {
-        if (imageLoadStatus.has(src)) return;
+      const probes = new Map<string, HTMLImageElement>();
+      const cancelProbe = (src: string) => {
+        const pending = probes.get(src);
+        if (!pending) return;
+        pending.onload = null;
+        pending.onerror = null;
+        pending.removeAttribute("src");
+        probes.delete(src);
+      };
+      const probe = (src: string, retry = false): void => {
+        if (!retry && imageLoadStatus.has(src)) return;
+        cancelProbe(src);
         imageLoadStatus.set(src, "loading");
         owned.add(src);
         const probeImg = new Image();
+        probes.set(src, probeImg);
         probeImg.referrerPolicy = "no-referrer";
         const finish = (status: LoadStatus): void => {
-          if (destroyed) return;
+          if (destroyed || probes.get(src) !== probeImg) return;
+          probes.delete(src);
           imageLoadStatus.set(src, status);
           // setMeta-only tx: nothing in doc changes, but state.apply runs
           // for normalize+decorations and the per-span editMode flag re-
@@ -163,10 +177,40 @@ function imageLoadProbePlugin(): Plugin {
           if (src) probe(src);
         }
       };
+      const onImageResult = (event: Event): void => {
+        const image = event.target;
+        if (!(image instanceof HTMLImageElement) || !image.matches("img.image-render") || !editorView.dom.contains(image)) return;
+        const src = image.getAttribute("src");
+        if (!src) return;
+        cancelProbe(src);
+        const status = event.type === "load" ? "ok" : "error";
+        if (imageLoadStatus.get(src) === status) return;
+        owned.add(src);
+        imageLoadStatus.set(src, status);
+        editorView.dispatch(editorView.state.tr.setMeta(INLINE_PRESENTATION_META, status));
+      };
+      editorView.dom.addEventListener("error", onImageResult, true);
+      editorView.dom.addEventListener("load", onImageResult, true);
+      const disposeRetry = createImageReconnectRetry({
+        isActive: () => isImageRetrySurfaceActive(editorView.dom),
+        getFailedSources: () => [...editorView.dom.querySelectorAll(".image-icon.broken[data-image-src]")]
+          .map((icon) => icon.getAttribute("data-image-src")!),
+        retry: (src) => {
+          probe(src, true);
+          editorView.dispatch(editorView.state.tr.setMeta(INLINE_PRESENTATION_META, "loading"));
+        }
+      });
       scanDoc();
       return {
         update: () => scanDoc(),
-        destroy: () => { destroyed = true; for (const src of owned) imageLoadStatus.delete(src); },
+        destroy: () => {
+          destroyed = true;
+          disposeRetry();
+          editorView.dom.removeEventListener("error", onImageResult, true);
+          editorView.dom.removeEventListener("load", onImageResult, true);
+          for (const src of probes.keys()) cancelProbe(src);
+          for (const src of owned) imageLoadStatus.delete(src);
+        },
       };
     },
   });

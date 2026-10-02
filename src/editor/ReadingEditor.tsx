@@ -26,6 +26,7 @@ import { displayCodeLanguage } from "./core/fenced-code-source";
 import { navigateToDocumentFragment } from "./core/fragment-navigation";
 import { MathFormula, MermaidDiagram } from "./richRenderers";
 import { remarkWikiLinks } from "./wikilinks";
+import { useImageReconnectRetry } from "./useImageReconnectRetry";
 
 function renderedText(children: ReactNode): string {
   return Children.toArray(children).map((child) => {
@@ -103,6 +104,7 @@ export function ReadingEditor({
   const renderId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const footnoteLabelId = `mint-footnote-${renderId}-label`;
   const articleRef = useRef<HTMLElement>(null);
+  const imageRetry = useImageReconnectRetry(articleRef);
   const allowedAttachmentUrls = new Set(attachmentUrls.values());
   const frontmatter = parseFrontmatter(markdown);
   let projection = ReadingSource.authored(frontmatter.body, markdown.length - frontmatter.body.length);
@@ -259,7 +261,8 @@ export function ReadingEditor({
             const attachment = /^webmd-attachment:([0-9a-f-]{36})$/i.exec(src ?? "");
             const displaySource = attachment ? attachmentUrls.get(attachment[1].toLowerCase()) : src;
             return displaySource
-              ? <img {...props} src={displaySource} alt={alt ?? ""} referrerPolicy="no-referrer" />
+              ? <img {...props} src={displaySource} alt={alt ?? ""} referrerPolicy="no-referrer"
+                onError={imageRetry.onError} onLoad={imageRetry.onLoad} />
               : <span className="attachment-placeholder">{t("app.attachmentNotLoaded", { name: alt ?? "" })}</span>;
           }
         }}
