@@ -20,6 +20,8 @@ import {
 import { parseFencedCodeSource } from "./fenced-code-source";
 import { LIVE_SYNTAX_EDITING, LIVE_SYNTAX_RENDERING } from "./live-syntax-state";
 import { schema } from "./schema";
+import { strictListMarkers } from "./list-markers";
+import { protectParserSource, restoreParserSource } from "./parser-source-protection";
 import { setextHeadingLevel, strictSetextHeadings } from "./setext-heading";
 import {
   SOURCE_FINGERPRINT_ATTR,
@@ -32,10 +34,9 @@ import { projectTableSource } from "./table-source";
 
 const md: MarkdownIt = new MarkdownIt("commonmark", { html: false });
 md.use(strictSetextHeadings);
+md.use(strictListMarkers);
 for (const plugin of collectMdItPlugins()) md.use(plugin);
 const parserSourceProtectors = collectParserSourceProtectors();
-
-const INCOMPLETE_BLOCK_CHARACTERS = new Set(["*", "+", "-", ".", ")", "="]);
 
 type SourceLine = { text: string; from: number };
 
@@ -135,84 +136,6 @@ function splitTopLevelListBlocks(tokens: readonly Token[], lines: readonly Sourc
     index = closeIndex + 1;
   }
   return result;
-}
-
-/**
- * Protect source spellings whose CommonMark meaning differs from Mint Notes'
- * Live presentation. Same-size private sentinels preserve every UTF-16 source
- * boundary, and ParserState restores the authored characters immediately.
- *
- * Feature-owned protections also use this boundary when plain markdown-it
- * would otherwise consume syntax that the feature must present from exact
- * authored text. The feature declares only character offsets; sentinel
- * allocation and restoration remain centralized here.
- */
-function protectLiveParserSpellings(source: string): {
-  parserSource: string;
-  restoration: ReadonlyMap<string, string>;
-} {
-  // Offsets throughout the editor are UTF-16 code-unit offsets. `split("")`
-  // intentionally follows that model; code-point iteration would shift a
-  // later candidate whenever an astral character appears earlier in source.
-  const characters = source.split("");
-  const sentinels = new Map<string, string>();
-  const restoration = new Map<string, string>();
-  let nextSentinel = 0xE001;
-  const sentinelFor = (character: string): string | null => {
-    const existing = sentinels.get(character);
-    if (existing) return existing;
-    while (nextSentinel <= 0xF8FF) {
-      const candidate = String.fromCharCode(nextSentinel++);
-      if (source.includes(candidate) || restoration.has(candidate)) continue;
-      sentinels.set(character, candidate);
-      restoration.set(candidate, character);
-      return candidate;
-    }
-    return null;
-  };
-  let changed = false;
-  for (const line of sourceLines(source)) {
-    for (const protect of parserSourceProtectors) {
-      for (const lineOffset of protect(line.text)) {
-        const character = line.text[lineOffset];
-        if (character === undefined) continue;
-        const sentinel = sentinelFor(character);
-        if (!sentinel) continue;
-        const sourceOffset = line.from + lineOffset;
-        if (characters[sourceOffset] !== sentinel) {
-          characters[sourceOffset] = sentinel;
-          changed = true;
-        }
-      }
-    }
-    if (!/^( {0,3})(?:[*+-]|\d+[.)]|={1,2}|-{1,2})$/.test(line.text)) continue;
-    for (let index = 0; index < line.text.length; index += 1) {
-      const character = line.text[index]!;
-      if (!INCOMPLETE_BLOCK_CHARACTERS.has(character)) continue;
-      const sentinel = sentinelFor(character);
-      if (!sentinel) continue;
-      const sourceOffset = line.from + index;
-      if (characters[sourceOffset] !== sentinel) {
-        characters[sourceOffset] = sentinel;
-        changed = true;
-      }
-    }
-  }
-  return {
-    parserSource: changed ? characters.join("") : source,
-    restoration,
-  };
-}
-
-function restoreProtectedCharacters(
-  text: string,
-  restoration: ReadonlyMap<string, string>,
-): string {
-  let restored = text;
-  for (const [sentinel, character] of restoration) {
-    restored = restored.replaceAll(sentinel, character);
-  }
-  return restored;
 }
 
 // markdown-it normally exposes an escaped character without the authored
@@ -334,7 +257,7 @@ export class ParserState {
   addText(text: string): void {
     if (!text) return;
     this.top().content.push(schema.text(
-      restoreProtectedCharacters(text, this.protectedCharacterRestoration),
+      restoreParserSource(text, this.protectedCharacterRestoration),
       this.marks,
     ));
   }
@@ -800,7 +723,9 @@ export interface ParseOptions {
 }
 
 export function parse(src: string, options: ParseOptions = {}): PMNode {
-  const protectedSource = protectLiveParserSpellings(src);
+  // Feature-owned protection uses the same UTF-16 substitutions as the shared
+  // syntax rules; ParserState restores those authored characters immediately.
+  const protectedSource = protectParserSource(src, parserSourceProtectors);
   const lines = sourceLines(src);
   const tokens = splitTopLevelListBlocks(
     md.parse(protectedSource.parserSource, {}),

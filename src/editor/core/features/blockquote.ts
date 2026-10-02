@@ -13,6 +13,7 @@ import {
 } from "../live-syntax-state";
 import { SOURCE_FROM_ATTR } from "../source";
 import { strictSetextHeadings } from "../setext-heading";
+import { strictListMarkers } from "../list-markers";
 import {
   LIVE_POINTER_SELECTION_META,
   LIVE_PRESENTATION_SYNC_META,
@@ -27,7 +28,7 @@ import type { FeaturePluginContext, FeatureSpec } from "./_types";
 // between a non-editable rendered preview and the same node's literal source;
 // it never swaps the source for rendered-only ProseMirror content.
 
-const md = new MarkdownIt("commonmark", { html: false }).use(strictSetextHeadings);
+const md = new MarkdownIt("commonmark", { html: false }).use(strictSetextHeadings).use(strictListMarkers);
 const QUOTE_PREFIX = /^(?: {0,3}>[\t ]?)+/;
 const blockquotePresentationKey = new PluginKey<number>("blockquote-presentation");
 function selectedBlockquote(state: EditorView["state"]): {

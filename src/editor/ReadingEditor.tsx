@@ -20,6 +20,9 @@ import { materializeSingleLineDisplayMathForReading } from "./liveMathCodec";
 import { materializeInlineFootnotesForReading } from "./inlineFootnotes";
 import { remarkReadingHighlight } from "./reading-highlight";
 import { remarkReadingListSpacing } from "./reading-list-spacing";
+import { remarkReadingListMarkers } from "./reading-list-markers";
+import { incompleteListMarkerOffsets } from "./core/list-markers";
+import { protectParserSource } from "./core/parser-source-protection";
 import { remarkReadingSetext } from "./reading-setext";
 import { commentSourceRanges } from "./extensions/comment";
 import { displayCodeLanguage } from "./core/fenced-code-source";
@@ -118,6 +121,7 @@ export function ReadingEditor({
   materializeInlineFootnotesForReading(projection.text, footnoteReplacements);
   projection = projection.replace(footnoteReplacements);
   const renderedMarkdown = projection.text;
+  const listMarkers = protectParserSource(renderedMarkdown, [incompleteListMarkerOffsets]);
   const rememberSelection = () => {
     const selected = articleRef.current && readingSelection(articleRef.current);
     if (selected) onSelectionChange?.(selected);
@@ -143,6 +147,7 @@ export function ReadingEditor({
       >{markdown}</span></pre> : <><FrontmatterProperties markdown={markdown} />
       <ReactMarkdown
         remarkPlugins={[
+          [remarkReadingListMarkers, { source: renderedMarkdown, restoration: listMarkers.restoration }],
           remarkReadingSetext,
           remarkMath,
           remarkGfm,
@@ -267,7 +272,7 @@ export function ReadingEditor({
           }
         }}
       >
-        {renderedMarkdown}
+        {listMarkers.parserSource}
       </ReactMarkdown></>}
     </article>
   );

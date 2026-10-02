@@ -29,6 +29,48 @@ function setup(source: string, options: EditorOptions = {}) {
 }
 
 describe("editor architecture acceptance", () => {
+  it.each(["> -", "> *", "> +", "> 1.", "> 1)", "> > -", "- > -"].flatMap((source) =>
+    [" ", "\t"].map((separator) => ({ source, separator, existingItems: source.startsWith("-") ? 1 : 0 })),
+  ))("creates and removes a nested list only after a separator in $source", ({ source, separator, existingItems }) => {
+    const { editor, host, onChange, input, key, undo, clipboard } = setup(source);
+    editor.setSelectionOffset(source.length);
+    expect(host.querySelectorAll("li")).toHaveLength(existingItems);
+    expect(editor.getMarkdown()).toBe(source);
+    expect(onChange).not.toHaveBeenCalled();
+    input(separator);
+    expect(editor.getMarkdown()).toBe(source + separator);
+    expect(editor.getSelectionOffset()).toBe(source.length + 1);
+    expect(host.querySelectorAll("li")).toHaveLength(existingItems + 1);
+    undo();
+    expect(editor.getMarkdown()).toBe(source);
+    expect(host.querySelectorAll("li")).toHaveLength(existingItems);
+    input(separator);
+    key("Backspace");
+    expect(editor.getMarkdown()).toBe(source);
+    expect(host.querySelectorAll("li")).toHaveLength(existingItems);
+    editor.setSelection({ anchor: 0, head: source.length });
+    expect(clipboard("copy")).toBe(source);
+    onChange.mockClear();
+    editor.setSourceMode(true);
+    editor.setSourceMode(false);
+    expect(editor.getMarkdown()).toBe(source);
+    expect(editor.getSelection()).toEqual({ anchor: 0, head: source.length });
+    expect(host.querySelectorAll("li")).toHaveLength(existingItems);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it.each(["> -", "> *", "> +", "> 07)", "> > -", "- > -"])(
+    "keeps an unfinished marker literal in an inactive quote preview: %j", (quote) => {
+      const source = `before\n\n${quote}\n\nafter`;
+      const { editor, host, onChange } = setup(source);
+      editor.setSelectionOffset(source.length);
+      expect(host.querySelectorAll("li")).toHaveLength(quote.startsWith("-") ? 1 : 0);
+      expect(host.querySelector("blockquote")?.textContent).toContain(quote.split(/> ?/).at(-1));
+      expect(editor.getMarkdown()).toBe(source);
+      expect(onChange).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["-", "="])("reparses a padded Setext %s underline at three markers and undoes exactly", (marker) => {
     const source = `Title\n${marker.repeat(2)}   `;
     const offset = source.indexOf("\n") + 3;

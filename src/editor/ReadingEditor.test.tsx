@@ -15,6 +15,84 @@ afterEach(() => {
 });
 
 describe("ReadingEditor", () => {
+  it.each(["-", "+", "*", "1.", "1)", "07.", "123456789)"].flatMap((marker) => [
+    { markdown: marker, items: 0 },
+    { markdown: `> ${marker}`, items: 0 },
+    { markdown: `>> ${marker}`, items: 0 },
+    { markdown: `- > ${marker}`, items: 1 },
+    { markdown: `> - ${marker}`, items: 1 },
+    { markdown: `- item\n    ${marker}`, items: 1 },
+    { markdown: `> - item\n> ${marker}`, items: 1 },
+    { markdown: `> [!note]\n> ${marker}`, items: 0 },
+  ]))("keeps an unfinished list marker literal in $markdown", ({ markdown, items }) => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadingEditor markdown={markdown} /></I18nProvider>
+    );
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    expect(doc.querySelectorAll("li")).toHaveLength(items);
+    expect(doc.body.textContent?.trim().endsWith(markdown.split(/\s+/).at(-1)!)).toBe(true);
+    expect(html).not.toMatch(/[\uE001-\uF8FF]/);
+  });
+
+  it.each(["-", "+", "*", "1.", "1)", "07.", "123456789)"].flatMap((marker) =>
+    [" ", "\t"].map((separator) => `> ${marker}${separator}`),
+  ))("renders an empty list item with an authored separator in %j", (markdown) => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadingEditor markdown={markdown} /></I18nProvider>
+    );
+    expect(new DOMParser().parseFromString(html, "text/html").querySelectorAll("li")).toHaveLength(1);
+  });
+
+  it.each(["> - - -", "> * * *", "- > - - -"])("preserves the thematic break in %j", (markdown) => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadingEditor markdown={markdown} /></I18nProvider>
+    );
+    expect(new DOMParser().parseFromString(html, "text/html").querySelectorAll("hr")).toHaveLength(1);
+  });
+
+  it.each(["-", "1)"])("preserves code containing %j without sentinel leakage", (marker) => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadingEditor markdown={`\`\`\`md\n${marker}\n\`\`\``} /></I18nProvider>
+    );
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    expect(doc.querySelector("code")?.textContent).toBe(`${marker}\n`);
+    expect(doc.querySelectorAll("li")).toHaveLength(0);
+  });
+
+  it.each(["[a](\n-\n)", "[a]:\n-\n\n[a]", '[a](x\n"\n-\n")'])(
+    "preserves a multiline link containing a bare marker in %j", (markdown) => {
+      const html = renderToStaticMarkup(
+        <I18nProvider><ReadingEditor markdown={markdown} /></I18nProvider>
+      );
+      const link = new DOMParser().parseFromString(html, "text/html").querySelector("a");
+      expect(link?.getAttribute("href")).toBe(markdown.includes('"') ? "x" : "-");
+      if (markdown.includes('"')) expect(link?.getAttribute("title")).toBe("\n-\n");
+      expect(html).not.toMatch(/[\uE001-\uF8FF]|%EE%8[0-9A-F]%[0-9A-F]{2}/i);
+    },
+  );
+
+  it("keeps literal marker provenance after astral characters and authored private-use characters", () => {
+    const markdown = "😀 \uE001 &#57346; &#xE003; %ee%80%84\r\n\r\n> -";
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadingEditor markdown={markdown} /></I18nProvider>
+    );
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    expect(doc.querySelectorAll("li")).toHaveLength(0);
+    expect(doc.querySelector("p")?.textContent).toBe("😀 \uE001 \uE002 \uE003 %ee%80%84");
+    const marker = doc.querySelector("blockquote [data-source-offsets]");
+    expect(marker?.textContent).toBe("-");
+    expect(marker?.getAttribute("data-source-offsets")).toBe(`${markdown.length - 1},${markdown.length}`);
+  });
+
+  it("keeps an authored encoded link target distinct from parser sentinels", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadingEditor markdown={"[a](&percnt;EE&#37;80%81)\n\n> -"} /></I18nProvider>
+    );
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    expect(doc.querySelector("a")?.getAttribute("href")).toBe("%EE%80%81");
+    expect(doc.querySelectorAll("li")).toHaveLength(0);
+  });
+
   it.each(["", " ", "   ", "\t", " \t "])("requires three Setext markers with suffix %j", (suffix) => {
     const markdown = ["-", "--", "=", "==", "---", "===", "----", "===="]
       .map((marker) => `Title ${marker}\n${marker}${suffix}`).join("\n\n");

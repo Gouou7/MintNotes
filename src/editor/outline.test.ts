@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { buildOutline, findOutlineHeading } from "./outline";
 
 describe("buildOutline", () => {
+  it.each(["-", "+", "*", "1.", "1)"])("does not put a heading inside an unfinished %s list", (marker) => {
+    const prefix = "😀\r\n\r\n";
+    const indent = " ".repeat(marker.length + 1);
+    const markdown = `${prefix}${marker}\r\n${indent}## Heading`;
+    expect(buildOutline(markdown)).toEqual([
+      { id: "heading-0", level: 2, text: "Heading", index: 0, sourceOffset: prefix.length + marker.length + 2, sourceLine: 3 },
+    ]);
+    expect(buildOutline(`${prefix}${marker} \r\n${indent}## Heading`)).toEqual([]);
+  });
+
   it.each(["", " ", "   ", "\t", " \t "])("requires three Setext markers with suffix %j", (suffix) => {
     const markdown = ["-", "--", "=", "==", "---", "===", "----", "===="]
       .map((marker) => `Title ${marker}\n${marker}${suffix}`).join("\n\n");
