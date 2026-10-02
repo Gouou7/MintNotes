@@ -131,12 +131,10 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
   return out;
 };
 
-// Probes every image src found in the doc. On load/error, updates the
+// Probes sources from actual image previews. On load/error, updates the
 // shared status map and dispatches a meta-only tx to retrigger normalize/
 // decorations so the span flips between image-mode and edit-mode.
-function imageLoadProbePlugin(
-  resolveImageSource?: (source: string) => string | null | undefined,
-): Plugin {
+function imageLoadProbePlugin(): Plugin {
   return new Plugin({
     view(editorView) {
       let destroyed = false;
@@ -146,6 +144,7 @@ function imageLoadProbePlugin(
         imageLoadStatus.set(src, "loading");
         owned.add(src);
         const probeImg = new Image();
+        probeImg.referrerPolicy = "no-referrer";
         const finish = (status: LoadStatus): void => {
           if (destroyed) return;
           imageLoadStatus.set(src, status);
@@ -159,20 +158,10 @@ function imageLoadProbePlugin(
         probeImg.src = src;
       };
       const scanDoc = (): void => {
-        editorView.state.doc.descendants((node) => {
-          if (!node.isTextblock) return true;
-          const text = node.textContent;
-          IMAGE_RE.lastIndex = 0;
-          let m: RegExpExecArray | null;
-          while ((m = IMAGE_RE.exec(text))) {
-            const authoredSource = m[2];
-            if (!authoredSource) continue;
-            const resolvedSource = resolveImageSource?.(authoredSource);
-            if (resolvedSource === null) continue;
-            probe(resolvedSource ?? authoredSource);
-          }
-          return false;
-        });
+        for (const preview of editorView.dom.querySelectorAll("img.image-render[src]")) {
+          const src = preview.getAttribute("src");
+          if (src) probe(src);
+        }
       };
       scanDoc();
       return {
@@ -246,8 +235,8 @@ export const image: FeatureSpec = {
     image: { open: "", close: "" },
   },
 
-  plugins: (_schema, context) => [
-    imageLoadProbePlugin(context.resolveImageSource),
+  plugins: () => [
+    imageLoadProbePlugin(),
   ],
 
   inline: {

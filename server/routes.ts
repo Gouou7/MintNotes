@@ -1,6 +1,5 @@
 import cookie from "@fastify/cookie";
 import compress from "@fastify/compress";
-import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { LogController } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -31,6 +30,7 @@ import {
   serverRequestId
 } from "./logging.js";
 import { registerWebRoutes } from "./web.js";
+import { registerSecurityHeaders } from "./securityHeaders.js";
 
 export interface RouteApplicationOptions {
   config?: ServerConfig;
@@ -69,25 +69,7 @@ await app.register(compress, { global: true, globalDecompression: false, thresho
 registerHttpLogging(app);
 app.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_request, body, done) => done(null, body));
 await app.register(rateLimit, { global: false });
-await app.register(helmet, {
-  global: true,
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      // hash-wasm compiles the bundled Argon2id WebAssembly module. This
-      // permits WASM compilation without enabling JavaScript 'unsafe-eval'.
-      scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'"],
-      workerSrc: ["'self'", "blob:"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"]
-    }
-  }
-});
+await registerSecurityHeaders(app);
 
 app.decorateRequest("sessionUser", null);
 app.decorateRequest("sessionContext", null);

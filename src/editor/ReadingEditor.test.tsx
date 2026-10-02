@@ -139,6 +139,20 @@ describe("ReadingEditor", () => {
     expect(html).toContain('--markdown-list-gap-before:2');
   });
 
+  it("renders HTTPS inline and reference images without sending the page referrer", () => {
+    const source = '![inline](https://images.example.test/a.png "Title")\n\n![reference][photo]\n\n[photo]: https://images.example.test/b.jpg';
+    const html = renderToStaticMarkup(
+      <I18nProvider><ReadingEditor markdown={source} /></I18nProvider>
+    );
+    const images = [...new DOMParser().parseFromString(html, "text/html").querySelectorAll("img")];
+    expect(images.map((image) => image.getAttribute("src"))).toEqual([
+      "https://images.example.test/a.png", "https://images.example.test/b.jpg"
+    ]);
+    expect(images.map((image) => image.getAttribute("referrerpolicy"))).toEqual(["no-referrer", "no-referrer"]);
+    expect(images.map((image) => image.alt)).toEqual(["inline", "reference"]);
+    expect(images[0].title).toBe("Title");
+  });
+
   it("renders an attachment reference from its in-memory Blob URL", () => {
     localStorage.setItem("webmd-notes-language", "zh-CN");
     const attachmentId = "11111111-1111-4111-8111-111111111111";

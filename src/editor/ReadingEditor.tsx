@@ -259,7 +259,7 @@ export function ReadingEditor({
             const attachment = /^webmd-attachment:([0-9a-f-]{36})$/i.exec(src ?? "");
             const displaySource = attachment ? attachmentUrls.get(attachment[1].toLowerCase()) : src;
             return displaySource
-              ? <img {...props} src={displaySource} alt={alt ?? ""} />
+              ? <img {...props} src={displaySource} alt={alt ?? ""} referrerPolicy="no-referrer" />
               : <span className="attachment-placeholder">{t("app.attachmentNotLoaded", { name: alt ?? "" })}</span>;
           }
         }}

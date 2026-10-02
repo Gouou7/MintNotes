@@ -40,6 +40,7 @@ const widgetBuilders: Record<string, (attrs: Record<string, string>) => HTMLElem
   "image-render": (attrs) => {
     const img = document.createElement("img");
     img.className = "image-render";
+    img.referrerPolicy = "no-referrer";
     if (attrs.src) img.setAttribute("src", attrs.src);
     if (attrs.alt) img.setAttribute("alt", attrs.alt);
     if (attrs.title) img.setAttribute("title", attrs.title);

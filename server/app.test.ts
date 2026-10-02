@@ -36,6 +36,34 @@ function registrationBody(username: string) {
 }
 
 describe("createApp", () => {
+  it("allows HTTPS image hosts while keeping other remote resource types restricted", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "mint-notes-image-csp-test-"));
+    temporaryDirectories.push(directory);
+    const db = openDatabase(directory);
+    const config = { ...loadServerConfig({ NODE_ENV: "production", LOG_LEVEL: "silent" }), dataDirectory: directory };
+    const app = await createApp({ config, db, maintenance: false });
+    try {
+      const response = await app.inject({ method: "GET", url: "/api/health" });
+      expect(response.statusCode).toBe(200);
+      const directives = new Map(String(response.headers["content-security-policy"])
+        .split(";").map((directive) => {
+          const [name, ...sources] = directive.trim().split(/\s+/);
+          return [name, sources];
+        }));
+      expect(directives.get("img-src")).toEqual(["'self'", "data:", "blob:", "https:"]);
+      expect(directives.get("default-src")).toEqual(["'self'"]);
+      expect(directives.get("script-src")).toEqual(["'self'", "'wasm-unsafe-eval'"]);
+      expect(directives.get("connect-src")).toEqual(["'self'"]);
+      expect(directives.get("font-src")).toEqual(["'self'"]);
+      expect(directives.get("object-src")).toEqual(["'none'"]);
+      expect(directives.get("frame-ancestors")).toEqual(["'none'"]);
+      expect(response.headers["referrer-policy"]).toBe("no-referrer");
+    } finally {
+      await app.close();
+      db.close();
+    }
+  });
+
   it.each(["notes.example.test", "notes.example.test:8443"])("supports registration, login and sync at %s with the unchanged deployment environment", async (host) => {
     const directory = mkdtempSync(join(tmpdir(), "mint-notes-default-deployment-test-"));
     temporaryDirectories.push(directory);
