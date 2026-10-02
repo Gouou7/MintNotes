@@ -44,6 +44,7 @@ import { adjacentGrapheme, changedSourceRange, selectTextarea, textareaSelection
 import { selectedTableCells, tableNavigation } from "./table-navigation";
 import { SourceComposition } from "./source-composition";
 import { nativeTextInputRange } from "./native-input-range";
+import { nativeSelectionPresentationPlugin } from "./native-selection-presentation";
 import { liveSourceKeyTransaction } from "./live-source-commands";
 import { resolveSourceBlockEditingPresentation } from "./presentation";
 import {
@@ -1073,13 +1074,16 @@ export function createEditor(
     const base = EditorState.create({
       schema,
       doc,
-      plugins: defaultPlugins({
-        cursorWidget: false,
-        canonicalSource: true,
-        renderControlIcon: options.renderControlIcon,
-        extensions: options.extensions,
-        resolveImageSource: options.resolveImageSource,
-      }),
+      plugins: [
+        ...defaultPlugins({
+          cursorWidget: false,
+          canonicalSource: true,
+          renderControlIcon: options.renderControlIcon,
+          extensions: options.extensions,
+          resolveImageSource: options.resolveImageSource,
+        }),
+        nativeSelectionPresentationPlugin(() => pointerSelectionActive || pendingComposition !== null),
+      ],
     });
     // Fire one no-op transaction so normalize's appendTransaction runs
     // and method-B marks (em, strong, autolink, etc.) apply on first
