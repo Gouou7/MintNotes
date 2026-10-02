@@ -108,8 +108,9 @@
 }
 
 /* ─── method-B syntax hints ──────────────────────────────────────── */
-.ProseMirror .syntax-hint {
-  color: #b0b0b0;
+.ProseMirror .syntax-hint,
+.ProseMirror .syntax-hint-italic {
+  color: var(--syntax-marker-color, #64635d);
   font-weight: normal;
   font-style: normal;
   line-height: inherit;
@@ -118,14 +119,6 @@
 }
 .ProseMirror pre.cb-source-editing .syntax-hint {
   user-select: text;
-}
-.ProseMirror .syntax-hint-italic {
-  color: #b0b0b0;
-  font-style: italic;
-  font-weight: normal;
-  line-height: inherit;
-  vertical-align: baseline;
-  user-select: none;
 }
 /* Delim char is present in the doc text but visually absent when the
  * cursor is outside the mark's surrounding span. PM pos still tracks
@@ -236,22 +229,22 @@
   display: inline-block;
   min-width: 1em;
 }
-.ProseMirror ref-label::before { content: "[ "; color: #b0b0b0; user-select: none; }
-.ProseMirror ref-label::after  { content: " ]: "; color: #b0b0b0; user-select: none; }
+.ProseMirror ref-label::before { content: "[ "; color: var(--syntax-marker-color, #64635d); user-select: none; }
+.ProseMirror ref-label::after  { content: " ]: "; color: var(--syntax-marker-color, #64635d); user-select: none; }
 .ProseMirror ref-url { color: #0969da; }
 .ProseMirror ref-url[data-placeholder]::before {
   content: attr(data-placeholder);
-  color: #b0b0b0;
+  color: var(--syntax-marker-color, #64635d);
   font-style: italic;
   text-decoration: underline;
   user-select: none;
 }
 .ProseMirror ref-title { color: #555; padding-left: 0.6em; }
-.ProseMirror ref-title::before { content: '" '; color: #b0b0b0; user-select: none; }
-.ProseMirror ref-title::after  { content: ' "'; color: #b0b0b0; user-select: none; }
+.ProseMirror ref-title::before { content: '" '; color: var(--syntax-marker-color, #64635d); user-select: none; }
+.ProseMirror ref-title::after  { content: ' "'; color: var(--syntax-marker-color, #64635d); user-select: none; }
 .ProseMirror ref-title[data-placeholder]::before {
   content: '" ' attr(data-placeholder) ' "';
-  color: #b0b0b0;
+  color: var(--syntax-marker-color, #64635d);
   font-style: italic;
   user-select: none;
 }

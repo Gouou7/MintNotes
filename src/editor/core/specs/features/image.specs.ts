@@ -19,7 +19,7 @@ export const imageSpecs: FeatureSpecs = {
         { at: 8, expect: "![alt](u|" },
         // The explicitly authored close `)` completes the image. Source is
         // visible above the preview while the caret remains on its boundary.
-        { at: 11, expect: "<img-icon/>![alt](url)<img:url>alt</img>|" },
+        { at: 11, expect: "<img-icon/><g>![</g>alt<g>](url)</g><img:url>alt</img>|" },
         // space pushes cursor outside → source hidden, only <img> remains.
         { at: 12, expect: "<img:url>alt</img> |" },
       ],
@@ -33,7 +33,7 @@ export const imageSpecs: FeatureSpecs = {
         { at: 3, expect: "![]|" },
         { at: 4, expect: "![](|" },
         { at: 5, expect: "![](u|" },
-        { at: 8, expect: "<img-icon/>![](url)<img:url></img>|" },
+        { at: 8, expect: "<img-icon/><g>![</g><g>](url)</g><img:url></img>|" },
         // Stable view: empty alt → <img> alt="" → pretty empty children.
         { at: 9, expect: "<img:url></img> |" },
       ],
@@ -46,11 +46,11 @@ export const imageSpecs: FeatureSpecs = {
         "!", "[", "a", "]", "(", "u", ")", " ", "<ArrowLeft>",
       ],
       checkpoints: [
-        { at: 7, expect: "<img-icon/>![a](u)<img:u>a</img>|" },
+        { at: 7, expect: "<img-icon/><g>![</g>a<g>](u)</g><img:u>a</img>|" },
         { at: 8, expect: "<img:u>a</img> |" },
         // Cursor moves to boundary `)|<space>` → still inside span, source
         // re-revealed; image still under it.
-        { at: 9, expect: "<img-icon/>![a](u)<img:u>a</img>| " },
+        { at: 9, expect: "<img-icon/><g>![</g>a<g>](u)</g><img:u>a</img>| " },
       ],
     },
   ],

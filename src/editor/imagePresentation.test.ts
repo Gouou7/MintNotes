@@ -26,6 +26,64 @@ afterEach(() => {
 });
 
 describe("external image presentation", () => {
+  it("dims image delimiters and target information while keeping the description and preview intact", () => {
+    mockImageLoads();
+    const imageSource = '![photo](https://images.example.test/dimmed.png "Title")';
+    const source = `before\r\n\r\n${imageSource}\r\n\r\nafter`;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const onChange = vi.fn();
+    const editor = createEditor(host, { initialContent: source, onChange });
+    try {
+      const start = source.indexOf(imageSource);
+      for (const offset of [start, start + 3, start + imageSource.length]) {
+        editor.setSelectionOffset(offset);
+        expect([...host.querySelectorAll(".syntax-hint")].map((marker) => marker.textContent))
+          .toEqual(["![", '](https://images.example.test/dimmed.png "Title")']);
+        const description = host.querySelector("[data-image-mark]");
+        expect(description?.textContent).toBe("photo");
+        expect(description?.closest(".syntax-hint")).toBeNull();
+        expect(description?.querySelector(".syntax-hint")).toBeNull();
+        expect(host.querySelector("img.image-render")?.getAttribute("alt")).toBe("photo");
+        expect(editor.getSelectionOffset()).toBe(offset);
+      }
+      editor.setSelectionOffset(source.length);
+      expect(host.querySelector(".syntax-hint")).toBeNull();
+      expect([...host.querySelectorAll(".syntax-hidden")].map((marker) => marker.textContent).join(""))
+        .toBe(imageSource);
+      expect(host.querySelector("img.image-render")).not.toBeNull();
+      expect(editor.getMarkdown()).toBe(source);
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it.each(["empty", "pending", "error"])("uses the same image marker hints for an %s source", (status) => {
+    const { probes } = mockImageLoads();
+    const destination = status === "empty" ? "" : `https://images.example.test/${status}-hints.png`;
+    const imageSource = `![photo](${destination})`;
+    const source = `before\n\n${imageSource}\n\nafter`;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const editor = createEditor(host, {
+      initialContent: source,
+      resolveImageSource: status === "pending" ? () => null : undefined,
+    });
+    try {
+      if (status === "error") probes[0].dispatchEvent(new Event("error"));
+      editor.setSelectionOffset(source.indexOf(imageSource) + 3);
+      expect([...host.querySelectorAll(".syntax-hint")].map((marker) => marker.textContent))
+        .toEqual(["![", `](${destination})`]);
+      expect(host.querySelector("[data-image-mark]")?.textContent).toBe("photo");
+      expect(editor.getMarkdown()).toBe(source);
+      editor.setSelectionOffset(source.length);
+      expect(host.querySelector(".syntax-hint") !== null).toBe(status !== "pending");
+    } finally {
+      editor.destroy();
+    }
+  });
+
   it("does not probe external image URLs written inside code or Front Matter", () => {
     const requests: string[] = [];
     vi.stubGlobal("Image", class {

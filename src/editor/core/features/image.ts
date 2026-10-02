@@ -19,11 +19,11 @@ import { createImageReconnectRetry, isImageRetrySurfaceActive } from "../image-r
 // Visibility model (different from link, matches Typora):
 //   - cursor outside span: source chars hidden, an <img> widget at closeTo
 //     renders the loaded image
-//   - cursor inside span:  source chars visible (plain), an icon widget at
+//   - cursor inside span: source markers dimmed, alt text stays normal; an icon at
 //     openFrom flags the line as image; empty sources stay editable.
 //
-// We piggy-back on the existing softInside delim path to flip the source
-// chars on and off, and on widgetDecorations to swap the img/icon UI.
+// Delimiter hints dim the markers and target; softInside keeps the alt text
+// normal while editing and hidden outside. Widgets retain the preview.
 
 const IMAGE_RE = /!\[([^\]]*?)\]\(([^\s)]*)(?:\s+"([^"]*)")?\)/g;
 
@@ -92,6 +92,13 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
         ? "loading"
         : imageLoadStatus.get(displaySource) ?? null;
     const editMode = src === "" || status === "error";
+    span.delimRanges = [
+      { from: openFrom, to: openTo, forceVisible: editMode },
+      ...(!editMode && contentFrom < contentTo
+        ? [{ from: contentFrom, to: contentTo, softInside: true }]
+        : []),
+      { from: closeFrom, to: closeTo, forceVisible: editMode },
+    ];
     // Icon side=1: caret at openFrom renders to the LEFT of the icon, so
     // ArrowLeft from inside the source can park the cursor before the icon
     // widget. With side=-1 the caret ended up between icon and `!`, with no
@@ -107,10 +114,9 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
     if (!editMode) {
       // Loaded image: <img> renders ALWAYS, placed at the END of the
       // source range so display:block puts it on a new line BELOW the
-      // markdown text. softInside delim hides the source chars when the
-      // cursor is outside; cursor inside reveals source for editing while
+      // markdown text. Delimiter ranges hide the whole source outside;
+      // entering reveals its dimmed markers and normal alt text while
       // the image stays put underneath.
-      span.delimRanges = [{ from: openFrom, to: closeTo, softInside: true }];
       span.widgetDecorations!.push(
         { ...iconWidget, when: "inside" } as never,
         {
@@ -122,7 +128,6 @@ const scan: InlineFeatureSpec["scan"] = (text, consumed, _parentBlock, presentat
         },
       );
     } else {
-      span.delimRanges = [];
       span.widgetDecorations!.push(
         { ...iconWidget, when: "always" } as never,
 
