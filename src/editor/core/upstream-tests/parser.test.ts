@@ -116,8 +116,9 @@ describe("parser: block nodes", () => {
       "bullet_list",
     ]);
     expect(firstList.childCount).toBe(2);
-    expect(firstList.child(0).child(1).type).toBe(schema.nodes.bullet_list);
-    expect(firstList.child(0).child(1).childCount).toBe(2);
+    const nestedList = firstList.child(0).content.content.find((node) => node.type === schema.nodes.bullet_list);
+    expect(nestedList).toBeDefined();
+    expect(nestedList?.childCount).toBe(2);
     expect(firstList.attrs[SOURCE_TEXT_ATTR]).toBe(markdown.slice(0, markdown.indexOf("\n\n")));
     expect(doc.child(2).attrs[SOURCE_TEXT_ATTR]).toBe("- 另一个一级项目");
     expect(serialize(doc)).toBe(markdown);

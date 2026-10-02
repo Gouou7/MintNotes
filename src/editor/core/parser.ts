@@ -306,8 +306,14 @@ type Frame = { type: NodeType; attrs: Attrs | null; content: PMNode[] };
 export class ParserState {
   private stack: Frame[] = [{ type: schema.nodes.doc, attrs: null, content: [] }];
   private marks: readonly Mark[] = Mark.none;
+  private tokenSource: Attrs | null = null;
 
   constructor(private readonly protectedCharacterRestoration: ReadonlyMap<string, string> = new Map()) {}
+
+  /** Every block, including feature-owned blocks, inherits its token's authored range. */
+  setTokenSource(attrs: Attrs | null): void {
+    this.tokenSource = attrs;
+  }
 
   literalInline(source: string, from: number, to: number): void {
     this.top().attrs = { ...this.top().attrs, sourceLiteral: true, sourceFrom: from, sourceTo: to, sourceText: source };
@@ -319,6 +325,9 @@ export class ParserState {
   }
 
   push(node: PMNode): void {
+    if (this.tokenSource && SOURCE_FROM_ATTR in node.attrs) {
+      node = node.type.createChecked({ ...node.attrs, ...this.tokenSource }, node.content, node.marks);
+    }
     this.top().content.push(node);
   }
 
@@ -345,6 +354,9 @@ export class ParserState {
   }
 
   openNode(type: NodeType, attrs: Attrs | null = null): void {
+    if (this.tokenSource && SOURCE_FROM_ATTR in (type.spec.attrs ?? {})) {
+      attrs = { ...this.tokenSource, ...attrs };
+    }
     this.stack.push({ type, attrs, content: [] });
   }
 
@@ -371,24 +383,72 @@ export class ParserState {
       const paragraph = schema.nodes.paragraph.createChecked({ ...frame.attrs, sourceLiteral: true }, schema.text(frame.attrs.sourceText));
       node = node.copy(Fragment.from(paragraph));
     }
-    if (node.type.name === "quote_container" && typeof frame.attrs?.sourceText === "string") {
+    if (["bullet_list", "ordered_list"].includes(node.type.name) && typeof frame.attrs?.sourceText === "string") {
+      const from = Number(frame.attrs.sourceFrom);
+      const items: PMNode[] = [];
+      node.forEach((item) => {
+        const previous = items.at(-1);
+        const gapFrom = previous?.attrs.sourceTo;
+        const gapTo = item.attrs.sourceFrom;
+        if (previous && Number.isInteger(gapFrom) && Number.isInteger(gapTo) && gapTo > gapFrom) {
+          const gap = sourceGapNode(frame.attrs!.sourceText.slice(gapFrom - from, gapTo - from), gapFrom, gapTo, Number(frame.attrs!.sourceTo) + 1);
+          // Lists only accept items. The preceding item owns the exact
+          // separator, including CRLF boundaries and quoted blank rows.
+          items[items.length - 1] = previous.type.createChecked({
+            ...previous.attrs, sourceTo: gapTo,
+            sourceText: frame.attrs!.sourceText.slice(Number(previous.attrs.sourceFrom) - from, gapTo - from),
+          }, previous.content.append(Fragment.from(gap)));
+          item = item.type.createChecked({ ...item.attrs, sourceGapBefore: 0 }, item.content);
+        }
+        items.push(item);
+      });
+      node = node.copy(Fragment.from(items));
+    }
+    if (["quote_container", "list_item"].includes(node.type.name) && typeof frame.attrs?.sourceText === "string") {
+      const isListItem = node.type.name === "list_item";
       const from = Number(frame.attrs.sourceFrom);
       const to = Number(frame.attrs.sourceTo);
       const children: PMNode[] = [];
       let cursor = from;
-      // Empty quotes have no parsed children. Do not retain createAndFill's
-      // synthetic paragraph: the authored marker gap already owns their rows.
-      frame.content.forEach((child) => {
+      let mapped = true;
+      // Empty quotes have no parsed children; their marker gap owns the rows.
+      // A list item must keep its required paragraph before non-paragraph
+      // children, even when that paragraph has no authored text of its own.
+      const content = isListItem ? node.content.content : frame.content;
+      content.forEach((child) => {
+        if (isListItem && child.type.name === "paragraph" && !child.content.size && child.attrs.sourceFrom === null) {
+          children.push(child);
+          return;
+        }
         const childFrom = Number(child.attrs.sourceFrom);
         const childTo = Number(child.attrs.sourceTo);
-        if (child.attrs.sourceFrom !== null && Number.isInteger(childFrom) && childFrom > cursor) {
+        if (
+          child.attrs.sourceFrom === null || child.attrs.sourceTo === null
+          || !Number.isInteger(childFrom) || !Number.isInteger(childTo)
+          || childFrom < cursor || childTo < childFrom || childTo > to
+        ) {
+          mapped = false;
+          return;
+        }
+        if (childFrom > cursor) {
           children.push(sourceGapNode(frame.attrs!.sourceText.slice(cursor - from, childFrom - from), cursor, childFrom, to + 1));
         }
         children.push(child);
-        if (child.attrs.sourceTo !== null && Number.isInteger(childTo)) cursor = childTo;
+        cursor = childTo;
       });
       if (cursor < to) children.push(sourceGapNode(frame.attrs.sourceText.slice(cursor - from), cursor, to, to + 1));
-      node = node.type.createChecked(node.attrs, children);
+      mapped &&= node.type.validContent(Fragment.from(children));
+      // Missing or overlapping provenance cannot justify an extra source
+      // row. Keep one exact editable source surface until it can be mapped.
+      node = mapped
+        ? node.type.createChecked(node.attrs, children)
+        : isListItem
+          ? node.type.createChecked(node.attrs, [schema.nodes.paragraph.createChecked(
+            { ...frame.attrs, sourceLiteral: true }, schema.text(frame.attrs.sourceText),
+          )])
+        : schema.nodes.source_block.createChecked(
+          { ...frame.attrs, kind: "unmapped-quote" }, schema.text(frame.attrs.sourceText),
+        );
     }
     this.top().content.push(node);
   }
@@ -563,55 +623,35 @@ function handleInline(state: ParserState, token: Token): void {
 
 type SourceBlockRange = { from: number; to: number };
 
-function originalLineStarts(source: string): number[] {
-  const starts = [0];
-  for (let index = 0; index < source.length; index += 1) {
-    if (source[index] === "\n") starts.push(index + 1);
+function tokenSourceRange(token: Token, source: string, lines: readonly SourceLine[]): SourceBlockRange | null {
+  if (!token.block || !token.map || token.type === "inline" || token.nesting === -1) return null;
+  const [fromLine, toLine] = token.map;
+  if (toLine <= fromLine) return null;
+  const from = lines[fromLine]?.from ?? source.length;
+  // Containers may consume following blank lines. Only their content owns
+  // this range; the remaining whitespace belongs to the parent's source gap.
+  let lastContentLine = toLine - 1;
+  while (token.type !== "fence" && lastContentLine > fromLine && !lines[lastContentLine]?.text.trim()) {
+    lastContentLine--;
   }
-  return starts;
-}
-
-function contentEndOfLine(source: string, start: number): number {
-  let end = start;
-  while (end < source.length && source[end] !== "\r" && source[end] !== "\n") end += 1;
-  return end;
+  const last = lines[lastContentLine];
+  // An unclosed fence also owns trailing blank rows and the final line ending.
+  const to = token.type === "fence" && !sourceFenceIsClosed(token, source)
+    ? lines[toLine]?.from ?? source.length
+    : last ? last.from + last.text.length : source.length;
+  return { from, to };
 }
 
 function topLevelSourceRanges(tokens: readonly Token[], source: string): SourceBlockRange[] {
-  const starts = originalLineStarts(source);
+  const lines = sourceLines(source);
   const ranges: SourceBlockRange[] = [];
   for (const token of tokens) {
-    if (
-      !token.block
-      || token.level !== 0
-      || !token.map
-      || token.type === "inline"
-      || token.nesting === -1
-    ) continue;
-    const [fromLine, toLine] = token.map;
-    if (toLine <= fromLine) continue;
-    const from = starts[fromLine] ?? source.length;
-    // markdown-it includes trailing blank lines in some container maps,
-    // notably lists. Those rows are not represented by the rich block and
-    // therefore belong to a top-level source_gap instead of the block's
-    // authored snapshot. Keep internal blank lines because a later nonblank
-    // line still belongs to the same container.
-    let lastContentLine = toLine - 1;
-    while (token.type !== "fence" && lastContentLine > fromLine) {
-      const candidateStart = starts[lastContentLine] ?? source.length;
-      const candidateEnd = contentEndOfLine(source, candidateStart);
-      if (source.slice(candidateStart, candidateEnd).trim().length > 0) break;
-      lastContentLine -= 1;
-    }
-    const lastLineStart = starts[lastContentLine] ?? source.length;
-    // An unclosed fence also owns trailing blank rows, including the final
-    // line ending. They must not turn into editable gaps outside the code.
-    const to = token.type === "fence" && !sourceFenceIsClosed(token, source)
-      ? starts[toLine] ?? source.length
-      : contentEndOfLine(source, lastLineStart);
+    if (token.level !== 0) continue;
+    const range = tokenSourceRange(token, source, lines);
+    if (!range) continue;
     const previous = ranges.at(-1);
-    if (previous?.from === from && previous.to === to) continue;
-    ranges.push({ from, to });
+    if (previous?.from === range.from && previous.to === range.to) continue;
+    ranges.push(range);
   }
   return ranges;
 }
@@ -771,6 +811,10 @@ export function parse(src: string, options: ParseOptions = {}): PMNode {
   const compositeQuotes: number[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index]!;
+    const range = options.sourceGaps !== false ? tokenSourceRange(token, src, lines) : null;
+    state.setTokenSource(range ? {
+      sourceFrom: range.from, sourceTo: range.to, sourceText: src.slice(range.from, range.to),
+    } : null);
     if (token.type === "blockquote_open") {
       const source = sourceForBlockquote(token, src);
       const close = blockquoteCloseIndex(tokens, index);
@@ -778,14 +822,7 @@ export function parse(src: string, options: ParseOptions = {}): PMNode {
         !/^[\t >]*\[!/.test(source) || tokens.slice(index, close).some((part) => part.type === "table_open")
       );
       if (composite) {
-        const from = lines[token.map![0]]!.from;
-        // Empty quotes can include following unquoted blank lines in their
-        // token map. Those lines belong outside the quote's border.
-        let lastLine = token.map![1] - 1;
-        while (lastLine > token.map![0] && !lines[lastLine]!.text.trim()) lastLine--;
-        const last = lines[lastLine]!;
-        const to = last.from + last.text.length;
-        state.openNode(schema.nodes.quote_container, { sourceFrom: from, sourceTo: to, sourceText: src.slice(from, to) });
+        state.openNode(schema.nodes.quote_container);
         compositeQuotes.push(token.level);
       } else {
         state.push(schema.nodes.blockquote.createChecked(
@@ -821,12 +858,11 @@ export function parse(src: string, options: ParseOptions = {}): PMNode {
       continue;
     }
     if (options.sourceGaps !== false && token.type === "list_item_open" && token.map) {
-      const line = lines[token.map[0]]!;
       let sourceGapBefore = 0;
       if (listHasItem.at(-1)) {
         for (let row = token.map[0] - 1; row >= 0 && !lines[row]!.text.trim(); row--) sourceGapBefore++;
       }
-      state.openNode(schema.nodes.list_item, { sourceGapBefore, sourceFrom: line.from, sourceTo: line.from + line.text.length, sourceText: line.text });
+      state.openNode(schema.nodes.list_item, { sourceGapBefore });
       if (listHasItem.length) listHasItem[listHasItem.length - 1] = true;
       continue;
     }

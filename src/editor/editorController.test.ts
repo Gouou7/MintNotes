@@ -549,6 +549,47 @@ describe("Mint editor core public controller", () => {
     },
   );
 
+  it.each(["> -", "> - ", "> *", "> +", "> 1.", "> 1)", "> - item", "> > -", "- > -"])(
+    "shows one authored copy of %j after typing, refresh, and mode switches",
+    async (source) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const changes: string[] = [];
+      const editor = createEditor(host, { onChange: (next) => changes.push(next) });
+      editor.focus();
+
+      await typeBrowserTextAtSelection(host, source);
+      expect(editor.getMarkdown()).toBe(source);
+      expect(host.querySelector(".ProseMirror")?.textContent).toBe(source);
+      expect(host.querySelector("blockquote [data-source-gap]")).toBeNull();
+      expect(changes).toEqual(Array.from({ length: source.length }, (_, index) => source.slice(0, index + 1)));
+
+      changes.length = 0;
+      for (let offset = 0; offset <= source.length; offset++) {
+        editor.setSelectionOffset(offset);
+        expect(editor.getSelectionOffset()).toBe(offset);
+        expect(host.querySelector(".ProseMirror")?.textContent).toBe(source);
+      }
+      editor.refreshPresentation();
+      editor.toggleSource();
+      editor.toggleSource();
+      expect(editor.getMarkdown()).toBe(source);
+      expect(host.querySelector(".ProseMirror")?.textContent).toBe(source);
+      expect(changes).toEqual([]);
+
+      editor.setSelectionOffset(source.length);
+      await typeBrowserTextAtSelection(host, "x");
+      expect(editor.getMarkdown()).toBe(`${source}x`);
+      expect(host.querySelector(".ProseMirror")?.textContent).toBe(`${source}x`);
+      host.querySelector(".ProseMirror")?.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "z", code: "KeyZ", ctrlKey: true, bubbles: true, cancelable: true,
+      }));
+      expect(editor.getMarkdown()).toBe(source);
+      expect(host.querySelector(".ProseMirror")?.textContent).toBe(source);
+      editor.destroy();
+    },
+  );
+
   it("inserts each typed backtick exactly once without synthesizing a closing fence", async () => {
     const host = document.createElement("div");
     document.body.append(host);
