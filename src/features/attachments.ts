@@ -116,7 +116,7 @@ export async function ensureAttachmentChunks(
   userId: string,
   attachment: OpenAttachment,
   continueOperation?: ContinueOperation,
-  allowNetwork = navigator.onLine,
+  allowNetwork = true,
   signal?: AbortSignal
 ): Promise<EncryptedAttachmentChunk[]> {
   requireActiveOperation(continueOperation);
@@ -136,7 +136,7 @@ export async function ensureAttachmentChunks(
   for (let index = 0; index < attachment.chunkCount; index += 1) {
     if (!byIndex.has(index)) missingIndexes.push(index);
   }
-  if (missingIndexes.length && (!navigator.onLine || !allowNetwork)) {
+  if (missingIndexes.length && !allowNetwork) {
     throw new Error(`附件“${attachment.originalName}”尚未缓存，离线时无法读取`);
   }
   const downloadedChunks = await mapWithConcurrency(
@@ -188,7 +188,7 @@ export async function decryptAttachmentBlob(
   userId: string,
   attachment: OpenAttachment,
   continueOperation?: ContinueOperation,
-  allowNetwork = navigator.onLine,
+  allowNetwork = true,
   signal?: AbortSignal
 ): Promise<Blob> {
   const chunks = await ensureAttachmentChunks(userId, attachment, continueOperation, allowNetwork, signal);

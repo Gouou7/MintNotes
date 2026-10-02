@@ -5,6 +5,7 @@ import { localDb } from "../../storage/database";
 export type SaveState = "ready" | "saving" | "local" | "syncing" | "synced" | "offline" | "error";
 export type VisibleSyncStatus = "synced" | "syncing" | "error" | "offline";
 export type SyncFailure =
+  | { kind: "unverified" }
   | { kind: "unreachable" }
   | { kind: "server"; reason: string };
 
@@ -21,11 +22,11 @@ export type SyncStatusAction =
   | { type: "local-failure"; objectId: string }
   | { type: "local-success"; objectId: string };
 
-export function createSyncStatus(online: boolean): SyncStatusState {
+export function createSyncStatus(online: boolean, browserOnline = false): SyncStatusState {
   return {
-    phase: online ? "ready" : "offline",
-    visible: online ? "synced" : "offline",
-    failure: null,
+    phase: online ? "ready" : browserOnline ? "error" : "offline",
+    visible: online ? "synced" : browserOnline ? "error" : "offline",
+    failure: !online && browserOnline ? { kind: "unverified" } : null,
     failedLocalObjectIds: new Set()
   };
 }
@@ -81,6 +82,7 @@ export function syncStatusDetailText(status: SyncStatusState, t: Translate): str
   if (status.phase === "local") return t("app.save.local");
   if (status.phase === "syncing") return t("app.save.syncingDetail");
   if (status.phase === "error") {
+    if (status.failure?.kind === "unverified") return t("app.save.unverifiedDetail");
     return status.failure?.kind === "server"
       ? t("app.save.serverErrorDetail", { reason: status.failure.reason })
       : t("app.save.unreachableDetail");
@@ -104,13 +106,18 @@ export function settledSyncPhase(online: boolean, pendingCount: number): "offlin
   return pendingCount > 0 ? "local" : "synced";
 }
 
-export function useSyncStatus(initialOnline: boolean) {
-  const [status, setStatus] = useState<SyncStatusState>(() => createSyncStatus(initialOnline));
+export function useSyncStatus(initialServerSessionVerified: boolean) {
+  const [status, setStatus] = useState<SyncStatusState>(() => createSyncStatus(initialServerSessionVerified, navigator.onLine));
   const setPhase = useCallback((phase: Exclude<SaveState, "error">) => {
     setStatus((current) => reduceSyncStatus(current, { type: "phase", phase }));
   }, []);
   const setSyncError = useCallback((failure: SyncFailure) => {
     setStatus((current) => reduceSyncStatus(current, { type: "sync-error", failure }));
+  }, []);
+  const setUnavailable = useCallback(() => {
+    setStatus((current) => reduceSyncStatus(current, navigator.onLine
+      ? { type: "sync-error", failure: { kind: "unverified" } }
+      : { type: "phase", phase: "offline" }));
   }, []);
   const markLocalFailure = useCallback((objectId: string) => {
     setStatus((current) => reduceSyncStatus(current, { type: "local-failure", objectId }));
@@ -123,6 +130,7 @@ export function useSyncStatus(initialOnline: boolean) {
     status,
     setPhase,
     setSyncError,
+    setUnavailable,
     markLocalFailure,
     markLocalSuccess
   };

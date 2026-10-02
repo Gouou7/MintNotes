@@ -114,10 +114,8 @@ export function useSessionController() {
   useEffect(() => {
     let active = true;
     void (async () => {
-      if (!navigator.onLine) {
-        await restoreOfflineSession();
-        return;
-      }
+      // Open cached notes immediately, then let revalidation test the actual server.
+      if (!navigator.onLine && await restoreOfflineSession()) return;
       try {
         await flushPendingEndpointRevocations();
         const remote = await api<AuthSession>("/api/auth/me");
@@ -154,7 +152,6 @@ export function useSessionController() {
       if (
         cancelled
         || verificationInFlight.current
-        || !navigator.onLine
         || document.visibilityState !== "visible"
       ) return;
       const expected = session;

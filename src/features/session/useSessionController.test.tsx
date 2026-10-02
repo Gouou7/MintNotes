@@ -1,6 +1,6 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeviceUnlockCredential, VerifiedDeviceSession } from "../../storage/database";
 import type { AuthEndpoint, User } from "../../types";
 import { ApiError, api } from "../../api";
@@ -113,17 +113,22 @@ async function renderController(online: boolean) {
   return () => latest!;
 }
 
+beforeEach(() => {
+  vi.mocked(api).mockReset().mockRejectedValue(new TypeError("unreachable"));
+});
+
 afterEach(async () => {
   for (const root of roots.splice(0)) await act(async () => root.unmount());
   document.body.replaceChildren();
   latest = null;
   vi.clearAllMocks();
+  vi.useRealTimers();
   Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
   vi.mocked(cryptoClient.lock).mockResolvedValue({ locked: true });
 });
 
 describe("offline remembered-session restoration", () => {
-  it("automatically opens a remembered direct credential without contacting the server", async () => {
+  it("opens a remembered direct credential while background verification cannot reach the server", async () => {
     vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
     vi.mocked(hasDevicePin).mockReturnValue(false);
     vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
@@ -133,7 +138,7 @@ describe("offline remembered-session restoration", () => {
     expect(controller().restoringDevice).toBe(false);
     expect(controller().user).toEqual(user);
     expect(controller().serverSessionVerified).toBe(false);
-    expect(api).not.toHaveBeenCalled();
+    expect(api).toHaveBeenCalledWith("/api/auth/me");
   });
 
   it("routes a remembered PIN credential to the offline lock screen", async () => {
@@ -178,7 +183,7 @@ describe("offline remembered-session restoration", () => {
     expect(getRememberedOfflineDevice).not.toHaveBeenCalled();
   });
 
-  it("revalidates before promoting a locally unlocked vault to server-authorized mode", async () => {
+  it("verifies a reachable server even while the browser continues reporting offline", async () => {
     vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
     vi.mocked(hasDevicePin).mockReturnValue(false);
     vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
@@ -187,17 +192,60 @@ describe("offline remembered-session restoration", () => {
     vi.mocked(updateVerifiedDeviceSession).mockResolvedValue(directCredential);
     const controller = await renderController(false);
 
-    Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
-    await act(async () => window.dispatchEvent(new Event("online")));
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    });
-
     expect(api).toHaveBeenCalledWith("/api/auth/me");
     await vi.waitFor(() => expect(controller().serverSessionVerified).toBe(true));
+    expect(navigator.onLine).toBe(false);
     expect(controller().user).toEqual(user);
+  });
+
+  it("restores a reachable server session without cached offline trust when the browser reports offline", async () => {
+    vi.mocked(getRememberedOfflineDevice).mockResolvedValue(null);
+    vi.mocked(api).mockResolvedValueOnce({ user, endpoint });
+    vi.mocked(getDeviceUnlock).mockResolvedValue(directCredential);
+    vi.mocked(updateVerifiedDeviceSession).mockResolvedValue(directCredential);
+    vi.mocked(hasDevicePin).mockReturnValue(false);
+    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
+
+    const controller = await renderController(false);
+
+    expect(controller().serverSessionVerified).toBe(true);
+    expect(controller().offlineUnavailable).toBe(false);
+    expect(controller().user).toEqual(user);
+  });
+
+  it("retries failed verification without needing a browser online event", async () => {
+    vi.useFakeTimers();
+    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
+    vi.mocked(hasDevicePin).mockReturnValue(false);
+    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
+    const controller = await renderController(false);
+    expect(controller().serverSessionVerified).toBe(false);
+
+    vi.mocked(api).mockResolvedValueOnce({ user, endpoint });
+    vi.mocked(getDeviceUnlock).mockResolvedValue(directCredential);
+    vi.mocked(updateVerifiedDeviceSession).mockResolvedValue(directCredential);
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+
+    expect(navigator.onLine).toBe(false);
+    expect(controller().serverSessionVerified).toBe(true);
+    expect(api).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { user: { ...user, id: "other-user" }, endpoint },
+    { user, endpoint: { ...endpoint, id: "other-endpoint" } },
+    { user, endpoint: { ...endpoint, remembered: false } }
+  ])("rejects a reachable session that does not match local remembered trust: %j", async (remote) => {
+    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
+    vi.mocked(hasDevicePin).mockReturnValue(false);
+    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
+    vi.mocked(api).mockResolvedValueOnce(remote);
+    const controller = await renderController(false);
+
+    expect(controller().serverSessionVerified).toBe(false);
+    expect(controller().session).toBeNull();
+    expect(forgetDeviceUnlock).toHaveBeenCalledWith(user.id);
+    expect(deleteLocalUserData).not.toHaveBeenCalled();
   });
 
   it("deduplicates concurrent reconnect verification attempts", async () => {

@@ -83,6 +83,14 @@ describe("sync status presentation", () => {
     expect(unreachable.visible).toBe("error");
   });
 
+  it("does not call an unverified session offline when the browser reports a connection", () => {
+    const unverified = createSyncStatus(false, true);
+    expect(unverified.visible).toBe("error");
+    expect(syncStatusDetailText(unverified, zh)).toContain("服务器会话尚未验证");
+    expect(createSyncStatus(false, false).visible).toBe("offline");
+    expect(createSyncStatus(true, false).visible).toBe("synced");
+  });
+
   it("settles initial loading from connectivity and all-outbox pending count", () => {
     expect(settledSyncPhase(true, 0)).toBe("synced");
     expect(settledSyncPhase(true, 3)).toBe("local");

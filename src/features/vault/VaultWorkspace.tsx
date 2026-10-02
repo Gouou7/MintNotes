@@ -130,6 +130,7 @@ import {
   type SyncFailure
 } from "./useSyncStatus";
 import { useVaultModel } from "./useVaultModel";
+import { useSyncConnection } from "./useSyncConnection";
 import { useWorkspaceSelection } from "./useWorkspaceSelection";
 import { attachmentGraphSignature, useAttachmentUrls } from "./useAttachmentUrls";
 import { VaultHistoryController, type HistoryIndexEnvelope } from "./historyController";
@@ -214,9 +215,10 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     status: syncStatus,
     setPhase: setSaveState,
     setSyncError,
+    setUnavailable,
     markLocalFailure,
     markLocalSuccess
-  } = useSyncStatus(navigator.onLine && serverSessionVerified);
+  } = useSyncStatus(serverSessionVerified);
   const [message, setMessage] = useState<ToastNotice | null>(null);
   const messageSequence = useRef(0);
   const [loading, setLoading] = useState(true);
@@ -247,10 +249,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const syncClientId = useRef(crypto.randomUUID());
   const syncCoordinator = useRef<SyncCoordinator | null>(null);
   const executeSyncRef = useRef<(intent: SyncIntent) => Promise<void>>(async () => undefined);
-  const eventSource = useRef<EventSource | null>(null);
-  const safetyTimer = useRef<number | null>(null);
-  const fallbackTimer = useRef<number | null>(null);
-  const fallbackDelay = useRef(60_000);
   const syncStatusTimer = useRef<number | null>(null);
   const serverSessionVerifiedRef = useRef(serverSessionVerified);
   const deferredActiveRemote = useRef<OpenDocument | null>(null);
@@ -400,7 +398,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         localHistoryIndexesForNote(noteId)
       ]);
       const localItems = await localHistoryListItems(local, localIndexes);
-      if (!navigator.onLine || !serverSessionVerified) {
+      if (!serverSessionVerified) {
         setHistoryItems((current) => append ? mergeHistoryItems(current, localItems) : localItems);
         setHistoryCursor(null);
         setHistoryHasMore(false);
@@ -512,8 +510,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     userId: user.id,
     generation,
     isActive: () => !logoutStarted.current,
-    canSynchronize: () => navigator.onLine && serverSessionVerifiedRef.current,
-    setSaveState,
+    canSynchronize: () => serverSessionVerifiedRef.current,
+    setSaveState: (phase) => phase === "offline" ? setUnavailable() : setSaveState(phase),
     onPersistenceError: (objectId) => {
       markLocalFailure(objectId);
       showMessage(t("notice.localSaveFailed"), "critical");
@@ -1035,8 +1033,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
   const executeSync = async (intent: SyncIntent) => {
     if (logoutStarted.current) return;
-    if (!navigator.onLine || !serverSessionVerified) {
-      setSaveState("offline");
+    if (!serverSessionVerifiedRef.current) {
+      setUnavailable();
       return;
     }
     const queued = await countPendingSyncEntries(user.id);
@@ -1060,8 +1058,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       setSaveState(remaining ? "local" : "synced");
     } catch (error) {
       if (logoutStarted.current) return;
-      if (navigator.onLine) setSyncError(synchronizationFailure(error, t));
-      else setSaveState("offline");
+      if (!(error instanceof ApiError) && !navigator.onLine) setSaveState("offline");
+      else setSyncError(synchronizationFailure(error, t));
       showMessage(error instanceof ApiError ? translateError(error, t, "notice.syncFailed") : t("notice.syncFailed"));
       requestFallbackPull();
     } finally {
@@ -1142,18 +1140,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     syncCoordinator.current?.request({ pull: true }, { delayMs, maxWaitMs: Math.max(1_000, delayMs) });
   }
 
-  function requestFallbackPull() {
-    if (logoutStarted.current) return;
-    if (fallbackTimer.current !== null || !serverSessionVerified || document.visibilityState !== "visible" || !navigator.onLine) return;
-    const delay = fallbackDelay.current;
-    fallbackTimer.current = window.setTimeout(() => {
-      fallbackTimer.current = null;
-      requestPull(0);
-      fallbackDelay.current = Math.min(300_000, Math.max(60_000, delay * 2));
-      if (eventSource.current?.readyState !== EventSource.OPEN) requestFallbackPull();
-    }, delay);
-  }
-
   const synchronize = async () => {
     if (logoutStarted.current) return;
     await syncCoordinator.current?.runNow({ pull: true, push: true });
@@ -1162,7 +1148,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   useEffect(() => {
     const coordinator = new SyncCoordinator({
       execute: (intent) => executeSyncRef.current(intent),
-      canRun: () => navigator.onLine && serverSessionVerifiedRef.current && document.visibilityState === "visible"
+      canRun: () => serverSessionVerifiedRef.current && document.visibilityState === "visible"
     });
     syncCoordinator.current = coordinator;
     return () => {
@@ -1246,7 +1232,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         if (mustVerifyServerFromStart && !logoutStarted.current) await localDb.meta.put({ key: cursorKey(user.id), value: "0" });
         let initialPullError: unknown;
         let failedRemoteIds = new Set<string>();
-        if (serverSessionVerified) {
+        if (serverSessionVerifiedRef.current) {
           try {
             failedRemoteIds = await pullChanges();
           } catch (error) {
@@ -1290,7 +1276,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         }
 
         const verifiedEmptyVault = shouldCreateWelcomeNote({
-          serverSessionVerified,
+          serverSessionVerified: serverSessionVerifiedRef.current,
           storedContentCount: storedContent.length,
           pendingContentCount: pendingContent.length,
           initialPullFailed: Boolean(initialPullError),
@@ -1311,11 +1297,12 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
           }));
         }
         if (initialPullError) {
-          if (navigator.onLine && serverSessionVerified) setSyncError(synchronizationFailure(initialPullError, t));
-          else setSaveState("offline");
+          if (!serverSessionVerifiedRef.current) setUnavailable();
+          else if (!(initialPullError instanceof ApiError) && !navigator.onLine) setSaveState("offline");
+          else setSyncError(synchronizationFailure(initialPullError, t));
         } else {
           const remaining = await countPendingSyncEntries(user.id);
-          setSaveState(settledSyncPhase(navigator.onLine && serverSessionVerified, remaining));
+          setSaveState(settledSyncPhase(serverSessionVerifiedRef.current, remaining));
         }
         setWorkspaceLoaded(true);
         setLoading(false);
@@ -1374,70 +1361,19 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     return () => query.removeEventListener("change", apply);
   }, [preferences.theme]);
 
-  useEffect(() => {
-    if (!workspaceLoaded) return;
-    const closeEvents = () => {
-      eventSource.current?.close();
-      eventSource.current = null;
-      if (safetyTimer.current !== null) window.clearInterval(safetyTimer.current);
-      safetyTimer.current = null;
-    };
-    const clearFallback = () => {
-      if (fallbackTimer.current !== null) window.clearTimeout(fallbackTimer.current);
-      fallbackTimer.current = null;
-    };
-    const openEvents = async () => {
-      if (logoutStarted.current || !serverSessionVerified || !navigator.onLine || document.visibilityState !== "visible" || eventSource.current) return;
-      const cursor = Number((await localDb.meta.get(cursorKey(user.id)))?.value ?? 0);
-      if (logoutStarted.current || !serverSessionVerified || !navigator.onLine || document.visibilityState !== "visible" || eventSource.current) return;
-      const source = new EventSource(
-        `/api/sync/events?since=${cursor}&clientId=${encodeURIComponent(syncClientId.current)}`,
-        { withCredentials: true }
-      );
-      eventSource.current = source;
-      source.onopen = () => {
-        fallbackDelay.current = 60_000;
-        clearFallback();
-      };
-      source.addEventListener("changed", () => requestPull(250));
-      source.onerror = () => requestFallbackPull();
-      safetyTimer.current = window.setInterval(() => requestPull(0), 5 * 60_000);
-    };
-    const online = () => {
-      clearFallback();
-      if (!serverSessionVerified) return;
-      void syncCoordinator.current?.runNow({ pull: true, push: true }).finally(() => void openEvents());
-    };
-    const offline = () => {
-      closeEvents();
-      clearFallback();
-      setSaveState("offline");
-    };
-    const visibility = () => {
-      if (document.visibilityState === "hidden") {
-        closeEvents();
-        clearFallback();
-        void finishHistorySession(true);
-        for (const id of documentSaveQueue.pendingIds()) void flushDocument(id);
-      } else {
-        if (!serverSessionVerified) return;
-        void syncCoordinator.current?.runNow({ pull: true, push: true }).finally(() => void openEvents());
-      }
-    };
-    window.addEventListener("online", online);
-    window.addEventListener("offline", offline);
-    document.addEventListener("visibilitychange", visibility);
-    if (serverSessionVerified && navigator.onLine && document.visibilityState === "visible") {
-      void syncCoordinator.current?.runNow({ pull: true, push: true }).finally(() => void openEvents());
+  const { requestFallbackPull, stop: stopSyncConnection } = useSyncConnection({
+    userId: user.id,
+    clientId: syncClientId.current,
+    enabled: workspaceLoaded,
+    serverSessionVerified,
+    isActive: () => !logoutStarted.current,
+    synchronize,
+    requestPull,
+    onHidden: () => {
+      void finishHistorySession(true);
+      for (const id of documentSaveQueue.pendingIds()) void flushDocument(id);
     }
-    return () => {
-      closeEvents();
-      clearFallback();
-      window.removeEventListener("online", online);
-      window.removeEventListener("offline", offline);
-      document.removeEventListener("visibilitychange", visibility);
-    };
-  }, [serverSessionVerified, workspaceLoaded, user.id]);
+  });
 
   const indexedActiveDocument = activeId ? documentIndexRef.current.get(activeId) : null;
   const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
@@ -1688,7 +1624,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
   const purgeTrash = async (objectIds: string[] | null) => {
     if (purging) return;
-    if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.purgeOnlineOnly"));
+    if (!serverSessionVerified) return showMessage(t("notice.purgeOnlineOnly"));
     setPurging(true);
     try {
       await documentSaveQueue.flushAll();
@@ -1909,7 +1845,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
   const deleteHistorySnapshot = async (item: HistoryListItem) => {
     if (!canDeleteHistory(item)) return showMessage(t("notice.historyProtectedDeleteBlocked"));
-    if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
+    if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.deleteConfirm", { date: formatNoteTime(item.capturedAt) }))) return;
     try {
       await api(`/api/notes/${item.noteId}/history/${item.historyId}`, { method: "DELETE" });
@@ -1931,7 +1867,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
   const clearCurrentHistory = async () => {
     if (!activeDocument) return;
-    if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
+    if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.clearNoteConfirm", { title: activeDocument.title }))) return;
     try {
       await synchronize();
@@ -1966,7 +1902,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   };
 
   const clearAllHistory = async () => {
-    if (!navigator.onLine || !serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
+    if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.clearAllConfirm"))) return;
     try {
       await synchronize();
@@ -2205,12 +2141,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       broadcastAccountLogout(user.id);
       syncCoordinator.current?.dispose();
       syncCoordinator.current = null;
-      eventSource.current?.close();
-      eventSource.current = null;
-      if (safetyTimer.current !== null) window.clearInterval(safetyTimer.current);
-      safetyTimer.current = null;
-      if (fallbackTimer.current !== null) window.clearTimeout(fallbackTimer.current);
-      fallbackTimer.current = null;
+      stopSyncConnection();
       if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
       syncStatusTimer.current = null;
     }

@@ -432,6 +432,11 @@ const messages = {
   "app.save.syncing": { en: "Syncing…", "zh-CN": "正在同步…", "zh-TW": "正在同步…" },
   "app.save.synced": { en: "Synced", "zh-CN": "已同步", "zh-TW": "已同步" },
   "app.save.offline": { en: "Offline · saved locally", "zh-CN": "离线 · 已保存到本地", "zh-TW": "離線 · 已儲存在本機" },
+  "app.save.unverifiedDetail": {
+    en: "Server session is not verified · changes are saved locally and verification will retry automatically",
+    "zh-CN": "服务器会话尚未验证 · 修改已保存到本地，将自动重试验证",
+    "zh-TW": "伺服器工作階段尚未驗證 · 修改已儲存在本機，將自動重試驗證"
+  },
   "app.save.error": { en: "Sync error · saved locally", "zh-CN": "同步错误 · 已保存到本地", "zh-TW": "同步錯誤 · 已儲存在本機" },
   "app.save.syncingDetail": { en: "Synchronizing with the server…", "zh-CN": "正在与服务器同步…", "zh-TW": "正在與伺服器同步…" },
   "app.save.offlineDetail": {
