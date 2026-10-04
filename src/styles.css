@@ -283,8 +283,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .reading-code-copy[data-copy-state="copied"] { color: var(--accent); }
 .reading-code-copy[data-copy-state="failed"] { color: var(--danger); }
 .wrap-code-blocks .reading-code-block pre,
-.live-editor-document.wrap-code-blocks .markdown-editor-host .ProseMirror pre:not([data-source-block]):not([data-source-gap]):not([data-source-blockquote]) {
+.live-editor-document.wrap-code-blocks .markdown-editor-host .ProseMirror pre:not([data-source-block]):not([data-source-gap]):not([data-source-blockquote]):not(.cb-source-editing) {
   overflow-x: hidden;
+}
+.wrap-code-blocks .reading-code-block pre,
+.live-editor-document.wrap-code-blocks .markdown-editor-host .ProseMirror pre:not([data-source-block]):not([data-source-gap]):not([data-source-blockquote]) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

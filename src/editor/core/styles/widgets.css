@@ -74,8 +74,11 @@
   overflow: visible;
 }
 .ProseMirror [data-source-gap-hidden] { display: none; }
+/* Keep invisible source separators in their parent's block flow. Out-of-flow
+ * separators make WebKit skip later list items when painting a native range,
+ * even when the range endpoints are correct. Zero height preserves the layout. */
 .ProseMirror pre[data-source-gap-structural] {
-  position: absolute;
+  position: static;
   width: 0;
   height: 0;
   overflow: hidden;
@@ -155,7 +158,17 @@
   padding: 0;
   border: 0;
 }
-.ProseMirror pre.cb-source-editing { padding: 0; border: 0; background: transparent; }
+/* Fenced source is ordinary editable text. A positioned or scrolling block
+ * becomes a separate WebKit selection root, whose gap fill highlights the
+ * entire code block when the native selection crosses it. Keep both out of
+ * the editing layout; the document scroll container handles unwrapped lines. */
+.ProseMirror pre.cb-source-editing {
+  position: static;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
 
 /* A Setext underline is a second authored source line. It uses body metrics
  * instead of heading metrics; rendering hides only its ink so the line keeps
