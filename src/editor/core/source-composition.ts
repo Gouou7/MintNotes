@@ -1,145 +1,96 @@
 import {
   CanonicalSource,
-  type SourceEdit,
   type SourceSelection,
   type SourceTransaction,
 } from "./source";
 
-type CompositionSegment =
-  | { readonly kind: "base"; readonly from: number; readonly to: number }
-  | { readonly kind: "insert"; readonly text: string };
-
-function segmentLength(segment: CompositionSegment): number {
-  return segment.kind === "base" ? segment.to - segment.from : segment.text.length;
-}
-
-function splitSegmentsAt(segments: CompositionSegment[], offset: number): number {
-  let position = 0;
-  for (let index = 0; index < segments.length; index += 1) {
-    const segment = segments[index]!;
-    const end = position + segmentLength(segment);
-    if (offset === position) return index;
-    if (offset === end) return index + 1;
-    if (offset < end) {
-      const localOffset = offset - position;
-      const replacement: CompositionSegment[] = segment.kind === "base"
-        ? [
-            { kind: "base", from: segment.from, to: segment.from + localOffset },
-            { kind: "base", from: segment.from + localOffset, to: segment.to },
-          ]
-        : [
-            { kind: "insert", text: segment.text.slice(0, localOffset) },
-            { kind: "insert", text: segment.text.slice(localOffset) },
-          ];
-      segments.splice(index, 1, ...replacement);
-      return index + 1;
-    }
-    position = end;
-  }
-  if (offset === position) return segments.length;
-  throw new RangeError(`Composition offset ${offset} is outside the current source`);
-}
-
-function compactSegments(segments: CompositionSegment[]): CompositionSegment[] {
-  const compacted: CompositionSegment[] = [];
-  for (const segment of segments) {
-    if (segmentLength(segment) === 0) continue;
-    const previous = compacted.at(-1);
-    if (previous?.kind === "base" && segment.kind === "base" && previous.to === segment.from) {
-      compacted[compacted.length - 1] = { kind: "base", from: previous.from, to: segment.to };
-    } else if (previous?.kind === "insert" && segment.kind === "insert") {
-      compacted[compacted.length - 1] = { kind: "insert", text: previous.text + segment.text };
-    } else {
-      compacted.push(segment);
-    }
-  }
-  return compacted;
-}
-
 /**
- * Buffers exact source edits emitted by one native IME composition.
+ * One IME session owns one replacement in the original Markdown.
  *
- * Base segments retain their original source coordinates while inserted
- * segments retain the browser-confirmed text. This lets the final composition
- * become one atomic SourceTransaction without diffing DOM text or serializing
- * the derived ProseMirror document.
+ * The browser may remove BR placeholders or rewrite the surrounding rendered
+ * block while composing. Those projection repairs do not enlarge the authored
+ * replacement. compositionend's text is committed at the original range;
+ * native transactions are only a fallback when they stay inside that range.
  */
 export class SourceComposition {
   readonly baseSource: string;
   readonly baseSelection: SourceSelection;
-  private segments: CompositionSegment[];
-  private currentSource: string;
-  private currentSelection: SourceSelection;
+  private readonly from: number;
+  private readonly to: number;
+  private nativeText: string;
+  private nativeSelection: SourceSelection;
+  private nativeValid = true;
+  private confirmedText: string | null = null;
 
   constructor(source: string, selection: SourceSelection) {
+    new CanonicalSource(source).apply({ edits: [], selection, origin: "input" });
     this.baseSource = source;
-    this.baseSelection = selection;
-    this.currentSource = source;
-    this.currentSelection = selection;
-    this.segments = source.length > 0
-      ? [{ kind: "base", from: 0, to: source.length }]
-      : [];
+    this.baseSelection = { ...selection };
+    this.from = Math.min(selection.anchor, selection.head);
+    this.to = Math.max(selection.anchor, selection.head);
+    this.nativeText = source.slice(this.from, this.to);
+    this.nativeSelection = { ...selection };
+  }
+
+  private result(): { text: string; selection: SourceSelection } {
+    if (this.confirmedText !== null) {
+      // Empty event data can mean cancellation or deletion. Accept a deletion
+      // only when an exact native edit removed the originally selected text.
+      if (this.confirmedText || (this.nativeValid && !this.nativeText)) {
+        const head = this.from + this.confirmedText.length;
+        return { text: this.confirmedText, selection: { anchor: head, head } };
+      }
+      return { text: this.baseSource.slice(this.from, this.to), selection: this.baseSelection };
+    }
+    return this.nativeValid
+      ? { text: this.nativeText, selection: this.nativeSelection }
+      : { text: this.baseSource.slice(this.from, this.to), selection: this.baseSelection };
   }
 
   get source(): string {
-    return this.currentSource;
+    return this.baseSource.slice(0, this.from) + this.nativeText + this.baseSource.slice(this.to);
   }
 
   get selection(): SourceSelection {
-    return this.currentSelection;
+    return this.result().selection;
+  }
+
+  get ended(): boolean {
+    return this.confirmedText !== null;
+  }
+
+  confirm(text: string): void {
+    this.confirmedText = text;
+  }
+
+  rejectNative(): void {
+    this.nativeValid = false;
   }
 
   apply(transaction: SourceTransaction): void {
-    const applied = new CanonicalSource(this.currentSource).apply(transaction);
-    const ordered = [...transaction.edits]
-      .sort((left, right) => left.from - right.from || left.to - right.to);
-    for (const edit of ordered.reverse()) {
-      const fromIndex = splitSegmentsAt(this.segments, edit.from);
-      const toIndex = splitSegmentsAt(this.segments, edit.to);
-      this.segments.splice(
-        fromIndex,
-        toIndex - fromIndex,
-        ...(edit.insert ? [{ kind: "insert" as const, text: edit.insert }] : []),
-      );
+    if (!this.nativeValid) return;
+    if (transaction.edits.some((edit) => edit.from < this.from || edit.to > this.from + this.nativeText.length)) {
+      this.rejectNative();
+      return;
     }
-    this.segments = compactSegments(this.segments);
-    this.currentSource = applied.source.value;
-    this.currentSelection = applied.selection;
+    const applied = new CanonicalSource(this.source).apply(transaction);
+    const delta = transaction.edits.reduce((sum, edit) => sum + edit.insert.length - (edit.to - edit.from), 0);
+    this.nativeText = applied.source.value.slice(this.from, this.from + this.nativeText.length + delta);
+    this.nativeSelection = applied.selection;
   }
 
   setSelection(selection: SourceSelection): void {
-    new CanonicalSource(this.currentSource).apply({
-      edits: [],
-      selection,
-      origin: "input",
-    });
-    this.currentSelection = selection;
+    if (!this.nativeValid) return;
+    new CanonicalSource(this.source).apply({ edits: [], selection, origin: "input" });
+    this.nativeSelection = selection;
   }
 
   transaction(reparseDerivedDocument = false): SourceTransaction {
-    const edits: SourceEdit[] = [];
-    let baseOffset = 0;
-    let inserted = "";
-    for (const segment of this.segments) {
-      if (segment.kind === "insert") {
-        inserted += segment.text;
-        continue;
-      }
-      if (segment.from < baseOffset) {
-        throw new Error("Composition source segments moved out of canonical order");
-      }
-      if (segment.from > baseOffset || inserted) {
-        edits.push({ from: baseOffset, to: segment.from, insert: inserted });
-        inserted = "";
-      }
-      baseOffset = segment.to;
-    }
-    if (baseOffset < this.baseSource.length || inserted) {
-      edits.push({ from: baseOffset, to: this.baseSource.length, insert: inserted });
-    }
+    const { text, selection } = this.result();
     return {
-      edits,
-      selection: this.currentSelection,
+      edits: text === this.baseSource.slice(this.from, this.to)
+        ? [] : [{ from: this.from, to: this.to, insert: text }],
+      selection,
       origin: "input",
       ...(reparseDerivedDocument ? { reparseDerivedDocument: true } : {}),
     };
