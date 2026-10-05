@@ -38,14 +38,17 @@ import {
   SOURCE_TO_ATTR,
   type SourceTransaction,
   type SourceSelection,
+  type SourceEdit,
 } from "./source";
 import { SOURCE_TRANSACTION_META, transactionSourceEffect } from "./source-transaction";
 import { adjacentGrapheme, changedSourceRange, selectTextarea, textareaSelection, TextareaSourceMap } from "./source-text";
 import { selectedTableCells, tableNavigation } from "./table-navigation";
 import { SourceComposition } from "./source-composition";
-import { nativeSourceSelection, nativeTextInputRange } from "./native-input-range";
+import { inverseSourceEdits, SourceBookmark } from "./source-bookmark";
+import { nativeReplacementText, nativeSourceSelection, nativeSourceTextTransaction, nativeTextInputRange } from "./native-input-range";
 import { nativeSelectionPresentationPlugin } from "./native-selection-presentation";
 import { liveSourceKeyTransaction } from "./live-source-commands";
+import { dropSourceTransaction, pasteSourceTransaction, transferPlainText } from "./source-transfer";
 import { resolveSourceBlockEditingPresentation } from "./presentation";
 import {
   LIVE_NAVIGATION_META,
@@ -86,6 +89,8 @@ export interface Editor {
   getMarkdownOffsetAtPoint(clientX: number, clientY: number): number;
   /** Insert Markdown at an explicit offset or at the current selection. */
   insertMarkdown(markdown: string, offset?: number): void;
+  /** Capture an insertion range that follows subsequent edits until used or disposed. */
+  createInsertionBookmark(offset?: number): { insert(markdown: string): boolean; dispose(): void };
   /** Replace the complete document and place the caret at a Markdown offset. */
   replaceMarkdown(markdown: string, offset?: number): void;
   /** Read the active caret/selection head as a canonical Markdown offset. */
@@ -145,9 +150,10 @@ export function createEditor(
   }
   let sourceInputSelection: SourceSelection = { anchor: 0, head: 0 };
   let canonicalMarkdown = options.initialContent ?? "";
-  type SourceHistoryEntry = { source: string; selection: { anchor: number; head: number } };
+  type SourceHistoryEntry = { source: string; selection: SourceSelection; edits: readonly SourceEdit[] };
   const sourceUndo: SourceHistoryEntry[] = [];
   const sourceRedo: SourceHistoryEntry[] = [];
+  const sourceBookmarks = new Set<SourceBookmark>();
   const SOURCE_HISTORY_LIMIT = 500;
   type LiveSourceRange = {
     pos: number;
@@ -175,6 +181,8 @@ export function createEditor(
   let detachPointerSelectionListeners: (() => void) | null = null;
   let presentationRefreshPending = false;
   let pendingComposition: SourceComposition | null = null;
+  let pendingNativeInput: { source: string; transaction: SourceTransaction; selection: SourceSelection } | null = null;
+  let draggedSource: { source: string; from: number; to: number; text: string } | null = null;
 
   function structureSignatureForDocument(doc: PMNode): string {
     const visit = (node: PMNode): unknown => {
@@ -858,8 +866,10 @@ export function createEditor(
     rememberSourceHistory(sourceUndo, {
       source: canonicalMarkdown,
       selection: previousSelection,
+      edits: inverseSourceEdits(canonicalMarkdown, transaction.edits),
     });
     sourceRedo.length = 0;
+    for (const bookmark of sourceBookmarks) bookmark.map(transaction.edits);
     canonicalMarkdown = applied.source.value;
     updateCanonicalStructureSignature();
     options.onChange?.(canonicalMarkdown);
@@ -879,6 +889,19 @@ export function createEditor(
 
   function currentSelection(): SourceSelection {
     return inSource ? sourceTextareaSelection() : sourceSelectionForState(view.state);
+  }
+
+  function liveInputSelection(): SourceSelection {
+    return nativeSourceSelection(view, sourcePositionMapForState(view.state))
+      ?? sourceSelectionForState(view.state);
+  }
+
+  function sourceKeyContext(selection?: SourceSelection): { literal: boolean } {
+    const parent = selection
+      ? view.state.doc.resolve(sourcePositionMapForState(view.state).sourceToDocument(Math.min(selection.anchor, selection.head))).parent
+      : view.state.selection.$from.parent;
+    return { literal: parent.type.name === "code_block" || parent.type.name === "front_matter"
+      || parent.type.name === "source_block" && !["blockquote", "quote_container", "unmapped-quote"].includes(String(parent.attrs.kind)) };
   }
 
   function setLiveSelection(selection: SourceSelection, scrollToSelection = false): void {
@@ -918,6 +941,7 @@ export function createEditor(
   }
 
   function beginComposition(): void {
+    flushNativeInput();
     if (compositionFinalizeTimer !== null) {
       clearTimeout(compositionFinalizeTimer);
       compositionFinalizeTimer = null;
@@ -1008,9 +1032,20 @@ export function createEditor(
     scrollToSelection = true,
   ): boolean {
     if (!inSource && dispatchTransactionInsideActiveSourceBlock(transaction)) return true;
-    const previousSelection = currentSelection();
+    const previousSelection = inSource ? currentSelection() : liveInputSelection();
     if (!applyCanonicalTransaction(transaction, previousSelection)) return false;
     renderCanonicalSelection(transaction.selection, scrollToSelection);
+    return true;
+  }
+
+  function flushNativeInput(): boolean {
+    const pending = pendingNativeInput;
+    if (!pending) return false;
+    pendingNativeInput = null;
+    if (pending.source === canonicalMarkdown) {
+      applyCanonicalTransaction(pending.transaction, pending.selection);
+      renderCanonicalSelection(pending.transaction.selection);
+    } else renderCanonicalSelection(currentSelection());
     return true;
   }
 
@@ -1018,12 +1053,15 @@ export function createEditor(
     from: SourceHistoryEntry[],
     to: SourceHistoryEntry[],
   ): boolean {
+    flushNativeInput();
     const target = from.pop();
     if (!target) return false;
     rememberSourceHistory(to, {
       source: canonicalMarkdown,
-      selection: currentSelection(),
+      selection: inSource ? currentSelection() : liveInputSelection(),
+      edits: inverseSourceEdits(canonicalMarkdown, target.edits),
     });
+    for (const bookmark of sourceBookmarks) bookmark.map(target.edits);
     canonicalMarkdown = target.source;
     updateCanonicalStructureSignature();
     options.onChange?.(canonicalMarkdown);
@@ -1037,6 +1075,10 @@ export function createEditor(
     text: string,
   ): boolean {
     const positions = sourcePositionMapForState(view.state);
+    if (!positions.hasExactDocumentBoundary(fromPosition) || !positions.hasExactDocumentBoundary(toPosition)) {
+      setSourceMode(true);
+      return true;
+    }
     const from = positions.documentToSource(fromPosition, "right");
     const to = fromPosition === toPosition ? from : positions.documentToSource(toPosition, "left");
     if (to < from) return true;
@@ -1046,15 +1088,16 @@ export function createEditor(
       + canonicalMarkdown.slice(to);
     const nextDerivedStructure = analyzeDerivedStructure(nextSource);
     pendingDerivedStructure = { source: nextSource, ...nextDerivedStructure };
+    const tr = view.state.tr.insertText(text, fromPosition, toPosition);
     const sourceTransaction: SourceTransaction = {
       edits: [{ from, to, insert: text }],
       selection: { anchor: head, head },
       origin: "input",
       ...(canonicalStructureSignature !== nextDerivedStructure.signature
+        || structureSignatureForDocument(tr.doc) !== nextDerivedStructure.signature
         ? { reparseDerivedDocument: true }
         : {}),
     };
-    const tr = view.state.tr.insertText(text, fromPosition, toPosition);
     view.dispatch(
       tr.setSelection(TextSelection.near(tr.doc.resolve(fromPosition + text.length)))
         .setMeta(SOURCE_TRANSACTION_META, sourceTransaction)
@@ -1095,6 +1138,7 @@ export function createEditor(
         return true;
       },
       dispatchTransaction(tr) {
+        if (tr.docChanged && flushNativeInput()) return;
         if (pendingComposition && tr.getMeta(INLINE_PRESENTATION_META) && !tr.docChanged && !tr.selectionSet) {
           presentationRefreshPending = true;
           return;
@@ -1105,7 +1149,8 @@ export function createEditor(
         const compositionId = tr.getMeta("composition") as number | undefined;
         if (compositionId !== undefined && !pendingComposition) beginComposition();
         const beforeCanonical = pendingComposition?.source ?? canonicalMarkdown;
-        const beforeSelection = sourceSelectionForState(v.state);
+        const beforeSelection = tr.getMeta(SOURCE_TRANSACTION_META)
+          ? liveInputSelection() : sourceSelectionForState(v.state);
         const activeSourceEditing = tr.docChanged
           ? activeSourceBlockEditing(v.state)
           : null;
@@ -1195,6 +1240,13 @@ export function createEditor(
         if (pendingComposition?.ended) finalizeComposition();
         if (pendingComposition) return false;
         if (view.composing || event.isComposing || event.keyCode === 229) return false;
+        if (["Enter", "Backspace", "Delete", "Tab"].includes(event.key)) {
+          const nativeSelection = liveInputSelection();
+          const modeledSelection = sourceSelectionForState(view.state);
+          if (nativeSelection.anchor !== modeledSelection.anchor || nativeSelection.head !== modeledSelection.head) {
+            setLiveSelection(nativeSelection);
+          }
+        }
         const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
         const mod = isMac ? event.metaKey : event.ctrlKey;
         if (
@@ -1240,6 +1292,7 @@ export function createEditor(
             sourceSelection,
             event.key,
             event.shiftKey,
+            sourceKeyContext(),
           );
           if (transaction) {
             applyAndRenderCanonicalTransaction(transaction);
@@ -1299,6 +1352,7 @@ export function createEditor(
       },
       handleDOMEvents: {
         input: (_view, event) => {
+          if (flushNativeInput()) return true;
           // A literal source surface admits text and inline decorations only.
           // Block-shaped native input has no proven authored newline mapping.
           const literal = _view.dom.querySelector(".source-blockquote-node.is-source-editing .source-blockquote-source-code");
@@ -1320,18 +1374,72 @@ export function createEditor(
           return false;
         },
         beforeinput: (_view, event) => {
+          let finishingSource: string | null = null;
+          let finishingInput: SourceTransaction | null = null;
           if (pendingComposition?.ended && !event.isComposing
             && !["insertCompositionText", "insertFromComposition", "deleteCompositionText"].includes(event.inputType)) {
+            // StaticRanges belong to the current native projection. Resolve
+            // them before finalization replaces those DOM nodes.
+            finishingSource = pendingComposition.source;
+            const text = nativeReplacementText(event);
+            if (text !== null && (!event.inputType.startsWith("delete") || event.getTargetRanges?.().length)) finishingInput = nativeSourceTextTransaction(
+              view, event, sourcePositionMapForState(view.state), text,
+              event.inputType.startsWith("delete") ? "delete" : "input",
+            );
             finalizeComposition();
           }
-          if (event.isComposing || pendingComposition || view.composing || !event.cancelable) return false;
+          if (event.isComposing || pendingComposition || view.composing) return false;
+          pendingNativeInput = null;
+          if (finishingSource === canonicalMarkdown && finishingInput) {
+            if (event.cancelable) {
+              event.preventDefault();
+              applyAndRenderCanonicalTransaction(finishingInput);
+              return true;
+            }
+            pendingNativeInput = { source: canonicalMarkdown, transaction: finishingInput, selection: currentSelection() };
+            return false;
+          }
+          if (!event.cancelable) {
+            if (["deleteContentBackward", "deleteContentForward", "insertParagraph", "insertLineBreak"].includes(event.inputType)) {
+              const selected = liveInputSelection();
+              const key = event.inputType === "deleteContentBackward" ? "Backspace"
+                : event.inputType === "deleteContentForward" ? "Delete" : "Enter";
+              const keyboard = new KeyboardEvent("keydown", { key, shiftKey: event.inputType === "insertLineBreak" });
+              const action = tableNavigation(view, canonicalMarkdown, selected, keyboard)
+                ?? liveSourceKeyTransaction(canonicalMarkdown, selected, key, keyboard.shiftKey, sourceKeyContext(selected));
+              if (action) pendingNativeInput = { source: canonicalMarkdown, selection: selected,
+                transaction: "edits" in action ? action : { edits: [], selection: action, origin: "input" } };
+              return false;
+            }
+            const text = nativeReplacementText(event);
+            const transaction = text == null ? null : nativeSourceTextTransaction(
+              view, event, sourcePositionMapForState(view.state), text,
+              event.inputType.startsWith("delete") ? "delete" : "input",
+            );
+            if (transaction) pendingNativeInput = { source: canonicalMarkdown, transaction, selection: liveInputSelection() };
+            return false;
+          }
+          if (["historyUndo", "historyRedo"].includes(event.inputType)) {
+            if (event.inputType === "historyUndo") restoreSourceHistory(sourceUndo, sourceRedo);
+            else restoreSourceHistory(sourceRedo, sourceUndo);
+            event.preventDefault();
+            return true;
+          }
+          if (["deleteWordBackward", "deleteWordForward", "deleteSoftLineBackward", "deleteSoftLineForward", "deleteHardLineBackward", "deleteHardLineForward", "deleteEntireSoftLine", "deleteByCut"].includes(event.inputType)) {
+            const transaction = nativeSourceTextTransaction(view, event, sourcePositionMapForState(view.state), "", "delete");
+            event.preventDefault();
+            if (transaction && (event.getTargetRanges?.().length || transaction.edits.some((edit) => edit.from !== edit.to))) applyAndRenderCanonicalTransaction(transaction);
+            else setSourceMode(true);
+            return true;
+          }
           if (["deleteContentBackward", "deleteContentForward", "insertParagraph", "insertLineBreak"].includes(event.inputType)) {
             const key = event.inputType === "deleteContentBackward" ? "Backspace"
               : event.inputType === "deleteContentForward" ? "Delete" : "Enter";
             const keyboard = new KeyboardEvent("keydown", { key, shiftKey: event.inputType === "insertLineBreak" });
-            const selected = currentSelection();
+            const selected = liveInputSelection();
+            setLiveSelection(selected);
             const table = tableNavigation(view, canonicalMarkdown, selected, keyboard);
-            const action = table ?? liveSourceKeyTransaction(canonicalMarkdown, selected, key, keyboard.shiftKey);
+            const action = table ?? liveSourceKeyTransaction(canonicalMarkdown, selected, key, keyboard.shiftKey, sourceKeyContext());
             if (action && "edits" in action) applyAndRenderCanonicalTransaction(action);
             else if (action) setLiveSelection(action);
             event.preventDefault();
@@ -1349,7 +1457,9 @@ export function createEditor(
           return true;
         },
         copy: (_view, event) => {
-          const selection = sourceSelectionForState(view.state);
+          if (pendingComposition?.ended) finalizeComposition();
+          if (pendingComposition) return false;
+          const selection = liveInputSelection();
           if (selection.anchor === selection.head || !event.clipboardData) return false;
           const from = Math.min(selection.anchor, selection.head);
           const to = Math.max(selection.anchor, selection.head);
@@ -1358,14 +1468,16 @@ export function createEditor(
           return true;
         },
         cut: (_view, event) => {
+          if (pendingComposition?.ended) finalizeComposition();
+          if (pendingComposition) return false;
           const cells = selectedTableCells(view.state);
-          const selected = currentSelection();
+          const selected = liveInputSelection();
           if (cells.length && !cells.some((cell) => Math.min(selected.anchor, selected.head) >= cell.from && Math.max(selected.anchor, selected.head) <= cell.to)) {
             setSourceMode(true);
             event.preventDefault();
             return true;
           }
-          const selection = sourceSelectionForState(view.state);
+          const selection = liveInputSelection();
           if (selection.anchor === selection.head || !event.clipboardData) return false;
           const from = Math.min(selection.anchor, selection.head);
           const to = Math.max(selection.anchor, selection.head);
@@ -1379,6 +1491,53 @@ export function createEditor(
           event.preventDefault();
           return true;
         },
+        paste: (_view, event) => {
+          if (pendingComposition?.ended) finalizeComposition();
+          if (pendingComposition) return false;
+          if (!event.clipboardData?.getData) return false;
+          const text = transferPlainText(event.clipboardData);
+          event.preventDefault();
+          if (text !== null) applyAndRenderCanonicalTransaction(pasteSourceTransaction(liveInputSelection(), text));
+          return true;
+        },
+        dragstart: (_view, event) => {
+          if (pendingComposition?.ended) finalizeComposition();
+          const selection = liveInputSelection();
+          draggedSource = null;
+          if (pendingComposition || selection.anchor === selection.head || !event.dataTransfer) {
+            event.preventDefault();
+            return true;
+          }
+          const from = Math.min(selection.anchor, selection.head);
+          const to = Math.max(selection.anchor, selection.head);
+          const text = canonicalMarkdown.slice(from, to);
+          draggedSource = { source: canonicalMarkdown, from, to, text };
+          event.dataTransfer.clearData();
+          event.dataTransfer.setData("text/plain", text);
+          event.dataTransfer.effectAllowed = "copyMove";
+          return true;
+        },
+        dragend: () => { draggedSource = null; return true; },
+        drop: (_view, event) => {
+          if (pendingComposition?.ended) finalizeComposition();
+          event.preventDefault();
+          const dragged = draggedSource;
+          draggedSource = null;
+          if (pendingComposition) return true;
+          const text = transferPlainText(event.dataTransfer);
+          if (text === null) return true;
+          const target = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          const positions = sourcePositionMapForState(view.state);
+          if (!target || !positions.hasExactDocumentBoundary(target.pos)) {
+            setSourceMode(true);
+            return true;
+          }
+          const copy = /Mac|iPhone|iPad/.test(navigator.platform) ? event.altKey : event.ctrlKey;
+          const move = dragged?.source === canonicalMarkdown && dragged.text === text && !copy ? dragged : undefined;
+          const transaction = dropSourceTransaction(positions.documentToSource(target.pos, "right"), text, move);
+          if (transaction) applyAndRenderCanonicalTransaction(transaction);
+          return true;
+        },
       },
       handleTextInput(_view, fromPosition, toPosition, text) {
         // Keep ProseMirror's native transaction during composition. Its
@@ -1386,21 +1545,6 @@ export function createEditor(
         // preserve the active IME text node across candidate updates.
         if (pendingComposition || _view.composing) return false;
         return applyLiveTextInput(fromPosition, toPosition, text);
-      },
-      handlePaste(_view, event) {
-        const text = event.clipboardData?.getData?.("text/plain");
-        if (text == null) return false;
-        const selection = sourceSelectionForState(view.state);
-        const from = Math.min(selection.anchor, selection.head);
-        const to = Math.max(selection.anchor, selection.head);
-        const head = from + text.length;
-        applyAndRenderCanonicalTransaction({
-          edits: [{ from, to, insert: text }],
-          selection: { anchor: head, head },
-          origin: "paste",
-          reparseDerivedDocument: true,
-        });
-        return true;
       },
     });
     const ownerDocument = v.dom.ownerDocument;
@@ -1463,6 +1607,7 @@ export function createEditor(
   }
 
   function insertMarkdown(markdown: string, offset?: number): void {
+    flushNativeInput();
     if (pendingComposition) finalizeComposition();
     if (sourceComposing) finalizeSourceComposition();
     const selection = currentSelection();
@@ -1474,6 +1619,7 @@ export function createEditor(
   }
 
   function replaceMarkdown(markdown: string, offset = markdown.length): void {
+    flushNativeInput();
     if (pendingComposition) finalizeComposition();
     if (sourceComposing) finalizeSourceComposition();
     const head = Math.max(0, Math.min(offset, markdown.length));
@@ -1482,7 +1628,9 @@ export function createEditor(
   }
 
   function setSelectionOffset(offset: number): void {
+    flushNativeInput();
     if (pendingComposition) finalizeComposition();
+    if (sourceComposing) finalizeSourceComposition();
     const clamped = Math.max(0, Math.min(offset, canonicalMarkdown.length));
     if (inSource) {
       selectSourceTextarea({ anchor: clamped, head: clamped });
@@ -1493,6 +1641,7 @@ export function createEditor(
   }
 
   function runExtensionCommand<Result>(command: string, input?: unknown): Result | undefined {
+    flushNativeInput();
     if (pendingComposition) finalizeComposition();
     if (inSource) return undefined;
     for (const extension of options.extensions ?? []) {
@@ -1503,6 +1652,7 @@ export function createEditor(
   }
 
   function setSourceMode(source: boolean): void {
+    flushNativeInput();
     if (pendingComposition || sourceComposing || view.composing) {
       pendingSourceMode = source;
       return;
@@ -1580,7 +1730,24 @@ export function createEditor(
     flushDeferredPresentation();
     options.onCompositionChange?.(false);
   }
-  sourceTextarea.addEventListener("beforeinput", () => {
+  sourceTextarea.addEventListener("beforeinput", (event) => {
+    if (sourceCompositionFinalizeTimer !== null && !event.isComposing
+      && !["insertCompositionText", "insertFromComposition", "deleteCompositionText"].includes(event.inputType)) {
+      finalizeSourceComposition();
+    }
+    if (!sourceComposing && ["historyUndo", "historyRedo"].includes(event.inputType) && event.cancelable) {
+      event.preventDefault();
+      if (event.inputType === "historyUndo") restoreSourceHistory(sourceUndo, sourceRedo);
+      else restoreSourceHistory(sourceRedo, sourceUndo);
+      return;
+    }
+    if (!sourceComposing && event.cancelable && ["deleteContentBackward", "deleteContentForward"].includes(event.inputType)) {
+      event.preventDefault();
+      const transaction = liveSourceKeyTransaction(canonicalMarkdown, currentSelection(),
+        event.inputType === "deleteContentBackward" ? "Backspace" : "Delete");
+      if (transaction) applyAndRenderCanonicalTransaction(transaction);
+      return;
+    }
     if (!sourceComposing) sourceInputSelection = sourceTextareaSelection();
   });
   sourceTextarea.addEventListener("input", () => { if (!sourceComposing) commitSourceInput(); });
@@ -1600,6 +1767,7 @@ export function createEditor(
     sourceCompositionFinalizeTimer = setTimeout(finalizeSourceComposition, 0);
   });
   sourceTextarea.addEventListener("keydown", (event) => {
+    if (sourceCompositionFinalizeTimer !== null && !event.isComposing) finalizeSourceComposition();
     if (event.isComposing || sourceComposing) return;
     const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? event.metaKey : event.ctrlKey;
     if (!mod && !event.altKey && ["Backspace", "Delete"].includes(event.key)) {
@@ -1615,14 +1783,24 @@ export function createEditor(
     }
   });
   sourceTextarea.addEventListener("paste", (event) => {
-    const text = event.clipboardData?.getData?.("text/plain");
-    if (text === undefined || sourceComposing) return;
+    if (sourceCompositionFinalizeTimer !== null) finalizeSourceComposition();
+    if (sourceComposing) return;
+    if (!event.clipboardData?.getData) return;
+    const text = transferPlainText(event.clipboardData);
     event.preventDefault();
+    if (text !== null) applyAndRenderCanonicalTransaction(pasteSourceTransaction(currentSelection(), text));
+  });
+  for (const type of ["copy", "cut"] as const) sourceTextarea.addEventListener(type, (event) => {
+    if (sourceCompositionFinalizeTimer !== null) finalizeSourceComposition();
+    if (sourceComposing || !event.clipboardData) return;
     const selection = currentSelection();
     const from = Math.min(selection.anchor, selection.head);
     const to = Math.max(selection.anchor, selection.head);
-    applyAndRenderCanonicalTransaction({ edits: [{ from, to, insert: text }],
-      selection: { anchor: from + text.length, head: from + text.length }, origin: "paste" });
+    if (from === to) return;
+    event.clipboardData.setData("text/plain", canonicalMarkdown.slice(from, to));
+    event.preventDefault();
+    if (type === "cut") applyAndRenderCanonicalTransaction({ edits: [{ from, to, insert: "" }],
+      selection: { anchor: from, head: from }, origin: "delete" });
   });
 
   view = buildView(canonicalMarkdown);
@@ -1637,10 +1815,13 @@ export function createEditor(
       return canonicalMarkdown;
     },
     setMarkdown(md: string): void {
+      flushNativeInput();
       if (md === canonicalMarkdown) return;
       if (pendingComposition) finalizeComposition();
       if (sourceComposing) finalizeSourceComposition();
       if (md !== canonicalMarkdown) {
+        for (const bookmark of sourceBookmarks) bookmark.invalidate();
+        sourceBookmarks.clear();
         sourceUndo.length = 0;
         sourceRedo.length = 0;
       }
@@ -1661,11 +1842,33 @@ export function createEditor(
     insertMarkdown(markdown: string, offset?: number): void {
       insertMarkdown(markdown, offset);
     },
+    createInsertionBookmark(offset?: number) {
+      flushNativeInput();
+      if (pendingComposition) finalizeComposition();
+      if (sourceComposing) finalizeSourceComposition();
+      const point = offset === undefined ? null : Math.max(0, Math.min(offset, canonicalMarkdown.length));
+      const bookmark = new SourceBookmark(point === null ? inSource ? currentSelection() : liveInputSelection()
+        : { anchor: point, head: point });
+      sourceBookmarks.add(bookmark);
+      const dispose = () => { sourceBookmarks.delete(bookmark); bookmark.invalidate(); };
+      return { dispose, insert(markdown: string): boolean {
+        flushNativeInput();
+        if (pendingComposition) finalizeComposition();
+        if (sourceComposing) finalizeSourceComposition();
+        const range = bookmark.range;
+        dispose();
+        if (!range) return false;
+        return applyAndRenderCanonicalTransaction(pasteSourceTransaction({ anchor: range.from, head: range.to }, markdown));
+      } };
+    },
     replaceMarkdown(markdown: string, offset?: number): void {
       replaceMarkdown(markdown, offset);
     },
     getSelection: currentSelection,
     setSelection(selection: SourceSelection): void {
+      flushNativeInput();
+      if (pendingComposition) finalizeComposition();
+      if (sourceComposing) finalizeSourceComposition();
       if (inSource) selectSourceTextarea(selection);
       else setLiveSelection(selection);
     },
@@ -1698,8 +1901,11 @@ export function createEditor(
       else view.focus();
     },
     destroy(): void {
+      flushNativeInput();
       if (pendingComposition) finalizeComposition();
       finalizeSourceComposition();
+      for (const bookmark of sourceBookmarks) bookmark.invalidate();
+      sourceBookmarks.clear();
       if (compositionFinalizeTimer !== null) clearTimeout(compositionFinalizeTimer);
       if (pointerSelectionCommitTimer !== null) clearTimeout(pointerSelectionCommitTimer);
       if (sourceScrollFrame !== null) cancelAnimationFrame(sourceScrollFrame);

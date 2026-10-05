@@ -25,9 +25,14 @@ vi.mock("./extensions/wikilink", () => ({
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function mockEditor(overrides: Partial<EditorController> = {}): EditorController {
-  return { setSourceMode: vi.fn(), isSourceMode: () => false, isComposing: () => false, getSelectionOffset: () => 0,
+  const editor = { setSourceMode: vi.fn(), isSourceMode: () => false, isComposing: () => false, getSelectionOffset: () => 0,
     getSelection: () => ({ anchor: 0, head: 0 }), setSelection: vi.fn(), replaceMarkdown: vi.fn(),
-    ...overrides } as unknown as EditorController;
+    createInsertionBookmark: (offset?: number) => ({ dispose: vi.fn(), insert: (markdown: string) => {
+      if (offset === undefined) editor.insertMarkdown(markdown);
+      else editor.insertMarkdown(markdown, offset);
+      return true;
+    } }), ...overrides } as unknown as EditorController;
+  return editor;
 }
 
 const attachmentId = "11111111-1111-4111-8111-111111111111";
@@ -429,6 +434,51 @@ describe("MarkdownEditor live mode", () => {
 });
 
 describe("MarkdownEditor source mode", () => {
+  it.each(["drop", "paste"] as const)("keeps an async image %s at its tracked source range while typing continues", async (type) => {
+    vi.mocked(createEditor).mockImplementation((await vi.importActual<typeof import("./core/lib")>("./core/lib")).createEditor);
+    let finish: ((insertion: string) => void) | undefined;
+    const onImageInsert = () => new Promise<string>((resolve) => { finish = resolve; });
+    const onChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(<I18nProvider><MarkdownEditor markdown="Before selected after" mode="source"
+      onChange={onChange} onImageInsert={onImageInsert} /></I18nProvider>));
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
+    textarea.setSelectionRange(7, 15);
+    act(() => textarea.dispatchEvent(transferEvent(type, imageTransfer(new File(["image"], "image.png", { type: "image/png" })))));
+    act(() => {
+      textarea.setSelectionRange(0, 0);
+      textarea.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: "X", bubbles: true }));
+      textarea.value = "XBefore selected after";
+      textarea.setSelectionRange(1, 1);
+      textarea.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: "X", bubbles: true }));
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    });
+    await act(async () => { finish?.("![image](webmd-attachment:image)"); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(onChange).toHaveBeenLastCalledWith("XBefore ![image](webmd-attachment:image) after");
+    await act(async () => root.unmount());
+  });
+
+  it("discards a pending image insertion after externally replacing the document", async () => {
+    vi.mocked(createEditor).mockImplementation((await vi.importActual<typeof import("./core/lib")>("./core/lib")).createEditor);
+    let finish: ((insertion: string) => void) | undefined;
+    const onImageInsert = () => new Promise<string>((resolve) => { finish = resolve; });
+    const onChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const render = (markdown: string) => <I18nProvider><MarkdownEditor markdown={markdown} mode="source"
+      onChange={onChange} onImageInsert={onImageInsert} /></I18nProvider>;
+    await act(async () => root.render(render("Original document")));
+    act(() => container.querySelector("textarea")!.dispatchEvent(transferEvent("paste", imageTransfer(new File(["image"], "image.png", { type: "image/png" })))));
+    await act(async () => root.render(render("Replacement document")));
+    await act(async () => { finish?.("![image](webmd-attachment:image)"); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(container.querySelector("textarea")!.value).toBe("Replacement document");
+    expect(onChange).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
+  });
+
   it("inserts a dragged image at the captured source selection", async () => {
     vi.mocked(createEditor).mockImplementation((await vi.importActual<typeof import("./core/lib")>("./core/lib")).createEditor);
     let finishInsertion: ((insertion: string) => void) | undefined;

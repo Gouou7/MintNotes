@@ -162,13 +162,12 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
     event.preventDefault();
     event.stopPropagation();
     const editor = editorRef.current;
-    const selection = editor.isSourceMode() ? editor.getSelection() : null;
-    const offset = editor.getMarkdownOffsetAtPoint(event.clientX, event.clientY);
-    const insertion = await onImageInsert(file);
-    if (insertion === null) return;
-    if (editorRef.current !== editor) return;
-    if (selection) { editor.setSelection(selection); editor.insertMarkdown(insertion); }
-    else editor.insertMarkdown(insertion, offset);
+    const bookmark = editor.createInsertionBookmark(editor.isSourceMode()
+      ? undefined : editor.getMarkdownOffsetAtPoint(event.clientX, event.clientY));
+    try {
+      const insertion = await onImageInsert(file);
+      if (insertion !== null && editorRef.current === editor) bookmark.insert(insertion);
+    } finally { bookmark.dispose(); }
   };
   const paste = async (event: ReactClipboardEvent<HTMLDivElement>) => {
     const file = imageFileFromTransfer(event.clipboardData);
@@ -176,9 +175,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
     if (!file || !onImageInsert || !editor) return;
     event.preventDefault();
     event.stopPropagation();
-    const insertion = await onImageInsert(file);
-    if (insertion === null) return;
-    if (editorRef.current === editor) editor.insertMarkdown(insertion);
+    const bookmark = editor.createInsertionBookmark();
+    try {
+      const insertion = await onImageInsert(file);
+      if (insertion !== null && editorRef.current === editor) bookmark.insert(insertion);
+    } finally { bookmark.dispose(); }
   };
 
   const changeProperties = (next: string) => {

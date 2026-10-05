@@ -1,4 +1,4 @@
-import type { SourceEdit, SourceSelection } from "./source";
+import type { SourceEdit, SourceRange, SourceSelection } from "./source";
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
@@ -13,6 +13,18 @@ export function adjacentGrapheme(source: string, offset: number, direction: -1 |
     previous = segment.index;
   }
   return direction < 0 ? previous : source.length;
+}
+
+/** Even a restored caret inside a UTF-16 cluster deletes the entire perceived character. */
+export function graphemeDeletionRange(source: string, offset: number, direction: -1 | 1): SourceRange {
+  if (direction < 0 && offset <= 0 || direction > 0 && offset >= source.length) return { from: offset, to: offset };
+  for (const segment of graphemes.segment(source)) {
+    const end = segment.index + segment.segment.length;
+    if (direction < 0 && end >= offset || direction > 0 && end > offset) {
+      return { from: segment.index, to: end };
+    }
+  }
+  return { from: offset, to: offset };
 }
 
 /** One native textarea input is one replacement, including an entire IME commit. */

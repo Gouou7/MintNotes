@@ -21,13 +21,14 @@ export class SourcePositionMap {
   private constructor(
     readonly sourceLength: number,
     readonly documentSize: number,
+    private readonly source: string,
   ) {
     this.sourceBoundaries = Array.from({ length: sourceLength + 1 }, () => []);
     this.documentPositions = Array.from({ length: documentSize + 1 }, () => []);
   }
 
   static fromDocument(doc: PMNode, source: string): SourcePositionMap {
-    const map = new SourcePositionMap(source.length, doc.content.size);
+    const map = new SourcePositionMap(source.length, doc.content.size, source);
     doc.descendants((node, position) => {
       const from = numericAttr(node, SOURCE_FROM_ATTR);
       const to = numericAttr(node, SOURCE_TO_ATTR);
@@ -59,6 +60,13 @@ export class SourcePositionMap {
 
   hasExactDocumentBoundary(position: number): boolean {
     return (this.documentPositions[position]?.length ?? 0) > 0;
+  }
+
+  /** A browser can skip the invisible CR atom; native input still owns the complete CRLF. */
+  nativeInputBoundary(position: number, affinity: PositionAffinity): number {
+    const offset = this.documentToSource(position, affinity);
+    if (this.source[offset - 1] !== "\r" || this.source[offset] !== "\n") return position;
+    return this.sourceToDocument(offset + (affinity === "left" ? -1 : 1), affinity);
   }
 
   /** Whether this authored boundary owns a concrete Live document position. */

@@ -182,10 +182,15 @@ describe("native composition source ownership", () => {
     expect(editor.isComposing()).toBe(false);
   });
 
-  it("does not lose ordinary typing immediately after IME confirmation", async () => {
+  it.each([false, true])("does not lose ordinary typing immediately after IME confirmation with targetRanges=%s", async (withTargetRanges) => {
     const { editor, live, changes } = setup("前后", 1);
     await compose(live, ["ni", "你"], false, false);
-    live.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "x" }));
+    const range = document.getSelection()!.getRangeAt(0);
+    const target = { startContainer: range.startContainer, startOffset: range.startOffset,
+      endContainer: range.endContainer, endOffset: range.endOffset };
+    const event = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "x" });
+    if (withTargetRanges) Object.defineProperty(event, "getTargetRanges", { value: () => [target] });
+    live.dispatchEvent(event);
     await tick();
     expect(editor.getMarkdown()).toBe("前你x后");
     expect(editor.getSelectionOffset()).toBe(3);

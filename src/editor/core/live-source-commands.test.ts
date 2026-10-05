@@ -76,4 +76,26 @@ describe("canonical Live source commands", () => {
     expect(press("1. item", 7, "Tab")).toBe("    1. item");
     expect(press("- [ ] item", 10, "Tab")).toBe("    - [ ] item");
   });
+
+  it("continues a list when Enter splits its text in the middle", () => {
+    expect(press("- first second", 8, "Enter")).toBe("- first \n- second");
+  });
+
+  it("inserts a blank line before a quote without duplicating its marker", () => {
+    expect(press("> quote", 0, "Enter")).toBe("\n> quote");
+    expect(press("> > quote", 0, "Enter")).toBe("\n> > quote");
+  });
+
+  it("keeps the quote when adding a hard break or indenting a nested list", () => {
+    expect(press("> quote", 4, "Enter", true)).toBe("> qu  \n> ote");
+    expect(press("> - item", 8, "Tab")).toBe(">     - item");
+    expect(press(">     - item", 12, "Tab", true)).toBe("> - item");
+  });
+
+  it.each(["👨‍👩‍👧‍👦", "🇨🇳", "👍🏽", "e\u0301", "\r\n"])(
+    "deletes the whole grapheme %j when a restored caret lands inside it", (cluster) => {
+      expect(press(`a${cluster}b`, 2, "Backspace")).toBe("ab");
+      expect(press(`a${cluster}b`, 2, "Delete")).toBe("ab");
+    },
+  );
 });

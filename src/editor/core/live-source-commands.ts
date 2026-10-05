@@ -1,5 +1,5 @@
 import type { SourceSelection, SourceTransaction } from "./source";
-import { adjacentGrapheme } from "./source-text";
+import { graphemeDeletionRange } from "./source-text";
 
 type LiveSourceKey = "Enter" | "Backspace" | "Delete" | "Tab";
 
@@ -16,8 +16,8 @@ type ListPrefix = {
   readonly task: boolean;
 };
 
-const QUOTE_PREFIX = /^( {0,3}(?:>[\t ]?)+)/;
-const LIST_PREFIX = /^(\s*)((?:[-+*])|(?:\d+[.)]))([\t ]+)(?:\[([^\]\r\n])\]([\t ]+))?/;
+const QUOTE_PREFIX = /^((?: {0,3}>[\t ]?)+)/;
+const LIST_PREFIX = /^([\t ]*)((?:[-+*])|(?:\d{1,9}[.)]))([\t ]+)(?:\[([ xX])\]([\t ]+))?/;
 const LIST_LEVEL_INDENT = "    ";
 
 function lineContext(source: string, offset: number): LineContext {
@@ -72,40 +72,44 @@ function enterTransaction(
   source: string,
   selection: SourceSelection,
   shiftKey: boolean,
+  literal: boolean,
 ): SourceTransaction {
   const from = Math.min(selection.anchor, selection.head);
   const to = Math.max(selection.anchor, selection.head);
   const line = lineContext(source, from);
+  if (literal || to > line.to) return transaction(selection, from, to, "\n", "input");
   const beforeLine = source.slice(line.from, from);
   const selectedLine = beforeLine + source.slice(to, line.to);
-  const list = listPrefix(selectedLine);
+  const quote = QUOTE_PREFIX.exec(selectedLine);
+  const quotePrefix = quote?.[1] ?? "";
+  const list = listPrefix(selectedLine.slice(quotePrefix.length));
+  const withinList = list && beforeLine.length >= quotePrefix.length + list.full.length;
   const atLineEnd = to === line.to;
 
   if (shiftKey) {
-    if (list) {
+    if (withinList) {
       const continuationIndent = " ".repeat(list.full.length);
-      return transaction(selection, from, to, `\n${continuationIndent}`, "input");
+      return transaction(selection, from, to, `\n${quotePrefix}${continuationIndent}`, "input");
     }
-    return transaction(selection, from, to, "  \n", "input");
+    return transaction(selection, from, to, `  \n${beforeLine.length >= quotePrefix.length ? quotePrefix : ""}`, "input");
   }
 
-  if (list && atLineEnd) {
-    const contentBefore = beforeLine.slice(list.full.length);
+  if (withinList) {
+    const contentBefore = beforeLine.slice(quotePrefix.length + list.full.length);
     const contentAfter = source.slice(to, line.to);
-    if (!`${contentBefore}${contentAfter}`.trim()) {
+    if (atLineEnd && !`${contentBefore}${contentAfter}`.trim()) {
       return transaction(
         selection,
         line.from,
         line.to,
-        "\n",
+        quotePrefix || "\n",
         "command",
       );
     }
-    return transaction(selection, from, to, `\n${nextListPrefix(list)}`, "command");
+    return transaction(selection, from, to, `\n${quotePrefix}${nextListPrefix(list)}`, "command");
   }
 
-  const quote = QUOTE_PREFIX.exec(selectedLine);
-  if (quote) {
+  if (quote && beforeLine.length >= quotePrefix.length) {
     const prefix = quote[1]!;
     const contentBefore = beforeLine.slice(prefix.length);
     const contentAfter = source.slice(to, line.to);
@@ -128,15 +132,17 @@ function tabTransaction(
 ): SourceTransaction | null {
   if (selection.anchor !== selection.head) return null;
   const line = lineContext(source, selection.head);
-  const list = listPrefix(line.text);
+  const quotePrefix = QUOTE_PREFIX.exec(line.text)?.[1] ?? "";
+  const list = listPrefix(line.text.slice(quotePrefix.length));
   if (!list) return null;
+  const indentFrom = line.from + quotePrefix.length;
 
   if (shiftKey) {
     if (!list.indent) return null;
     const remove = Math.min(list.indent.length, LIST_LEVEL_INDENT.length);
     const head = Math.max(line.from, selection.head - remove);
     return {
-      edits: [{ from: line.from, to: line.from + remove, insert: "" }],
+      edits: [{ from: indentFrom, to: indentFrom + remove, insert: "" }],
       selection: { anchor: head, head },
       origin: "command",
       reparseDerivedDocument: true,
@@ -146,7 +152,7 @@ function tabTransaction(
   const indent = LIST_LEVEL_INDENT;
   const head = selection.head + indent.length;
   return {
-    edits: [{ from: line.from, to: line.from, insert: indent }],
+    edits: [{ from: indentFrom, to: indentFrom, insert: indent }],
     selection: { anchor: head, head },
     origin: "command",
     reparseDerivedDocument: true,
@@ -159,17 +165,20 @@ export function liveSourceKeyTransaction(
   selection: SourceSelection,
   key: LiveSourceKey,
   shiftKey = false,
+  context: { literal?: boolean } = {},
 ): SourceTransaction | null {
-  if (key === "Enter") return enterTransaction(source, selection, shiftKey);
-  if (key === "Tab") return tabTransaction(source, selection, shiftKey);
+  if (key === "Enter") return enterTransaction(source, selection, shiftKey, context.literal === true);
+  if (key === "Tab") return context.literal ? null : tabTransaction(source, selection, shiftKey);
 
   const from = Math.min(selection.anchor, selection.head);
   const to = Math.max(selection.anchor, selection.head);
   if (from !== to) return transaction(selection, from, to, "", "delete");
   if (key === "Backspace") {
     if (from === 0) return null;
-    return transaction(selection, adjacentGrapheme(source, from, -1), from, "", "delete");
+    const range = graphemeDeletionRange(source, from, -1);
+    return transaction(selection, range.from, range.to, "", "delete");
   }
   if (to === source.length) return null;
-  return transaction(selection, to, adjacentGrapheme(source, to, 1), "", "delete");
+  const range = graphemeDeletionRange(source, to, 1);
+  return transaction(selection, range.from, range.to, "", "delete");
 }

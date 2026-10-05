@@ -482,7 +482,14 @@ describe("Mint editor core public controller", () => {
         host.remove();
       };
 
-      for (const position of positions) {
+      const enterInsertions: Record<string, readonly string[]> = {
+        "bullet list": ["\n", "\n", "\n  + "],
+        "ordered list": ["\n", "\n", "\n    10. "],
+        "task list": ["\n", "\n", "\n- [ ] "],
+        blockquote: ["\n", "\n", "\n> "],
+        Callout: ["\n", "\n> ", "\n> "],
+      };
+      for (const [index, position] of positions.entries()) {
         exercise(
           "Backspace",
           position,
@@ -494,12 +501,7 @@ describe("Mint editor core public controller", () => {
           deletePosition,
           markdown.slice(0, deletePosition) + markdown.slice(deletePosition + 1),
         );
-        const lineStart = markdown.lastIndexOf("\n", position - 1) + 1;
-        const line = markdown.slice(lineStart, markdown.indexOf("\n", lineStart) < 0
-          ? markdown.length
-          : markdown.indexOf("\n", lineStart));
-        const quotePrefix = /^(?: {0,3}>[\t ]?)+/.exec(line)?.[0] ?? "";
-        const enterText = quotePrefix ? `\n${quotePrefix}` : "\n";
+        const enterText = enterInsertions[_name]?.[index] ?? "\n";
         exercise(
           "Enter",
           position,
