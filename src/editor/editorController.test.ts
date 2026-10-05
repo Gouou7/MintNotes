@@ -21,7 +21,7 @@ interface MintPresentationOptions {
 function activeLiveTextSurface(editable: HTMLElement): HTMLElement | null {
   const anchor = document.getSelection()?.anchorNode;
   const parent = anchor instanceof HTMLElement ? anchor : anchor?.parentElement;
-  const selected = parent?.closest<HTMLElement>("p, h1, h2, h3, h4, h5, h6, td, th, code");
+  const selected = parent?.closest<HTMLElement>("p, h1, h2, h3, h4, h5, h6, td, th, code, pre[data-source-gap]:not([data-source-gap-structural])");
   if (selected && editable.contains(selected)) return selected;
   const structured = editable.querySelector<HTMLElement>("pre[data-source-block] > code")
     ?? editable.querySelector<HTMLElement>(
@@ -29,7 +29,7 @@ function activeLiveTextSurface(editable: HTMLElement): HTMLElement | null {
     )
     ?? editable.querySelector<HTMLElement>("pre.cb-source-editing > code")
     ?? editable.querySelector<HTMLElement>(
-      "pre[data-source-gap]:not([data-source-gap-structural]) > code",
+      "pre[data-source-gap]:not([data-source-gap-structural])",
     );
   if (structured) return structured;
   const lastBlock = editable.lastElementChild;
@@ -782,10 +782,10 @@ describe("Mint editor core public controller", () => {
     ["bullet list", "- ", "li p"],
     ["ordered list", "1. ", "li p"],
     ["task list", "- [ ] ", "li p"],
-    ["blockquote", ">", "blockquote code"],
+    ["blockquote", ">", "blockquote pre[data-source-gap]"],
     ["horizontal rule", "---", "pre[data-source-block][data-source-kind='horizontal_rule'] > code"],
     ["TOC", "[TOC]", "pre[data-source-block][data-source-kind='toc'] > code"],
-    ["reference definition", "[ref]: https://example.test", "pre[data-source-gap] > code"],
+    ["reference definition", "[ref]: https://example.test", "pre[data-source-gap]"],
   ] as const)(
     "keeps a newly typed %s marker and its DOM caret on the same authored source line",
     async (_name, markdown, selector) => {
@@ -2173,7 +2173,7 @@ describe("Mint editor core public controller", () => {
     expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
     expect(editor.getSelectionOffset()).toBe(quoteTo + 3);
     expect(pressNavigationKey(host, "ArrowDown")).toBe(true);
-    expect(editor.getSelectionOffset()).toBe(calloutFrom);
+    expect(editor.getSelectionOffset()).toBe(calloutFrom + "> quote".length);
     expect(host.querySelector(".source-blockquote-node.is-source-editing")).not.toBeNull();
 
     editor.setSelectionOffset(calloutFrom + 3);
@@ -2192,7 +2192,7 @@ describe("Mint editor core public controller", () => {
     expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
     expect(editor.getSelectionOffset()).toBe(calloutFrom - 3);
     expect(pressNavigationKey(host, "ArrowUp")).toBe(true);
-    expect(editor.getSelectionOffset()).toBe(quoteTo);
+    expect(editor.getSelectionOffset()).toBe(quoteFrom);
     expect(host.querySelector("blockquote p .syntax-hint")).not.toBeNull();
 
     expect(editor.getMarkdown()).toBe(markdown);

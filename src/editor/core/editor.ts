@@ -80,7 +80,7 @@ export function defaultPlugins(options: {
     manualEscapeDecorationPlugin(),
     ...extensions.flatMap((extension) => extension.createPlugins?.({ schema }) ?? []),
     normalizeInlinePlugin({ resolveImageSource }),
-    sourceGapNavigationPlugin(),
+    ...(options.canonicalSource ? [] : [sourceGapNavigationPlugin()]),
     // Feature-contributed plugins sit after normalize (so block-draft
     // watchers see the post-normalize doc) and before syntaxHints (so any
     // extra decorations merge into PM's decoration pipeline naturally).

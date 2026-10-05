@@ -21,6 +21,7 @@ import {
   markLiveNavigation,
   hasVisualLineInDirection,
   selectionOutsideBlock,
+  verticalSourceOffset,
 } from "../source-navigation";
 import type { FeatureSpec } from "./_types";
 
@@ -372,28 +373,11 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
 
   const text = node.textContent;
   const offset = selection.$from.parentOffset;
-  const lineStart = text.lastIndexOf("\n", offset - 1) + 1;
-  const column = offset - lineStart;
-  let targetOffset: number | null = null;
-
-  if (direction < 0 && lineStart > 0) {
-    const previousEnd = lineStart - 1;
-    const previousStart = text.lastIndexOf("\n", previousEnd - 1) + 1;
-    targetOffset = previousStart + Math.min(column, previousEnd - previousStart);
-  } else if (direction > 0) {
-    const currentEnd = text.indexOf("\n", lineStart);
-    if (currentEnd >= 0) {
-      const nextStart = currentEnd + 1;
-      const nextBreak = text.indexOf("\n", nextStart);
-      const nextEnd = nextBreak >= 0 ? nextBreak : text.length;
-      // The closing fence is rendered as its own syntax-hint span. A caret at
-      // the preceding text node's trailing newline is painted on the body line
-      // by Chromium, making the fence look skipped. Use the stable outer edge
-      // when entering the final source line from above.
-      targetOffset = nextEnd === text.length
-        ? nextEnd
-        : nextStart + Math.min(column, nextEnd - nextStart);
-    }
+  let targetOffset = verticalSourceOffset(text, offset, direction);
+  // Chromium paints the start of the closing syntax span on the body row.
+  // Enter that fence at its stable outer edge, keeping body navigation native.
+  if (direction > 0 && targetOffset !== null && parsed?.closingFrom != null && targetOffset >= parsed.closingFrom) {
+    targetOffset = text.length;
   }
 
   const blockPos = selection.$from.before();
@@ -416,7 +400,7 @@ function moveSourceVertically(view: EditorView, direction: -1 | 1): boolean {
   return true;
 }
 
-function fencedCodeSourcePlugin(): Plugin {
+function fencedCodeSourcePlugin(canonicalSource = false): Plugin {
   return new Plugin({
     appendTransaction(transactions, oldState, newState) {
       if (transactions.some((transaction) => transaction.getMeta(LIVE_POINTER_SELECTION_META))) return null;
@@ -484,6 +468,7 @@ function fencedCodeSourcePlugin(): Plugin {
         );
       },
       handleKeyDown(view, event) {
+        if (canonicalSource) return false;
         if (view.composing || event.isComposing || event.keyCode === 229) return false;
         if (
           event.key === "Backspace"
@@ -563,7 +548,7 @@ function fencedCodeSourcePlugin(): Plugin {
 export const fencedCode: FeatureSpec = {
   name: "code_block",
 
-  plugins: () => [fencedCodeSourcePlugin()],
+  plugins: (_schema, context) => [fencedCodeSourcePlugin(context.canonicalSource)],
 
   keymap: (schema) => ({
     Enter: (state, dispatch) => {

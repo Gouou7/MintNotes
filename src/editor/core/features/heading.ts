@@ -116,10 +116,10 @@ function makeHeadingPlugin(schema: Schema) {
 export const heading: FeatureSpec = {
   name: "heading",
 
-  plugins: (schema) => [
+  plugins: (schema, context) => [
     headingCandidatePlugin(),
     makeHeadingPlugin(schema).plugin,
-    headingArrowDownPlugin(),
+    ...(context.canonicalSource ? [] : [headingArrowDownPlugin()]),
   ],
 
   keymap: (schema) => ({

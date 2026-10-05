@@ -75,6 +75,12 @@ export class SourcePositionMap {
     return this.sourceBoundaries[offset]!.length > 0;
   }
 
+  /** Shared source edges must resolve inside the navigation target's owner. */
+  sourceToDocumentWithin(sourceOffset: SourceOffset, documentFrom: number, documentTo: number): number | null {
+    const exact = this.sourceBoundaries[sourceOffset] ?? [];
+    return exact.find((position) => documentFrom <= position && position <= documentTo) ?? null;
+  }
+
   private add(sourceOffset: number, documentPosition: number): void {
     if (
       sourceOffset < 0

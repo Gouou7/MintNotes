@@ -41,22 +41,22 @@ import {
   type SourceEdit,
 } from "./source";
 import { SOURCE_TRANSACTION_META, transactionSourceEffect } from "./source-transaction";
-import { adjacentGrapheme, changedSourceRange, selectTextarea, textareaSelection, TextareaSourceMap } from "./source-text";
-import { selectedTableCells, tableNavigation } from "./table-navigation";
+import { changedSourceRange, selectTextarea, textareaSelection, TextareaSourceMap } from "./source-text";
+import { tableCutRequiresSource, tableNavigation } from "./table-navigation";
+import { LiveNavigation } from "./live-navigation";
 import { SourceComposition } from "./source-composition";
 import { inverseSourceEdits, SourceBookmark } from "./source-bookmark";
 import { nativeReplacementText, nativeSourceSelection, nativeSourceTextTransaction, nativeTextInputRange } from "./native-input-range";
 import { nativeSelectionPresentationPlugin } from "./native-selection-presentation";
 import { liveSourceKeyTransaction } from "./live-source-commands";
 import { dropSourceTransaction, pasteSourceTransaction, transferPlainText } from "./source-transfer";
+import { editingShortcut } from "./editing-shortcuts";
 import { resolveSourceBlockEditingPresentation } from "./presentation";
 import {
   LIVE_NAVIGATION_META,
   LIVE_POINTER_SELECTION_META,
   LIVE_PRESENTATION_SYNC_META,
   markLiveNavigation,
-  hasVisualLineInDirection,
-  verticalSourceOffset,
   type LiveNavigationIntent,
 } from "./source-navigation";
 
@@ -183,6 +183,7 @@ export function createEditor(
   let pendingComposition: SourceComposition | null = null;
   let pendingNativeInput: { source: string; transaction: SourceTransaction; selection: SourceSelection } | null = null;
   let draggedSource: { source: string; from: number; to: number; text: string } | null = null;
+  const navigation = new LiveNavigation();
 
   function structureSignatureForDocument(doc: PMNode): string {
     const visit = (node: PMNode): unknown => {
@@ -578,6 +579,11 @@ export function createEditor(
   ): number | null {
     if (!range || sourceOffset < range.from || sourceOffset > range.to) return null;
     const node = doc.nodeAt(range.pos);
+    if (node && !node.isTextblock) {
+      return SourcePositionMap.fromDocument(doc, canonicalMarkdown).sourceToDocumentWithin(
+        sourceOffset, range.pos + 1, range.pos + node.nodeSize - 1,
+      );
+    }
     if (
       !node?.isTextblock
       || node.content.size !== range.source.length
@@ -777,57 +783,6 @@ export function createEditor(
     return true;
   }
 
-  function moveSourceTextVertically(direction: -1 | 1): boolean {
-    const { state } = view;
-    const { selection } = state;
-    const node = selection.$from.parent;
-    if (!selection.empty || (node.type.name !== "source_block" && !node.attrs.sourceLiteral)) return false;
-    if (hasVisualLineInDirection(view, direction)) return false;
-    const blockPos = selection.$from.before();
-    const targetOffset = verticalSourceOffset(
-      node.textContent,
-      selection.$from.parentOffset,
-      direction,
-    );
-    if (targetOffset !== null) {
-      const sourceFrom = Number(node.attrs[SOURCE_FROM_ATTR]);
-      const targetSource = Number.isInteger(sourceFrom) ? sourceFrom + targetOffset : undefined;
-      view.dispatch(
-        markLiveNavigation(state.tr
-          .setSelection(TextSelection.create(state.doc, blockPos + 1 + targetOffset))
-          .setMeta(SOURCE_BLOCK_PRESENTATION_META, true), {
-          ...(targetSource !== undefined ? { anchor: targetSource, head: targetSource } : {}),
-          direction,
-          scroll: true,
-        }),
-      );
-      return true;
-    }
-
-    const sourceFrom = Number(node.attrs[SOURCE_FROM_ATTR]);
-    if (!Number.isInteger(sourceFrom)) return false;
-    const targetSource = direction < 0
-      ? sourceFrom - 1
-      : sourceFrom + node.textContent.length + 1;
-    if (targetSource < 0 || targetSource > canonicalMarkdown.length) return false;
-    const targetPosition = sourcePositionMapForState(state).sourceToDocument(
-      targetSource,
-      direction < 0 ? "left" : "right",
-    );
-    const outside = TextSelection.near(state.doc.resolve(targetPosition), direction);
-    view.dispatch(
-      markLiveNavigation(state.tr
-        .setSelection(outside)
-        .setMeta(SOURCE_BLOCK_PRESENTATION_META, true), {
-        anchor: targetSource,
-        head: targetSource,
-        direction,
-        scroll: true,
-      }),
-    );
-    return true;
-  }
-
   function reparsePresentation(
     state: EditorState,
     sourceSelection: SourceSelection,
@@ -894,6 +849,81 @@ export function createEditor(
   function liveInputSelection(): SourceSelection {
     return nativeSourceSelection(view, sourcePositionMapForState(view.state))
       ?? sourceSelectionForState(view.state);
+  }
+
+  function visibleLiveBoundary(position: number): boolean {
+    const node = view.domAtPos(position).node;
+    let element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
+    while (element && view.dom.contains(element)) {
+      if (getComputedStyle(element).display === "none") return false;
+      element = element.parentElement;
+    }
+    return true;
+  }
+
+  function handleEditingShortcut(event: KeyboardEvent): boolean {
+    const command = editingShortcut(event, navigator.platform);
+    if (!command) return false;
+    const ended = pendingComposition?.ended === true;
+    if (ended) finalizeComposition();
+    if (sourceCompositionFinalizeTimer !== null) finalizeSourceComposition();
+    if (pendingComposition || sourceComposing || view.composing && !ended) return false;
+    flushNativeInput();
+    if (command === "copy" || command === "cut" || command === "paste") return false;
+    navigation.reset();
+    if (command === "select-all") {
+      const selection = { anchor: 0, head: canonicalMarkdown.length };
+      if (!inSource) {
+        setLiveSelection(selection);
+        const mapped = currentSelection();
+        // Rich cells cannot express outer pipes or a table delimiter row. A
+        // complete selection must include every authored character, so use
+        // the exact source surface when its endpoints cannot be represented.
+        if (mapped.anchor !== selection.anchor || mapped.head !== selection.head
+          || !visibleLiveBoundary(view.state.selection.anchor)
+          || !visibleLiveBoundary(view.state.selection.head)) setSourceMode(true);
+      }
+      if (inSource) {
+        selectSourceTextarea(selection);
+        sourceInputSelection = selection;
+      }
+    } else if (command === "undo") restoreSourceHistory(sourceUndo, sourceRedo);
+    else restoreSourceHistory(sourceRedo, sourceUndo);
+    event.preventDefault();
+    return true;
+  }
+
+  function handleSourceClipboard(event: ClipboardEvent): boolean {
+    if (pendingComposition?.ended) finalizeComposition();
+    if (sourceCompositionFinalizeTimer !== null) finalizeSourceComposition();
+    if (pendingComposition || sourceComposing || !event.clipboardData) return false;
+    flushNativeInput();
+    const selection = inSource ? currentSelection() : liveInputSelection();
+    if (event.type === "paste") {
+      if (!event.clipboardData.getData) return false;
+      const text = transferPlainText(event.clipboardData);
+      event.preventDefault();
+      if (text !== null) applyAndRenderCanonicalTransaction(pasteSourceTransaction(selection, text));
+      return true;
+    }
+    const from = Math.min(selection.anchor, selection.head);
+    const to = Math.max(selection.anchor, selection.head);
+    if (from === to) return false;
+    if (event.type === "cut" && !inSource && tableCutRequiresSource(view.state.doc, selection)) {
+      setSourceMode(true);
+      selectSourceTextarea(selection);
+      sourceInputSelection = selection;
+      scheduleSourceReveal();
+      event.preventDefault();
+      return true;
+    }
+    event.clipboardData.setData("text/plain", canonicalMarkdown.slice(from, to));
+    event.preventDefault();
+    if (event.type === "cut") applyAndRenderCanonicalTransaction({
+      edits: [{ from, to, insert: "" }], selection: { anchor: from, head: from },
+      origin: "delete", reparseDerivedDocument: true,
+    });
+    return true;
   }
 
   function sourceKeyContext(selection?: SourceSelection): { literal: boolean } {
@@ -1240,40 +1270,37 @@ export function createEditor(
         if (pendingComposition?.ended) finalizeComposition();
         if (pendingComposition) return false;
         if (view.composing || event.isComposing || event.keyCode === 229) return false;
-        if (["Enter", "Backspace", "Delete", "Tab"].includes(event.key)) {
+        if (!pointerSelectionActive && ["Enter", "Backspace", "Delete", "Tab", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
           const nativeSelection = liveInputSelection();
           const modeledSelection = sourceSelectionForState(view.state);
           if (nativeSelection.anchor !== modeledSelection.anchor || nativeSelection.head !== modeledSelection.head) {
             setLiveSelection(nativeSelection);
           }
         }
-        const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-        const mod = isMac ? event.metaKey : event.ctrlKey;
-        if (
-          mod
-          && (event.key.toLowerCase() === "z" || event.key.toLowerCase() === "y")
-          && !event.altKey
-        ) {
-          if (event.shiftKey || event.key.toLowerCase() === "y") restoreSourceHistory(sourceRedo, sourceUndo);
-          else restoreSourceHistory(sourceUndo, sourceRedo);
-          event.preventDefault();
-          return true;
-        }
-        const tableAction = tableNavigation(view, canonicalMarkdown, currentSelection(), event);
-        if (tableAction) {
-          if ("edits" in tableAction) applyAndRenderCanonicalTransaction(tableAction);
-          else setLiveSelection(tableAction, true);
-          event.preventDefault();
-          return true;
-        }
-        if (
-          (event.key === "ArrowUp" || event.key === "ArrowDown")
-          && !event.shiftKey
-          && !event.metaKey
-          && !event.ctrlKey
-          && !event.altKey
-          && moveSourceTextVertically(event.key === "ArrowUp" ? -1 : 1)
-        ) {
+        const action = navigation.resolve(view, canonicalMarkdown, currentSelection(), event, sourcePositionMapForState(view.state));
+        if (action) {
+          if (action.kind === "transaction") applyAndRenderCanonicalTransaction(action.transaction);
+          else if (action.kind === "source-selection") {
+            setSourceMode(true);
+            selectSourceTextarea(action.selection);
+            scheduleSourceReveal();
+          }
+          else {
+            const select = (selection: SourceSelection) => {
+              const positions = sourcePositionMapForState(view.state);
+              const affinities = sourceSelectionAffinities(selection, action.direction);
+              const anchor = positions.sourceToDocument(selection.anchor, affinities.anchor);
+              const head = positions.sourceToDocument(selection.head, affinities.head);
+              view.dispatch(markLiveNavigation(view.state.tr.setSelection(TextSelection.create(view.state.doc, anchor, head)), {
+                ...selection, direction: action.direction, scroll: true,
+              }));
+            };
+            select(action.selection);
+            if (!pointerSelectionActive) {
+              const aligned = navigation.align(view, canonicalMarkdown, action, sourcePositionMapForState(view.state));
+              if (aligned.anchor !== action.selection.anchor || aligned.head !== action.selection.head) select(aligned);
+            }
+          }
           event.preventDefault();
           return true;
         }
@@ -1300,57 +1327,10 @@ export function createEditor(
             return true;
           }
         }
-        if (
-          (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
-          || event.metaKey
-          || event.ctrlKey
-          || event.altKey
-        ) return false;
-        const current = view.state.selection;
-        for (let depth = current.$head.depth; depth > 0; depth -= 1) {
-          if (current.$head.node(depth).type.name === "table") return false;
-        }
-        const positions = sourcePositionMapForState(view.state);
-        const direction = event.key === "ArrowLeft" ? -1 : 1;
-        const selection = sourceSelectionForState(view.state);
-        const head = selection.head;
-        if (!current.empty && !event.shiftKey) return false;
-        const target = adjacentGrapheme(canonicalMarkdown, head, direction);
-        if (target === head) return false;
-        const anchor = event.shiftKey ? selection.anchor : target;
-        const currentRange = sourceRangeAtOffsetInDocument(view.state.doc, head);
-        const exactTargetPosition = exactTextPositionForRange(
-          view.state.doc,
-          currentRange,
-          target,
-        );
-        const headPosition = exactTargetPosition
-          ?? positions.sourceToDocument(target, direction < 0 ? "left" : "right");
-        const anchorPosition = event.shiftKey ? current.anchor : headPosition;
-        let navigation = view.state.tr;
-        try {
-          navigation = navigation.setSelection(TextSelection.create(
-            navigation.doc,
-            anchorPosition,
-            headPosition,
-          ));
-        } catch {
-          if (event.shiftKey) return false;
-          navigation = navigation.setSelection(TextSelection.near(
-            navigation.doc.resolve(headPosition),
-            direction,
-          ));
-        }
-        view.dispatch(markLiveNavigation(navigation, {
-          anchor,
-          head: target,
-          direction,
-          scroll: true,
-        }));
-        event.preventDefault();
-        return true;
+        return false;
       },
       handleDOMEvents: {
+        keydown: (_view, event) => handleEditingShortcut(event),
         input: (_view, event) => {
           if (flushNativeInput()) return true;
           // A literal source surface admits text and inline decorations only.
@@ -1456,50 +1436,9 @@ export function createEditor(
           else setSourceMode(true);
           return true;
         },
-        copy: (_view, event) => {
-          if (pendingComposition?.ended) finalizeComposition();
-          if (pendingComposition) return false;
-          const selection = liveInputSelection();
-          if (selection.anchor === selection.head || !event.clipboardData) return false;
-          const from = Math.min(selection.anchor, selection.head);
-          const to = Math.max(selection.anchor, selection.head);
-          event.clipboardData.setData("text/plain", canonicalMarkdown.slice(from, to));
-          event.preventDefault();
-          return true;
-        },
-        cut: (_view, event) => {
-          if (pendingComposition?.ended) finalizeComposition();
-          if (pendingComposition) return false;
-          const cells = selectedTableCells(view.state);
-          const selected = liveInputSelection();
-          if (cells.length && !cells.some((cell) => Math.min(selected.anchor, selected.head) >= cell.from && Math.max(selected.anchor, selected.head) <= cell.to)) {
-            setSourceMode(true);
-            event.preventDefault();
-            return true;
-          }
-          const selection = liveInputSelection();
-          if (selection.anchor === selection.head || !event.clipboardData) return false;
-          const from = Math.min(selection.anchor, selection.head);
-          const to = Math.max(selection.anchor, selection.head);
-          event.clipboardData.setData("text/plain", canonicalMarkdown.slice(from, to));
-          applyAndRenderCanonicalTransaction({
-            edits: [{ from, to, insert: "" }],
-            selection: { anchor: from, head: from },
-            origin: "delete",
-            reparseDerivedDocument: true,
-          });
-          event.preventDefault();
-          return true;
-        },
-        paste: (_view, event) => {
-          if (pendingComposition?.ended) finalizeComposition();
-          if (pendingComposition) return false;
-          if (!event.clipboardData?.getData) return false;
-          const text = transferPlainText(event.clipboardData);
-          event.preventDefault();
-          if (text !== null) applyAndRenderCanonicalTransaction(pasteSourceTransaction(liveInputSelection(), text));
-          return true;
-        },
+        copy: (_view, event) => handleSourceClipboard(event),
+        cut: (_view, event) => handleSourceClipboard(event),
+        paste: (_view, event) => handleSourceClipboard(event),
         dragstart: (_view, event) => {
           if (pendingComposition?.ended) finalizeComposition();
           const selection = liveInputSelection();
@@ -1550,6 +1489,7 @@ export function createEditor(
     const ownerDocument = v.dom.ownerDocument;
     const onPointerDownCapture = (event: MouseEvent): void => {
       if (event.button !== 0) return;
+      navigation.reset();
       pointerSelectionActive = true;
       if (pointerSelectionCommitTimer !== null) {
         clearTimeout(pointerSelectionCommitTimer);
@@ -1571,9 +1511,12 @@ export function createEditor(
         }));
       }, 0);
     };
+    const resetNavigationGoal = () => navigation.reset();
+    v.dom.addEventListener("pointerdown", resetNavigationGoal, true);
     v.dom.addEventListener("mousedown", onPointerDownCapture, true);
     ownerDocument.addEventListener("mouseup", onPointerUpCapture, true);
     detachPointerSelectionListeners = () => {
+      v.dom.removeEventListener("pointerdown", resetNavigationGoal, true);
       v.dom.removeEventListener("mousedown", onPointerDownCapture, true);
       ownerDocument.removeEventListener("mouseup", onPointerUpCapture, true);
     };
@@ -1628,6 +1571,7 @@ export function createEditor(
   }
 
   function setSelectionOffset(offset: number): void {
+    navigation.reset();
     flushNativeInput();
     if (pendingComposition) finalizeComposition();
     if (sourceComposing) finalizeSourceComposition();
@@ -1652,6 +1596,7 @@ export function createEditor(
   }
 
   function setSourceMode(source: boolean): void {
+    navigation.reset();
     flushNativeInput();
     if (pendingComposition || sourceComposing || view.composing) {
       pendingSourceMode = source;
@@ -1769,6 +1714,7 @@ export function createEditor(
   sourceTextarea.addEventListener("keydown", (event) => {
     if (sourceCompositionFinalizeTimer !== null && !event.isComposing) finalizeSourceComposition();
     if (event.isComposing || sourceComposing) return;
+    if (handleEditingShortcut(event)) return;
     const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? event.metaKey : event.ctrlKey;
     if (!mod && !event.altKey && ["Backspace", "Delete"].includes(event.key)) {
       const transaction = liveSourceKeyTransaction(canonicalMarkdown, currentSelection(), event.key as "Backspace" | "Delete");
@@ -1776,32 +1722,8 @@ export function createEditor(
       event.preventDefault();
       return;
     }
-    if (mod && !event.altKey && (event.key.toLowerCase() === "z" || event.key.toLowerCase() === "y")) {
-      event.preventDefault();
-      if (event.shiftKey || event.key.toLowerCase() === "y") restoreSourceHistory(sourceRedo, sourceUndo);
-      else restoreSourceHistory(sourceUndo, sourceRedo);
-    }
   });
-  sourceTextarea.addEventListener("paste", (event) => {
-    if (sourceCompositionFinalizeTimer !== null) finalizeSourceComposition();
-    if (sourceComposing) return;
-    if (!event.clipboardData?.getData) return;
-    const text = transferPlainText(event.clipboardData);
-    event.preventDefault();
-    if (text !== null) applyAndRenderCanonicalTransaction(pasteSourceTransaction(currentSelection(), text));
-  });
-  for (const type of ["copy", "cut"] as const) sourceTextarea.addEventListener(type, (event) => {
-    if (sourceCompositionFinalizeTimer !== null) finalizeSourceComposition();
-    if (sourceComposing || !event.clipboardData) return;
-    const selection = currentSelection();
-    const from = Math.min(selection.anchor, selection.head);
-    const to = Math.max(selection.anchor, selection.head);
-    if (from === to) return;
-    event.clipboardData.setData("text/plain", canonicalMarkdown.slice(from, to));
-    event.preventDefault();
-    if (type === "cut") applyAndRenderCanonicalTransaction({ edits: [{ from, to, insert: "" }],
-      selection: { anchor: from, head: from }, origin: "delete" });
-  });
+  for (const type of ["copy", "cut", "paste"] as const) sourceTextarea.addEventListener(type, handleSourceClipboard);
 
   view = buildView(canonicalMarkdown);
   if (typeof ResizeObserver !== "undefined") {
@@ -1866,6 +1788,7 @@ export function createEditor(
     },
     getSelection: currentSelection,
     setSelection(selection: SourceSelection): void {
+      navigation.reset();
       flushNativeInput();
       if (pendingComposition) finalizeComposition();
       if (sourceComposing) finalizeSourceComposition();

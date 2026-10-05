@@ -217,10 +217,10 @@ describe("native composition source ownership", () => {
     editor.setSourceMode(true);
     editor.refreshPresentation();
     expect(editor.isSourceMode()).toBe(false);
-    const code = live.querySelector("code")!;
-    code.textContent = "输入";
+    const surface = live.querySelector("pre[data-source-gap]")!;
+    surface.textContent = "输入";
     const range = document.createRange();
-    range.selectNodeContents(code);
+    range.selectNodeContents(surface);
     range.collapse(false);
     document.getSelection()!.removeAllRanges();
     document.getSelection()!.addRange(range);

@@ -64,7 +64,6 @@
   white-space: pre-wrap;
   tab-size: inherit;
 }
-.ProseMirror pre[data-source-gap] > code { font: inherit; white-space: inherit; }
 /* Empty rows keep their block height, but shrink their selectable inline area
  * to a short line-ending marker instead of painting selection to the editor edge. */
 .ProseMirror pre[data-source-gap]:not([data-source-gap-structural]) {
@@ -74,6 +73,14 @@
   overflow: visible;
 }
 .ProseMirror [data-source-gap-hidden] { display: none; }
+/* The invisible CR before a visible LF still owns the row's source boundary.
+ * Give that boundary a caret rectangle without adding a character or row. */
+.ProseMirror [data-source-gap-caret] {
+  display: inline;
+  font: inherit;
+  line-height: inherit;
+  visibility: hidden;
+}
 /* Keep invisible source separators in their parent's block flow. Out-of-flow
  * separators make WebKit skip later list items when painting a native range,
  * even when the range endpoints are correct. Zero height preserves the layout. */
@@ -83,12 +90,6 @@
   height: 0;
   overflow: hidden;
   pointer-events: none;
-}
-.ProseMirror pre[data-source-gap-structural] > code {
-  display: block;
-  width: 0;
-  height: 0;
-  overflow: hidden;
 }
 .ProseMirror pre[data-source-gap] br.ProseMirror-trailingBreak { display: none; }
 /* A trailing source gap is also the editable line after the last authored

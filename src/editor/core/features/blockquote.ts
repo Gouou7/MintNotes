@@ -20,6 +20,7 @@ import {
   markLiveNavigation,
   hasVisualLineInDirection,
   selectionOutsideBlock,
+  verticalSourceOffset,
 } from "../source-navigation";
 import { SOURCE_TRANSACTION_META } from "../source-transaction";
 import type { FeaturePluginContext, FeatureSpec } from "./_types";
@@ -146,23 +147,7 @@ function moveBlockquoteSourceVertically(view: EditorView, direction: -1 | 1): bo
   if (hasVisualLineInDirection(view, direction)) return false;
   const text = selection.$from.parent.textContent;
   const offset = selection.$from.parentOffset;
-  const lineStart = text.lastIndexOf("\n", offset - 1) + 1;
-  const column = offset - lineStart;
-  let targetOffset: number | null = null;
-
-  if (direction < 0 && lineStart > 0) {
-    const previousEnd = lineStart - 1;
-    const previousStart = text.lastIndexOf("\n", previousEnd - 1) + 1;
-    targetOffset = previousStart + Math.min(column, previousEnd - previousStart);
-  } else if (direction > 0) {
-    const currentEnd = text.indexOf("\n", lineStart);
-    if (currentEnd >= 0) {
-      const nextStart = currentEnd + 1;
-      const nextBreak = text.indexOf("\n", nextStart);
-      const nextEnd = nextBreak >= 0 ? nextBreak : text.length;
-      targetOffset = nextStart + Math.min(column, nextEnd - nextStart);
-    }
-  }
+  const targetOffset = verticalSourceOffset(text, offset, direction);
 
   if (targetOffset === null) return moveOutsideBlockquote(view, direction);
   const blockPos = selection.$from.before();
@@ -340,6 +325,7 @@ function blockquotePlugin(
     },
     props: {
       handleKeyDown(view, event) {
+        if (context.canonicalSource) return false;
         if (view.composing || event.isComposing || event.keyCode === 229) return false;
         if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
           return false;

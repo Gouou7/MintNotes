@@ -379,6 +379,6 @@ export const list: FeatureSpec = {
     };
   },
 
-  plugins: () => [listBoundaryNavigationPlugin()],
+  plugins: (_schema, context) => context.canonicalSource ? [] : [listBoundaryNavigationPlugin()],
 
 };

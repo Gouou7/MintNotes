@@ -5,6 +5,7 @@ import type { EditorView } from "prosemirror-view";
 
 import { SOURCE_BLOCK_PRESENTATION_META } from "./extension";
 import { SOURCE_FROM_ATTR, SOURCE_TEXT_ATTR, SOURCE_TO_ATTR } from "./source";
+import { adjacentGrapheme } from "./source-text";
 
 export const LIVE_NAVIGATION_META = "live-source-navigation";
 export const LIVE_POINTER_SELECTION_META = "live-pointer-selection";
@@ -74,6 +75,19 @@ function sourceLines(source: string): Array<{ from: number; to: number }> {
   return lines;
 }
 
+export function sourceLineAt(source: string, offset: number): { from: number; to: number } {
+  const lines = sourceLines(source);
+  return [...lines].reverse().find((line) => line.from <= offset) ?? lines[0]!;
+}
+
+export function sourceColumnOffset(source: string, from: number, to: number, column: number): number {
+  const target = from + Math.max(0, Math.min(column, to - from));
+  if (target === from || target === to) return target;
+  const after = adjacentGrapheme(source.slice(from, to), target - from, 1) + from;
+  const before = adjacentGrapheme(source.slice(from, to), after - from, -1) + from;
+  return before === target ? target : before;
+}
+
 export function verticalSourceOffset(
   source: string,
   offset: number,
@@ -89,7 +103,7 @@ export function verticalSourceOffset(
   if (!target) return null;
   const line = lines[lineIndex]!;
   const column = Math.max(0, Math.min(offset - line.from, line.to - line.from));
-  return target.from + Math.min(column, target.to - target.from);
+  return sourceColumnOffset(source, target.from, target.to, column);
 }
 
 function adjacentSourceGap(

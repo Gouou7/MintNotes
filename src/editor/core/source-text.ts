@@ -2,6 +2,11 @@ import type { SourceEdit, SourceRange, SourceSelection } from "./source";
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
+export function* graphemeBoundaries(source: string): Generator<number> {
+  yield 0;
+  for (const segment of graphemes.segment(source)) yield segment.index + segment.segment.length;
+}
+
 /** Offsets remain UTF-16; navigation and deletion use user-perceived characters. */
 export function adjacentGrapheme(source: string, offset: number, direction: -1 | 1): number {
   const at = Math.max(0, Math.min(offset, source.length));

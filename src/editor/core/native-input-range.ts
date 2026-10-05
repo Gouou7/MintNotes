@@ -33,6 +33,18 @@ function exactNativeRange(
   }
 }
 
+function hiddenLineEndingsOnly(view: EditorView, from: number, to: number): boolean {
+  if (from === to) return true;
+  const start = view.state.doc.resolve(from);
+  const end = view.state.doc.resolve(to);
+  if (start.parent !== end.parent || start.parent.type.name !== "source_gap") return false;
+  let hidden = true;
+  start.parent.nodesBetween(start.parentOffset, end.parentOffset, (node) => {
+    if (node.type.name !== "source_gap_eol" || node.attrs.visible) hidden = false;
+  });
+  return hidden;
+}
+
 /** Selectionchange may still be queued when the browser starts composition. */
 export function nativeSourceSelection(view: EditorView, positions: SourcePositionMap): SourceSelection | null {
   const selection = view.dom.ownerDocument.getSelection();
@@ -69,7 +81,20 @@ export function nativeTextInputRange(
     return { from, to: view.state.selection.empty ? from : positions.nativeInputBoundary(view.state.selection.to, "right") };
   }
   if (ranges.length !== 1) return null;
-  return exactNativeRange(view, ranges[0]!, positions);
+  const target = exactNativeRange(view, ranges[0]!, positions);
+  if (target && event.inputType === "insertText") {
+    const selected = view.dom.ownerDocument.getSelection();
+    const native = selected?.rangeCount ? exactNativeRange(view, selected.getRangeAt(0), positions) : null;
+    // Chromium trims display:none line-ending atoms from a replacement's
+    // StaticRange even though they remain inside the actual DOM selection.
+    // Reconcile only these proven invisible edges. Dictation/autocorrect and
+    // targets differing by real text still keep their explicit native range.
+    if (native && native.from < native.to
+      && native.from <= target.from && target.to <= native.to
+      && hiddenLineEndingsOnly(view, native.from, target.from)
+      && hiddenLineEndingsOnly(view, target.to, native.to)) return native;
+  }
+  return target;
 }
 
 export function nativeSourceTextTransaction(

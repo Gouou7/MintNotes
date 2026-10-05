@@ -605,6 +605,7 @@ function sourceGapContent(
         // CRLF is one authored line ending. Its CR remains a separately
         // addressable source character while the LF alone owns presentation.
         visible: visible && characterIndex === ending.length - 1,
+        caretHost: visible && ending === "\r\n" && characterIndex === 0,
       }));
     }
     cursor = start + ending.length;

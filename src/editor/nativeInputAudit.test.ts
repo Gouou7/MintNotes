@@ -128,8 +128,8 @@ describe("native input audit", () => {
 
   it("does not split CRLF when the browser's native target skips the invisible CR", () => {
     const { editor, live } = setup("\r\n保留原文", 0);
-    const code = live.querySelector("pre[data-source-gap] code")!;
-    const target = { startContainer: code, startOffset: 1, endContainer: code, endOffset: 1 };
+    const surface = live.querySelector("pre[data-source-gap]")!;
+    const target = { startContainer: surface, startOffset: 1, endContainer: surface, endOffset: 1 };
     expect(beforeInput(live, "insertText", "字", target).defaultPrevented).toBe(true);
     expect(editor.getMarkdown()).toBe("字\r\n保留原文");
     expect(editor.getSelectionOffset()).toBe(1);

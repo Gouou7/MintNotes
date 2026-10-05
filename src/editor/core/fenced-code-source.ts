@@ -36,7 +36,7 @@ export function displayCodeLanguage(lang: string): string {
   return names[normalized] ?? lang.trim();
 }
 
-const OPENING_FENCE_RE = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/;
+const OPENING_FENCE_RE = /^ {0,3}(`{3,}|~{3,})([^\r\n]*)$/;
 
 function closingFenceLength(line: string, marker: string): number | null {
   const match = /^ {0,3}(`+|~+)[\t ]*$/.exec(line);
@@ -47,16 +47,18 @@ function closingFenceLength(line: string, marker: string): number | null {
 }
 
 export function parseFencedCodeSource(source: string): FencedCodeSource | null {
-  const openingBreak = source.indexOf("\n");
-  if (openingBreak < 0) return null;
+  const endings = [...source.matchAll(/\r\n|\r|\n/g)];
+  if (!endings.length) return null;
+  const openingBreak = endings[0]!.index;
   const opening = OPENING_FENCE_RE.exec(source.slice(0, openingBreak));
   if (!opening) return null;
 
   const marker = opening[1]!;
-  const lastBreak = source.lastIndexOf("\n");
-  const closingLine = source.slice(lastBreak + 1);
+  const lastBreak = endings.at(-1)!.index;
+  const closingFrom = lastBreak + endings.at(-1)![0].length;
+  const closingLine = source.slice(closingFrom);
   const hasClosingFence = closingFenceLength(closingLine, marker) !== null;
-  const bodyFrom = openingBreak + 1;
+  const bodyFrom = openingBreak + endings[0]![0].length;
   // In an empty fenced block (`opening\nclosing`), the same line break ends
   // the opening line and precedes the closing line. Keep the body as a valid
   // zero-width source range at the start of the closing fence.
@@ -70,7 +72,7 @@ export function parseFencedCodeSource(source: string): FencedCodeSource | null {
     bodyTo,
     openingFrom: 0,
     openingTo: openingBreak,
-    closingFrom: hasClosingFence ? lastBreak + 1 : null,
+    closingFrom: hasClosingFence ? closingFrom : null,
     closingTo: hasClosingFence ? source.length : null,
   };
 }
@@ -80,7 +82,7 @@ export function parseFencedCodeSource(source: string): FencedCodeSource | null {
 // structural edits (adding/removing a close fence) without reparsing on every
 // code character.
 export function fencedCodeStructureSignature(source: string): string {
-  const openingBreak = source.indexOf("\n");
+  const openingBreak = source.search(/\r\n|\r|\n/);
   const opening = openingBreak >= 0
     ? OPENING_FENCE_RE.exec(source.slice(0, openingBreak))
     : null;
@@ -88,8 +90,8 @@ export function fencedCodeStructureSignature(source: string): string {
 
   const marker = opening[1]!;
   const closingMarkers = source
-    .slice(openingBreak + 1)
-    .split("\n")
+    .slice(openingBreak)
+    .split(/\r\n|\r|\n/)
     .map((line) => closingFenceLength(line, marker))
     .filter((length): length is number => length !== null);
   return `${marker[0]}:${marker.length}:${closingMarkers.join(",")}`;

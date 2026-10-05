@@ -43,7 +43,9 @@ const coreNodes: Record<string, NodeSpec> = {
       "data-source-gap": "1",
       ...(node.attrs.structuralOnly ? { "data-source-gap-structural": "1" } : {}),
       "aria-hidden": "true",
-    }, ["code", 0]],
+      // The block is the editable surface. An inline CODE wrapper lets IME
+      // candidates escape outside contentDOM at empty atom boundaries.
+    }, 0],
   },
 
   // Line-ending characters inside a source gap need stable document
@@ -59,6 +61,7 @@ const coreNodes: Record<string, NodeSpec> = {
     attrs: {
       character: { default: "\n" },
       visible: { default: true },
+      caretHost: { default: false },
     },
     parseDOM: [
       {
@@ -73,6 +76,7 @@ const coreNodes: Record<string, NodeSpec> = {
         getAttrs: (el) => ({
           character: (el as HTMLElement).getAttribute("data-source-gap-eol") === "cr" ? "\r" : "\n",
           visible: false,
+          caretHost: (el as HTMLElement).hasAttribute("data-source-gap-caret"),
         }),
       },
     ],
@@ -82,7 +86,7 @@ const coreNodes: Record<string, NodeSpec> = {
         ? ["br", { "data-source-gap-eol": kind }]
         : ["span", {
             "data-source-gap-eol": kind,
-            "data-source-gap-hidden": "1",
+            ...(node.attrs.caretHost ? { "data-source-gap-caret": "1" } : { "data-source-gap-hidden": "1" }),
             contenteditable: "false",
           }];
     },
