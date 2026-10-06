@@ -1,0 +1,6 @@
+.fixture-workspace { --note-pane-left: 0px; --note-pane-right: 160px; height: 100%; display: flex; }
+.fixture-workspace .note-pane { flex: 1; min-width: 0; }
+.fixture-workspace .note-toolbar { flex-wrap: wrap; padding: 8px; height: auto; min-height: 57px; }
+.fixture-workspace .note-toolbar button { padding: 6px; }
+.fixture-outline { width: 160px; display: flex; flex-direction: column; background: var(--sidebar); }
+@media (max-width: 720px) { .fixture-workspace { --note-pane-right: 0px; } .fixture-outline { display: none; } }

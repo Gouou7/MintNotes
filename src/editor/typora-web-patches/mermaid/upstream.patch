@@ -1,0 +1,29 @@
+--- a/src/features/fenced-code.ts
++++ b/src/features/fenced-code.ts
+@@ -87,7 +87,7 @@
+ // via setNodeAttribute.
+ // ─────────────────────────────────────────────────────────────────────────────
+ 
+-class CodeBlockView implements NodeView {
++export class CodeBlockView implements NodeView {
+   dom: HTMLElement;
+   contentDOM: HTMLElement;
+   private chromeEl: HTMLElement;
+--- a/src/features/index.ts
++++ b/src/features/index.ts
+@@ -8,6 +8,7 @@
+ import { footnoteReference, footnoteDefinition } from "../mint/footnote.ts";
+ import { callout } from "../mint/callout.ts";
+ import { codePresentationFeature } from "../mint/code.ts";
++import { mermaid } from "../mint/mermaid.ts";
+ import { mintSyntax } from "../mint/syntax.ts";
+ import type { MintContext } from "../mint/context.ts";
+ import { chainCommands } from "prosemirror-commands";
+@@ -39,6 +40,7 @@
+ 
+ export const ALL_FEATURES: FeatureSpec[] = [
+   mintSyntax,
++  mermaid,
+   codePresentationFeature,
+   callout,
+   footnoteReference, footnoteDefinition,

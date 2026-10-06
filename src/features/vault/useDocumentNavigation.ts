@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, type RefObject } from "react";
 import type { MarkdownEditorHandle } from "../../editor/MarkdownEditor";
 import type { OutlineItem, WorkspaceEditorMode } from "../../types";
 import { editorScrollViewport } from "../../editor/scrollViewport";
-import { visibleScrollBounds, type EditorScrollViewport } from "../../editor/core/scroll-viewport";
-import { textareaCaretRect } from "../../editor/core/textarea-caret";
+import { visibleScrollBounds, type EditorScrollViewport } from "../../editor/viewport";
+import { textareaCaretRect } from "../../editor/viewport";
 
 export const HEADING_VIEWPORT_POSITION = 0.4;
 
-const RENDERED_HEADING_SELECTOR = "h1,h2,h3,h4,h5,h6,pre[data-source-block][data-source-kind^='heading-'],.heading-draft-1,.heading-draft-2,.heading-draft-3,.heading-draft-4,.heading-draft-5,.heading-draft-6";
+const RENDERED_HEADING_SELECTOR = "h1,h2,h3,h4,h5,h6";
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
@@ -46,7 +46,7 @@ export function scrollElementToViewportPosition(
 
 export function renderedHeadingElements(editorArea: HTMLElement): HTMLElement[] {
   const documentRoot = editorArea.querySelector<HTMLElement>(".markdown-editor-host .ProseMirror")
-    ?? editorArea.querySelector<HTMLElement>(".reading-editor");
+    ?? editorArea.querySelector<HTMLElement>(".reading-editor .ProseMirror");
   if (!documentRoot) return [];
   return [...documentRoot.children]
     .filter((element): element is HTMLElement => element instanceof HTMLElement && element.matches(RENDERED_HEADING_SELECTOR));

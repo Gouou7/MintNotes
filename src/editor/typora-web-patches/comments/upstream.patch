@@ -1,0 +1,18 @@
+--- a/src/features/index.ts
++++ b/src/features/index.ts
+@@ -4,6 +4,7 @@
+ import { referenceDefinitions } from "../mint/references.ts";
+ import { inlineMath, blockMath } from "../mint/math.ts";
+ import { wikiLink } from "../mint/wikilink.ts";
++import { comment } from "../mint/comment.ts";
+ import { mintSyntax } from "../mint/syntax.ts";
+ import type { MintContext } from "../mint/context.ts";
+ import { chainCommands } from "prosemirror-commands";
+@@ -35,6 +36,7 @@
+ 
+ export const ALL_FEATURES: FeatureSpec[] = [
+   mintSyntax,
++  comment,
+   wikiLink,
+   inlineMath, blockMath,
+   referenceDefinitions,

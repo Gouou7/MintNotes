@@ -12,7 +12,8 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `src/features/vault/` | 保险库工作区、视图、保存队列、同步与历史控制器 |
 | `src/features/` | 树与排序、附件、导入导出、历史等领域逻辑及功能界面 |
 | `src/editor/` | 编辑器产品集成、阅读模式、Front Matter 与派生展示 |
-| `src/editor/core/`、`src/editor/extensions/` | Markdown 核心、源码事务与位置映射；产品语法扩展 |
+| `src/editor/typora-web/` | 不修改的原始上游快照、测试与许可 |
+| `src/editor/typora-web-patches/` | 按功能归档的补丁、新增模块与应用清单 |
 | `src/crypto/`、`src/storage/`、`src/api.ts` | 加密 Worker 及调用入口、Dexie 存储、HTTP 接口 |
 | `src/components/`、`src/i18n/`、`src/styles.css` | 公共控件、界面翻译、应用样式 |
 | `server/` | 服务组合、领域路由、认证、SQLite、日志、维护与备份 |
@@ -21,7 +22,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `public/` | 随应用发布的静态资源与第三方许可声明 |
 | `docs/` | 系统设计、编辑器原则与自托管文档 |
 
-测试与实现相邻，命名为 `*.test.ts`／`*.test.tsx`；编辑器还保留 `core/upstream-tests/` 与 `core/specs/`。`dist/`、`server-dist/` 是构建产物；`data/`、`notes-data/`、`backups/` 是运行数据，不作为源码维护或提交。
+上游可运行源码生成于忽略的 `.generated/typora-web/`；不要直接修改生成树或原始上游。原始上游和补丁目录是维护素材，从常规 TypeScript 检查和 Mint 测试收集中排除；运行引擎的类型检查通过生成代码完成。测试与实现相邻，命名为 `*.test.ts`／`*.test.tsx`；原始上游测试与 specs 位于 `src/editor/typora-web/`，浏览器验收位于 `tests/editor/browser/`。`dist/`、`server-dist/` 是构建产物；`data/`、`notes-data/`、`backups/` 是运行数据，不作为源码维护或提交。
 
 ## 开发与命令
 
@@ -32,8 +33,11 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `pnpm install` | 安装开发依赖；CI／发布使用 `pnpm install --frozen-lockfile` |
 | `pnpm dev` | 同时启动 Vite 与 Fastify；也可用 `pnpm dev:web`／`pnpm dev:server` 分别启动 |
 | `pnpm typecheck` | 检查客户端与服务端 TypeScript |
-| `pnpm test` | 运行 Vitest 测试 |
-| `pnpm exec vitest run src/editor/architecture.test.ts` | 定向运行单个测试文件；按任务替换路径 |
+| `pnpm test` | 运行 Mint Vitest 测试，默认单工作进程 |
+| `pnpm test:upstream`／`pnpm test:patched-upstream` | 分别验证原始与生成的完整上游测试 |
+| `pnpm prepare:editor` | 离线校验上游并应用严格补丁 |
+| `pnpm test:editor-browser` | 构建夹具并运行 Chromium／Firefox／WebKit 验收 |
+| `pnpm exec vitest run src/editor/engine.test.ts` | 定向运行单个测试文件；按任务替换路径 |
 | `pnpm build` | 构建客户端与服务端；也可用 `pnpm build:web`／`pnpm build:server` 分别构建 |
 | `pnpm start` | 运行已构建的服务端 |
 | `pnpm backup` | 对已构建的服务端执行 SQLite 在线备份；构建后运行，输出路径与摘要 |
@@ -64,14 +68,14 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 - `src/App.tsx`、`src/features/vault/VaultApp.tsx`、`server/index.ts`、`server/app.ts` 只负责组合与生命周期，不放领域算法。
 - `src/features/vault/VaultWorkspace.tsx` 与 `server/routes.ts` 仍是需要逐步提取的协调边界。修改相关行为时，先将其提取到职责单一的 Hook、控制器、领域路由或服务并测试，再扩展功能。
 - 视图通过 Hook／控制器访问数据，不直接调用 Dexie、加密 Worker 或同步 API。
-- `src/editor/core/` 不导入产品扩展；扩展放在 `src/editor/extensions/`，通过受限声明契约或类型化源码事务接入，不接收原始 ProseMirror 视图。
-- 编辑器核心是仓库内维护的上游衍生代码，不是生成文件。修改前按需读 `src/editor/core/UPSTREAM.md`，保留上游许可证与测试；引入或更新第三方代码时检查 `public/THIRD_PARTY_NOTICES.txt`。
+- 编辑器优先采用上游 FeatureSpec 与插件；ProseMirror 类型及视图访问仅在引擎、补丁和引擎测试内部。业务组件通过 `src/editor/engine.ts` 的 Mint 控制器接入，不另建语法或阅读转换链。
+- 上游和补丁的维护方式见 `src/editor/typora-web-patches/README.md`。新功能使用独立的语义目录，将 `upstream.patch` 与新增模块放在一起；在 `series.json` 声明应用顺序、用途、依赖与测试，不依赖目录排序。准备脚本失败时人工核对，不模糊合并。引入或更新第三方代码时核对 `public/THIRD_PARTY_NOTICES.txt`。
 - 新增界面文案使用 `src/i18n/index.tsx` 的消息键，补齐英文、简体中文、繁体中文。控件图标显式导入 `lucide-react` 并通过 `AppIcon` 渲染，不用 Emoji、字体或 CDN 图标替代；纯图标按钮提供可翻译的可访问名称。
 
 ## 不变量
 
-- **正文只有一份**：原始 Markdown 是唯一可编辑、可持久化、可交换的正文。解析树、DOM 与渲染结果都是派生状态；编辑必须经准确、原子的源码事务提交，操作范围外的空格、换行和标记写法保持原样。
-- **展示不改正文**：模式切换、源码显隐和异步渲染不触发保存、同步或内容撤销记录；无法准确映射时先回退到源码，具体验收遵守 [编辑器架构原则](docs/editor-architecture.md)。
+- **正文只有一份**：完整 Markdown 是唯一持久化、历史、同步和导出的正文。实时编辑采用上游模型与序列化，允许等价格式变化；不得丢失内容、链接目标、附件引用或扩展语法。
+- **展示不改正文**：模式切换、源码显隐和异步渲染不触发保存、同步或内容撤销记录；异步插入使用文档身份和可失效的位置书签，具体验收遵守 [编辑器架构原则](docs/editor-architecture.md)。
 - **本地保存不等网络**：顺序为内存 → 浏览器加密 → 原子写入 IndexedDB 对象与发件箱 → 后台上传。同一用户、同一对象的持久写入串行；旧异步结果或上传确认不能覆盖新编辑或删掉较新的发件箱条目。
 - **同步可重试**：沿用服务器修订、持久游标、`baseRevision` 与幂等键。拉取页全部通过认证、解密并原子落库后才推进游标；Service Worker 与 SSE 只改善可用性，不承担正确性。
 - **冲突与清理不丢数据**：不按设备时间决定冲突胜者；保留服务器版本，将本地版本连同附件保存为独立冲突副本。冲突、删除和清理不得静默移除唯一剩余修订；永久清除必须遵守墓碑、待同步数据和受保护历史的检查。

@@ -1,0 +1,174 @@
+--- a/src/decorations.ts
++++ b/src/decorations.ts
+@@ -99,6 +99,10 @@
+ function buildWidget(w: WidgetDecoration, context: MintContext): HTMLElement {
+   const minted = mintWidget(w, context);
+   if (minted) { minted.contentEditable = "false"; return minted; }
++  if (w.kind === "image-icon") {
++    const host = document.createElement("span"); host.className = "image-icon mint-image-icon"; const icon = context.icon?.("image");
++    if (icon) { host.append(icon.element); host.addEventListener("mint-destroy", icon.destroy, { once: true }); } return host;
++  }
+   if (w.kind === "file-input") { const fallback = document.createElement("span"); fallback.className = "image-unavailable"; return fallback; }
+   if (w.kind === "image-render") {
+     const img = document.createElement("img"); img.className = "image-render"; img.referrerPolicy = "no-referrer"; img.alt = w.attrs?.alt ?? "";
+@@ -162,7 +166,7 @@
+       Decoration.widget(w.pos, () => buildWidget(w, context), {
+         side: w.side ?? -1,
+         key: `${w.kind}@${w.pos}:${JSON.stringify(w.attrs)}:${context.footnotes?.get(w.kind === "mint-inline-footnote" ? `inline-${w.pos}` : w.attrs?.target ?? "")?.number ?? ""}:${context.revision ?? 0}:${context.readOnly ? 1 : 0}`,
+-        destroy: element => destroyMintWidget(element as HTMLElement),
++        destroy: element => { destroyMintWidget(element as HTMLElement); (element as HTMLElement).dispatchEvent(new Event("mint-destroy")); },
+         ignoreSelection: true,
+         // PM should not forward DOM events bubbled out of the widget
+         // back as editor input — otherwise input/keydown fired around
+--- a/src/features/fenced-code.ts
++++ b/src/features/fenced-code.ts
+@@ -13,6 +13,7 @@
+ } from "prosemirror-view";
+ 
+ import { leaveLineDraft } from "../block-draft.ts";
++import type { MintContext } from "../mint/context.ts";
+ import type { FeatureSpec } from "./_types.ts";
+ 
+ // Fenced code block feature.
+@@ -100,6 +101,7 @@
+     view: EditorView,
+     getPos: () => number | undefined,
+     decorations: readonly Decoration[] = [],
++    context: MintContext = {},
+   ) {
+     this.view = view;
+     this.getPos = getPos;
+@@ -114,7 +116,7 @@
+     chrome.setAttribute("contenteditable", "false");
+     const input = document.createElement("input");
+     input.className = "cb-lang-input";
+-    input.placeholder = "lang";
++    input.placeholder = "lang"; input.setAttribute("aria-label", context.label?.("codeLanguage") ?? "Code language");
+     input.value = lang;
+     input.spellcheck = false;
+     chrome.appendChild(input);
+@@ -151,6 +153,7 @@
+   }
+ 
+   private onInput = (): void => {
++    if (!this.view.editable) return;
+     const pos = this.getPos();
+     if (pos == null) return;
+     const newLang = this.inputEl.value;
+--- a/src/features/table.ts
++++ b/src/features/table.ts
+@@ -2,6 +2,7 @@
+ import { Plugin, TextSelection } from "prosemirror-state";
+ import type { EditorView } from "prosemirror-view";
+ 
++import type { MintContext } from "../mint/context.ts";
+ import type { FeatureSpec } from "./_types.ts";
+ 
+ // GFM table — phase 1 (parse / serialize / display only). Live editor
+@@ -177,10 +178,16 @@
+   return svg;
+ }
+ 
+-function buildToolbar(view: EditorView, getInfo: () => TableInfo | null): {
++function buildToolbar(view: EditorView, getInfo: () => TableInfo | null, context: MintContext): {
+   root: HTMLElement;
+   popup: HTMLElement;
++  destroy(): void;
+ } {
++  const cleanup: (() => void)[] = [];
++  const control = (button: HTMLButtonElement, name: string, label: string) => {
++    button.replaceChildren(); button.title = context.label?.(label) ?? label; button.setAttribute("aria-label", button.title);
++    const icon = context.icon?.(name); if (icon) { button.append(icon.element); cleanup.push(icon.destroy); }
++  };
+   const root = document.createElement("div");
+   root.className = "table-toolbar";
+ 
+@@ -197,6 +204,7 @@
+     ),
+   );
+ 
++  control(grid, "table-size", "tableSize");
+   const sep = document.createElement("span");
+   sep.className = "table-tb-sep";
+ 
+@@ -206,7 +214,7 @@
+     b.className = "table-tb-btn";
+     b.title = `Align ${a}`;
+     b.dataset.align = a;
+-    b.appendChild(svgIcon(lines));
++    control(b, `align-${a}`, `align${a[0]!.toUpperCase()}${a.slice(1)}`);
+     b.addEventListener("mousedown", (e) => e.preventDefault());
+     b.addEventListener("click", () => {
+       const info = getInfo();
+@@ -246,6 +254,7 @@
+         stroke='currentColor' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/>`,
+     ),
+   );
++  control(trash, "table-delete", "tableDelete");
+   trash.addEventListener("mousedown", (e) => e.preventDefault());
+   trash.addEventListener("click", () => {
+     const info = getInfo();
+@@ -305,6 +314,8 @@
+   cIn.type = "number";
+   cIn.min = "1";
+   cIn.max = "20";
++  rIn.setAttribute("aria-label", context.label?.("rows") ?? "Rows");
++  cIn.setAttribute("aria-label", context.label?.("columns") ?? "Columns");
+   inputs.append(rIn, xLabel, cIn);
+ 
+   const setHighlight = (R: number, C: number) => {
+@@ -377,21 +388,21 @@
+     popup.style.display = "block";
+   });
+ 
+-  return { root, popup };
+-}
+-
+-function tableToolbarPlugin(): Plugin {
++  return { root, popup, destroy: () => cleanup.forEach(dispose => dispose()) };
++}
++
++function tableToolbarPlugin(context: MintContext): Plugin {
+   return new Plugin({
+     view(view) {
+       let info: TableInfo | null = null;
+       // Lazy: toolbar DOM is only built and appended when this view is
+       // both focused and on a table. Unfocused views (every case-card
+       // in the harness with a table seed) never create toolbar DOM.
+-      let toolbar: { root: HTMLElement; popup: HTMLElement } | null = null;
++      let toolbar: { root: HTMLElement; popup: HTMLElement; destroy(): void } | null = null;
+ 
+       const ensureMounted = () => {
+         if (!toolbar) {
+-          toolbar = buildToolbar(view, () => info);
++          toolbar = buildToolbar(view, () => info, context);
+         }
+         if (!toolbar.root.isConnected) {
+           document.body.appendChild(toolbar.root);
+@@ -408,7 +419,7 @@
+ 
+       const update = () => {
+         info = findTableAtSelection(view.state);
+-        if (!info || !view.hasFocus()) {
++        if (!view.editable || !info || !view.hasFocus()) {
+           unmount();
+           return;
+         }
+@@ -445,7 +456,7 @@
+           window.removeEventListener("resize", onScroll);
+           view.dom.removeEventListener("focusin", update);
+           view.dom.removeEventListener("focusout", update);
+-          unmount();
++          unmount(); toolbar?.destroy();
+         },
+       };
+     },
+@@ -563,7 +574,7 @@
+ 
+   mdItPlugins: [(md) => md.enable("table")],
+ 
+-  plugins: () => [tableToolbarPlugin()],
++  plugins: (_schema, context = {}) => [tableToolbarPlugin(context)],
+ 
+   keymap: (schema: Schema) => ({
+     // Cell navigation. Tab / Shift-Tab move the cursor row-major; at the

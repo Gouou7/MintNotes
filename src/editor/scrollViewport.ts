@@ -1,4 +1,4 @@
-import type { EditorScrollViewport } from "./core/scroll-viewport";
+import type { EditorScrollViewport } from "./viewport";
 
 /** Shared by navigation and the editor façade; CSS owns the measured insets. */
 export function editorScrollViewport(element: HTMLElement): EditorScrollViewport {

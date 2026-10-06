@@ -8,7 +8,7 @@ Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户�
 
 ## 主要能力
 
-- **Markdown 编辑：**实时、源码与阅读三种模式，支持 GFM、数学公式、Mermaid、WikiLink、Callout、YAML Front Matter 与 HTTPS 外部图片。
+- **Markdown 编辑：**实时、源码与阅读三种模式，基于 Typora-web，支持 GFM、代码高亮与复制、脚注、注释、数学公式、Mermaid、WikiLink、Callout、YAML Front Matter 与 HTTPS 外部图片。
 - **笔记整理：**文件夹、搜索、排序、固定、笔记锁、回收站、加密历史与图片附件。
 - **本地优先：**内容先加密写入浏览器的 IndexedDB，离线仍可使用，恢复网络后后台同步。
 - **账户与恢复：**多用户、恢复密钥、已记住设备与可选本地 PIN；保险库指该账户的加密笔记数据。
@@ -41,7 +41,7 @@ docker compose ps
 
 - 客户端：React、TypeScript、Vite、ProseMirror、Dexie／IndexedDB
 - 服务端：Fastify、SQLite
-- 内容处理：Markdown、KaTeX、Mermaid
+- 内容处理：Typora-web／MarkdownIt、KaTeX、Mermaid、highlight.js
 - 部署与浏览器：Docker Compose 单容器、非 root 运行；需支持 Web Crypto 与 IndexedDB，已适配 iPhone／iPadOS Safari 与 PWA 安装模式
 
 ## 本地开发
@@ -52,6 +52,8 @@ docker compose ps
 pnpm install
 pnpm dev
 ```
+
+编辑器开发和构建会自动校验上游快照并应用本地补丁，生成目录无需手动维护；维护方式见[补丁说明](src/editor/typora-web-patches/README.md)，行为约束见[编辑器架构](docs/editor-architecture.md)。实时编辑遵循上游的 Markdown 序列化行为，编辑后可能发生等价格式变化，跨源码／实时模式不共享撤销历史。
 
 Vite 默认运行在 `http://localhost:5173`，并将 `/api` 转发到 `http://127.0.0.1:8787` 的 Fastify 服务。常用检查命令为 `pnpm typecheck`、`pnpm test` 与 `pnpm build`；`pnpm test:crypto-worker`、`pnpm test:smoke` 分别检查加密 Worker 与 API，运行前需重新构建。
 
@@ -84,6 +86,7 @@ Mint Notes 采用 [MIT 许可证](LICENSE)。
 - [typora-web](https://github.com/Yuyz0112/typora-web)：编辑器核心的上游项目，采用 MIT 许可证。
 - [KaTeX](https://katex.org/)：用于渲染数学公式，采用 MIT 许可证。
 - [Mermaid](https://mermaid.js.org/)：用于渲染图表，采用 MIT 许可证。
+- [highlight.js](https://highlightjs.org/)：用于本地代码语法高亮，采用 BSD 3-Clause 许可证。
 - [Lucide React](https://lucide.dev/)：用于界面图标，采用 ISC 许可证；其中部分源自 Feather 的图标采用 MIT 许可证。
 
 完整的许可文本见[第三方许可声明](public/THIRD_PARTY_NOTICES.txt)，并随发布包一同提供。

@@ -1,0 +1,22 @@
+--- a/src/features/image.ts
++++ b/src/features/image.ts
+@@ -262,7 +262,7 @@
+     image: { open: "", close: "" },
+   },
+ 
+-  plugins: () => [imageFileInputPlugin(), imageLoadProbePlugin()],
++  plugins: () => [],
+ 
+   inline: {
+     // Before link: image's `![alt](url)` strictly contains link's `[alt](url)`
+--- a/src/features/task.ts
++++ b/src/features/task.ts
+@@ -147,7 +147,7 @@
+       e.preventDefault();
+     };
+     const onClick = (e: MouseEvent): void => {
+-      if (!cb.contains(e.target as Node) && e.target !== cb) return;
++      if (!view.editable || !cb.contains(e.target as Node) && e.target !== cb) return;
+       e.preventDefault();
+       e.stopPropagation();
+       const pos = getPos();

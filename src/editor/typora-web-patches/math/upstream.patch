@@ -1,0 +1,18 @@
+--- a/src/features/index.ts
++++ b/src/features/index.ts
+@@ -2,6 +2,7 @@
+ // exactly from here — adding a feature means one import + one array entry.
+ 
+ import { referenceDefinitions } from "../mint/references.ts";
++import { inlineMath, blockMath } from "../mint/math.ts";
+ import { mintSyntax } from "../mint/syntax.ts";
+ import type { MintContext } from "../mint/context.ts";
+ import { chainCommands } from "prosemirror-commands";
+@@ -33,6 +34,7 @@
+ 
+ export const ALL_FEATURES: FeatureSpec[] = [
+   mintSyntax,
++  inlineMath, blockMath,
+   referenceDefinitions,
+   htmlComment,
+   emoji,

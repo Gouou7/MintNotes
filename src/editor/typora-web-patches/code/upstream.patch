@@ -1,0 +1,18 @@
+--- a/src/features/index.ts
++++ b/src/features/index.ts
+@@ -7,6 +7,7 @@
+ import { comment } from "../mint/comment.ts";
+ import { footnoteReference, footnoteDefinition } from "../mint/footnote.ts";
+ import { callout } from "../mint/callout.ts";
++import { codePresentationFeature } from "../mint/code.ts";
+ import { mintSyntax } from "../mint/syntax.ts";
+ import type { MintContext } from "../mint/context.ts";
+ import { chainCommands } from "prosemirror-commands";
+@@ -38,6 +39,7 @@
+ 
+ export const ALL_FEATURES: FeatureSpec[] = [
+   mintSyntax,
++  codePresentationFeature,
+   callout,
+   footnoteReference, footnoteDefinition,
+   comment,

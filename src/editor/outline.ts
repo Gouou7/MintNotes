@@ -1,27 +1,5 @@
-import MarkdownIt from "markdown-it";
 import type { OutlineItem } from "../types";
-import { parseFrontmatter } from "./frontmatter";
-import { strictSetextHeadings } from "./core/setext-heading";
-import { strictListMarkers } from "./core/list-markers";
-
-interface MarkdownLine {
-  text: string;
-  offset: number;
-}
-
-function markdownLines(markdown: string): MarkdownLine[] {
-  const lines: MarkdownLine[] = [];
-  const pattern = /([^\r\n]*)(\r\n|\r|\n|$)/g;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(markdown))) {
-    if (match.index === markdown.length && match[0] === "") break;
-    lines.push({ text: match[1], offset: match.index });
-    if (!match[2]) break;
-  }
-  return lines;
-}
-
-const outlineParser = new MarkdownIt({ html: false }).use(strictSetextHeadings).use(strictListMarkers);
+import { documentOutline } from "./engine";
 
 function headingText(source: string): string {
   return source
@@ -34,43 +12,8 @@ function headingText(source: string): string {
     .trim();
 }
 
-function pushHeading(items: OutlineItem[], level: number, source: string, sourceOffset: number, sourceLine: number): void {
-  const index = items.length;
-  items.push({
-    id: `heading-${index}`,
-    level,
-    text: headingText(source),
-    index,
-    sourceOffset,
-    sourceLine
-  });
-}
-
 export function buildOutline(markdown: string): OutlineItem[] {
-  const items: OutlineItem[] = [];
-  const frontmatter = parseFrontmatter(markdown);
-  const sourceOffset = frontmatter.prefix.length;
-  const sourceLine = (frontmatter.prefix.match(/\n/g) ?? []).length;
-  const lines = markdownLines(frontmatter.body);
-
-  const tokens = outlineParser.parse(frontmatter.body, {});
-  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
-    const token = tokens[tokenIndex];
-    if (token.type !== "heading_open" || token.level !== 0 || !token.map) continue;
-    const level = Number(token.tag.slice(1));
-    const localLine = token.map[0];
-    const line = lines[localLine];
-    const inline = tokens[tokenIndex + 1];
-    if (!line || !Number.isInteger(level) || inline?.type !== "inline") continue;
-    pushHeading(
-      items,
-      level,
-      inline.content,
-      sourceOffset + line.offset,
-      sourceLine + localLine
-    );
-  }
-  return items;
+  return documentOutline(markdown).map((heading, index) => ({ id: `heading-${index}`, index, level: heading.level, text: heading.text, sourceOffset: heading.offset, sourceLine: heading.line }));
 }
 
 function normalizedHeading(value: string): string {

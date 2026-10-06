@@ -1,32 +1,28 @@
-import { useCallback, useEffect, useRef, type RefObject, type SyntheticEvent } from "react";
-import { createImageReconnectRetry, isExternalImageSource, isImageRetrySurfaceActive } from "./core/image-reconnect-retry";
+import { useEffect, type RefObject } from "react";
 
 export function useImageReconnectRetry(surface: RefObject<HTMLElement | null>) {
-  const failures = useRef(new WeakMap<HTMLImageElement, string>());
   useEffect(() => {
     const root = surface.current;
     if (!root) return;
-    const failedImages = () => [...root.querySelectorAll<HTMLImageElement>("img[src]")]
-      .filter((image) => failures.current.get(image) === image.getAttribute("src"));
-    return createImageReconnectRetry({
-      isActive: () => isImageRetrySurfaceActive(root),
-      getFailedSources: () => failedImages().map((image) => image.getAttribute("src")!),
-      retry: (source) => {
-        for (const image of failedImages()) {
-          if (image.getAttribute("src") !== source) continue;
-          failures.current.delete(image);
-          image.removeAttribute("src");
-          image.setAttribute("src", source);
-        }
+    const failures = new Map<HTMLImageElement, string>();
+    const error = (event: Event) => {
+      const image = event.target;
+      if (image instanceof HTMLImageElement && image.src.startsWith("https:")) failures.set(image, image.src);
+    };
+    const load = (event: Event) => { if (event.target instanceof HTMLImageElement) failures.delete(event.target); };
+    const retry = () => {
+      if (!root.isConnected || root.closest("[hidden]") || document.visibilityState === "hidden" || !navigator.onLine) return;
+      for (const [image, src] of failures) {
+        failures.delete(image);
+        if (!root.contains(image) || image.src !== src) continue;
+        image.removeAttribute("src"); image.src = src;
       }
-    });
+    };
+    root.addEventListener("error", error, true); root.addEventListener("load", load, true);
+    window.addEventListener("online", retry); window.addEventListener("focus", retry); document.addEventListener("visibilitychange", retry);
+    return () => {
+      root.removeEventListener("error", error, true); root.removeEventListener("load", load, true);
+      window.removeEventListener("online", retry); window.removeEventListener("focus", retry); document.removeEventListener("visibilitychange", retry); failures.clear();
+    };
   }, [surface]);
-  const onError = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
-    const source = event.currentTarget.getAttribute("src");
-    if (source && isExternalImageSource(source)) failures.current.set(event.currentTarget, source);
-  }, []);
-  const onLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
-    failures.current.delete(event.currentTarget);
-  }, []);
-  return { onError, onLoad };
 }

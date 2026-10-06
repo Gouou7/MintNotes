@@ -1,4 +1,3 @@
-import { readingPosition } from "./reading-source";
 export type CalloutKind =
   | "note"
   | "abstract"
@@ -134,61 +133,4 @@ function parseCalloutAppearance(value: string): { title: string; color?: Callout
   }
   if (!consumed.length || consumed.join(" ") !== attributes.trim().replace(/\s+/g, " ")) return { title: value };
   return { title: value.slice(0, block.index).trimEnd(), color, icon };
-}
-
-interface MdNode {
-  type: string;
-  position?: { start: { offset: number }; end: { offset: number } };
-  value?: string;
-  children?: MdNode[];
-  data?: {
-    hProperties?: Record<string, unknown>;
-  };
-}
-
-const MDAST_MARKER = /^\[!([a-z0-9_-]+)\]([+-]?)(?:[ \t]+([^\r\n]*))?(?:\r?\n|$)/i;
-
-function transformMdast(node: MdNode, source: string) {
-  if (node.type === "blockquote") {
-    const paragraph = node.children?.[0];
-    const firstText = paragraph?.type === "paragraph" ? paragraph.children?.[0] : undefined;
-    if (firstText?.type === "text" && typeof firstText.value === "string") {
-      const marker = MDAST_MARKER.exec(firstText.value);
-      if (marker) {
-        const parsed = parseCalloutMarker(`[!${marker[1]}]${marker[2] ?? ""}${marker[3] ? ` ${marker[3]}` : ""}`);
-        if (parsed) {
-          firstText.value = firstText.value.slice(marker[0].length);
-          if (firstText.value && firstText.position) {
-            const { start, end } = firstText.position;
-            // MDAST text has already decoded escapes/entities and trimmed line
-            // endings. Locate the body in authored source, not by decoded length.
-            const lineEnding = /\r\n|\r|\n/.exec(source.slice(start.offset, end.offset));
-            if (lineEnding) {
-              let bodyFrom = start.offset + lineEnding.index + lineEnding[0].length;
-              const prefix = /^(?:[\t ]*>[\t ]?)+/.exec(source.slice(bodyFrom))?.[0] ?? "";
-              bodyFrom += prefix.length;
-              firstText.position = readingPosition(source, bodyFrom, end.offset);
-            }
-          }
-          if (!firstText.value) paragraph?.children?.shift();
-          if (paragraph?.children?.length === 0) node.children?.shift();
-          node.data ??= {};
-          node.data.hProperties = {
-            ...(node.data.hProperties ?? {}),
-            className: `markdown-callout callout-${parsed.kind}`,
-            "data-callout-kind": parsed.kind,
-            "data-callout-title": parsed.title,
-            "data-callout-fold": parsed.fold,
-            ...(parsed.color ? { "data-callout-color": parsed.color } : {}),
-            ...(parsed.icon ? { "data-callout-icon": parsed.icon } : {})
-          };
-        }
-      }
-    }
-  }
-  for (const child of node.children ?? []) transformMdast(child, source);
-}
-
-export function remarkCallouts() {
-  return (tree: MdNode, file: { value?: unknown }) => transformMdast(tree, String(file.value ?? ""));
 }

@@ -9,6 +9,21 @@ export type TranslationValues = Record<string, string | number>;
 const LANGUAGE_STORAGE_KEY = "webmd-notes-language";
 
 const messages = {
+  "editor.backToFootnote": { en: "Back to footnote reference", "zh-CN": "返回脚注引用", "zh-TW": "返回註腳引用" },
+  "editor.sourceLabel": { en: "Markdown source", "zh-CN": "Markdown 源码", "zh-TW": "Markdown 原始碼" },
+  "editor.toggleCallout": { en: "Toggle callout", "zh-CN": "展开或折叠 Callout", "zh-TW": "展開或摺疊 Callout" },
+  "editor.diagramRendering": { en: "Rendering diagram…", "zh-CN": "正在渲染图表…", "zh-TW": "正在繪製圖表…" },
+  "editor.diagramFailed": { en: "Unable to render Mermaid diagram", "zh-CN": "无法渲染 Mermaid 图表", "zh-TW": "無法繪製 Mermaid 圖表" },
+  "editor.diagramAlt": { en: "Mermaid diagram", "zh-CN": "Mermaid 图表", "zh-TW": "Mermaid 圖表" },
+  "editor.insertRetry": { en: "The insertion position changed. Please insert the attachment again.", "zh-CN": "插入位置已变化，请重新插入附件。", "zh-TW": "插入位置已變更，請重新插入附件。" },
+  "editor.tableSize": { en: "Resize table", "zh-CN": "调整表格大小", "zh-TW": "調整表格大小" },
+  "editor.tableDelete": { en: "Delete table", "zh-CN": "删除表格", "zh-TW": "刪除表格" },
+  "editor.alignLeft": { en: "Align left", "zh-CN": "左对齐", "zh-TW": "靠左對齊" },
+  "editor.alignCenter": { en: "Align center", "zh-CN": "居中对齐", "zh-TW": "置中對齊" },
+  "editor.alignRight": { en: "Align right", "zh-CN": "右对齐", "zh-TW": "靠右對齊" },
+  "editor.rows": { en: "Rows", "zh-CN": "行数", "zh-TW": "列數" },
+  "editor.columns": { en: "Columns", "zh-CN": "列数", "zh-TW": "欄數" },
+  "editor.codeLanguage": { en: "Code language", "zh-CN": "代码语言", "zh-TW": "程式碼語言" },
   "common.close": { en: "Close", "zh-CN": "关闭", "zh-TW": "關閉" },
   "common.cancel": { en: "Cancel", "zh-CN": "取消", "zh-TW": "取消" },
   "common.copy": { en: "Copy", "zh-CN": "复制", "zh-TW": "複製" },

@@ -1,0 +1,199 @@
+{
+  "commit": "317fdb0f89a38cfc98a0bba753deec979c6722e6",
+  "patches": [
+    {
+      "id": "01-integration",
+      "reason": "受限 Mint 控制器、渲染上下文及代码区域保护",
+      "patch": "integration/upstream.patch",
+      "additions": {
+        "src/mint/context.ts": "integration/context.ts",
+        "src/mint/editor.ts": "integration/editor.ts",
+        "src/mint/widgets.ts": "integration/widgets.ts"
+      },
+      "tests": [
+        "src/editor/engine.test.ts"
+      ],
+      "requires": [
+        "ProseMirror",
+        "markdown-it"
+      ]
+    },
+    {
+      "id": "02-data-integrity",
+      "reason": "保留所有引用定义，禁止可执行链接；允许上游格式规范化",
+      "patch": "data-integrity/upstream.patch",
+      "additions": {
+        "src/mint/references.ts": "data-integrity/references.ts"
+      },
+      "tests": [
+        "src/editor/engine.test.ts"
+      ],
+      "requires": [
+        "01-integration"
+      ]
+    },
+    {
+      "id": "03-safe-images",
+      "reason": "关闭上游 Blob URL 正文插入和额外探测，采用附件解析及 HTTPS 展示；只读任务不可修改",
+      "patch": "safe-images/upstream.patch",
+      "additions": {},
+      "tests": [
+        "src/editor/engine.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "01-integration"
+      ]
+    },
+    {
+      "id": "04-mint-syntax",
+      "reason": "在上游解析前保护产品语法，不生成正文私有标记",
+      "patch": "syntax/upstream.patch",
+      "additions": {
+        "src/mint/syntax.ts": "syntax/syntax.ts",
+        "src/mint/blocks.ts": "syntax/blocks.ts"
+      },
+      "tests": [
+        "src/editor/features.test.ts"
+      ],
+      "requires": [
+        "01-integration"
+      ]
+    },
+    {
+      "id": "05-math",
+      "reason": "KaTeX 行内与块级公式",
+      "patch": "math/upstream.patch",
+      "additions": {
+        "src/mint/math.ts": "math/math.ts"
+      },
+      "tests": [
+        "src/editor/features.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "04-mint-syntax",
+        "KaTeX"
+      ]
+    },
+    {
+      "id": "06-wikilink",
+      "reason": "WikiLink、别名及嵌入入口",
+      "patch": "wikilink/upstream.patch",
+      "additions": {
+        "src/mint/wikilink.ts": "wikilink/wikilink.ts"
+      },
+      "tests": [
+        "src/editor/features.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "04-mint-syntax"
+      ]
+    },
+    {
+      "id": "07-comments",
+      "reason": "Mint 注释显隐",
+      "patch": "comments/upstream.patch",
+      "additions": {
+        "src/mint/comment.ts": "comments/comment.ts"
+      },
+      "tests": [
+        "src/editor/features.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "04-mint-syntax"
+      ]
+    },
+    {
+      "id": "08-footnotes",
+      "reason": "引用及行内脚注",
+      "patch": "footnotes/upstream.patch",
+      "additions": {
+        "src/mint/footnote.ts": "footnotes/footnote.ts"
+      },
+      "tests": [
+        "src/editor/features.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "04-mint-syntax"
+      ]
+    },
+    {
+      "id": "09-callouts",
+      "reason": "Callout 类型、标题、折叠与外观",
+      "patch": "callouts/upstream.patch",
+      "additions": {
+        "src/mint/callout.ts": "callouts/callout.ts"
+      },
+      "tests": [
+        "src/editor/features.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "04-mint-syntax"
+      ]
+    },
+    {
+      "id": "10-code",
+      "reason": "代码高亮和复制",
+      "patch": "code/upstream.patch",
+      "additions": {
+        "src/mint/code.ts": "code/code.ts"
+      },
+      "tests": [
+        "src/editor/features.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "01-integration",
+        "highlight.js"
+      ]
+    },
+    {
+      "id": "11-mermaid",
+      "reason": "Mermaid 预览，普通代码块继续使用上游 NodeView",
+      "patch": "mermaid/upstream.patch",
+      "additions": {
+        "src/mint/mermaid.ts": "mermaid/mermaid.ts"
+      },
+      "tests": [
+        "src/editor/features.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "04-mint-syntax",
+        "Mermaid"
+      ]
+    },
+    {
+      "id": "12-product-controls",
+      "reason": "Mint 图标、三语表格控件及只读工具栏隔离",
+      "patch": "product-controls/upstream.patch",
+      "additions": {},
+      "tests": [
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "01-integration",
+        "11-mermaid",
+        "Lucide React"
+      ]
+    },
+    {
+      "id": "13-upstream-test-expectations",
+      "reason": "仅调整图片 specs：移除直接 Blob 文件选择入口，相对图片 URL 被安全边界阻止；保留全部检查点",
+      "patch": "upstream-test-expectations/upstream.patch",
+      "additions": {},
+      "tests": [
+        ".generated/typora-web/tests/features/image.test.ts"
+      ],
+      "requires": [
+        "03-safe-images",
+        "12-product-controls"
+      ]
+    }
+  ]
+}

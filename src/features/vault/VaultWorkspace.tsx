@@ -35,6 +35,7 @@ import {
 } from "../../crypto/deviceUnlock";
 import { buildOutline, findOutlineHeading } from "../../editor/outline";
 import { ReadingEditor } from "../../editor/ReadingEditor";
+import { useNoteEditorIntegration } from "./useNoteEditorIntegration";
 import { MarkdownEditor } from "../../editor/MarkdownEditor";
 import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/wikilinks";
 import { ATTACHMENT_TRANSFER_CONCURRENCY, attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
@@ -1380,6 +1381,14 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const activeDocumentLocked = isLockedNote(activeDocument);
   const effectiveMode = effectiveEditorMode(mode, activeDocument);
   const documentNavigation = useDocumentNavigation(effectiveMode);
+  const noteEditor = useNoteEditorIntegration({
+    document: activeDocument, previewing: Boolean(historyPreview),
+    findDocument: id => documentIndexRef.current.get(id), patchDocument,
+    saveImage: async (id, file) => {
+      try { const attachment = await addAttachment(id, file); return attachmentMarkdown(attachment.objectId, attachment.originalName); }
+      catch (error) { showMessage(translateError(error, t, "notice.attachmentSaveFailed"), "critical"); return null; }
+    },
+  });
 
   const changeEditorMode = (nextMode: EditorMode) => {
     if (!documentNavigation.prepareModeChange(nextMode)) return;
@@ -2325,19 +2334,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       >
           {activeDocument ? historyPreview
             ? <ReadingEditor markdown={historyPreview.payload.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : <MarkdownEditor ref={documentNavigation.editorSurface} key={`${editorSessionId}:${effectiveMode}`} markdown={activeDocument.markdown} mode={effectiveMode} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={(markdown) => {
-              const latest = documentIndexRef.current.get(activeDocument.objectId);
-              if (!latest || markdown === latest.markdown) return;
-              patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });
-            }} onWikiLink={openWikiLink} onImageInsert={async (file) => {
-              try {
-                const attachment = await addAttachment(activeDocument.objectId, file);
-                return attachmentMarkdown(attachment.objectId, attachment.originalName);
-              } catch (error) {
-                showMessage(translateError(error, t, "notice.attachmentSaveFailed"), "critical");
-                return null;
-              }
-            }} />
+            : <MarkdownEditor ref={documentNavigation.editorSurface} key={editorSessionId} documentKey={activeDocument.objectId} markdown={activeDocument.markdown} mode={effectiveMode} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={noteEditor.onChange} onWikiLink={openWikiLink} onImageInsert={noteEditor.onImageInsert} onInsertionCancelled={() => showMessage(t("editor.insertRetry"), "critical")} onModeChange={next => { if (!activeDocument.locked) setMode(next); }} />
             : <EmptyEditor />}
       </NotePaneLayout>
 

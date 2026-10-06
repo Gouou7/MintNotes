@@ -1,219 +1,83 @@
-import { AlignCenter, AlignLeft, AlignRight, Image as ImageIcon, ImageOff, TableProperties, Trash2 } from "lucide-react";
-import { AppIcon } from "../components/AppIcon";
-import {
-  forwardRef,
-  type ClipboardEvent as ReactClipboardEvent,
-  type DragEvent,
-  useImperativeHandle,
-  useEffect,
-  useRef,
-  useState
-} from "react";
-import { createRoot } from "react-dom/client";
-import { createEditor, type Editor as EditorController } from "./core/lib";
-import "./core/styles/widgets.css";
-import "./core/styles/theme-typora.css";
-import { createCalloutExtension } from "./extensions/callout";
-import { createCommentExtension } from "./extensions/comment";
-import { createMathExtension } from "./extensions/math";
-import { createMermaidExtension } from "./extensions/mermaid";
-import { createWikiLinkExtension } from "./extensions/wikilink";
-import { I18nProvider, useI18n } from "../i18n";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
+import { useI18n } from "../i18n";
 import type { WorkspaceEditorMode } from "../types";
+import { createMintEditor, type Editor } from "./engine";
+import { editorPresentation } from "./controls";
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter } from "./frontmatter";
 import { editorScrollViewport } from "./scrollViewport";
-import { ReadingEditor } from "./ReadingEditor";
-import { renderMathInto, renderMermaidInto } from "./richRenderers";
+import { useImageReconnectRetry } from "./useImageReconnectRetry";
+import "../../.generated/typora-web/src/styles/widgets.css";
+import "../../.generated/typora-web/src/styles/theme-typora.css";
+import "./typora-overrides.css";
 
 interface Props {
+  documentKey?: string;
   markdown: string;
   mode: WorkspaceEditorMode;
-  onChange: (markdown: string) => void;
+  onChange: (markdown: string, documentKey?: string) => void;
+  onModeChange?: (mode: WorkspaceEditorMode) => void;
   attachmentUrls?: Map<string, string>;
   attachmentsPending?: boolean;
   onImageInsert?: (file: File) => Promise<string | null>;
+  onInsertionCancelled?: () => void;
   onWikiLink?: (target: string) => void;
   emptyHint?: string;
   wrapCodeBlocks?: boolean;
 }
+export interface MarkdownEditorHandle { focus(): void; getSelectionOffset(): number; setSelectionOffset(offset: number): void }
 
-export interface MarkdownEditorHandle {
-  focus: () => void;
-  getSelectionOffset: () => number;
-  setSelectionOffset: (offset: number) => void;
-}
-
-export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function MarkdownEditor({ markdown, mode, onChange, attachmentUrls = new Map(), attachmentsPending = false, onImageInsert, onWikiLink, emptyHint, wrapCodeBlocks = true }, ref) {
-  const frontmatter = parseFrontmatter(markdown);
-  const [displayMode, setDisplayMode] = useState(mode);
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
-  const hostRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<EditorController | null>(null);
-  const changeRef = useRef(onChange);
-  const attachmentUrlsRef = useRef(attachmentUrls);
-  const attachmentsPendingRef = useRef(attachmentsPending);
-  const editorMarkdownRef = useRef(markdown);
-  const wikiLinkRef = useRef(onWikiLink);
-  changeRef.current = onChange;
-  attachmentUrlsRef.current = attachmentUrls;
-  attachmentsPendingRef.current = attachmentsPending;
-  wikiLinkRef.current = onWikiLink;
-  useImperativeHandle(ref, () => ({
-    focus: () => editorRef.current?.focus(),
-    getSelectionOffset: () => editorRef.current?.getSelectionOffset() ?? editorMarkdownRef.current.length,
-    setSelectionOffset: (offset) => editorRef.current?.setSelectionOffset(offset)
-  }), []);
-
+export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function MarkdownEditor(props, ref) {
+  const { t } = useI18n();
+  const current = useRef({ ...props, t }); current.current = { ...props, t };
+  const host = useRef<HTMLDivElement>(null), editor = useRef<Editor | null>(null);
+  const identity = useRef(props.documentKey ?? "note"), shown = useRef(props.markdown);
+  const [displayMode, setDisplayMode] = useState(props.mode);
+  useImageReconnectRetry(host);
+  useImperativeHandle(ref, () => ({ focus: () => editor.current?.focus(), getSelectionOffset: () => editor.current?.getSelectionOffset() ?? 0, setSelectionOffset: offset => editor.current?.setSelectionOffset(offset) }), []);
   useEffect(() => {
-    if (!hostRef.current) return;
-    const editor = createEditor(hostRef.current, {
-      initialContent: markdown,
-      getScrollViewport: () => {
-        const area = hostRef.current?.closest<HTMLElement>(".editor-area");
-        return area ? editorScrollViewport(area) : null;
-      },
-      renderControlIcon: (name) => {
-        const icons = { image: ImageIcon, "image-unavailable": ImageOff, "table-size": TableProperties, "table-delete": Trash2, "align-left": AlignLeft, "align-center": AlignCenter, "align-right": AlignRight };
-        const container = document.createElement("span");
-        const root = createRoot(container);
-        root.render(<AppIcon icon={icons[name]} size={16} />);
-        return { element: container, destroy: () => queueMicrotask(() => root.unmount()) };
-      },
-      onSourceModeChange: (source) => setDisplayMode(source ? "source" : modeRef.current === "reading" ? "reading" : "live"),
-      onCompositionChange: (composing) => {
-        if (!composing) {
-          editorRef.current?.setSourceMode(modeRef.current === "source");
-          setDisplayMode(modeRef.current);
-        }
-      },
-      extensions: [
-        createCommentExtension(),
-        createCalloutExtension({
-          renderBlockquotePreview: (container, source) => {
-            const root = createRoot(container);
-            root.render(
-              <I18nProvider>
-                <ReadingEditor
-                  markdown={source}
-                  wrapCodeBlocks={false}
-                  attachmentUrls={attachmentUrlsRef.current}
-                  onWikiLink={(target) => wikiLinkRef.current?.(target)}
-                />
-              </I18nProvider>
-            );
-            return () => root.unmount();
-          },
-        }),
-        createMathExtension({
-          renderInline: (container, source) => renderMathInto(container, source),
-          renderBlock: (container, source) => renderMathInto(container, source, true),
-        }),
-        createMermaidExtension({ render: renderMermaidInto }),
-        createWikiLinkExtension({
-          onNavigate: (target) => wikiLinkRef.current?.(target),
-        }),
-      ],
-      resolveImageSource: (source) => {
-        const match = /^webmd-attachment:([0-9a-f-]{36})$/i.exec(source);
-        if (!match) return undefined;
-        return attachmentUrlsRef.current.get(match[1].toLowerCase())
-          ?? (attachmentsPendingRef.current ? null : undefined);
-      },
-      onChange: (next) => {
-        if (next === editorMarkdownRef.current) return;
-        editorMarkdownRef.current = next;
-        changeRef.current(next);
-      }
+    if (!host.current) return;
+    const instance = createMintEditor(host.current, {
+      ...editorPresentation(() => current.current.t), initialContent: current.current.markdown, documentKey: identity.current,
+      readOnly: current.current.mode === "reading",
+      getScrollViewport: () => { const area = host.current?.closest<HTMLElement>(".editor-area"); return area ? editorScrollViewport(area) : null; },
+      resolveImageSource: source => { const id = /^webmd-attachment:([0-9a-f-]{36})$/i.exec(source)?.[1].toLowerCase(); return id ? current.current.attachmentUrls?.get(id) ?? (current.current.attachmentsPending ? null : undefined) : undefined; },
+      onNavigate: target => current.current.onWikiLink?.(target),
+      onChange: (text, key) => { if (identity.current === key) shown.current = text; current.current.onChange(text, key); },
+      onModeChange: mode => { setDisplayMode(mode); current.current.onModeChange?.(mode); },
     });
-    editorRef.current = editor;
-    editor.setSourceMode(modeRef.current === "source");
-    if (modeRef.current !== "reading") editor.focus();
-    return () => {
-      editorRef.current = null;
-      editor.destroy();
-    };
+    editor.current = instance; instance.setMode(current.current.mode);
+    return () => { editor.current = null; instance.destroy(); };
   }, []);
-
   useEffect(() => {
-    if (!editorRef.current) return;
-    // Attachment Blob URLs are refreshed through the presentation resolver
-    // below. Only authored Markdown changes rebuild the editor document.
-    if (markdown === editorMarkdownRef.current) return;
-    editorMarkdownRef.current = markdown;
-    editorRef.current.setMarkdown(markdown);
-  }, [markdown]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (editor?.isComposing()) return;
-    editor?.setSourceMode(mode === "source");
-    setDisplayMode(mode);
-  }, [mode]);
-
-  useEffect(() => {
-    editorRef.current?.refreshPresentation?.();
-  }, [attachmentUrls, attachmentsPending]);
-
-  const drop = async (event: DragEvent<HTMLDivElement>) => {
-    const file = imageFileFromTransfer(event.dataTransfer);
-    if (!file || !onImageInsert || !editorRef.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const editor = editorRef.current;
-    const bookmark = editor.createInsertionBookmark(editor.isSourceMode()
-      ? undefined : editor.getMarkdownOffsetAtPoint(event.clientX, event.clientY));
+    const key = props.documentKey ?? "note";
+    if (key !== identity.current || shown.current !== props.markdown) {
+      identity.current = key; shown.current = props.markdown; editor.current?.loadDocument(key, props.markdown);
+    }
+  }, [props.markdown, props.documentKey]);
+  useEffect(() => { editor.current?.setMode(props.mode); }, [props.mode]);
+  useEffect(() => { editor.current?.refreshPresentation(); }, [props.attachmentUrls, props.attachmentsPending, t]);
+  const insertImage = async (event: ClipboardEvent<HTMLDivElement> | DragEvent<HTMLDivElement>) => {
+    const transfer = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
+    const file = imageFileFromTransfer(transfer), instance = editor.current;
+    if (!file || !props.onImageInsert || !instance || displayMode === "reading") return;
+    event.preventDefault(); event.stopPropagation();
+    const bookmark = "clientX" in event && displayMode !== "source" ? instance.createInsertionBookmarkAtPoint(event.clientX, event.clientY) : instance.createInsertionBookmark();
+    const key = identity.current;
     try {
-      const insertion = await onImageInsert(file);
-      if (insertion !== null && editorRef.current === editor) bookmark.insert(insertion);
+      const text = await props.onImageInsert(file);
+      if (text !== null && (editor.current !== instance || identity.current !== key || !bookmark.insert(text))) current.current.onInsertionCancelled?.();
     } finally { bookmark.dispose(); }
   };
-  const paste = async (event: ReactClipboardEvent<HTMLDivElement>) => {
-    const file = imageFileFromTransfer(event.clipboardData);
-    const editor = editorRef.current;
-    if (!file || !onImageInsert || !editor) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const bookmark = editor.createInsertionBookmark();
-    try {
-      const insertion = await onImageInsert(file);
-      if (insertion !== null && editorRef.current === editor) bookmark.insert(insertion);
-    } finally { bookmark.dispose(); }
-  };
-
-  const changeProperties = (next: string) => {
-    if (next === editorMarkdownRef.current) return;
-    editorRef.current?.replaceMarkdown(next, editorRef.current.getSelectionOffset());
-  };
-
-  return (
-    <>
-    <div hidden={displayMode === "reading"} className={`live-editor-document mode-${displayMode}${wrapCodeBlocks ? " wrap-code-blocks" : ""}`}>
-      {displayMode === "live" && frontmatter.status !== "absent" && <FrontmatterProperties markdown={markdown} editable onChange={changeProperties} />}
-      <div
-        ref={hostRef}
-        className={`markdown-editor-host${emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? " is-empty" : ""}`}
-        data-empty-hint={emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? emptyHint : undefined}
-        onDragOver={(event) => { if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file")) event.preventDefault(); }}
-        onDropCapture={(event) => void drop(event)}
-        onPasteCapture={(event) => void paste(event)}
-      />
-    </div>
-    {displayMode === "reading" && <ReadingEditor markdown={markdown} wrapCodeBlocks={wrapCodeBlocks}
-      attachmentUrls={attachmentUrls} onWikiLink={onWikiLink}
-      onSelectionChange={(selection) => editorRef.current?.setSelection(selection)} />}
-    </>
-  );
+  const frontmatter = parseFrontmatter(props.markdown);
+  return <div className={`live-editor-document mode-${displayMode}${displayMode === "reading" ? " reading-editor" : ""}${props.wrapCodeBlocks !== false ? " wrap-code-blocks" : ""}`}>
+    {displayMode !== "source" && <FrontmatterProperties markdown={props.markdown} editable={displayMode !== "reading"} onChange={next => editor.current?.replaceMarkdown(next)} />}
+    <div ref={host} className={`markdown-editor-host${props.emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? " is-empty" : ""}`} data-empty-hint={props.emptyHint}
+      onDragOver={event => { if (displayMode !== "reading" && Array.from(event.dataTransfer.items).some(item => item.kind === "file")) event.preventDefault(); }}
+      onDropCapture={event => void insertImage(event)} onPasteCapture={event => void insertImage(event)} />
+  </div>;
 });
-
 function imageFileFromTransfer(transfer: Pick<DataTransfer, "files" | "items">): File | null {
-  const file = Array.from(transfer.files).find((entry) => entry.type.startsWith("image/"));
-  if (file) return file;
-  for (const item of Array.from(transfer.items)) {
-    if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
-    const entry = item.getAsFile();
-    if (entry) return entry;
-  }
-  return null;
+  return Array.from(transfer.files).find(file => file.type.startsWith("image/"))
+    ?? Array.from(transfer.items).find(item => item.kind === "file" && item.type.startsWith("image/"))?.getAsFile() ?? null;
 }

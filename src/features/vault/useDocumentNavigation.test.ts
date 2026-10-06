@@ -57,7 +57,7 @@ describe("document navigation", () => {
     area.innerHTML = `
       <div class="markdown-editor-host"><div class="ProseMirror">
         <h1>One</h1>
-        <pre data-source-block="1" data-source-kind="heading-2"><code>## Two</code></pre>
+        <h2><span class="syntax-hint">## </span>Two</h2>
         <p>Body</p>
         <h2>Three</h2>
       </div></div>`;

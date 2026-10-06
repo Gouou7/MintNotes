@@ -1,5 +1,4 @@
 import katex from "katex";
-import { useEffect, useRef, useState } from "react";
 import "katex/dist/katex.min.css";
 
 const MAX_MERMAID_SOURCE_LENGTH = 100_000;
@@ -53,24 +52,11 @@ export function renderMathInto(container: HTMLElement, source: string, displayMo
   return () => container.replaceChildren();
 }
 
-export function MathFormula({ source, displayMode = false }: { source: string; displayMode?: boolean }) {
-  const markup = katex.renderToString(source, {
-    displayMode,
-    throwOnError: false,
-    strict: "warn",
-    trust: false,
-    output: "htmlAndMathml"
-  });
-  return displayMode
-    ? <div className="reading-math-block" dangerouslySetInnerHTML={{ __html: markup }} />
-    : <span className="reading-inline-math" dangerouslySetInnerHTML={{ __html: markup }} />;
-}
-
-export function renderMermaidInto(container: HTMLElement, source: string): () => void {
+export function renderMermaidInto(container: HTMLElement, source: string, labels: { rendering: string; failed: string; alt: string }): () => void {
   let cancelled = false;
   let objectUrl: string | null = null;
   container.classList.add("is-rendering");
-  container.textContent = "Rendering diagram…";
+  container.textContent = labels.rendering;
 
   void (async () => {
     try {
@@ -82,13 +68,13 @@ export function renderMermaidInto(container: HTMLElement, source: string): () =>
       objectUrl = URL.createObjectURL(new Blob([safeSvg], { type: "image/svg+xml" }));
       const image = document.createElement("img");
       image.src = objectUrl;
-      image.alt = "Mermaid diagram";
+      image.alt = labels.alt;
       image.draggable = false;
       container.replaceChildren(image);
       container.classList.remove("is-rendering", "has-error");
     } catch {
       if (cancelled) return;
-      container.textContent = "Unable to render Mermaid diagram";
+      container.textContent = labels.failed;
       container.classList.remove("is-rendering");
       container.classList.add("has-error");
     }
@@ -99,22 +85,4 @@ export function renderMermaidInto(container: HTMLElement, source: string): () =>
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     container.replaceChildren();
   };
-}
-
-export function MermaidDiagram({ source }: { source: string }) {
-  const host = useRef<HTMLDivElement>(null);
-  const [sourceAtRender, setSourceAtRender] = useState(source);
-
-  useEffect(() => {
-    setSourceAtRender(source);
-    if (!host.current) return;
-    return renderMermaidInto(host.current, source);
-  }, [source]);
-
-  return (
-    <figure className="mermaid-diagram">
-      <div ref={host} className="mermaid-diagram-canvas" />
-      <figcaption className="sr-only">Mermaid diagram generated from: {sourceAtRender}</figcaption>
-    </figure>
-  );
 }

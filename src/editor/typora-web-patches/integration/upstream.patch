@@ -1,0 +1,179 @@
+--- a/src/decorations.ts
++++ b/src/decorations.ts
+@@ -9,6 +9,8 @@
+ // whether to show it gray (cursor inside the surrounding span) or hide it
+ // (cursor outside).
+ 
++import { mintWidget, destroyMintWidget } from "./mint/widgets.ts";
++import { safeImage, safeLink, type MintContext } from "./mint/context.ts";
+ import { Plugin, PluginKey, type EditorState } from "prosemirror-state";
+ import { Decoration, DecorationSet } from "prosemirror-view";
+ 
+@@ -94,7 +96,15 @@
+   },
+ };
+ 
+-function buildWidget(w: WidgetDecoration): HTMLElement {
++function buildWidget(w: WidgetDecoration, context: MintContext): HTMLElement {
++  const minted = mintWidget(w, context);
++  if (minted) { minted.contentEditable = "false"; return minted; }
++  if (w.kind === "file-input") { const fallback = document.createElement("span"); fallback.className = "image-unavailable"; return fallback; }
++  if (w.kind === "image-render") {
++    const img = document.createElement("img"); img.className = "image-render"; img.referrerPolicy = "no-referrer"; img.alt = w.attrs?.alt ?? "";
++    const url = safeImage(w.attrs?.src ?? "", context); if (url) img.src = url; else img.classList.add("image-unavailable");
++    img.addEventListener("error", () => { img.dataset.imageFailed = "true"; }); img.addEventListener("load", () => { delete img.dataset.imageFailed; }); return img;
++  }
+   const builder = widgetBuilders[w.kind];
+   const el = builder
+     ? builder(w.attrs ?? {})
+@@ -112,9 +122,9 @@
+   return el;
+ }
+ 
+-function buildDecorationSet(state: EditorState): DecorationSet {
++function buildDecorationSet(state: EditorState, context: MintContext): DecorationSet {
+   const decos: Decoration[] = [];
+-  const cursor = state.selection.empty ? state.selection.from : null;
++  const cursor = !context.readOnly && state.selection.empty ? state.selection.from : null;
+   for (const d of getDelims(state)) {
+     const cursorInside =
+       cursor !== null && cursor >= d.spanFrom && cursor <= d.spanTo;
+@@ -140,7 +150,7 @@
+   }
+   for (const ex of getExtras(state)) {
+     decos.push(
+-      Decoration.inline(ex.from, ex.to, { nodeName: ex.nodeName, ...(ex.attrs ?? {}) }),
++      Decoration.inline(ex.from, ex.to, { nodeName: ex.nodeName, ...(ex.attrs ?? {}), ...(ex.attrs?.href && !safeLink(ex.attrs.href) ? { href: "" } : {}) }),
+     );
+   }
+   for (const w of getWidgets(state)) {
+@@ -148,11 +158,11 @@
+       cursor !== null && cursor >= w.spanFrom && cursor <= w.spanTo;
+     if (w.when === "inside" && !cursorInsideSpan) continue;
+     if (w.when === "outside" && cursorInsideSpan) continue;
+-    const dom = buildWidget(w);
+     decos.push(
+-      Decoration.widget(w.pos, dom, {
++      Decoration.widget(w.pos, () => buildWidget(w, context), {
+         side: w.side ?? -1,
+-        key: `${w.kind}@${w.pos}`,
++        key: `${w.kind}@${w.pos}:${JSON.stringify(w.attrs)}:${context.footnotes?.get(w.kind === "mint-inline-footnote" ? `inline-${w.pos}` : w.attrs?.target ?? "")?.number ?? ""}:${context.revision ?? 0}:${context.readOnly ? 1 : 0}`,
++        destroy: element => destroyMintWidget(element as HTMLElement),
+         ignoreSelection: true,
+         // PM should not forward DOM events bubbled out of the widget
+         // back as editor input — otherwise input/keydown fired around
+@@ -168,12 +178,12 @@
+ 
+ const syntaxHintsKey = new PluginKey<DecorationSet>("syntaxHints");
+ 
+-export function syntaxHintsPlugin(): Plugin<DecorationSet> {
++export function syntaxHintsPlugin(context: MintContext = {}): Plugin<DecorationSet> {
+   return new Plugin<DecorationSet>({
+     key: syntaxHintsKey,
+     state: {
+-      init: (_, state) => buildDecorationSet(state),
+-      apply: (_tr, _old, _oldState, newState) => buildDecorationSet(newState),
++      init: (_, state) => buildDecorationSet(state, context),
++      apply: (_tr, _old, _oldState, newState) => buildDecorationSet(newState, context),
+     },
+     props: {
+       decorations(state) {
+--- a/src/editor.ts
++++ b/src/editor.ts
+@@ -1,3 +1,5 @@
++import type { MintContext } from "./mint/context.ts";
++import { safeLink } from "./mint/context.ts";
+ import type { Node as PMNode } from "prosemirror-model";
+ import { EditorState, Plugin } from "prosemirror-state";
+ import { keymap } from "prosemirror-keymap";
+@@ -26,7 +28,7 @@
+         const a = (event.target as Element | null)?.closest("a");
+         if (!a) return false;
+         const href = a.getAttribute("href");
+-        if (!href) return false;
++        if (!href || !safeLink(href)) return false;
+         event.preventDefault();
+         window.open(href, "_blank", "noopener,noreferrer");
+         return true;
+@@ -35,7 +37,7 @@
+   });
+ }
+ 
+-export function defaultPlugins(options: { cursorWidget?: boolean } = {}): Plugin[] {
++export function defaultPlugins(options: MintContext & { cursorWidget?: boolean } = {}): Plugin[] {
+   // cursorRenderPlugin paints a visible caret even when the view is not
+   // focused — only useful for the replay harness (fakeView has no focus).
+   // A real browser editor already draws its own caret, so a live editor
+@@ -51,8 +53,8 @@
+     // Feature-contributed plugins sit after normalize (so block-draft
+     // watchers see the post-normalize doc) and before syntaxHints (so any
+     // extra decorations merge into PM's decoration pipeline naturally).
+-    ...collectPlugins(schema),
+-    syntaxHintsPlugin(),
++    ...collectPlugins(schema, options),
++    syntaxHintsPlugin(options),
+     openLinkOnModClickPlugin(),
+   ];
+   if (cursorWidget) plugins.push(cursorRenderPlugin());
+--- a/src/features/_types.ts
++++ b/src/features/_types.ts
+@@ -11,6 +11,7 @@
+ // need them (inline marks don't need block handlers, etc.).
+ 
+ import type MarkdownIt from "markdown-it";
++import type { MintContext } from "../mint/context.ts";
+ import type Token from "markdown-it/lib/token.mjs";
+ import type { InputRule } from "prosemirror-inputrules";
+ import type {
+@@ -61,7 +62,7 @@
+   // Escape hatch for feature-owned PM plugins: leave-line draft watchers,
+   // NodeViews (via Plugin.props.nodeViews), DOM event handlers for custom
+   // UI overlays. Anything that doesn't fit inputRules / keymap / normalize.
+-  plugins?: (schema: Schema) => Plugin[];
++  plugins?: (schema: Schema, context?: MintContext) => Plugin[];
+   inline?: InlineFeatureSpec;
+ };
+ 
+--- a/src/features/index.ts
++++ b/src/features/index.ts
+@@ -1,6 +1,7 @@
+ // Single registry of all Typora-syntax features. Each core module reads
+ // exactly from here — adding a feature means one import + one array entry.
+ 
++import type { MintContext } from "../mint/context.ts";
+ import { chainCommands } from "prosemirror-commands";
+ import type { Command, Plugin } from "prosemirror-state";
+ import type { Schema } from "prosemirror-model";
+@@ -108,8 +109,8 @@
+     out[key] = cmds.length === 1 ? cmds[0]! : chainCommands(...cmds);
+   return out;
+ }
+-export function collectPlugins(schema: Schema): Plugin[] {
+-  return ALL_FEATURES.flatMap((f) => f.plugins?.(schema) ?? []);
++export function collectPlugins(schema: Schema, context: MintContext = {}): Plugin[] {
++  return ALL_FEATURES.flatMap((f) => f.plugins?.(schema, context) ?? []);
+ }
+ // Inline features, priority-sorted. Consumed by inline-parse orchestration,
+ // normalize (mark sync), decorations (which marks use the inline path),
+--- a/src/normalize.ts
++++ b/src/normalize.ts
+@@ -74,6 +74,7 @@
+   const extras: ExtraDecoration[] = [];
+   const widgets: WidgetDecoration[] = [];
+   doc.descendants((node, pos, parent) => {
++    if (node.type.spec.code) return false;
+     if (!node.isTextblock) return true;
+     const text = node.textContent;
+     const spans = parseInline(text, parent);
+--- a/src/parser.ts
++++ b/src/parser.ts
+@@ -15,7 +15,8 @@
+ } from "./features/index.ts";
+ import { schema } from "./schema.ts";
+ 
+-const md: MarkdownIt = new MarkdownIt("commonmark", { html: false });
++export const markdownParser: MarkdownIt = new MarkdownIt("commonmark", { html: false });
++const md = markdownParser;
+ for (const plugin of collectMdItPlugins()) md.use(plugin);
+ 
+ // Preserve trailing whitespace inside paragraphs.
