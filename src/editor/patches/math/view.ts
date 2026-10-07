@@ -14,8 +14,9 @@ export function mathBlockView(context: MintContext): Plugin {
       const redraw = () => {
         cleanup?.(); cleanup = undefined;
         const math = mathBlockSource(node.textContent);
-        dom.classList.toggle("mint-math-incomplete", !math);
-        if (math) cleanup = mathPreview(preview, math.body, true, context);
+        const renderable = !!math?.body.trim();
+        dom.classList.toggle("mint-math-incomplete", !renderable);
+        if (math && renderable) cleanup = mathPreview(preview, math.body, true, context);
         else preview.replaceChildren();
       };
       const enter = (event: MouseEvent) => {
@@ -49,6 +50,11 @@ export function mathBlockView(context: MintContext): Plugin {
           class: active ? "mint-math-editing" : "mint-math-rendered",
           "data-mint-presentation": `${context.revision ?? 0}:${context.readOnly ? 1 : 0}`,
         }));
+        const math = mathBlockSource(node.textContent, true);
+        if (math) {
+          decorations.push(Decoration.inline(pos + 1 + math.from, pos + 1 + math.contentFrom, { class: "syntax-hint" }));
+          if (math.complete) decorations.push(Decoration.inline(pos + 1 + math.contentTo, pos + 1 + math.to, { class: "syntax-hint" }));
+        }
         return false;
       });
       return DecorationSet.create(state.doc, decorations);

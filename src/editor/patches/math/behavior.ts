@@ -47,7 +47,7 @@ export function mathBehavior(context: MintContext): Plugin {
       const tr = state.tr;
       state.doc.descendants((node, pos) => {
         if (node.type.name !== "paragraph" || !node.childCount || !node.content.content.every(child => child.isText && !child.marks.some(mark => mark.type.name === "code"))) return true;
-        if (!mathBlockSource(node.textContent)) return false;
+        if (!mathBlockSource(node.textContent)?.body.trim()) return false;
         const mapped = tr.mapping.map(pos);
         const block = state.schema.nodes.mint_math_block.create(null, state.schema.text(node.textContent));
         const anchor = state.selection.anchor, head = state.selection.head;
@@ -83,7 +83,7 @@ export function mathBehavior(context: MintContext): Plugin {
       handlePaste(view, event) {
         if (context.readOnly || composing || view.composing || view.state.selection.$from.parent.type.spec.code || event.clipboardData?.getData("text/html")) return false;
         const source = event.clipboardData?.getData("text/plain").replace(/\r\n?/g, "\n");
-        if (!source || !mathBlockSource(source)) return false;
+        if (!source || !mathBlockSource(source)?.body.trim()) return false;
         const block = view.state.schema.nodes.mint_math_block.create(null, view.state.schema.text(source));
         const $from = view.state.selection.$from;
         if (!$from.depth || !mathReplacement(view.state.doc, $from.before(), block)) return false;

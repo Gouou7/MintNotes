@@ -78,11 +78,16 @@
 .mint-block-preview :is(.typora-web-wrap,.typora-web-editor-host) { min-height: 0; }
 .mint-display-math, .katex-display { overflow-x: auto; overflow-y: hidden; }
 .mint-math, .mint-display-math, .mint-math-preview { cursor: text; }
-.mint-math, .mint-display-math { display: inline-block; max-width: 100%; vertical-align: baseline; }
+.mint-math { display: inline-block; max-width: 100%; vertical-align: baseline; }
+.mint-display-math { display: block; width: 100%; max-width: 100%; margin: 1em 0; text-align: center; }
+.mint-display-math > .katex-display { margin: 0; }
 .mint-math-block { min-width: 0; margin-bottom: 1em; }
-.mint-math-preview { min-height: 1.5em; overflow-x: auto; }
+.mint-math-preview { min-height: 1.5em; overflow-x: auto; text-align: center; }
 .mint-math-rendered:not(.mint-math-incomplete) > pre, .mint-math-editing > .mint-math-preview, .mint-math-incomplete > .mint-math-preview { display: none; }
-.mint-math-block > pre { margin-bottom: 0; }
+.markdown-editor-host .ProseMirror .mint-math-block > pre { min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; color: inherit; font: inherit; white-space: pre-wrap; }
+.markdown-editor-host .ProseMirror .mint-math-block > pre::before, .markdown-editor-host .ProseMirror .mint-math-block > pre::after { display: none; }
+.markdown-editor-host .ProseMirror .mint-math-block > pre code { padding: 0; border: 0; border-radius: 0; color: inherit; font: inherit; white-space: pre-wrap; }
+.markdown-editor-host .ProseMirror .mint-math-block .syntax-hint { color: var(--muted); }
 .mint-reading :is(.mint-math,.mint-display-math,.mint-math-preview) { cursor: auto; }
 .wiki-link { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; cursor: pointer; }
 .inline-footnote-body { display: none; }

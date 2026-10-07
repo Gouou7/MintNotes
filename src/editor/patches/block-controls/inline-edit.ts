@@ -8,6 +8,17 @@ export interface InlineTextEditor {
   destroy(): void;
 }
 
+/** Native horizontal editing continues until the collapsed caret reaches an edge. */
+export function inlineArrowDirection(input: HTMLInputElement, event: KeyboardEvent): -1 | 1 | null {
+  if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || event.keyCode === 229) return null;
+  if (event.key === "ArrowUp") return -1;
+  if (event.key === "ArrowDown") return 1;
+  if (input.selectionStart !== input.selectionEnd) return null;
+  if (event.key === "ArrowLeft" && input.selectionStart === 0) return -1;
+  if (event.key === "ArrowRight" && input.selectionEnd === input.value.length) return 1;
+  return null;
+}
+
 export function inlineTextEditor(options: {
   value: string; display: string; label: string; placeholder?: string;
   readOnly(): boolean;

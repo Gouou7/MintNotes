@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EditorState, TextSelection } from "prosemirror-state";
+import { EditorState, NodeSelection, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { undo, redo } from "prosemirror-history";
 import { defaultPlugins } from "../../../.generated/typora-web/src/editor";
@@ -7,6 +7,7 @@ import { parse } from "../../../.generated/typora-web/src/parser";
 import { serialize } from "../../../.generated/typora-web/src/serializer";
 import { schema } from "../../../.generated/typora-web/src/schema";
 import { getLangFocus } from "../../../.generated/typora-web/src/features/fenced-code";
+import { calloutBody, calloutKey } from "../../../.generated/typora-web/src/mint/callout-behavior";
 import { createMintEditor } from "../engine";
 import { CALLOUT_TYPES, editCalloutMarker, parseCalloutMarker } from "../product/calloutMarker";
 
@@ -27,8 +28,9 @@ function select(view: EditorView, pos: number) { view.dispatch(view.state.tr.set
 function arrow(view: EditorView, key: 'ArrowUp' | 'ArrowDown', options: KeyboardEventInit = {}) {
   return !!view.someProp('handleKeyDown', handler => handler(view, new KeyboardEvent('keydown', { key, ...options })));
 }
-function inputArrow(input: HTMLInputElement, key: 'ArrowUp' | 'ArrowDown') {
-  input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+function inputArrow(input: HTMLInputElement, key: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight', options: KeyboardEventInit = {}) {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...options });
+  input.dispatchEvent(event); return event.defaultPrevented;
 }
 function choose(view: EditorView, value: string, index = 0) {
   const select = view.dom.querySelectorAll<HTMLSelectElement>(".callout-type-select")[index]; select.value = value; select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -186,6 +188,70 @@ describe("Callout header editing", () => {
     expect(view.dom.querySelector('.callout-header strong')?.textContent).toBe('Note'); const before = view.state.doc;
     view.dom.querySelector<HTMLButtonElement>('.callout-toggle')!.click(); expect(view.state.doc.eq(before)).toBe(true);
     expect(view.dom.querySelector('.callout-toggle')?.getAttribute('aria-expanded')).toBe('true');
+  });
+});
+
+describe('header input horizontal exits', () => {
+  for (const kind of ['callout', 'code'] as const) it(`clears virtual ${kind} header focus when exiting unchanged text to a separator`, () => {
+    const view = setup(kind === 'callout' ? '---\n\n> [!note] Title\n> Body' : '---\n\n```js\nbody\n```'), before = view.state.doc;
+    const pos = before.firstChild!.nodeSize;
+    if (kind === 'callout') select(view, calloutBody(before, pos)!.start); else select(view, pos + 1);
+    arrow(view, 'ArrowUp'); const field = view.dom.querySelector<HTMLInputElement>(kind === 'callout' ? '.callout-title-editor input' : '.cb-lang-input')!;
+    expect(field.hidden).toBe(false); field.setSelectionRange(0, 0); inputArrow(field, 'ArrowLeft');
+    expect(field.hidden).toBe(true); expect(document.activeElement).toBe(view.dom); expect(view.state.selection).toBeInstanceOf(NodeSelection);
+    expect(view.state.selection.from).toBe(0); expect(getLangFocus(view.state)).toBeNull(); expect(calloutKey.getState(view.state)?.titleFocus).toBeNull();
+    expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  for (const kind of ['callout', 'code'] as const) for (const above of [true, false]) it(`exits a nested ${kind} header on the left ${above ? 'to preceding text' : 'at the document start'}`, () => {
+    const nested = kind === 'callout' ? '> > [!tip] Inner\n> > Body' : '> ```js\n> body\n> ```';
+    const view = setup((above ? 'Above\n\n' : '') + '> [!note] Outer\n>\n' + nested), before = view.state.doc;
+    const button = kind === 'callout' ? view.dom.querySelectorAll<HTMLButtonElement>('.callout-title-editor button')[1] : view.dom.querySelector<HTMLButtonElement>('.mint-code-language-label')!;
+    button.click(); const field = kind === 'callout' ? view.dom.querySelectorAll<HTMLInputElement>('.callout-title-editor input')[1] : view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!;
+    field.setSelectionRange(0, 0); inputArrow(field, 'ArrowLeft');
+    expect([...view.dom.querySelectorAll<HTMLInputElement>('.callout-title-editor input, .cb-lang-input')].every(input => input.hidden)).toBe(true);
+    expect(document.activeElement).toBe(view.dom);
+    expect(view.state.selection.$from.parent.textContent).toBe(above ? 'Above' : kind === 'callout' ? '[!tip] Inner\nBody' : 'body');
+    expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  for (const firstBody of ['callout', 'code', 'separator'] as const) it(`enters the first ${firstBody} body from the outer title without another header stop`, () => {
+    const body = firstBody === 'callout' ? '> > [!tip] Inner\n> > Body' : firstBody === 'code' ? '> ```js\n> body\n> ```' : '> ---\n>\n> Body';
+    const view = setup('> [!note] Outer\n>\n' + body), before = view.state.doc;
+    view.dom.querySelector<HTMLButtonElement>('.callout-title-editor button')!.click(); const field = view.dom.querySelector<HTMLInputElement>('.callout-title-editor input')!;
+    field.setSelectionRange(field.value.length, field.value.length); inputArrow(field, 'ArrowRight');
+    expect([...view.dom.querySelectorAll<HTMLInputElement>('.callout-title-editor input, .cb-lang-input')].every(input => input.hidden)).toBe(true);
+    expect(document.activeElement).toBe(view.dom);
+    if (firstBody === 'separator') expect(view.state.selection).toBeInstanceOf(NodeSelection);
+    else expect(view.state.selection.$from.parent.textContent).toBe(firstBody === 'callout' ? '[!tip] Inner\nBody' : 'body');
+    expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  for (const kind of ['callout', 'code'] as const) for (const direction of ['ArrowLeft', 'ArrowRight'] as const) it(`exits the ${kind} input on ${direction} at its boundary and commits its draft`, () => {
+    const view = setup(kind === 'callout' ? 'Above\n\n> [!note] Title\n> Body\n\nBelow' : 'Above\n\n```js\nbody\n```\n\nBelow'), before = view.state.doc;
+    view.dom.querySelector<HTMLButtonElement>(kind === 'callout' ? '.callout-title-editor button' : '.mint-code-language-label')!.click();
+    const field = view.dom.querySelector<HTMLInputElement>(kind === 'callout' ? '.callout-title-editor input' : '.cb-lang-input')!;
+    draft(field, kind === 'callout' ? 'Changed title' : 'python metadata');
+    const boundary = direction === 'ArrowLeft' ? 0 : field.value.length; field.setSelectionRange(boundary, boundary);
+    expect(inputArrow(field, direction)).toBe(true); expect(field.hidden).toBe(true); expect(document.activeElement).toBe(view.dom);
+    expect(view.state.selection.$from.parent.textContent).toBe(direction === 'ArrowLeft' ? 'Above' : kind === 'callout' ? '[!note] Changed title\nBody' : 'body');
+    if (direction === 'ArrowLeft') expect(view.state.selection.$from.parentOffset).toBe('Above'.length);
+    else if (kind === 'code') expect(view.state.selection.$from.parentOffset).toBe(0);
+    else expect(view.state.selection.from).toBe(calloutBody(view.state.doc, before.firstChild!.nodeSize)!.start);
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  for (const kind of ['callout', 'code'] as const) it(`keeps native movement and selection in the ${kind} input`, () => {
+    const view = setup(kind === 'callout' ? 'Above\n\n> [!note] Title\n> Body' : 'Above\n\n```javascript\nbody\n```'), before = view.state.doc;
+    view.dom.querySelector<HTMLButtonElement>(kind === 'callout' ? '.callout-title-editor button' : '.mint-code-language-label')!.click();
+    const field = view.dom.querySelector<HTMLInputElement>(kind === 'callout' ? '.callout-title-editor input' : '.cb-lang-input')!;
+    field.setSelectionRange(2, 2); expect(inputArrow(field, 'ArrowLeft')).toBe(false); expect(inputArrow(field, 'ArrowRight')).toBe(false);
+    field.setSelectionRange(0, field.value.length); expect(inputArrow(field, 'ArrowLeft')).toBe(false); expect(inputArrow(field, 'ArrowRight')).toBe(false);
+    field.setSelectionRange(0, 0);
+    for (const options of [{ shiftKey: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }, { isComposing: true }]) expect(inputArrow(field, 'ArrowLeft', options)).toBe(false);
+    expect(field.hidden).toBe(false); expect(document.activeElement).toBe(field); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('keeps an invalid code language in its input when attempting to exit', () => {
+    const view = setup('Above\n\n```js\nbody\n```'), before = view.state.doc;
+    view.dom.querySelector<HTMLButtonElement>('.mint-code-language-label')!.click(); const field = view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!;
+    draft(field, 'js```'); field.setSelectionRange(field.value.length, field.value.length);
+    expect(inputArrow(field, 'ArrowRight')).toBe(true); expect(field.hidden).toBe(false); expect(document.activeElement).toBe(field); expect(view.state.doc.eq(before)).toBe(true);
   });
 });
 

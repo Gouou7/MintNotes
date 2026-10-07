@@ -36,7 +36,7 @@ function key(view: EditorView, key: string, options: KeyboardEventInit = {}) {
 }
 
 describe("formula syntax and Markdown preservation", () => {
-  for (const source of ['$$\nA_B\n$$', '$$A_B$$', '$$ A_B $$', '$$A_B\nC_D\n$$', '$$\nA_B\nC_D$$', '$$\n\n$$', '$$\n\\begin{aligned}\nA_B &= C_D \\\\\nE_F &= G_H\n\\end{aligned}\n$$']) {
+  for (const source of ['$$\nA_B\n$$', '$$A_B$$', '$$ A_B $$', '$$A_B\nC_D\n$$', '$$\nA_B\nC_D$$', '$$\n\\begin{aligned}\nA_B &= C_D \\\\\nE_F &= G_H\n\\end{aligned}\n$$']) {
     it(`loads and serializes a single complete block ${JSON.stringify(source)}`, () => {
       const doc = parse(source);
       expect(doc.childCount).toBe(1); expect(doc.firstChild?.type.name).toBe("mint_math_block");
@@ -45,6 +45,20 @@ describe("formula syntax and Markdown preservation", () => {
       expect(mathBlockSource(source)?.complete).toBe(true);
     });
   }
+  for (const source of ['$$ $$', '$$\t$$', '$$\n$$', '$$\n\n$$', '$$\n  \t\n$$']) it(`leaves empty fences visible as ordinary source ${JSON.stringify(source)}`, () => {
+    const render = vi.fn(), view = setup(source, { readOnly: true, renderMath: render });
+    view.state.doc.descendants(node => { expect(node.type.name).not.toBe('mint_math_block'); });
+    expect(view.dom.querySelector('.mint-math,.mint-display-math,.mint-math-preview,.syntax-hidden')).toBeNull();
+    expect(view.dom.textContent?.replace(/\s/g, '')).toBe('$$$$');
+    expect(render).not.toHaveBeenCalled();
+    expect(parse(serialize(view.state.doc)).eq(view.state.doc)).toBe(true);
+  });
+  it("keeps an empty paragraph formula from consuming a following nonempty formula", () => {
+    const source = 'Empty $$ $$ then $A_B$', view = setup(source, { readOnly: true, renderMath: renderMathInto });
+    expect(view.dom.querySelectorAll('.mint-math .katex')).toHaveLength(1);
+    expect(view.dom.querySelector('.mint-display-math')).toBeNull();
+    expect(serialize(view.state.doc)).toBe(source);
+  });
   for (const source of ['Text $A_B$ end', 'Text $$ A_B $$ end', '| A | B |\n| --- | --- |\n| $A_B$ | $$ C_D $$ |', '> $$\n> A_B\n> $$', '- $$\n  A_B\n  $$', '$$\nA_B\n$$\n\n$$\nC_D\n$$']) {
     it(`retains math inside its container ${source.slice(0, 35)}`, () => {
       const doc = parse(source), output = serialize(doc);
@@ -111,6 +125,32 @@ describe("formula editing", () => {
     expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
     expect(redo(view.state, view.dispatch)).toBe(true); expect(serialize(view.state.doc)).toBe('$$A_B$$');
   });
+  it("leaves empty typed and pasted fences as text until they contain a formula", () => {
+    const view = setup(''); view.dispatch(view.state.tr.insertText('$$ $$'));
+    expect(view.state.doc.firstChild?.type.name).toBe('paragraph');
+    select(view, 3); view.dispatch(view.state.tr.insertText('A_B'));
+    expect(view.state.doc.firstChild?.type.name).toBe('mint_math_block');
+    expect(serialize(view.state.doc)).toBe('$$A_B $$');
+    const paste = setup('');
+    const event = { clipboardData: { getData: (type: string) => type === 'text/plain' ? '$$\n\n$$' : '' } } as ClipboardEvent;
+    expect(paste.someProp('handlePaste', handler => handler(paste, event, Slice.empty))).toBeUndefined();
+    expect(paste.state.doc.firstChild?.type.name).toBe('paragraph');
+  });
+  it("keeps a created or cleared empty block source visible even after the caret leaves", () => {
+    const render = vi.fn((host: HTMLElement, body: string, display: boolean) => renderMathInto(host, body, display));
+    const view = setup('$$\n\nBelow', { renderMath: render });
+    select(view, 3); expect(key(view, 'Enter')).toBe(true);
+    expect(view.dom.querySelector('.mint-math-block')?.classList.contains('mint-math-incomplete')).toBe(true);
+    expect(render).not.toHaveBeenCalled();
+    view.dispatch(view.state.tr.insertText('A_B'));
+    expect(render).toHaveBeenCalledTimes(1);
+    view.dispatch(view.state.tr.delete(4, 7));
+    select(view, view.state.doc.content.size - 1);
+    expect(view.dom.querySelector('.mint-math-block')?.classList.contains('mint-math-incomplete')).toBe(true);
+    expect(view.dom.querySelector('.mint-math-block code')?.textContent).toBe('$$\n\n$$');
+    expect(view.dom.querySelector('.katex')).toBeNull();
+    expect(serialize(view.state.doc)).toBe('$$\n\n$$\n\nBelow');
+  });
   it("creates inside a list with a valid leading paragraph and keeps formulas inline in table cells", () => {
     const list = setup('- $$');
     select(list, 5); expect(key(list, 'Enter')).toBe(true);
@@ -142,9 +182,43 @@ describe("formula editing", () => {
     const widget = view.dom.querySelector<HTMLElement>('.mint-math')!;
     expect(widget.querySelector('.katex')).not.toBeNull(); widget.click();
     expect(view.state.selection.from).toBe(9); expect(view.dom.querySelector('.mint-math')).toBeNull();
+    expect([...view.dom.querySelectorAll('.syntax-hint')].map(element => element.textContent)).toEqual(['$', '$']);
     select(view, 5, 15);
     expect(view.dom.querySelector('.mint-math')).toBeNull(); expect(view.dom.querySelector('.syntax-hidden')).toBeNull();
     expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  it("reveals paragraph display math with only its dollar delimiters muted and edits its body in place", () => {
+    const source = 'Before $$A_B$$ after', view = setup(source, { renderMath: renderMathInto }), before = view.state.doc;
+    select(view, before.content.size - 1);
+    view.dom.querySelector<HTMLElement>('.mint-display-math')!.click();
+    expect(view.state.selection.from).toBe(10);
+    expect(view.dom.querySelector('.mint-display-math')).toBeNull();
+    expect([...view.dom.querySelectorAll('.syntax-hint')].map(element => element.textContent)).toEqual(['$$', '$$']);
+    expect(view.dom.querySelector('.syntax-hidden')).toBeNull();
+    expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+    view.dispatch(view.state.tr.insertText('X'));
+    expect(serialize(view.state.doc)).toBe('Before $$XA_B$$ after');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  for (const source of ['$$A_B$$', '$$\nA_B\n$$', '$$\nA_B\nC_D\n$$']) it(`mutes only block delimiters while retaining source lines ${JSON.stringify(source)}`, () => {
+    const view = setup('Above\n\n' + source + '\n\nBelow', { renderMath: renderMathInto }), before = view.state.doc;
+    select(view, 2); view.dom.querySelector<HTMLElement>('.mint-math-preview')!.click();
+    expect(view.dom.querySelector('.mint-math-block > pre > code')?.textContent).toBe(source);
+    expect([...view.dom.querySelectorAll('.mint-math-block .syntax-hint')].map(element => element.textContent)).toEqual(['$$', '$$']);
+    expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+    select(view, before.content.size - 1);
+    expect(view.dom.querySelector('.mint-math-preview .katex-display')).not.toBeNull();
+    expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  it("keeps unfinished formula bodies editable and mutes the remaining opening delimiter", () => {
+    const draft = setup('Before $A_B');
+    expect([...draft.dom.querySelectorAll('.syntax-hint')].map(element => element.textContent)).toEqual(['$']);
+    expect(draft.dom.querySelector('.syntax-hidden')).toBeNull(); expect(serialize(draft.state.doc)).toBe('Before $A_B');
+    const view = setup('$$\nA_B\n$$');
+    view.dispatch(view.state.tr.delete(view.state.doc.firstChild!.content.size - 1, view.state.doc.firstChild!.content.size + 1));
+    expect(view.dom.querySelector('.mint-math-block')?.classList.contains('mint-math-incomplete')).toBe(true);
+    expect([...view.dom.querySelectorAll('.mint-math-block .syntax-hint')].map(element => element.textContent)).toEqual(['$$']);
+    expect(serialize(view.state.doc)).toBe('$$\nA_B\n');
   });
   it("enters a block preview at the body, navigates its boundaries and leaves internal movement native", () => {
     const view = setup('Above\n\n$$\nA_B\n$$\n\nBelow', { renderMath: renderMathInto }), before = view.state.doc;
@@ -193,7 +267,7 @@ describe("formula rendering and lifecycle", () => {
   it("preserves loaded source through previews, selections, reading/source modes and refreshes without saving", () => {
     const host = document.createElement('div'), changed = vi.fn(), disposals: ReturnType<typeof vi.fn>[] = [];
     document.body.append(host);
-    const source = 'Before $A_B$ after\n\n$$\nA_B\n$$';
+    const source = 'Before $A_B$ and $$ C_D $$ after\n\n$$\nA_B\n$$\n\n$$E_F$$\n\n$$\n\n$$';
     const render = vi.fn((element: HTMLElement, text: string, display: boolean) => {
       element.textContent = text; element.dataset.display = String(display);
       const dispose = vi.fn(() => element.replaceChildren()); disposals.push(dispose); return dispose;

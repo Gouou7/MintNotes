@@ -42,7 +42,7 @@ export function literals(text: string): Literal[] {
       if (header) { kind = "callout-marker"; body = header[0]; to = from + header[0].length; }
     } else if (start === "$") {
       const math = mathAt(text, from, true);
-      if (math) { body = math.body; kind = math.complete ? math.kind : "math-draft"; to = math.to; }
+      if (math) { body = math.body; kind = math.complete && math.body.trim() ? math.kind : "math-draft"; to = math.to; }
     }
     if (to > from) { result.push({ from, to, source: text.slice(from, to), body, target, kind }); pattern.lastIndex = to; }
   }

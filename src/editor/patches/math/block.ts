@@ -16,7 +16,7 @@ export const blockMath: FeatureSpec = {
     const source = state.getLines(start, end, state.blkIndent, false);
     const from = /^[ \t]*/.exec(source)![0].length;
     const math = mathAt(source, from);
-    if (!math || math.kind !== "display-math" || source.slice(math.to).split("\n")[0].trim() || !mathBlockSource(source.slice(0, math.to))) return false;
+    if (!math || !math.body.trim() || math.kind !== "display-math" || source.slice(math.to).split("\n")[0].trim() || !mathBlockSource(source.slice(0, math.to))) return false;
     if (silent) return true;
     const next = start + source.slice(0, math.to).split("\n").length;
     const token = state.push("mint_math_block", "", 0);

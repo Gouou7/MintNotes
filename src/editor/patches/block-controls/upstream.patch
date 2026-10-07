@@ -3,7 +3,7 @@
 @@ -15,3 +15,5 @@
  import { leaveLineDraft } from "../block-draft.ts";
  import type { MintContext } from "../mint/context.ts";
-+import { inlineTextEditor, type InlineTextEditor } from "../mint/inline-edit.ts";
++import { inlineArrowDirection, inlineTextEditor, type InlineTextEditor } from "../mint/inline-edit.ts";
 +import { closeHistory } from "prosemirror-history";
  import type { FeatureSpec } from "./_types.ts";
 @@ -35,16 +37,12 @@
@@ -47,16 +47,16 @@
 +
 +// Move past the block in its own container, including adjacent code blocks.
 +// At a container edge, provide an empty paragraph for continued editing.
-+function moveOutsideCode(view: EditorView, pos: number, direction: -1 | 1): boolean {
++function moveOutsideCode(view: EditorView, pos: number, direction: -1 | 1, horizontal = false): boolean {
 +  const node = view.state.doc.nodeAt(pos);
 +  if (node?.type.name !== "code_block") return false;
 +  const boundary = direction < 0 ? pos : pos + node.nodeSize;
 +  const $boundary = view.state.doc.resolve(boundary);
 +  const neighbor = direction < 0 ? $boundary.nodeBefore : $boundary.nodeAfter;
-+  if (direction > 0 && neighbor?.type.name === "code_block") {
++  if (!horizontal && direction > 0 && neighbor?.type.name === "code_block") {
 +    return focusCodeLanguage(view, boundary);
 +  }
-+  const tr = view.state.tr.setMeta(langFocusKey, null);
++  const tr = view.state.tr.setMeta(langFocusKey, null).setMeta("mint-horizontal-navigation", horizontal ? { direction, origin: pos } : undefined);
 +  if (neighbor) {
 +    tr.setSelection(TextSelection.near($boundary, direction));
 +  } else {
@@ -72,9 +72,9 @@
 +  return true;
 +}
 +
-+function leaveCodeLanguage(view: EditorView, pos: number, direction: -1 | 1): boolean {
++function leaveCodeLanguage(view: EditorView, pos: number, direction: -1 | 1, horizontal = false): boolean {
 +  if (view.state.doc.nodeAt(pos)?.type.name !== "code_block") return false;
-+  if (direction < 0) return moveOutsideCode(view, pos, -1);
++  if (direction < 0) return moveOutsideCode(view, pos, -1, horizontal);
 +  view.dispatch(view.state.tr
 +    .setSelection(TextSelection.create(view.state.doc, pos + 1))
 +    .setMeta(langFocusKey, null));
@@ -131,8 +131,8 @@
 +      },
 +      confirm: event => this.onInputKeyDown(event),
 +      keyDown: event => {
-+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
-+        if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
++        const direction = inlineArrowDirection(this.languageEditor.input, event);
++        if (direction === null) return false;
 +        event.preventDefault();
 +        if (this.languageEditor.finish()) this.onInputKeyDown(event); return true;
 +      },
@@ -227,10 +227,10 @@
 -      this.view.focus();
 -    }
 +    if (!this.view.editable || this.context.readOnly) return;
-+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && (e.key !== "Enter" || e.shiftKey)) return;
++    if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight" && (e.key !== "Enter" || e.shiftKey)) return;
 +    e.preventDefault();
 +    const pos = this.getPos();
-+    if (pos != null) leaveCodeLanguage(this.view, pos, e.key === "ArrowUp" ? -1 : 1);
++    if (pos != null) leaveCodeLanguage(this.view, pos, e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 1, e.key === "ArrowLeft" || e.key === "ArrowRight");
    };
 @@ -208,7 +241,7 @@
      const lang = (node.attrs.lang as string) ?? "";

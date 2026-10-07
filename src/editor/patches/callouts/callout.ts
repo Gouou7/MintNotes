@@ -3,7 +3,7 @@ import { closeHistory } from "prosemirror-history";
 import type { Decoration } from "prosemirror-view";
 import { calloutBehavior, calloutBody, calloutKey, calloutLine, enterCalloutBody, leaveCallout } from "./callout-behavior.ts";
 import { literalFeature } from "./syntax.ts";
-import { inlineTextEditor } from "./inline-edit.ts";
+import { inlineArrowDirection, inlineTextEditor } from "./inline-edit.ts";
 import type { FeatureSpec } from "../features/_types.ts";
 
 export const callout: FeatureSpec = {
@@ -44,11 +44,11 @@ export const callout: FeatureSpec = {
           if (editable() && pos !== undefined && !event.shiftKey) enterCalloutBody(view, pos);
         },
         keyDown(event) {
-          if (event.key !== "ArrowUp" && event.key !== "ArrowDown" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
+          const direction = inlineArrowDirection(titleEditor.input, event); if (direction === null) return false;
           event.preventDefault();
           if (titleEditor.finish()) {
-            const pos = getPos();
-            if (editable() && pos !== undefined) event.key === "ArrowUp" ? leaveCallout(view, pos, -1, context) : enterCalloutBody(view, pos);
+            const pos = getPos(), horizontal = event.key === "ArrowLeft" || event.key === "ArrowRight";
+            if (editable() && pos !== undefined) direction < 0 ? leaveCallout(view, pos, -1, context, horizontal) : enterCalloutBody(view, pos, false, horizontal);
           }
           return true;
         },

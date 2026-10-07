@@ -19,10 +19,16 @@ export const inlineMath: FeatureSpec = {
       for (const literal of literals(text)) {
         if (!["math", "display-math", "math-draft"].includes(literal.kind) || consumed.slice(literal.from, literal.to).some(Boolean)) continue;
         markConsumed(consumed, literal.from, literal.to);
+        const draft = literal.kind === "math-draft", width = literal.source.startsWith("$$") ? 2 : 1;
+        const contentFrom = literal.from + width, contentTo = contentFrom + literal.body.length;
         spans.push({ type: "mint-math", from: literal.from, to: literal.to, openFrom: literal.from, openTo: literal.from,
           closeFrom: literal.to, closeTo: literal.to,
-          delimRanges: literal.kind === "math-draft" ? [] : [{ from: literal.from, to: literal.to, softInside: true, revealOnSelection: true }],
-          widgetDecorations: literal.kind === "math-draft" ? [] : [{ pos: literal.from, when: "outside", kind: `mint-${literal.kind}`, revealOnSelection: true,
+          delimRanges: [
+            { from: literal.from, to: contentFrom, forceVisible: draft, revealOnSelection: true },
+            ...!draft && contentFrom < contentTo ? [{ from: contentFrom, to: contentTo, softInside: true, revealOnSelection: true }] : [],
+            ...!draft ? [{ from: contentTo, to: literal.to, revealOnSelection: true }] : [],
+          ],
+          widgetDecorations: draft ? [] : [{ pos: literal.from, when: "outside", kind: `mint-${literal.kind}`, revealOnSelection: true,
             attrs: { source: literal.body, full: literal.source }, side: -1 }] });
       }
       return spans;

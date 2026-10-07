@@ -73,7 +73,11 @@ export function createMintEditor(host: HTMLElement, options: EditorOptions = {},
       bookmark.valid = !from.deletedAcross && !to.deletedAcross; bookmark.from = from.pos; bookmark.to = Math.max(from.pos, to.pos);
     }
     view.updateState(result.state);
-    if (!suppress && mode !== "reading" && tr.docChanged && !previous.eq(result.state.doc) && !composing && !view.composing) emit(serialize(result.state.doc));
+    if (!suppress && mode !== "reading" && tr.docChanged && !previous.eq(result.state.doc) && !composing && !view.composing) {
+      const next = serialize(result.state.doc);
+      // Empty body placeholders may change the model without editing Markdown.
+      if (!tr.getMeta("mint-presentation-only") || next !== serialize(previous)) emit(next);
+    }
     if (tr.scrolledIntoView) revealCaret();
   };
   const view = new EditorView(live, { state: makeState(markdown), editable: () => mode !== "reading", dispatchTransaction: onTransaction,

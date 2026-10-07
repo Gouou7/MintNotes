@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EditorState, TextSelection } from "prosemirror-state";
+import { EditorState, NodeSelection, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { undo } from "prosemirror-history";
 import { defaultPlugins } from "../../../.generated/typora-web/src/editor";
 import { parse } from "../../../.generated/typora-web/src/parser";
 import { serialize } from "../../../.generated/typora-web/src/serializer";
 import { schema } from "../../../.generated/typora-web/src/schema";
-import { calloutBody, calloutKey } from "../../../.generated/typora-web/src/mint/callout-behavior";
+import { calloutBody, calloutKey, enterCalloutBody } from "../../../.generated/typora-web/src/mint/callout-behavior";
+import { getLangFocus } from "../../../.generated/typora-web/src/features/fenced-code";
 import { CALLOUT_TYPES, editCalloutMarker, parseCalloutMarker } from "../product/calloutMarker";
 import { createMintEditor } from "../engine";
 
@@ -64,18 +65,189 @@ describe('Callout creation and body editing', () => {
       expect(changed).not.toHaveBeenCalled();
     } finally { editor.destroy(); }
   });
-  it('keeps the first empty body on Backspace and opens the title instead of the marker', () => {
+  it('deletes the whole Callout when Backspace is pressed in its empty body', () => {
     const view = setup('> [!note] Title'); titleInput(view).previousElementSibling?.dispatchEvent(new MouseEvent('click'));
     titleKey(view, 'Enter'); const before = view.state.doc;
-    expect(key(view, 'Backspace')).toBe(true); expect(titleInput(view).hidden).toBe(false); expect(view.state.doc.eq(before)).toBe(true);
-    expect(view.dom.querySelector('.mint-callout-editing')).toBeNull(); titleKey(view, 'ArrowDown');
-    input(view, 'Body'); expect(view.state.doc.firstChild?.firstChild?.textContent).toBe('[!note] Title'); expect(serialize(view.state.doc)).toContain('Body');
+    expect(key(view, 'Backspace')).toBe(true); expect(view.dom.querySelector('.markdown-callout')).toBeNull();
+    expect(view.state.doc.childCount).toBe(1); expect(view.state.doc.firstChild?.type.name).toBe('paragraph'); expect(view.state.selection.$from.parent.textContent).toBe('');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
   });
   it('does not turn ordinary quotes or code literals into Callouts', () => {
     const quote = setup('> ordinary'); select(quote, 2 + 'ordinary'.length); key(quote, 'Enter'); key(quote, 'Enter');
     expect(quote.state.doc.lastChild?.type.name).toBe('paragraph'); expect(quote.dom.querySelector('.markdown-callout')).toBeNull();
     const code = setup('```md\n> [!note] literal\n```'); select(code, code.state.doc.firstChild!.nodeSize - 1); key(code, 'Enter');
     expect(code.state.doc.firstChild?.type.name).toBe('code_block'); expect(code.dom.querySelector('.markdown-callout')).toBeNull();
+  });
+});
+
+describe('Callout Backspace behavior', () => {
+  for (const body of ['', 'Body', 'First\n> Last']) it(`matches code blocks when deleting from the empty next line: ${JSON.stringify(body)}`, () => {
+    const view = setup('Above\n\n> [!note] Custom title' + (body ? '\n> ' + body : ''));
+    view.dispatch(view.state.tr.insert(view.state.doc.content.size, schema.nodes.paragraph.create()));
+    const before = view.state.doc, pos = before.firstChild!.nodeSize;
+    select(view, before.content.size - 1); expect(key(view, 'Backspace')).toBe(true);
+    if (body) {
+      expect(view.state.doc.childCount).toBe(2); expect(view.state.selection.from).toBe(calloutBody(view.state.doc, pos)!.end);
+      expect(view.state.doc.lastChild?.eq(before.child(1))).toBe(true); expect(titleInput(view).hidden).toBe(true);
+    } else {
+      expect(view.state.doc.childCount).toBe(2); expect(view.state.doc.lastChild?.type.name).toBe('paragraph'); expect(view.dom.querySelector('.markdown-callout')).toBeNull();
+    }
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+    const code = setup('Above\n\n```js\n' + body.replaceAll('\n> ', '\n') + '\n```');
+    code.dispatch(code.state.tr.insert(code.state.doc.content.size, schema.nodes.paragraph.create()));
+    select(code, code.state.doc.content.size - 1); vi.mocked(code.endOfTextblock).mockReturnValue(true);
+    expect(key(code, 'Backspace')).toBe(true); expect(code.state.doc.childCount).toBe(2);
+    expect(code.state.selection.$from.parent.type.name).toBe(body ? 'code_block' : 'paragraph');
+    if (body) expect(code.state.selection.$from.parentOffset).toBe(code.state.selection.$from.parent.content.size);
+  });
+  it('preserves text on the next line while moving into a nonempty folded Callout', () => {
+    const view = setup('> [!note]- Title\n> First\n> Last\n\nBelow'), before = view.state.doc;
+    select(view, before.content.size - 'Below'.length - 1); expect(key(view, 'Backspace')).toBe(true);
+    expect(view.state.doc.eq(before)).toBe(true); expect(view.state.selection.from).toBe(calloutBody(before, 0)!.end);
+    expect(view.dom.querySelector('.mint-callout-folded')).toBeNull(); expect(titleInput(view).hidden).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  it('deletes a cleared body without counting its marker or title as content', () => {
+    const view = setup('Above\n\n> [!tip] Title\n> Body\n\nBelow'), pos = view.state.doc.firstChild!.nodeSize;
+    const body = calloutBody(view.state.doc, pos)!; view.dispatch(view.state.tr.delete(body.start, body.end));
+    const before = view.state.doc; select(view, calloutBody(before, pos)!.start);
+    expect(key(view, 'Backspace')).toBe(true); expect(view.dom.querySelector('.markdown-callout')).toBeNull();
+    expect(view.state.doc.childCount).toBe(2); expect(view.state.doc.textContent).toBe('AboveBelow');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('removes empty body lines one at a time before deleting the block', () => {
+    const view = setup('> [!note] Title'); enterCalloutBody(view, 0); key(view, 'Enter'); key(view, 'Enter');
+    vi.mocked(view.endOfTextblock).mockReturnValue(true);
+    for (let remaining = 3; remaining >= 2; remaining--) {
+      expect(key(view, 'Backspace')).toBe(true); expect(view.state.doc.firstChild?.childCount).toBe(remaining);
+      expect(titleInput(view).hidden).toBe(true);
+    }
+    expect(key(view, 'Backspace')).toBe(true); expect(view.dom.querySelector('.markdown-callout')).toBeNull();
+  });
+  for (const body of ['Body', ' ', '\n', '![](webmd-attachment:00000000-0000-4000-8000-000000000000)', '\n>\n> ---']) it(`keeps a nonempty body on boundary Backspace: ${JSON.stringify(body)}`, () => {
+    const view = setup('> [!note] Title'); enterCalloutBody(view, 0); input(view, body);
+    const before = view.state.doc; select(view, calloutBody(before, 0)!.start);
+    expect(key(view, 'Backspace')).toBe(true); expect(view.state.doc.eq(before)).toBe(true); expect(titleInput(view).hidden).toBe(true);
+  });
+  it('keeps the outer Callout editable after deleting an empty nested Callout', () => {
+    const view = setup('> [!note] Outer\n>\n> > [!tip] Inner'), inner = view.state.doc.firstChild!.firstChild!.nodeSize + 1;
+    enterCalloutBody(view, inner); const before = view.state.doc;
+    expect(key(view, 'Backspace')).toBe(true); expect(view.dom.querySelectorAll('.markdown-callout')).toHaveLength(1);
+    expect(view.state.selection.from).toBe(calloutBody(view.state.doc, 0)!.start); expect(titleInput(view).hidden).toBe(true);
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('returns to the empty Callout body after deleting its final empty code block', () => {
+    const view = setup('> [!note] Outer\n>\n> ```js\n> ```'), before = view.state.doc, code = before.firstChild!.firstChild!.nodeSize + 1;
+    select(view, code + 1); expect(key(view, 'Backspace')).toBe(true);
+    expect(titleInput(view).hidden).toBe(true); expect(view.state.selection.$from.parent.textContent).toBe('');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('keeps code block deletion ahead of the preceding Callout', () => {
+    const view = setup('> [!note] Title\n\n```js\n```'), before = view.state.doc, code = before.firstChild!.nodeSize;
+    select(view, code + 1); expect(key(view, 'Backspace')).toBe(true);
+    expect(view.state.doc.firstChild?.firstChild?.eq(before.firstChild!.firstChild!)).toBe(true); expect(view.dom.querySelector('.cb-lang-input')).toBeNull();
+    expect(titleInput(view).hidden).toBe(true); expect(view.state.selection.$from.parent.textContent).toBe('');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('retains native list Backspace at the first body item without touching the title', () => {
+    const view = setup('> [!note] Title\n>\n> - Item'), before = view.state.doc;
+    select(view, calloutBody(before, 0)!.start); vi.mocked(view.endOfTextblock).mockReturnValue(true);
+    expect(key(view, 'Backspace')).toBe(true); expect(view.state.doc.firstChild?.child(1).type.name).toBe('paragraph');
+    expect(view.state.doc.firstChild?.firstChild?.textContent).toBe('[!note] Title'); expect(view.state.doc.firstChild?.child(1).textContent).toBe('Item'); expect(titleInput(view).hidden).toBe(true);
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('leaves an uncommitted marker editable and rejects reading-mode deletion', () => {
+    const draft = setup(); input(draft, '> [!note]'); const before = draft.state.doc;
+    expect(key(draft, 'Backspace')).toBe(false); expect(draft.state.doc.eq(before)).toBe(true);
+    const readonly = setup('> [!note] Title\n> Body\n\nBelow', true), readonlyDoc = readonly.state.doc;
+    select(readonly, readonlyDoc.content.size - 'Below'.length - 1);
+    expect(key(readonly, 'Backspace')).toBe(false); expect(readonly.state.doc.eq(readonlyDoc)).toBe(true);
+  });
+});
+
+describe('Callout horizontal navigation', () => {
+  it('crosses selected separators above and inside a Callout without opening its title', () => {
+    const view = setup('Above\n\n---\n\n> [!note] Title\n>\n> ---\n>\n> Body\n\nBelow'), before = view.state.doc;
+    const separator = before.firstChild!.nodeSize, pos = separator + before.child(1).nodeSize;
+    const innerSeparator = pos + 1 + before.child(2).firstChild!.nodeSize;
+    view.dispatch(view.state.tr.setSelection(NodeSelection.create(before, separator)));
+    expect(key(view, 'ArrowRight')).toBe(true); expect(view.state.selection).toBeInstanceOf(NodeSelection); expect(view.state.selection.from).toBe(innerSeparator);
+    expect(titleInput(view).hidden).toBe(true);
+    expect(key(view, 'ArrowLeft')).toBe(true); expect(view.state.selection.from).toBe(separator); expect(view.state.selection).toBeInstanceOf(NodeSelection);
+    view.dispatch(view.state.tr.setSelection(NodeSelection.create(before, innerSeparator)));
+    expect(key(view, 'ArrowRight')).toBe(false); expect(titleInput(view).hidden).toBe(true);
+    select(view, calloutBody(before, pos)!.start); vi.mocked(view.endOfTextblock).mockReturnValueOnce(true);
+    view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', keyCode: 37, bubbles: true, cancelable: true }));
+    expect(view.state.selection).toBeInstanceOf(NodeSelection); expect(view.state.selection.from).toBe(innerSeparator);
+    key(view, 'ArrowLeft'); expect(view.state.selection.from).toBe(separator);
+    expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  for (const source of ['> [!tip] Title\n> Body', '> [!tip] Title\n>\n> Body']) it(`crosses the body without opening the title: ${source}`, () => {
+    const view = setup('Above\n\n' + source + '\n\nBelow'), before = view.state.doc, pos = before.firstChild!.nodeSize;
+    const body = calloutBody(before, pos)!;
+    select(view, pos - 1); expect(key(view, 'ArrowRight')).toBe(true); expect(view.state.selection.from).toBe(body.start);
+    expect(titleInput(view).hidden).toBe(true); expect(document.activeElement).toBe(view.dom);
+    expect(key(view, 'ArrowLeft')).toBe(true); expect(view.state.selection.from).toBe(pos - 1);
+    select(view, body.end); expect(key(view, 'ArrowRight')).toBe(true); expect(view.state.selection.$from.parent.textContent).toBe('Below');
+    expect(key(view, 'ArrowLeft')).toBe(true); expect(view.state.selection.from).toBe(body.end);
+    expect(titleInput(view).hidden).toBe(true); expect(calloutKey.getState(view.state)?.titleFocus).toBeNull();
+    expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  it('visits a loaded empty body without changing Markdown or adding undo history', () => {
+    const view = setup('Above\n\n> [!tip] Title\n\nBelow'), before = serialize(view.state.doc), pos = view.state.doc.firstChild!.nodeSize;
+    select(view, pos - 1); key(view, 'ArrowRight');
+    const body = calloutBody(view.state.doc, pos)!;
+    expect(view.state.selection.from).toBe(body.start); expect(view.state.selection.$from.parent.textContent).toBe('');
+    key(view, 'ArrowRight'); expect(view.state.selection.$from.parent.textContent).toBe('Below');
+    key(view, 'ArrowLeft'); expect(view.state.selection.from).toBe(body.end);
+    key(view, 'ArrowLeft'); expect(view.state.selection.from).toBe(pos - 1);
+    expect(titleInput(view).hidden).toBe(true); expect(serialize(view.state.doc)).toBe(before); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  it('does not save or normalize original Markdown when entering a loaded empty Callout', () => {
+    const host = document.createElement('div'), changed = vi.fn(), source = 'Above\n\n\n> [!tip] Title\n\nBelow'; document.body.append(host);
+    const editor = createMintEditor(host, { initialContent: source, parseCallout: parseCalloutMarker, editCalloutMarker, onChange: changed });
+    try {
+      editor.setSelectionOffset('Above'.length);
+      host.querySelector('.ProseMirror')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      expect(host.querySelectorAll('.callout-content > p')).toHaveLength(2);
+      expect(host.querySelector<HTMLInputElement>('.callout-title-editor input')?.hidden).toBe(true);
+      expect(changed).not.toHaveBeenCalled(); expect(editor.getMarkdown()).toBe(source);
+      expect(editor.createInsertionBookmark().insert('Actual body')).toBe(true);
+      expect(changed).toHaveBeenCalledTimes(1); expect(editor.getMarkdown()).toContain('> Actual body');
+    } finally { editor.destroy(); }
+  });
+  it('skips headers between adjacent Callouts and code bodies in both directions', () => {
+    const view = setup('```js\ncode\n```\n\n> [!note] First\n> Body\n\n> [!tip] Second\n> Next\n\n```ts\nlast\n```'), before = view.state.doc;
+    const first = before.firstChild!.nodeSize, second = first + before.child(1).nodeSize, code = second + before.child(2).nodeSize;
+    select(view, first - 1); expect(key(view, 'ArrowRight')).toBe(true); expect(view.state.selection.from).toBe(calloutBody(before, first)!.start);
+    expect(key(view, 'ArrowLeft')).toBe(true); expect(view.state.selection.from).toBe(first - 1);
+    select(view, calloutBody(before, first)!.end); key(view, 'ArrowRight'); expect(view.state.selection.from).toBe(calloutBody(before, second)!.start);
+    key(view, 'ArrowLeft'); expect(view.state.selection.from).toBe(calloutBody(before, first)!.end);
+    select(view, calloutBody(before, second)!.end); key(view, 'ArrowRight'); expect(view.state.selection.from).toBe(code + 1);
+    key(view, 'ArrowLeft'); expect(view.state.selection.from).toBe(calloutBody(before, second)!.end);
+    expect([...view.dom.querySelectorAll<HTMLInputElement>('.callout-title-editor input, .cb-lang-input')].every(field => field.hidden)).toBe(true);
+    expect(getLangFocus(view.state)).toBeNull(); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('skips nested markers and reveals folded bodies without changing Markdown', () => {
+    const view = setup('Above\n\n> [!note]- Outer\n>\n> > [!tip]- Inner\n> > Body\n\nBelow'), before = view.state.doc;
+    const outer = before.firstChild!.nodeSize, inner = outer + 1 + before.child(1).firstChild!.nodeSize;
+    select(view, outer - 1); key(view, 'ArrowRight'); expect(view.state.selection.from).toBe(calloutBody(before, inner)!.start);
+    expect(view.dom.querySelector('.mint-callout-folded')).toBeNull();
+    key(view, 'ArrowLeft'); expect(view.state.selection.from).toBe(outer - 1);
+    select(view, before.content.size - 'Below'.length - 1); key(view, 'ArrowLeft'); expect(view.state.selection.from).toBe(calloutBody(before, inner)!.end);
+    expect([...view.dom.querySelectorAll<HTMLInputElement>('.callout-title-editor input')].every(field => field.hidden)).toBe(true);
+    expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('keeps native movement within body text and does not insert paragraphs at document edges', () => {
+    const view = setup('> [!note] Title\n> Body'), before = view.state.doc, body = calloutBody(before, 0)!;
+    select(view, body.start + 1); expect(key(view, 'ArrowLeft')).toBe(false); expect(key(view, 'ArrowRight')).toBe(false);
+    select(view, body.start); expect(key(view, 'ArrowLeft')).toBe(true); expect(view.state.selection.from).toBe(body.start);
+    select(view, body.end); key(view, 'ArrowRight'); expect(view.state.selection.from).toBe(body.end);
+    expect(view.state.doc.eq(before)).toBe(true); expect(titleInput(view).hidden).toBe(true);
+  });
+  for (const arrow of ['ArrowLeft', 'ArrowRight']) for (const options of [{ shiftKey: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }, { isComposing: true }]) it(`preserves native ${arrow} ${JSON.stringify(options)}`, () => {
+    const view = setup('Above\n\n> [!note] Title\n> Body'), before = view.state.doc, pos = before.firstChild!.nodeSize;
+    select(view, arrow === 'ArrowLeft' ? calloutBody(before, pos)!.start : pos - 1);
+    expect(key(view, arrow, options)).toBe(false); expect(titleInput(view).hidden).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
   });
 });
 
