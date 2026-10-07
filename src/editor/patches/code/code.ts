@@ -47,19 +47,33 @@ function codePresentation(context: MintContext): Plugin {
         let ranges = cache.get(node); if (!ranges) { ranges = highlightRanges(node.textContent, String(node.attrs.lang ?? "").split(/\s/)[0]); cache.set(node, ranges); }
         for (const range of ranges) output.push(Decoration.inline(pos + 1 + range.from, pos + 1 + range.to, { class: range.className }));
         output.push(Decoration.widget(pos + 1, () => {
-          const actions = document.createElement("div"), copy = document.createElement("button"); actions.className = "mint-code-actions"; actions.contentEditable = "false"; copy.type = "button";
+          const actions = document.createElement("div"), copy = document.createElement("button");
+          actions.className = "mint-code-actions"; actions.contentEditable = "false"; copy.type = "button";
           copy.setAttribute("aria-label", context.label?.("copyCode") ?? "Copy code");
-          const icon = context.icon?.("copy"); if (icon) copy.append(icon.element);
+          let iconName = "copy", icon = context.icon?.(iconName); if (icon) copy.append(icon.element);
           copy.addEventListener("mousedown", event => event.preventDefault());
-          let disposed = false; let timer: ReturnType<typeof setTimeout> | undefined;
+          let disposed = false, requestId = 0; let timer: ReturnType<typeof setTimeout> | undefined;
+          const feedback = (state?: "copied" | "failed") => {
+            if (state) copy.dataset.copyState = state; else delete copy.dataset.copyState;
+            const label = state === "copied" ? "codeCopied" : state === "failed" ? "codeCopyFailed" : "copyCode";
+            copy.setAttribute("aria-label", context.label?.(label) ?? (state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy code"));
+            const nextIcon = state === "copied" ? "copy-success" : "copy";
+            if (nextIcon !== iconName) {
+              icon?.destroy(); iconName = nextIcon; icon = context.icon?.(iconName); copy.replaceChildren(); if (icon) copy.append(icon.element);
+            }
+          };
           copy.addEventListener("click", async event => {
             event.preventDefault();
-            try { await navigator.clipboard.writeText(node.textContent.endsWith("\n") ? node.textContent : node.textContent + "\n"); if (disposed) return; copy.dataset.copyState = "copied"; copy.setAttribute("aria-label", context.label?.("codeCopied") ?? "Copied"); }
-            catch { if (disposed) return; copy.dataset.copyState = "failed"; copy.setAttribute("aria-label", context.label?.("codeCopyFailed") ?? "Copy failed"); }
-            if (timer) clearTimeout(timer); timer = setTimeout(() => { delete copy.dataset.copyState; copy.setAttribute("aria-label", context.label?.("copyCode") ?? "Copy code"); }, 1800);
+            if (disposed) return;
+            const request = ++requestId; let state: "copied" | "failed";
+            try { await navigator.clipboard.writeText(node.textContent.endsWith("\n") ? node.textContent : node.textContent + "\n"); state = "copied"; }
+            catch { state = "failed"; }
+            if (disposed || request !== requestId) return;
+            feedback(state);
+            if (timer) clearTimeout(timer); timer = setTimeout(() => { timer = undefined; feedback(); }, state === "copied" ? 800 : 1200);
           });
           actions.append(copy); cleanup.set(actions, () => { disposed = true; if (timer) clearTimeout(timer); icon?.destroy(); }); return actions;
-        }, { key: `mint-copy-${pos}-${node.textContent}`, side: -1, stopEvent: () => true, destroy: node => { cleanup.get(node as HTMLElement)?.(); cleanup.delete(node as HTMLElement); } }));
+        }, { key: `mint-copy-${pos}-${node.attrs.lang ?? ""}-${node.textContent}-${context.revision ?? 0}`, side: -1, stopEvent: () => true, destroy: node => { cleanup.get(node as HTMLElement)?.(); cleanup.delete(node as HTMLElement); } }));
         return false;
       }); return DecorationSet.create(state.doc, output);
     }

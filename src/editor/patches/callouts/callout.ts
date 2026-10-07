@@ -2,24 +2,8 @@ import { Plugin, TextSelection } from "prosemirror-state";
 import { closeHistory } from "prosemirror-history";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { literalFeature } from "./syntax.ts";
+import { inlineTextEditor } from "./inline-edit.ts";
 import type { FeatureSpec } from "../features/_types.ts";
-
-/** Resolve a click on the rendered title before exposing its source text. */
-function titleOffsetAtPoint(title: HTMLElement, x: number, y: number): number {
-  const doc = title.ownerDocument as Document & {
-    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-    caretRangeFromPoint?: (x: number, y: number) => Range | null;
-  };
-  const caret = doc.caretPositionFromPoint?.(x, y);
-  const range = caret ? undefined : doc.caretRangeFromPoint?.(x, y);
-  const node = caret?.offsetNode ?? range?.startContainer;
-  const offset = caret?.offset ?? range?.startOffset;
-  if (node && offset !== undefined && title.contains(node)) {
-    const prefix = doc.createRange(); prefix.selectNodeContents(title); prefix.setEnd(node, offset);
-    return prefix.toString().length;
-  }
-  return x <= title.getBoundingClientRect().left ? 0 : title.textContent?.length ?? 0;
-}
 
 export const callout: FeatureSpec = {
   ...literalFeature("mint-callout", ["callout-marker"]),
@@ -43,54 +27,77 @@ export const callout: FeatureSpec = {
         const dom = document.createElement("blockquote");
         return { dom, contentDOM: dom, update: next => next.type === initial.type && !appearance(next) };
       }
-      let node = initial, folded: boolean | null = null;
+      let node = initial, folded: boolean | null = null, disposed = false, drawnFold: string | undefined;
       let drawnMarker = "", drawnRevision: number | undefined;
-      let icons: (() => void)[] = [];
       const dom = document.createElement("blockquote"), header = document.createElement("div"), content = document.createElement("div");
       header.className = "callout-header"; header.contentEditable = "false"; content.className = "callout-content"; dom.append(header, content);
+      const editable = () => !disposed && view.editable && !context.readOnly && !!context.editCalloutMarker;
+      const commit = (change: { type?: string; title?: string }) => {
+        if (!editable()) return;
+        const pos = getPos(); if (pos === undefined || view.state.doc.nodeAt(pos)?.type.name !== "blockquote") return;
+        const line = markerText(node), next = context.editCalloutMarker?.(line, change);
+        if (next === null || next === undefined || next === line) return;
+        view.dispatch(closeHistory(view.state.tr.insertText(next, pos + 2, pos + 2 + line.length)));
+        view.dispatch(closeHistory(view.state.tr));
+      };
+      const icon = document.createElement("span"), iconHost = document.createElement("span"), types = document.createElement("select"), title = document.createElement("strong"), toggle = document.createElement("button");
+      icon.className = "callout-icon"; iconHost.className = "callout-type-icon"; types.className = "callout-type-select"; toggle.className = "callout-toggle"; toggle.type = "button";
+      types.setAttribute("aria-label", context.label?.("calloutType") ?? "Callout type");
+      const titleEditor = inlineTextEditor({ value: appearance(node)!.title, display: appearance(node)!.title,
+        label: context.label?.("calloutTitle") ?? "Callout title", readOnly: () => !editable(), commit: value => commit({ title: value }),
+        confirm() {
+          const pos = getPos(); if (disposed || pos === undefined) return;
+          const first = node.firstChild!, line = markerText(node);
+          const body = first.textContent.includes("\n") ? pos + 3 + line.length : node.childCount > 1 ? pos + 2 + first.nodeSize : undefined;
+          if (body === undefined) { titleEditor.element.querySelector("button")?.focus(); return; }
+          view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(body)))); view.focus();
+        },
+      });
+      titleEditor.element.classList.add("callout-title-editor"); title.append(titleEditor.element); icon.append(iconHost, types); header.append(icon, title, toggle);
+      let typeIcon: { element: HTMLElement; destroy(): void } | undefined, foldIcon: typeof typeIcon;
+      let typeIconName = "", foldIconName = "";
+      types.addEventListener("change", () => { if (editable()) commit({ type: types.value }); });
+      toggle.addEventListener("mousedown", event => event.preventDefault());
+      toggle.addEventListener("click", event => { event.stopPropagation(); titleEditor.finish(); folded = !folded; draw(); });
       const draw = () => {
-        icons.forEach(dispose => dispose()); icons = []; header.replaceChildren();
         const current = appearance(node);
         if (!current) return;
         drawnMarker = markerText(node); drawnRevision = context.revision;
-        if (folded === null) folded = current.fold === "-";
+        if (folded === null || current.fold !== drawnFold) folded = current.fold === "-";
+        drawnFold = current.fold;
         const presentation = ["mint-callout-editing", "mint-callout-rendered"].filter(name => dom.classList.contains(name)).join(" ");
         dom.className = `${presentation} markdown-callout callout-${current.kind}${current.color ? ` callout-color-${current.color}` : ""}${folded ? " mint-callout-folded" : ""}`;
-        const addIcon = (parent: HTMLElement, name: string) => { const icon = context.icon?.(name); if (icon) { parent.append(icon.element); icons.push(icon.destroy); } };
-        if (current.fold) {
-          const toggle = document.createElement("button"); toggle.type = "button"; toggle.setAttribute("aria-label", context.label?.("toggleCallout") ?? current.title); toggle.setAttribute("aria-expanded", String(!folded));
-          addIcon(toggle, folded ? "chevron-right" : "chevron-down");
-          toggle.addEventListener("click", event => { event.stopPropagation(); folded = !folded; draw(); }); header.append(toggle);
+        const nextTypeIcon = `callout-${current.icon ?? current.kind}`;
+        if (nextTypeIcon !== typeIconName) {
+          typeIcon?.destroy(); typeIcon = context.icon?.(nextTypeIcon); typeIconName = nextTypeIcon; iconHost.replaceChildren(); if (typeIcon) iconHost.append(typeIcon.element);
         }
-        const icon = document.createElement("span"); icon.className = "callout-icon"; addIcon(icon, `callout-${current.icon ?? current.kind}`); header.append(icon);
-        const title = document.createElement("strong"); title.textContent = current.title; header.append(title);
+        const rawType = current.rawType ?? current.kind, choices = [...context.calloutTypes ?? []];
+        if (!choices.some(option => option.value === rawType)) choices.unshift({ value: rawType, label: current.title });
+        const nextChoices = JSON.stringify(choices);
+        if (types.dataset.choices !== nextChoices) {
+          types.replaceChildren(...choices.map(choice => { const option = document.createElement("option"); option.value = choice.value; option.textContent = choice.label; return option; })); types.dataset.choices = nextChoices;
+        }
+        types.value = rawType; types.disabled = !editable(); types.setAttribute("aria-label", context.label?.("calloutType") ?? "Callout type");
+        titleEditor.update(current.title, current.title, { label: context.label?.("calloutTitle") ?? "Callout title" });
+        toggle.hidden = !current.fold; toggle.setAttribute("aria-label", context.label?.("toggleCallout") ?? current.title); toggle.setAttribute("aria-expanded", String(!folded));
+        const nextFoldIcon = folded ? "chevron-right" : "chevron-down";
+        if (current.fold && nextFoldIcon !== foldIconName) {
+          foldIcon?.destroy(); foldIcon = context.icon?.(nextFoldIcon); foldIconName = nextFoldIcon; toggle.replaceChildren(); if (foldIcon) toggle.append(foldIcon.element);
+        }
       };
       draw();
-      header.addEventListener("mousedown", event => event.preventDefault());
-      header.addEventListener("click", event => {
-        const pos = getPos(), current = appearance(node);
-        if (context.readOnly || pos === undefined || !current) return;
-        const title = event.target instanceof Element ? event.target.closest("strong") : null;
-        const titleSource = current.titleSource;
-        const offset = title instanceof HTMLElement && titleSource
-          ? Math.min(titleSource.to, titleSource.from + titleOffsetAtPoint(title, event.clientX, event.clientY))
-          : markerText(node).length;
-        folded = false; draw();
-        view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos + 2 + offset)).scrollIntoView()); view.focus();
-      });
       return {
         dom, contentDOM: content,
         update(next) {
           if (next.type !== node.type || !appearance(next)) return false;
           node = next;
-          // Preserve the header DOM during body input. Replacing it can move the
-          // native Firefox caret when an empty paragraph has just been restored.
+          // Keep focused native controls and the body caret mounted during edits.
           if (markerText(node) !== drawnMarker || context.revision !== drawnRevision) draw();
           return true;
         },
         stopEvent: event => header.contains(event.target as Node),
         ignoreMutation: mutation => header.contains(mutation.target) || mutation.target === dom && mutation.type === "attributes",
-        destroy() { icons.forEach(dispose => dispose()); }
+        destroy() { disposed = true; titleEditor.destroy(); typeIcon?.destroy(); foldIcon?.destroy(); }
       };
     } },
     decorations(state) {
@@ -99,7 +106,7 @@ export const callout: FeatureSpec = {
         if (node.type.name !== "blockquote" || node.firstChild?.type.name !== "paragraph" || !context.parseCallout?.(node.firstChild.textContent.split("\n")[0])) return true;
         const line = node.firstChild.textContent.split("\n")[0], markerStart = pos + 2, markerEnd = markerStart + line.length;
         const editingMarker = !context.readOnly && state.selection.from <= markerEnd && state.selection.to >= markerStart;
-        decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: editingMarker ? "mint-callout-editing" : "mint-callout-rendered" }));
+        decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: editingMarker ? "mint-callout-editing" : "mint-callout-rendered", "data-mint-presentation": `${context.revision ?? 0}:${context.readOnly ? 1 : 0}` }));
         if (line.length === node.firstChild.textContent.length) decorations.push(Decoration.node(pos + 1, pos + 1 + node.firstChild.nodeSize, { class: "callout-source-marker" }));
         else decorations.push(Decoration.inline(markerStart, markerEnd + 1, { class: "callout-marker-source" }));
         return true;

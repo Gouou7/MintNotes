@@ -1,5 +1,20 @@
 /* Mint owns colors, preferences, containers and additive feature UI here.
    The upstream widgets.css and theme-typora.css remain untouched. */
+/* Sketch's radius-20, 60%-smoothed curves occupy 32px at each corner.
+   Separate fill and 1px stroke masks retain the same curve at any block size,
+   including translucent callouts, without observers or browser-specific corners. */
+.markdown-editor-host {
+  --editor-control-bg: rgb(0 0 0 / 10%);
+  --editor-corner-tl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(0%2016%2016)%22%20d%3D%22M32%200%20C20.7989499%200%2015.1984248%200%2010.92019%202.17986952%20C7.15694815%204.09733702%204.09733702%207.15694815%202.17986952%2010.92019%20C0%2015.1984248%200%2020.7989499%200%2032%20H32%20Z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E");
+  --editor-outline-tl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(0%2016%2016)%22%20d%3D%22M32%20.5%20C18.099212%20.5%2014.7874117%20.770584778%2011.1471853%202.62537278%20C7.47802444%204.49490359%204.49490359%207.47802444%202.62537278%2011.1471853%20C.770584778%2014.7874117%20.5%2018.099212%20.5%2032%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E");
+  --editor-corner-tr: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(90%2016%2016)%22%20d%3D%22M32%200%20C20.7989499%200%2015.1984248%200%2010.92019%202.17986952%20C7.15694815%204.09733702%204.09733702%207.15694815%202.17986952%2010.92019%20C0%2015.1984248%200%2020.7989499%200%2032%20H32%20Z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E");
+  --editor-outline-tr: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(90%2016%2016)%22%20d%3D%22M32%20.5%20C18.099212%20.5%2014.7874117%20.770584778%2011.1471853%202.62537278%20C7.47802444%204.49490359%204.49490359%207.47802444%202.62537278%2011.1471853%20C.770584778%2014.7874117%20.5%2018.099212%20.5%2032%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E");
+  --editor-corner-br: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(180%2016%2016)%22%20d%3D%22M32%200%20C20.7989499%200%2015.1984248%200%2010.92019%202.17986952%20C7.15694815%204.09733702%204.09733702%207.15694815%202.17986952%2010.92019%20C0%2015.1984248%200%2020.7989499%200%2032%20H32%20Z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E");
+  --editor-outline-br: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(180%2016%2016)%22%20d%3D%22M32%20.5%20C18.099212%20.5%2014.7874117%20.770584778%2011.1471853%202.62537278%20C7.47802444%204.49490359%204.49490359%207.47802444%202.62537278%2011.1471853%20C.770584778%2014.7874117%20.5%2018.099212%20.5%2032%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E");
+  --editor-corner-bl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(270%2016%2016)%22%20d%3D%22M32%200%20C20.7989499%200%2015.1984248%200%2010.92019%202.17986952%20C7.15694815%204.09733702%204.09733702%207.15694815%202.17986952%2010.92019%20C0%2015.1984248%200%2020.7989499%200%2032%20H32%20Z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E");
+  --editor-outline-bl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(270%2016%2016)%22%20d%3D%22M32%20.5%20C18.099212%20.5%2014.7874117%20.770584778%2011.1471853%202.62537278%20C7.47802444%204.49490359%204.49490359%207.47802444%202.62537278%2011.1471853%20C.770584778%2014.7874117%20.5%2018.099212%20.5%2032%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E");
+}
+:root[data-theme="dark"] .markdown-editor-host { --editor-control-bg: rgb(255 255 255 / 10%); }
 .live-editor-document {
   --editor-document-top: calc(46px + var(--editor-inset-top, 0px));
   --editor-document-bottom: calc(120px + var(--editor-inset-bottom, 0px));
@@ -26,18 +41,33 @@
 .markdown-editor-host .ProseMirror :is(h6,blockquote,.syntax-hint,.syntax-hint-italic,.cb-language-label,.toc-item) { color: var(--muted); }
 .markdown-editor-host .ProseMirror :is(a,ref-url) { color: var(--accent-text); }
 .markdown-editor-host .ProseMirror code { background: var(--surface-input); }
-.markdown-editor-host .ProseMirror pre { background: var(--code-block-bg); color: var(--code-block-text); border-color: var(--border); position: relative; }
-.markdown-editor-host .ProseMirror pre code { background: transparent; }
+.markdown-editor-host .ProseMirror pre { --editor-block-bg: var(--code-block-bg); --editor-block-border: var(--border); position: relative; isolation: isolate; min-height: 64px; margin-bottom: 16px; padding: 15px; border: 1px solid transparent; border-radius: 20px; background: transparent; color: var(--code-block-text); font-size: calc(13px + var(--font-adjust, 0px)); font-weight: 400; line-height: calc(20px + var(--font-adjust, 0px)); overflow: visible; }
+.markdown-editor-host .ProseMirror pre:has(.mint-code-language) { padding-top: calc(50px + var(--font-adjust, 0px)); }
+.markdown-editor-host .ProseMirror pre code { display: block; overflow-x: auto; background: transparent; }
+.markdown-editor-host .ProseMirror :is(pre,blockquote.markdown-callout)::before,
+.markdown-editor-host .ProseMirror :is(pre,blockquote.markdown-callout)::after { content: ""; position: absolute; inset: -1px; z-index: -1; pointer-events: none; mask-repeat: no-repeat; }
+.markdown-editor-host .ProseMirror :is(pre,blockquote.markdown-callout)::before {
+  background: var(--editor-block-bg);
+  mask-image: var(--editor-corner-tl), var(--editor-corner-tr), var(--editor-corner-br), var(--editor-corner-bl), linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-size: 32px 32px, 32px 32px, 32px 32px, 32px 32px, calc(100% - 64px) 100%, 100% calc(100% - 64px);
+  mask-position: top left, top right, bottom right, bottom left, center, center;
+}
+.markdown-editor-host .ProseMirror :is(pre,blockquote.markdown-callout)::after {
+  background: var(--editor-block-border);
+  mask-image: var(--editor-outline-tl), var(--editor-outline-tr), var(--editor-outline-br), var(--editor-outline-bl), linear-gradient(#fff 0 0), linear-gradient(#fff 0 0), linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-size: 32px 32px, 32px 32px, 32px 32px, 32px 32px, calc(100% - 64px) 1px, calc(100% - 64px) 1px, 1px calc(100% - 64px), 1px calc(100% - 64px);
+  mask-position: top left, top right, bottom right, bottom left, top center, bottom center, center left, center right;
+}
 .markdown-editor-host .ProseMirror :is(td,th) { border-color: var(--border); }
 .markdown-editor-host .ProseMirror th { background: var(--surface-raised); }
 .markdown-editor-host .ProseMirror blockquote { border-color: var(--border); }
-.markdown-editor-host .ProseMirror hr { background: var(--border); }
+.markdown-editor-host .ProseMirror hr { background: var(--document-divider); }
 .markdown-editor-host .ProseMirror mark { background: var(--highlight-bg); color: var(--highlight-text); }
 .markdown-editor-host .ProseMirror > yaml-block { display: none; }
 .typora-web-source { width: 100%; min-height: 180px; border: 0; outline: none; resize: none; background: transparent; color: var(--text); font-size: calc(16px + var(--font-adjust, 0px)); overflow: hidden; }
 .wrap-code-blocks .ProseMirror pre, .wrap-code-blocks .ProseMirror pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .mint-image-icon::before { display: none; }
-.mint-reading :is(.cb-chrome,.table-toolbar,.emoji-completion) { display: none; }
+.mint-reading :is(.table-toolbar,.emoji-completion) { display: none; }
 .mint-reading .ProseMirror :is(ref-def,.mint-reference-definition) { display: none; }
 .mint-block-rendered > pre { display: none; }
 .mint-block-editing > .mint-block-preview { display: none; }
@@ -46,14 +76,37 @@
 .mint-block-preview .ProseMirror { min-height: 0; font-size: inherit; }
 .mint-block-preview :is(.typora-web-wrap,.typora-web-editor-host) { min-height: 0; }
 .mint-display-math, .katex-display { overflow-x: auto; overflow-y: hidden; }
-.wiki-link { padding: 0; border: 0; background: transparent; color: var(--accent-text); font: inherit; cursor: pointer; }
+.wiki-link { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; cursor: pointer; }
 .inline-footnote-body { display: none; }
 .mint-inline-footnote:hover .inline-footnote-body { display: inline; }
-.mint-code-actions { display: inline-flex; position: absolute; top: 6px; right: 8px; }
-.mint-code-actions button, .callout-header button { display: inline-flex; align-items: center; padding: 5px; border: 0; border-radius: 4px; background: var(--surface-raised); color: var(--muted); cursor: pointer; }
-.mint-code-actions button[data-copy-state="copied"] { color: var(--accent-text); }
+.mint-code-actions { display: flex; position: absolute; top: 9px; right: 9px; color: var(--code-block-muted); white-space: normal; }
+.markdown-editor-host .ProseMirror pre .cb-chrome { display: flex; position: absolute; top: 15px; left: 15px; right: 47px; bottom: auto; align-items: center; gap: 5px; min-width: 0; color: var(--code-block-muted); font: 600 calc(14px + var(--font-adjust, 0px))/calc(20px + var(--font-adjust, 0px)) Inter, ui-sans-serif, system-ui, sans-serif; white-space: normal; }
+.mint-code-actions { user-select: none; }
+.mint-code-language > span:not(.mint-inline-editor), .mint-code-actions button > span, .callout-type-icon, .callout-type-icon > span { display: inline-flex; flex: 0 0 auto; }
+.mint-code-language svg, .callout-icon svg, .callout-toggle svg { width: 20px; height: 20px; }
+.mint-code-actions svg { width: 16px; height: 16px; }
+.mint-code-actions button, .callout-toggle { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--code-block-muted); cursor: pointer; transition: background-color 120ms ease, color 120ms ease; }
+.mint-code-actions button svg, .callout-toggle svg { transition: transform 100ms ease; }
+@media (hover: hover) and (pointer: fine) {
+  .mint-code-actions button:hover, .callout-toggle:hover { background: var(--editor-control-bg); }
+}
+.mint-code-actions button:focus-visible, .callout-toggle:focus-visible { background: var(--editor-control-bg); }
+.mint-code-actions button:active, .callout-toggle:active { background: color-mix(in srgb, var(--code-block-text) 18%, transparent); }
+.mint-code-actions button:active svg, .callout-toggle:active svg { transform: scale(.9); }
+@media (prefers-reduced-motion: reduce) {
+  .mint-code-actions button, .mint-code-actions button svg, .callout-toggle, .callout-toggle svg { transition: none; }
+  .mint-code-actions button:active svg, .callout-toggle:active svg { transform: none; }
+}
+.mint-inline-editor { display: inline-grid; grid-template-columns: minmax(0, auto); min-width: 0; max-width: 100%; vertical-align: top; }
+.mint-inline-editor > [hidden], .callout-toggle[hidden] { display: none; }
+.mint-inline-editor-label, .mint-inline-editor-measure, .markdown-editor-host .ProseMirror pre .cb-lang-input, .mint-inline-editor-input { grid-area: 1 / 1; min-width: 0; margin: 0; padding: 0 3px; border: 0; border-radius: 8px; font: inherit; line-height: inherit; }
+.mint-inline-editor-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.mint-inline-editor-label:disabled { cursor: default; }
+.mint-inline-editor-label:enabled:hover { background: var(--editor-control-bg); }
+.mint-inline-editor-measure { visibility: hidden; white-space: pre; }
+.markdown-editor-host .ProseMirror pre .cb-lang-input, .mint-inline-editor-input { width: 100%; background: var(--editor-control-bg); color: var(--code-block-text); outline: 0; user-select: text; }
+.markdown-editor-host .ProseMirror .mint-inline-editor-input:focus-visible { outline: 0; }
 .mint-code-actions button[data-copy-state="failed"] { color: var(--danger); }
-.mint-code-actions button { padding: 3px; }
 .hljs-keyword,.hljs-selector-tag,.hljs-literal { color: #9b43aa; }
 .hljs-string,.hljs-attr,.hljs-addition { color: #26774c; }
 .hljs-number,.hljs-built_in,.hljs-type { color: #a05d16; }
@@ -63,11 +116,18 @@
 :root[data-theme="dark"] .hljs-string,:root[data-theme="dark"] .hljs-attr { color: #98d9aa; }
 :root[data-theme="dark"] .hljs-number,:root[data-theme="dark"] .hljs-type { color: #e9bf87; }
 :root[data-theme="dark"] .hljs-title,:root[data-theme="dark"] .hljs-name { color: #9ecdf9; }
-.ProseMirror blockquote.markdown-callout { border: 1px solid var(--callout-color); border-radius: 10px; padding: 15px 17px; color: var(--text); background: var(--callout-soft); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-.callout-header { min-width: 0; min-height: 24px; display: flex; align-items: center; gap: 10px; color: var(--callout-color); }
-.callout-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: .98em; line-height: 1.4; }
-.callout-icon { width: 21px; height: 21px; display: grid; place-items: center; flex: 0 0 21px; }
-.callout-content { margin-top: 10px; color: var(--text); }
+.markdown-editor-host .ProseMirror blockquote.markdown-callout { --editor-block-bg: var(--callout-soft); --editor-block-border: var(--callout-color); position: relative; isolation: isolate; min-height: 64px; margin-bottom: 16px; border: 1px solid transparent; border-radius: 20px; padding: 15px; color: var(--code-block-text); background: transparent; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: calc(14px + var(--font-adjust, 0px)); }
+.callout-header { min-width: 0; min-height: 20px; display: flex; align-items: center; gap: 6px; color: var(--callout-color); }
+.callout-header:has(> .callout-toggle:not([hidden])) { padding-right: 28px; }
+.callout-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-weight: 600; font-size: 1em; line-height: calc(20px + var(--font-adjust, 0px)); }
+.callout-icon { position: relative; width: 20px; height: 20px; display: grid; place-items: center; flex: 0 0 20px; }
+.callout-type-select { position: absolute; inset: -2px; width: 24px; height: 24px; opacity: 0; cursor: pointer; }
+.callout-type-select:disabled { cursor: default; }
+.callout-icon:has(.callout-type-select:enabled)::before { content: ""; position: absolute; inset: -2px; border-radius: 8px; pointer-events: none; }
+.callout-icon:has(.callout-type-select:enabled):hover::before { background: var(--editor-control-bg); }
+.callout-icon:has(.callout-type-select:focus-visible)::before { outline: 2px solid var(--accent); outline-offset: 2px; }
+.callout-toggle { position: absolute; top: 9px; right: 9px; }
+.callout-content { margin-top: 14px; color: var(--code-block-text); line-height: calc(20px + var(--font-adjust, 0px)); }
 .callout-content > :first-child { margin-top: 0; }
 .callout-content > :last-child { margin-bottom: 0; }
 .mint-callout-rendered > .callout-content > .callout-source-marker,
@@ -81,7 +141,7 @@
   .live-editor-document { --editor-document-top: calc(30px + var(--editor-inset-top, 0px)); --editor-document-bottom: calc(80px + var(--safe-area-bottom, 0px) + var(--editor-inset-bottom, 0px)); --editor-document-left: max(18px, var(--safe-area-left, 0px)); --editor-document-right: max(18px, var(--safe-area-right, 0px)); }
   .properties-panel .property-row { grid-template-columns: 20px minmax(75px, 110px) minmax(0, 1fr) 28px; gap: 5px; }
 }
-.markdown-callout { --callout-color: #6b7280; --callout-soft: color-mix(in srgb, var(--callout-color) 13%, transparent); }
+.markdown-callout { --callout-color: #6b7280; --callout-soft: color-mix(in srgb, var(--callout-color) 10%, transparent); }
 .callout-note, .callout-info, .callout-todo { --callout-color: #38a8e8 !important; }
 .callout-abstract { --callout-color: #2fbac5 !important; }
 .callout-tip, .callout-success { --callout-color: #43b83f !important; }

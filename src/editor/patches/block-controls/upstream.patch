@@ -1,0 +1,131 @@
+--- a/src/features/fenced-code.ts
++++ b/src/features/fenced-code.ts
+@@ -14,6 +14,8 @@
+ 
+ import { leaveLineDraft } from "../block-draft.ts";
+ import type { MintContext } from "../mint/context.ts";
++import { inlineTextEditor, type InlineTextEditor } from "../mint/inline-edit.ts";
++import { closeHistory } from "prosemirror-history";
+ import type { FeatureSpec } from "./_types.ts";
+ 
+ // Fenced code block feature.
+@@ -92,7 +94,9 @@
+   dom: HTMLElement;
+   contentDOM: HTMLElement;
+   private chromeEl: HTMLElement;
+-  private inputEl: HTMLInputElement;
++  private languageEditor: InlineTextEditor;
++  private languageIcon: { destroy(): void } | undefined;
++  private context: MintContext;
+   private view: EditorView;
+   private getPos: () => number | undefined;
+ 
+@@ -105,6 +109,7 @@
+   ) {
+     this.view = view;
+     this.getPos = getPos;
++    this.context = context;
+     const pre = document.createElement("pre");
+     const lang = (node.attrs.lang as string) ?? "";
+     if (lang) pre.setAttribute("data-lang", lang);
+@@ -112,23 +117,34 @@
+     pre.appendChild(code);
+ 
+     const chrome = document.createElement("div");
+-    chrome.className = "cb-chrome";
++    chrome.className = "cb-chrome mint-code-language";
+     chrome.setAttribute("contenteditable", "false");
+-    const input = document.createElement("input");
+-    input.className = "cb-lang-input";
+-    input.placeholder = "lang"; input.setAttribute("aria-label", context.label?.("codeLanguage") ?? "Code language");
+-    input.value = lang;
+-    input.spellcheck = false;
+-    chrome.appendChild(input);
++    const icon = context.icon?.("code");
++    if (icon) { chrome.append(icon.element); this.languageIcon = icon; }
++    this.languageEditor = inlineTextEditor({
++      value: lang, display: this.languageLabel(lang),
++      label: context.label?.("codeLanguage") ?? "Code language",
++      placeholder: context.label?.("codeText") ?? "Text",
++      readOnly: () => !this.view.editable || !!this.context.readOnly,
++      validate: value => /[`\r\n]/.test(value) ? context.label?.("invalidCodeLanguage") ?? "Code language cannot contain backticks or line breaks." : "",
++      commit: value => this.onInput(value),
++      confirm: event => this.onInputKeyDown(event),
++      keyDown: event => {
++        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
++        if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
++        if (this.languageEditor.finish()) this.onInputKeyDown(event); return true;
++      },
++    });
++    const input = this.languageEditor.input;
++    input.classList.add("cb-lang-input");
++    this.languageEditor.element.querySelector("button")!.classList.add("mint-code-language-label");
++    chrome.appendChild(this.languageEditor.element);
+     pre.appendChild(chrome);
+ 
+     this.dom = pre;
+     this.contentDOM = code;
+     this.chromeEl = chrome;
+-    this.inputEl = input;
+-
+-    input.addEventListener("input", this.onInput);
+-    input.addEventListener("keydown", this.onInputKeyDown);
++
+     input.addEventListener("mousedown", (e) => e.stopPropagation());
+     // Apply initial decorations (PM doesn't call update() right after
+     // construction with the starting deco set — do it manually).
+@@ -147,20 +163,22 @@
+     this.dom.classList.toggle("cb-lang-focus", langFocus);
+     if (langFocus) this.dom.setAttribute("data-lang-focus", "1");
+     else this.dom.removeAttribute("data-lang-focus");
+-    if (langFocus && typeof this.inputEl.focus === "function") {
+-      try { this.inputEl.focus(); } catch { /* ignore */ }
+-    }
+-  }
+-
+-  private onInput = (): void => {
+-    if (!this.view.editable) return;
++    if (langFocus) this.languageEditor.begin();
++  }
++
++  private languageLabel(lang: string): string {
++    return !lang || /^(text|txt|plaintext)$/i.test(lang)
++      ? this.context.label?.("codeText") ?? "Text" : lang;
++  }
++
++  private onInput = (newLang: string): void => {
++    if (!this.view.editable || this.context.readOnly) return;
+     const pos = this.getPos();
+-    if (pos == null) return;
+-    const newLang = this.inputEl.value;
+-    const tr = this.view.state.tr.setNodeAttribute(pos, "lang", newLang);
+-    // Preserve virtual lang-focus across the tr (setMeta to same pos).
+-    tr.setMeta(langFocusKey, { pos });
++    if (pos == null || this.view.state.doc.nodeAt(pos)?.type.name !== "code_block") return;
++    const tr = closeHistory(this.view.state.tr.setNodeAttribute(pos, "lang", newLang));
++    tr.setMeta(langFocusKey, null);
+     this.view.dispatch(tr);
++    this.view.dispatch(closeHistory(this.view.state.tr));
+   };
+ 
+   private onInputKeyDown = (e: KeyboardEvent): void => {
+@@ -208,7 +226,7 @@
+     const lang = (node.attrs.lang as string) ?? "";
+     if (lang) this.dom.setAttribute("data-lang", lang);
+     else this.dom.removeAttribute("data-lang");
+-    if (this.inputEl.value !== lang) this.inputEl.value = lang;
++    this.languageEditor.update(lang, this.languageLabel(lang), { label: this.context.label?.("codeLanguage") ?? "Code language", placeholder: this.context.label?.("codeText") ?? "Text" });
+     this.applyDecorations(decorations);
+     return true;
+   }
+@@ -223,8 +241,8 @@
+   }
+ 
+   destroy(): void {
+-    this.inputEl.removeEventListener("input", this.onInput);
+-    this.inputEl.removeEventListener("keydown", this.onInputKeyDown);
++    this.languageEditor.destroy();
++    this.languageIcon?.destroy();
+   }
+ }
+ 

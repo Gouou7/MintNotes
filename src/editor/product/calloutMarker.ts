@@ -55,6 +55,8 @@ const ALIASES = new Map(DEFINITIONS.flatMap((definition) => (
   definition.aliases.map((alias) => [alias, definition] as const)
 )));
 
+export const CALLOUT_TYPES = DEFINITIONS.flatMap(definition => definition.aliases.map(value => ({ value, label: defaultCalloutTitle(value) })));
+
 const MARKER = /^\[!([a-z0-9_-]+)\]([+-]?)(?:[ \t]+([^\r\n]*))?$/i;
 // Accepted only to repair notes produced by the removed live-highlight workaround.
 const LEGACY_MATERIALIZED_MARKER = /^==`(\[![a-z0-9_-]+\][+-]?(?:[ \t]+[^\r\n]*)?)`=?=?$/i;
@@ -138,4 +140,21 @@ function parseCalloutAppearance(value: string): { title: string; color?: Callout
   }
   if (!consumed.length || consumed.join(" ") !== attributes.trim().replace(/\s+/g, " ")) return { title: value };
   return { title: value.slice(0, block.index).trimEnd(), color, icon };
+}
+
+/** Change only the marker; the engine keeps its body, nesting and fold token. */
+export function editCalloutMarker(value: string, change: { type?: string; title?: string }): string | null {
+  const legacy = LEGACY_MATERIALIZED_MARKER.exec(value.trim());
+  const candidate = legacy?.[1] ?? value.trim(), match = MARKER.exec(candidate) ?? ESCAPED_MARKER.exec(candidate);
+  if (!match) return null;
+  if (change.type !== undefined && !CALLOUT_TYPES.some(type => type.value === change.type)) return null;
+  if (change.type === match[1].toLowerCase() && change.title === undefined) return value;
+  const rawTitle = match[3]?.trim() ?? "", decoded = legacy ? decodeLegacyTitle(rawTitle) : rawTitle;
+  const appearance = parseCalloutAppearance(decoded);
+  const title = change.title === undefined ? appearance.title : change.title.replace(/[\r\n]+/g, " ").trim();
+  // Choosing a new type also chooses its default icon and color. Title edits
+  // keep explicit appearance attributes, including their original order.
+  const attributes = change.type === undefined && (appearance.color || appearance.icon) ? ATTRIBUTE_BLOCK.exec(decoded)?.[0].trim() ?? "" : "";
+  const suffix = [title, attributes].filter(Boolean).join(" ");
+  return `[!${change.type ?? match[1]}]${match[2]}${suffix ? ` ${suffix}` : ""}`;
 }

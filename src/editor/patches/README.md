@@ -20,12 +20,13 @@
 | [06-wikilink](wikilink/upstream.patch) | 目标、别名、标题导航及嵌入入口 | features.test.ts、浏览器 |
 | [07-comments](comments/upstream.patch) | 注释显隐与跨段注释保存 | features.test.ts |
 | [08-footnotes](footnotes/upstream.patch) | 引用、行内脚注、编号、回链与定义预览 | features.test.ts、浏览器 |
-| [09-callouts](callouts/upstream.patch) | 类型、折叠、嵌套、旧版外观、标题点击定位与空正文退格；正文编辑保留标题 | callout-interaction.test.ts、features.test.ts、浏览器 |
+| [09-callouts](callouts/upstream.patch) | 类型、折叠、嵌套、旧版外观与空正文退格；正文编辑保留标题 | callout-interaction.test.ts、features.test.ts、浏览器 |
 | [10-code](code/upstream.patch) | 代码复制及本地 highlight.js 装饰 | features.test.ts、浏览器 |
 | [11-mermaid](mermaid/upstream.patch) | Mermaid 安全预览，普通代码继续使用上游 NodeView | features.test.ts、浏览器 |
 | [12-product-controls](product-controls/upstream.patch) | AppIcon、可访问名称、三语表格控件与只读工具栏 | 浏览器 |
 | [13-upstream-test-expectations](upstream-test-expectations/upstream.patch) | 仅改变图片 specs 的安全预期，全部检查点继续运行 | 补丁后的上游测试 |
 | [14-blockquote-input](blockquote/upstream.patch) | 停止自动转义 `>`，保留手写引用转义；补齐浏览器合并输入的引用触发，沿用上游嵌套、延续与退出行为 | blockquote.test.ts、浏览器 |
+| [15-block-controls](block-controls/upstream.patch) | 代码语言与 Callout 标题直接编辑，回车／失焦提交；原生类型选单、右侧折叠与编辑状态 | block-controls.test.ts、calloutMarker.test.ts、浏览器 |
 
 测试差异补丁移除直接文件选择占位，阻止 `u`／`url` 这类相对图片 URL 出现在预览 src；图片源码与说明文字不变。Mint 只允许 HTTPS 或经附件解析器取得的 Blob URL。普通引用、键盘、表格、链接及其余上游预期继续原样验证。
 

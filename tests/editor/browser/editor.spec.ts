@@ -23,7 +23,11 @@ test('readonly uses math, diagram, wiki, callout, footnote and highlight plugins
   await expect(page.locator('#footnote-one')).toBeVisible(); await expect(page.locator('.mint-inline-footnotes:not(:empty)')).toBeVisible(); await expect(page.getByRole('link', { name: 'Back to footnote reference' })).toHaveCount(2); await page.getByRole('link', { name: 'Back to footnote reference' }).last().click();
   await expect(page.locator('.hljs-keyword').first()).toHaveText('const');
   await expect(page.locator('.syntax-hidden').filter({ hasText: '%%hidden comment%%' })).toHaveCSS('font-size', '0px');
-  await page.getByRole('button', { name: 'Copy code' }).click(); await expect(page.getByRole('button', { name: 'Code copied' })).toBeVisible();
+  const copy = page.getByRole('button', { name: 'Copy code' }), originalColor = await copy.evaluate(element => getComputedStyle(element).color);
+  await copy.click(); await expect(page.getByRole('button', { name: 'Code copied' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Code copied' }).locator('.lucide-check')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Code copied' })).toHaveCSS('color', originalColor);
+  await expect(page.getByRole('button', { name: 'Copy code' }).locator('.lucide-copy')).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { mintCopied: string }).mintCopied)).toBe('const value: number = 1;\n'); expect(await saved(page)).toBe(0);
 });
 test('source edits preserve literal extensions, references and unfinished input', async ({ page }) => {
@@ -58,13 +62,17 @@ test('live composition commits native DOM input once after composition ends', as
 });
 test('code language controls remain editable after returning from readonly mode', async ({ page }) => {
   await load(page, '```ts\nconst value = 1;\n```');
+  await expect(page.locator('.mint-code-language-label')).toHaveText('ts');
   await page.getByRole('button', { name: 'reading', exact: true }).click();
   await page.locator('.cb-lang-input').evaluate(element => { (element as HTMLInputElement).value = 'python'; element.dispatchEvent(new Event('input', { bubbles: true })); });
   expect(await saved(page)).toBe(0);
   await page.getByRole('button', { name: 'live', exact: true }).click();
-  await page.locator('.ProseMirror .hljs-keyword').click();
+  await page.getByRole('button', { name: 'Code language', exact: true }).click();
   const language = page.getByRole('textbox', { name: 'Code language' }); await expect(language).toBeEnabled(); await language.fill('python');
+  expect(await saved(page)).toBe(0); await language.press('Enter');
   await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('```python');
+  await expect(page.locator('.mint-code-language-label')).toHaveText('python');
+  await expect(language).toBeHidden();
 });
 test('pending attachment cannot write into another note', async ({ page }) => {
   await load(page, 'Alpha'); await page.getByText('Alpha', { exact: true }).click();
@@ -96,7 +104,7 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['tablet', 834, 111
     await page.screenshot({ path: `test-results/${test.info().project.name}-${name}.png` }); expect(await saved(page)).toBe(0);
     await load(page, '> [!tip] Callout title ' + 'long-title-'.repeat(30) + '\n> Body\n>\n> > [!warning] Nested\n> > Nested body');
     const quote = page.locator('.markdown-callout').first();
-    await expect(quote).toHaveCSS('border-radius', '10px'); await expect(quote).toHaveCSS('padding', '15px 17px');
+    await expect(quote).toHaveCSS('border-radius', '20px'); await expect(quote).toHaveCSS('padding', '15px');
     await expect(quote.locator(':scope > .callout-header')).toBeVisible();
     await expect(quote.locator(':scope > .callout-header strong')).toHaveCSS('text-overflow', 'ellipsis');
     const nestedBody = page.locator('.markdown-callout').nth(1).locator(':scope > .callout-content > p');
@@ -144,24 +152,24 @@ test('quote input stays unescaped and creates nested quotes; authored escapes re
   await expect(live.locator('blockquote')).toHaveCount(0); await expect(live.locator('p')).toContainText('> literal!');
 });
 
-test('Callout body editing retains its header; title clicks edit the corresponding source character', async ({ page }) => {
+test('Callout header controls edit titles and types while retaining body and nesting', async ({ page }) => {
   await load(page, 'Before\n\n> [!tip]+ Hello title {color=red icon=bug}\n>\n> Body\n>\n> > [!note] Nested\n> > nested body');
   const outer = page.locator('.markdown-callout').first(), header = outer.locator(':scope > .callout-header');
   await page.getByText('Body', { exact: true }).click(); await page.keyboard.press('End'); await page.keyboard.type('!');
   await expect(header).toBeVisible(); await expect(outer).toHaveClass(/mint-callout-rendered/);
-  const title = header.locator('strong');
-  const point = await title.evaluate(element => {
-    const range = document.createRange(); range.selectNodeContents(element); range.setEnd(element.firstChild!, 5);
-    const rect = range.getBoundingClientRect(); return { x: rect.right, y: (rect.top + rect.bottom) / 2 };
-  });
-  const before = await saved(page); await page.mouse.click(point.x, point.y);
-  await expect(header).not.toBeVisible(); expect(await saved(page)).toBe(before);
-  await page.keyboard.type('!'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('[!tip]+ Hello! title {color=red icon=bug}');
+  const before = await saved(page); await header.getByRole('button', { name: 'Callout title' }).click();
+  const title = header.getByRole('textbox', { name: 'Callout title' }); await expect(title).toBeFocused();
+  await title.fill('Hello! title'); expect(await saved(page)).toBe(before); await title.press('Enter');
+  await expect(header).toBeVisible(); await expect(title).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('[!tip]+ Hello! title {color=red icon=bug}');
   await page.getByText('Body!', { exact: true }).click(); await expect(header).toBeVisible();
-  const nested = page.locator('.markdown-callout').nth(1), nestedTitle = nested.locator(':scope > .callout-header strong');
-  await nestedTitle.click({ position: { x: 1, y: 8 } });
-  await expect(nested.locator('.callout-marker-source')).toBeVisible(); await expect(header).toBeVisible();
-  await page.keyboard.type('X'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('[!note] XNested');
+  await header.getByRole('combobox', { name: 'Callout type' }).selectOption('success');
+  await expect(header.locator('strong')).toHaveText('Hello! title'); await expect(outer).toHaveClass(/callout-success/);
+  const nested = page.locator('.markdown-callout').nth(1);
+  await nested.getByRole('button', { name: 'Callout title' }).click();
+  const nestedTitle = nested.getByRole('textbox', { name: 'Callout title' }); await nestedTitle.fill('XNested');
+  await page.getByText('Body!', { exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('[!note] XNested');
   await page.getByRole('button', { name: 'reading', exact: true }).click();
   const savedBeforeFold = await saved(page); await page.getByRole('button', { name: 'Toggle callout' }).click();
   await expect(outer.locator(':scope > .callout-content')).not.toBeVisible(); expect(await saved(page)).toBe(savedBeforeFold);
@@ -171,7 +179,13 @@ test('empty Callout body Backspace returns to its marker and undo restores the e
   await load(page, 'Before\n\n> [!note] Title');
   const quote = page.locator('.markdown-callout'), header = quote.locator('.callout-header');
   await expect(quote).toHaveCount(1); await expect(header.locator('strong')).toHaveText('Title');
-  await header.locator('.callout-icon').click(); await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'source', exact: true }).click();
+  await page.locator('textarea.typora-web-source:not([hidden])').evaluate(element => {
+    const source = element as HTMLTextAreaElement; source.setSelectionRange(source.value.length, source.value.length);
+  });
+  await page.getByRole('button', { name: 'live', exact: true }).click();
+  await quote.locator('.callout-content > p').last().click();
+  await page.keyboard.press('End'); await page.keyboard.press('Enter');
   await expect(header).toBeVisible(); await expect(quote.locator('.callout-content > p')).toHaveCount(2);
   await page.keyboard.press('Backspace'); await expect(header).not.toBeVisible();
   await expect(quote.locator('.callout-content > p')).toHaveCount(1);

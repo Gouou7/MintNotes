@@ -1,5 +1,6 @@
 export interface CalloutAppearance {
   kind: string; title: string; fold: string; color?: string; icon?: string;
+  rawType?: string;
   titleSource?: { from: number; to: number };
 }
 export interface MintContext {
@@ -11,6 +12,8 @@ export interface MintContext {
   renderMermaid?: (host: HTMLElement, source: string) => void | (() => void);
   renderMarkdown?: (host: HTMLElement, source: string) => void | (() => void);
   parseCallout?: (source: string) => CalloutAppearance | null;
+  calloutTypes?: readonly { value: string; label: string }[];
+  editCalloutMarker?: (source: string, change: { type?: string; title?: string }) => string | null;
   onNavigate?: (target: string) => void;
   icon?: (name: string) => { element: HTMLElement; destroy(): void };
   label?: (name: string) => string;

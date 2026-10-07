@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calloutDefinition, parseCalloutMarker } from "./calloutMarker";
+import { calloutDefinition, editCalloutMarker, parseCalloutMarker } from "./calloutMarker";
 
 describe("callouts", () => {
   it("maps every official Obsidian type and alias while keeping unknown types usable", () => {
@@ -59,5 +59,18 @@ describe("callouts", () => {
     }
     expect(parseCalloutMarker("[!note]")?.titleSource).toBeUndefined();
     expect(parseCalloutMarker("[!note] {color=red}")?.titleSource).toBeUndefined();
+  });
+  it("changes only supported types, retaining literal titles and resetting type appearance", () => {
+    expect(editCalloutMarker('[!note]- {color=red}', { type: 'warning' })).toBe('[!warning]-');
+    expect(editCalloutMarker('[!NOTE]+ **Title** {icon=bug color=red}', { type: 'tip' })).toBe('[!tip]+ **Title**');
+    expect(editCalloutMarker('[!note] Literal {future=value}', { type: 'example' })).toBe('[!example] Literal {future=value}');
+    expect(editCalloutMarker('[!note] Styled {color=red}', { type: 'note' })).toBe('[!note] Styled {color=red}');
+    expect(editCalloutMarker('[!note] Title', { type: 'not-supported' })).toBeNull();
+  });
+  it("edits and clears titles while preserving folds and appearance attributes", () => {
+    expect(editCalloutMarker('[!note]+ Old {icon=bug color=red}', { title: 'New 标题' })).toBe('[!note]+ New 标题 {icon=bug color=red}');
+    expect(editCalloutMarker('[!note]- Old {color=red}', { title: '' })).toBe('[!note]- {color=red}');
+    expect(editCalloutMarker('==`[!note] Custom%20title`==', { type: 'warning' })).toBe('[!warning] Custom title');
+    expect(editCalloutMarker('incomplete [!note', { title: 'New' })).toBeNull();
   });
 });

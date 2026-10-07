@@ -123,7 +123,7 @@
     },
     {
       "id": "09-callouts",
-      "reason": "Callout 类型、标题、折叠与旧版外观交互；正文编辑保留标题，标题点击定位和空正文退格",
+      "reason": "Callout 类型、标题、折叠与旧版外观交互；正文编辑保留标题，空正文退格返回标记",
       "patch": "callouts/upstream.patch",
       "additions": {
         "src/mint/callout.ts": "callouts/callout.ts"
@@ -139,14 +139,15 @@
     },
     {
       "id": "10-code",
-      "reason": "代码高亮和复制",
+      "reason": "代码语言图标与标签、高亮和复制",
       "patch": "code/upstream.patch",
       "additions": {
         "src/mint/code.ts": "code/code.ts"
       },
       "tests": [
         "src/editor/tests/features.test.ts",
-        "tests/editor/browser/editor.spec.ts"
+        "tests/editor/browser/editor.spec.ts",
+        "tests/editor/browser/design.spec.ts"
       ],
       "requires": [
         "01-integration",
@@ -209,6 +210,27 @@
       ],
       "requires": [
         "01-integration"
+      ]
+    },
+    {
+      "id": "15-block-controls",
+      "reason": "代码语言与 Callout 标题直接编辑、原生类型选单及右侧折叠控件；回车或失焦提交",
+      "patch": "block-controls/upstream.patch",
+      "additions": {
+        "src/mint/inline-edit.ts": "block-controls/inline-edit.ts"
+      },
+      "tests": [
+        "src/editor/tests/block-controls.test.ts",
+        "src/editor/product/calloutMarker.test.ts",
+        "src/editor/tests/callout-interaction.test.ts",
+        "tests/editor/browser/editor.spec.ts",
+        "tests/editor/browser/design.spec.ts"
+      ],
+      "requires": [
+        "09-callouts",
+        "10-code",
+        "11-mermaid",
+        "12-product-controls"
       ]
     }
   ]

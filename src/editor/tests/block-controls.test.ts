@@ -1,0 +1,123 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { EditorState, TextSelection } from "prosemirror-state";
+import { EditorView } from "prosemirror-view";
+import { undo, redo } from "prosemirror-history";
+import { defaultPlugins } from "../../../.generated/typora-web/src/editor";
+import { parse } from "../../../.generated/typora-web/src/parser";
+import { serialize } from "../../../.generated/typora-web/src/serializer";
+import { schema } from "../../../.generated/typora-web/src/schema";
+import { createMintEditor } from "../engine";
+import { CALLOUT_TYPES, editCalloutMarker, parseCalloutMarker } from "../product/calloutMarker";
+
+const views: EditorView[] = [];
+afterEach(() => { views.splice(0).forEach(view => view.destroy()); document.body.replaceChildren(); });
+function setup(source: string, readOnly = false) {
+  const host = document.createElement("div"); document.body.append(host);
+  const view = new EditorView(host, { editable: () => !readOnly, state: EditorState.create({ schema, doc: parse(source), plugins: defaultPlugins({
+    cursorWidget: false, readOnly, parseCallout: parseCalloutMarker, editCalloutMarker, calloutTypes: CALLOUT_TYPES,
+    icon: name => { const element = document.createElement("span"); element.dataset.icon = name; return { element, destroy: vi.fn() }; },
+  }) }) });
+  views.push(view); return view;
+}
+function draft(input: HTMLInputElement, value: string) { input.value = value; input.dispatchEvent(new Event("input", { bubbles: true })); }
+function enter(input: HTMLInputElement, isComposing = false) { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing, bubbles: true, cancelable: true })); }
+function choose(view: EditorView, value: string, index = 0) {
+  const select = view.dom.querySelectorAll<HTMLSelectElement>(".callout-type-select")[index]; select.value = value; select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+describe("code language header editing", () => {
+  for (const finish of ["enter", "blur"] as const) it(`commits the entire info string on ${finish} as one undoable edit`, () => {
+    const view = setup('```js\nconst literal = "[[Note]] $x$";\n```'), before = view.state.doc;
+    const button = view.dom.querySelector<HTMLButtonElement>(".mint-code-language-label")!; button.click();
+    const input = view.dom.querySelector<HTMLInputElement>(".cb-lang-input")!;
+    expect(input.hidden).toBe(false); expect(input.value).toBe("js");
+    draft(input, "ts metadata"); expect(view.state.doc.eq(before)).toBe(true);
+    if (finish === "enter") enter(input); else input.blur();
+    expect(view.state.doc.firstChild?.attrs.lang).toBe("ts metadata"); expect(view.state.doc.firstChild?.textContent).toBe(before.firstChild?.textContent);
+    expect(input.hidden).toBe(true); expect(view.dom.querySelector(".mint-code-language-label")?.textContent).toBe("ts metadata");
+    expect(serialize(view.state.doc)).toContain('```ts metadata');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+    expect(redo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.firstChild?.attrs.lang).toBe("ts metadata");
+  });
+  it("keeps blank language blank, cancels Escape and rejects an invalid fence header", () => {
+    const view = setup('```\nplain body\n```'), before = view.state.doc;
+    const button = view.dom.querySelector<HTMLButtonElement>(".mint-code-language-label")!, input = view.dom.querySelector<HTMLInputElement>(".cb-lang-input")!;
+    button.click(); enter(input); expect(view.state.doc.eq(before)).toBe(true);
+    button.click(); draft(input, 'python'); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(input.hidden).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+    button.click(); draft(input, 'js```'); enter(input); expect(view.state.doc.eq(before)).toBe(true); expect(input.hidden).toBe(false);
+  });
+  it("waits for IME completion and commits a blurred composition once", () => {
+    const view = setup('```js\nbody\n```'), before = view.state.doc;
+    view.dom.querySelector<HTMLButtonElement>('.mint-code-language-label')!.click(); const input = view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!;
+    input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })); draft(input, 'python'); enter(input, true); input.blur();
+    expect(view.state.doc.eq(before)).toBe(true);
+    input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })); expect(view.state.doc.firstChild?.attrs.lang).toBe('python');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it("retains the upstream keyboard entry to the language field", () => {
+    const view = setup('```js\nbody\n```');
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.firstChild!.nodeSize - 1)));
+    view.someProp('handleKeyDown', handler => handler(view, new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    const input = view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!;
+    expect(input.hidden).toBe(false); draft(input, 'python'); enter(input); expect(input.hidden).toBe(true);
+    expect(view.state.doc.firstChild?.attrs.lang).toBe('python'); expect(view.state.selection.$from.parent.type.name).toBe('code_block');
+  });
+});
+
+describe("Callout header editing", () => {
+  it("offers every supported type and alias and updates a default title", () => {
+    const view = setup('> [!note]-\n> body'), before = view.state.doc;
+    expect([...view.dom.querySelectorAll<HTMLOptionElement>('.callout-type-select option')].map(option => option.value)).toEqual(CALLOUT_TYPES.map(type => type.value));
+    choose(view, 'warning');
+    expect(view.dom.querySelector('.callout-header strong')?.textContent).toBe('Warning');
+    expect(view.dom.querySelector('[data-icon="callout-warning"]')).not.toBeNull();
+    expect(view.dom.querySelector('.callout-warning')).not.toBeNull(); expect(view.state.doc.firstChild?.firstChild?.textContent).toBe('[!warning]-\nbody');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it("keeps custom titles, fold markers, literal body and nested Callouts", () => {
+    const view = setup('> [!note]+ **Custom title** {color=red icon=bug}\n> body [[Note]]\n>\n> > [!tip] Nested\n> > inner'), before = view.state.doc;
+    choose(view, 'success');
+    expect(view.dom.querySelector('.callout-header strong')?.textContent).toBe('**Custom title**');
+    expect(view.dom.querySelector('[data-icon="callout-success"]')).not.toBeNull();
+    expect(serialize(view.state.doc)).toContain('[!success]+ **Custom title**');
+    expect(serialize(view.state.doc)).not.toContain('color=red');
+    expect(view.state.doc.firstChild?.lastChild?.eq(before.firstChild!.lastChild!)).toBe(true);
+    choose(view, 'danger', 1); expect(serialize(view.state.doc)).toContain('[!danger] Nested'); expect(serialize(view.state.doc)).toContain('body [[Note]]');
+  });
+  for (const finish of ['enter', 'blur'] as const) it(`commits titles on ${finish} without replacing the type control`, () => {
+    const view = setup('> [!note]+ Old {icon=bug color=red}\n> Body'), before = view.state.doc;
+    const typeControl = view.dom.querySelector('.callout-type-select');
+    view.dom.querySelector<HTMLButtonElement>('.callout-title-editor button')!.click(); const input = view.dom.querySelector<HTMLInputElement>('.callout-title-editor input')!;
+    draft(input, 'New 标题'); expect(view.state.doc.eq(before)).toBe(true);
+    if (finish === 'enter') enter(input); else input.blur();
+    expect(input.hidden).toBe(true); expect(serialize(view.state.doc)).toContain('[!note]+ New 标题 {icon=bug color=red}');
+    expect(view.dom.querySelector('.callout-type-select')).toBe(typeControl);
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it("clears an explicit title back to its default and keeps folding display-only", () => {
+    const view = setup('> [!note]- Custom\n> Body');
+    view.dom.querySelector<HTMLButtonElement>('.callout-title-editor button')!.click(); const input = view.dom.querySelector<HTMLInputElement>('.callout-title-editor input')!;
+    draft(input, ''); input.blur(); expect(serialize(view.state.doc)).toContain('[!note]-\n');
+    expect(view.dom.querySelector('.callout-header strong')?.textContent).toBe('Note'); const before = view.state.doc;
+    view.dom.querySelector<HTMLButtonElement>('.callout-toggle')!.click(); expect(view.state.doc.eq(before)).toBe(true);
+    expect(view.dom.querySelector('.callout-toggle')?.getAttribute('aria-expanded')).toBe('true');
+  });
+});
+
+describe("header control lifecycle", () => {
+  it("disables edits in reading mode and discards old drafts on note replacement", () => {
+    const host = document.createElement('div'), changed = vi.fn(); document.body.append(host);
+    const editor = createMintEditor(host, { initialContent: '> [!note] Title\n> Body\n\n```js\ncode\n```', parseCallout: parseCalloutMarker, editCalloutMarker, calloutTypes: CALLOUT_TYPES, onChange: changed });
+    try {
+      editor.setMode('reading');
+      expect(host.querySelector<HTMLSelectElement>('.callout-type-select')?.disabled).toBe(true);
+      expect(host.querySelector<HTMLButtonElement>('.callout-title-editor button')?.disabled).toBe(true);
+      expect(host.querySelector<HTMLButtonElement>('.mint-code-language-label')?.disabled).toBe(true);
+      editor.setMode('live'); host.querySelector<HTMLButtonElement>('.callout-title-editor button')!.click();
+      const stale = host.querySelector<HTMLInputElement>('.callout-title-editor input')!; draft(stale, 'WRONG');
+      editor.loadDocument('other', 'Other note'); stale.dispatchEvent(new Event('blur')); enter(stale);
+      expect(editor.getMarkdown()).toBe('Other note'); expect(changed).not.toHaveBeenCalled();
+    } finally { editor.destroy(); host.remove(); }
+  });
+});
