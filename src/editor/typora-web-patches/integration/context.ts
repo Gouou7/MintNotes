@@ -1,5 +1,6 @@
 export interface CalloutAppearance {
   kind: string; title: string; fold: string; color?: string; icon?: string;
+  titleSource?: { from: number; to: number };
 }
 export interface MintContext {
   readOnly?: boolean;

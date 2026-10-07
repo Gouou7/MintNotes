@@ -27,6 +27,7 @@ export interface CalloutMarker {
   fold: CalloutFold;
   color?: CalloutColor;
   icon?: CalloutIcon;
+  titleSource?: { from: number; to: number };
 }
 
 interface CalloutDefinition {
@@ -104,13 +105,17 @@ export function parseCalloutMarker(value: string): CalloutMarker | null {
   const customTitle = match[3]?.trim();
   const decodedTitle = legacyMaterialized && customTitle ? decodeLegacyTitle(customTitle) : customTitle;
   const appearance = parseCalloutAppearance(decodedTitle ?? "");
+  const titleStart = !legacyMaterialized && customTitle && appearance.title
+    ? value.length - value.trimStart().length + match[0].length - match[3].length + match[3].indexOf(customTitle)
+    : undefined;
   return {
     rawType,
     kind: definition.kind,
     title: appearance.title || definition.title,
     fold: (match[2] || "") as CalloutFold,
     color: appearance.color,
-    icon: appearance.icon
+    icon: appearance.icon,
+    titleSource: titleStart === undefined ? undefined : { from: titleStart, to: titleStart + appearance.title.length }
   };
 }
 

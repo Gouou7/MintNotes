@@ -50,4 +50,14 @@ describe("callouts", () => {
     expect(parseCalloutMarker("\\[!CAUTION\\]")).toMatchObject({ kind: "warning" });
     expect(parseCalloutMarker("[!INCOMPLETE")).toBeNull();
   });
+
+  it("maps rendered titles to their source while excluding appearance attributes", () => {
+    for (const source of ["[!note] Title", "  [!tip]+  标题 {color=red icon=bug}  ", "\\[!note\\] Escaped"]) {
+      const marker = parseCalloutMarker(source)!;
+      expect(marker.titleSource).toBeDefined();
+      expect(source.slice(marker.titleSource!.from, marker.titleSource!.to)).toBe(marker.title);
+    }
+    expect(parseCalloutMarker("[!note]")?.titleSource).toBeUndefined();
+    expect(parseCalloutMarker("[!note] {color=red}")?.titleSource).toBeUndefined();
+  });
 });

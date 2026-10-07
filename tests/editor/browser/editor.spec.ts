@@ -94,6 +94,15 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['tablet', 834, 111
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (width > 720) { await page.locator('.fixture-outline').getByRole('button', { name: 'End', exact: true }).click(); await expect(page.locator('.ProseMirror h2')).toBeInViewport(); }
     await page.screenshot({ path: `test-results/${test.info().project.name}-${name}.png` }); expect(await saved(page)).toBe(0);
+    await load(page, '> [!tip] Callout title ' + 'long-title-'.repeat(30) + '\n> Body\n>\n> > [!warning] Nested\n> > Nested body');
+    const quote = page.locator('.markdown-callout').first();
+    await expect(quote).toHaveCSS('border-radius', '10px'); await expect(quote).toHaveCSS('padding', '15px 17px');
+    await expect(quote.locator(':scope > .callout-header')).toBeVisible();
+    await expect(quote.locator(':scope > .callout-header strong')).toHaveCSS('text-overflow', 'ellipsis');
+    const nestedBody = page.locator('.markdown-callout').nth(1).locator(':scope > .callout-content > p');
+    await expect(nestedBody).toBeVisible(); await expect(nestedBody).toContainText('Nested body');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/${test.info().project.name}-${name}-callout.png` }); expect(await saved(page)).toBe(0);
   });
 }
 test('secure image retry only refreshes real previews and sends no referrer', async ({ page }) => {
@@ -115,4 +124,57 @@ test('pending attachment is cancelled on lock and successful insertion preserves
   await expect.poll(() => page.evaluate(() => window.mintFixture.notice())).toBe('Retry insertion'); expect(await saved(page)).toBe(0);
   await page.getByRole('button', { name: 'Lock note' }).click(); await page.getByRole('button', { name: 'live', exact: true }).click(); await page.getByText('Alpha', { exact: true }).click();
   await drop(); await page.evaluate(() => window.mintFixture.resolveAttachment()); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('webmd-attachment:12345678-1234-1234-1234-123456789abc'); expect(await saved(page)).toBeGreaterThan(0);
+});
+
+test('quote input stays unescaped and creates nested quotes; authored escapes remain literal', async ({ page }) => {
+  await load(page, '');
+  const live = page.locator('.markdown-editor-host .ProseMirror').first(); await live.click();
+  await page.keyboard.type('>'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('>');
+  await page.keyboard.type(' quoted'); await expect(live.locator('blockquote')).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('> quoted');
+  await page.keyboard.press('Enter'); await page.keyboard.type('> nested'); await expect(live.locator('blockquote blockquote')).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('> > nested');
+  await page.keyboard.press('Enter'); await page.keyboard.press('Enter'); await page.keyboard.type('outer');
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('> outer');
+  await load(page, '\\> literal'); await expect(live.locator('blockquote')).toHaveCount(0);
+  await expect(live.locator('p')).toContainText('> literal');
+  await live.locator('p').click(); await page.keyboard.press('End'); await page.keyboard.type('!');
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('\\> literal!');
+  for (const mode of ['source', 'reading', 'live']) await page.getByRole('button', { name: mode, exact: true }).click();
+  await expect(live.locator('blockquote')).toHaveCount(0); await expect(live.locator('p')).toContainText('> literal!');
+});
+
+test('Callout body editing retains its header; title clicks edit the corresponding source character', async ({ page }) => {
+  await load(page, 'Before\n\n> [!tip]+ Hello title {color=red icon=bug}\n>\n> Body\n>\n> > [!note] Nested\n> > nested body');
+  const outer = page.locator('.markdown-callout').first(), header = outer.locator(':scope > .callout-header');
+  await page.getByText('Body', { exact: true }).click(); await page.keyboard.press('End'); await page.keyboard.type('!');
+  await expect(header).toBeVisible(); await expect(outer).toHaveClass(/mint-callout-rendered/);
+  const title = header.locator('strong');
+  const point = await title.evaluate(element => {
+    const range = document.createRange(); range.selectNodeContents(element); range.setEnd(element.firstChild!, 5);
+    const rect = range.getBoundingClientRect(); return { x: rect.right, y: (rect.top + rect.bottom) / 2 };
+  });
+  const before = await saved(page); await page.mouse.click(point.x, point.y);
+  await expect(header).not.toBeVisible(); expect(await saved(page)).toBe(before);
+  await page.keyboard.type('!'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('[!tip]+ Hello! title {color=red icon=bug}');
+  await page.getByText('Body!', { exact: true }).click(); await expect(header).toBeVisible();
+  const nested = page.locator('.markdown-callout').nth(1), nestedTitle = nested.locator(':scope > .callout-header strong');
+  await nestedTitle.click({ position: { x: 1, y: 8 } });
+  await expect(nested.locator('.callout-marker-source')).toBeVisible(); await expect(header).toBeVisible();
+  await page.keyboard.type('X'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('[!note] XNested');
+  await page.getByRole('button', { name: 'reading', exact: true }).click();
+  const savedBeforeFold = await saved(page); await page.getByRole('button', { name: 'Toggle callout' }).click();
+  await expect(outer.locator(':scope > .callout-content')).not.toBeVisible(); expect(await saved(page)).toBe(savedBeforeFold);
+});
+
+test('empty Callout body Backspace returns to its marker and undo restores the empty body', async ({ page }) => {
+  await load(page, 'Before\n\n> [!note] Title');
+  const quote = page.locator('.markdown-callout'), header = quote.locator('.callout-header');
+  await expect(quote).toHaveCount(1); await expect(header.locator('strong')).toHaveText('Title');
+  await header.locator('.callout-icon').click(); await page.keyboard.press('Enter');
+  await expect(header).toBeVisible(); await expect(quote.locator('.callout-content > p')).toHaveCount(2);
+  await page.keyboard.press('Backspace'); await expect(header).not.toBeVisible();
+  await expect(quote.locator('.callout-content > p')).toHaveCount(1);
+  await page.keyboard.press('ControlOrMeta+z'); await expect(quote.locator('.callout-content > p')).toHaveCount(2); await expect(header).toBeVisible();
+  await page.keyboard.type('Body'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('> Body'); await expect(header).toBeVisible();
 });

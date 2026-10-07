@@ -47,10 +47,19 @@
 :root[data-theme="dark"] .hljs-string,:root[data-theme="dark"] .hljs-attr { color: #98d9aa; }
 :root[data-theme="dark"] .hljs-number,:root[data-theme="dark"] .hljs-type { color: #e9bf87; }
 :root[data-theme="dark"] .hljs-title,:root[data-theme="dark"] .hljs-name { color: #9ecdf9; }
-.ProseMirror blockquote.markdown-callout { border: 1px solid var(--callout-color); border-radius: 8px; padding: 14px 16px; color: var(--text); background: var(--callout-soft); }
-.callout-header { display: flex; align-items: center; gap: 8px; color: var(--callout-color); margin-bottom: 8px; }
-.mint-callout-rendered :is(.callout-source-marker,.callout-marker-source) { display: none; }
+.ProseMirror blockquote.markdown-callout { border: 1px solid var(--callout-color); border-radius: 10px; padding: 15px 17px; color: var(--text); background: var(--callout-soft); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+.callout-header { min-width: 0; min-height: 24px; display: flex; align-items: center; gap: 10px; color: var(--callout-color); }
+.callout-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-size: .98em; line-height: 1.4; }
+.callout-icon { width: 21px; height: 21px; display: grid; place-items: center; flex: 0 0 21px; }
+.callout-content { margin-top: 10px; color: var(--text); }
+.callout-content > :first-child { margin-top: 0; }
+.callout-content > :last-child { margin-bottom: 0; }
+.mint-callout-rendered > .callout-content > .callout-source-marker,
+.mint-callout-rendered > .callout-content > p > .callout-marker-source { display: none; }
 .mint-callout-editing > .callout-header { display: none; }
+.mint-callout-editing > .callout-content { margin-top: 0; }
+.mint-callout-editing > .callout-content > .callout-source-marker,
+.mint-callout-editing > .callout-content > p > .callout-marker-source { color: var(--callout-color); }
 .mint-callout-folded.mint-callout-rendered > .callout-content { display: none; }
 @media (max-width: 720px) {
   .live-editor-document { width: 100%; padding: calc(30px + var(--editor-inset-top, 0px)) max(18px, var(--safe-area-right, 0px)) calc(80px + var(--safe-area-bottom, 0px) + var(--editor-inset-bottom, 0px)) max(18px, var(--safe-area-left, 0px)); }

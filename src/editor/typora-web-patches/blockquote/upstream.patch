@@ -1,0 +1,32 @@
+--- a/src/features/index.ts
++++ b/src/features/index.ts
+@@ -9,6 +9,7 @@
+ import { callout } from "../mint/callout.ts";
+ import { codePresentationFeature } from "../mint/code.ts";
+ import { mermaid } from "../mint/mermaid.ts";
++import { blockquoteInput } from "../mint/blockquote.ts";
+ import { mintSyntax } from "../mint/syntax.ts";
+ import type { MintContext } from "../mint/context.ts";
+ import { chainCommands } from "prosemirror-commands";
+@@ -40,6 +41,7 @@
+ 
+ export const ALL_FEATURES: FeatureSpec[] = [
+   mintSyntax,
++  blockquoteInput,
+   mermaid,
+   codePresentationFeature,
+   callout,
+--- a/src/serializer.ts
++++ b/src/serializer.ts
+@@ -29,9 +29,9 @@
+ 
+ // md configuration
+ const mdEscapeInline = (ch: string): string =>
+-  /[\\`*_\[\]<>]/.test(ch) ? `\\${ch}` : ch;
++  /[\\`*_\[\]<]/.test(ch) ? `\\${ch}` : ch;
+ const mdEscapeBlockStart = (ch: string): string =>
+-  /[#\->+*_]/.test(ch) ? `\\${ch}` : mdEscapeInline(ch);
++  /[#\-+*_]/.test(ch) ? `\\${ch}` : mdEscapeInline(ch);
+ 
+ const coreMdMarks: Record<string, MarkSpec> = {};
+ 

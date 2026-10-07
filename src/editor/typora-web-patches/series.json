@@ -123,12 +123,13 @@
     },
     {
       "id": "09-callouts",
-      "reason": "Callout 类型、标题、折叠与外观",
+      "reason": "Callout 类型、标题、折叠与旧版外观交互；正文编辑保留标题，标题点击定位和空正文退格",
       "patch": "callouts/upstream.patch",
       "additions": {
         "src/mint/callout.ts": "callouts/callout.ts"
       },
       "tests": [
+        "src/editor/callout-interaction.test.ts",
         "src/editor/features.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
@@ -193,6 +194,21 @@
       "requires": [
         "03-safe-images",
         "12-product-controls"
+      ]
+    },
+    {
+      "id": "14-blockquote-input",
+      "reason": "停止自动转义引用符号，保留手写引用转义；补齐浏览器合并输入的引用触发，沿用上游引用行为",
+      "patch": "blockquote/upstream.patch",
+      "additions": {
+        "src/mint/blockquote.ts": "blockquote/blockquote.ts"
+      },
+      "tests": [
+        "src/editor/blockquote.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "01-integration"
       ]
     }
   ]
