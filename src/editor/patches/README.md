@@ -28,6 +28,7 @@
 | [14-blockquote-input](blockquote/upstream.patch) | 停止自动转义 `>`，保留手写引用转义；补齐浏览器合并输入的引用触发，沿用上游嵌套、延续与退出行为 | blockquote.test.ts、浏览器 |
 | [15-block-controls](block-controls/upstream.patch) | 代码语言与 Callout 标题直接编辑，回车／失焦提交；代码上下键按头部在正文之前的顺序导航；原生类型选单、右侧折叠与编辑状态 | block-controls.test.ts、calloutMarker.test.ts、浏览器 |
 | [16-block-controls-tests](block-controls/test-expectations.patch) | 类型编辑框移到顶部后调整代码上下键导航预期，保留检查点并补齐从上方进入的检查 | 补丁后的上游测试 |
+| [17-image-presentation](image-presentation/upstream.patch) | 图片点击进入上方源码行尾，文本选区保持展开与选中描边，收紧独立图片段落空隙，阅读模式保持只读 | images.test.ts、images.spec.ts |
 
 图片测试差异补丁移除直接文件选择占位，阻止 `u`／`url` 这类相对图片 URL 出现在预览 src；图片源码与说明文字不变。Mint 只允许 HTTPS 或经附件解析器取得的 Blob URL。代码测试差异补丁调整类型编辑框所在位置对应的上下键路径，其余上游预期继续原样验证。
 

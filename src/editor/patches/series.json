@@ -254,6 +254,24 @@
       "requires": [
         "15-block-controls"
       ]
+    },
+    {
+      "id": "17-image-presentation",
+      "reason": "图片点击进入上方 Markdown 源码行尾，文本选区保持源码展开与主题色描边；收紧独立图片段落空隙，阅读模式不进入编辑",
+      "patch": "image-presentation/upstream.patch",
+      "additions": {
+        "src/mint/image-widget.ts": "image-presentation/widget.ts",
+        "src/mint/image-behavior.ts": "image-presentation/behavior.ts"
+      },
+      "tests": [
+        "src/editor/tests/images.test.ts",
+        "tests/editor/browser/images.spec.ts"
+      ],
+      "requires": [
+        "03-safe-images",
+        "05-math",
+        "12-product-controls"
+      ]
     }
   ]
 }

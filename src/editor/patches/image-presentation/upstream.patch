@@ -1,0 +1,47 @@
+--- a/src/decorations.ts
++++ b/src/decorations.ts
+@@ -12,4 +12,5 @@
+ import { mintWidget, destroyMintWidget } from "./mint/widgets.ts";
+-import { safeImage, safeLink, type MintContext } from "./mint/context.ts";
++import { safeLink, type MintContext } from "./mint/context.ts";
++import { imageWidget } from "./mint/image-widget.ts";
+ import { Plugin, PluginKey, type EditorState } from "prosemirror-state";
+ import { Decoration, DecorationSet } from "prosemirror-view";
+@@ -104,11 +105,7 @@
+     if (icon) { host.append(icon.element); host.addEventListener("mint-destroy", icon.destroy, { once: true }); } return host;
+   }
+   if (w.kind === "file-input") { const fallback = document.createElement("span"); fallback.className = "image-unavailable"; return fallback; }
+-  if (w.kind === "image-render") {
+-    const img = document.createElement("img"); img.className = "image-render"; img.referrerPolicy = "no-referrer"; img.alt = w.attrs?.alt ?? "";
+-    const url = safeImage(w.attrs?.src ?? "", context); if (url) img.src = url; else img.classList.add("image-unavailable");
+-    img.addEventListener("error", () => { img.dataset.imageFailed = "true"; }); img.addEventListener("load", () => { delete img.dataset.imageFailed; }); return img;
+-  }
++  if (w.kind === "image-render") return imageWidget(w, context);
+   const builder = widgetBuilders[w.kind];
+   const el = builder
+     ? builder(w.attrs ?? {})
+--- a/src/features/image.ts
++++ b/src/features/image.ts
+@@ -2,1 +2,2 @@
+ import { Plugin } from "prosemirror-state";
++import { imageInteractionPlugin } from "../mint/image-behavior.ts";
+@@ -99,13 +100,15 @@
+       // markdown text. softInside delim hides the source chars when the
+       // cursor is outside; cursor inside reveals source for editing while
+       // the image stays put underneath.
+-      span.delimRanges = [{ from: openFrom, to: closeTo, softInside: true }];
++      span.delimRanges = [{ from: openFrom, to: closeTo, softInside: true, revealOnSelection: true }];
+       span.widgetDecorations!.push(
+         { ...iconWidget, when: "inside" } as never,
+         {
+           pos: closeTo,
+           when: "always",
+           kind: "image-render",
++          // The caret at closeTo stays at the source line end, above the image.
++          side: 1,
+           attrs: { src, alt, ...(title ? { title } : {}) },
+         },
+       );
+@@ -265,1 +268,1 @@
+-  plugins: () => [],
++  plugins: (_schema, context = {}) => [imageInteractionPlugin(context)],

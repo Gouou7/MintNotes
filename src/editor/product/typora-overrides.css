@@ -67,7 +67,18 @@
 .markdown-editor-host .ProseMirror > yaml-block { display: none; }
 .typora-web-source { width: 100%; min-height: 180px; border: 0; outline: none; resize: none; background: transparent; color: var(--text); font-size: calc(16px + var(--font-adjust, 0px)); overflow: hidden; }
 .wrap-code-blocks .ProseMirror pre, .wrap-code-blocks .ProseMirror pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
-.mint-image-icon::before { display: none; }
+.markdown-editor-host .ProseMirror .mint-image-icon { display: none; }
+.markdown-editor-host .ProseMirror img.image-render { border-radius: 20px; height: auto; }
+.markdown-editor-host .ProseMirror[contenteditable="true"] img.image-render { cursor: text; }
+.markdown-editor-host .ProseMirror[contenteditable="true"]:focus img.mint-image-selected { outline: 2px solid var(--accent); }
+/* An image-only paragraph must not add anonymous lines for hidden source
+   or ProseMirror's trailing caret placeholder around its block preview. */
+.markdown-editor-host .ProseMirror p.mint-image-paragraph { line-height: 0; margin-bottom: 16px; }
+.markdown-editor-host .ProseMirror p.mint-image-paragraph:last-child { margin-bottom: 0; }
+.markdown-editor-host .ProseMirror p.mint-image-source-visible { line-height: 1.7; }
+.markdown-editor-host .ProseMirror p.mint-image-paragraph img.image-render { margin: 0; }
+.markdown-editor-host .ProseMirror p.mint-image-paragraph > br.ProseMirror-trailingBreak { display: none; }
+.markdown-editor-host .ProseMirror p:has(+ p.mint-image-paragraph) { margin-bottom: 16px; }
 .mint-reading :is(.table-toolbar,.emoji-completion) { display: none; }
 .mint-reading .ProseMirror :is(ref-def,.mint-reference-definition) { display: none; }
 .mint-block-rendered > pre { display: none; }
