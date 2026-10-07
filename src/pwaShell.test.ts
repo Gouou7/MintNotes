@@ -36,9 +36,9 @@ describe("installed PWA shell", () => {
   });
 
   it("keeps responsive sidebar controls available at their intended breakpoints", () => {
-    expect(styles).toContain(".mobile-outline-close, .mobile-tree-close { display: none; }");
+    expect(styles).toContain(".side-header > :is(.mobile-tree-close, .mobile-outline-close) { display: none; }");
     expect(styles).toMatch(/@media \(max-width: 1100px\)[\s\S]*?\.right-pane-collapse \{ display: none; \}/);
-    expect(styles).toMatch(/@media \(max-width: 720px\)[\s\S]*?\.tree-pane-collapse \{ display: none; \}[\s\S]*?\.mobile-tree-close \{ display: block; \}/);
+    expect(styles).toMatch(/@media \(max-width: 720px\)[\s\S]*?\.tree-pane-collapse \{ display: none; \}[\s\S]*?\.mobile-tree-close \{ display: grid; \}/);
     expect(styles).not.toContain(".desktop-collapse { display: none; }");
   });
 

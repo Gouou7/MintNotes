@@ -4,7 +4,7 @@
    Separate fill and 1px stroke masks retain the same curve at any block size,
    including translucent callouts, without observers or browser-specific corners. */
 .markdown-editor-host {
-  --editor-control-bg: rgb(0 0 0 / 10%);
+  --editor-control-bg: var(--button-hover);
   --editor-corner-tl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(0%2016%2016)%22%20d%3D%22M32%200%20C20.7989499%200%2015.1984248%200%2010.92019%202.17986952%20C7.15694815%204.09733702%204.09733702%207.15694815%202.17986952%2010.92019%20C0%2015.1984248%200%2020.7989499%200%2032%20H32%20Z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E");
   --editor-outline-tl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(0%2016%2016)%22%20d%3D%22M32%20.5%20C18.099212%20.5%2014.7874117%20.770584778%2011.1471853%202.62537278%20C7.47802444%204.49490359%204.49490359%207.47802444%202.62537278%2011.1471853%20C.770584778%2014.7874117%20.5%2018.099212%20.5%2032%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E");
   --editor-corner-tr: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(90%2016%2016)%22%20d%3D%22M32%200%20C20.7989499%200%2015.1984248%200%2010.92019%202.17986952%20C7.15694815%204.09733702%204.09733702%207.15694815%202.17986952%2010.92019%20C0%2015.1984248%200%2020.7989499%200%2032%20H32%20Z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E");
@@ -14,7 +14,6 @@
   --editor-corner-bl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(270%2016%2016)%22%20d%3D%22M32%200%20C20.7989499%200%2015.1984248%200%2010.92019%202.17986952%20C7.15694815%204.09733702%204.09733702%207.15694815%202.17986952%2010.92019%20C0%2015.1984248%200%2020.7989499%200%2032%20H32%20Z%22%20fill%3D%22white%22%2F%3E%3C%2Fsvg%3E");
   --editor-outline-bl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20transform%3D%22rotate(270%2016%2016)%22%20d%3D%22M32%20.5%20C18.099212%20.5%2014.7874117%20.770584778%2011.1471853%202.62537278%20C7.47802444%204.49490359%204.49490359%207.47802444%202.62537278%2011.1471853%20C.770584778%2014.7874117%20.5%2018.099212%20.5%2032%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E");
 }
-:root[data-theme="dark"] .markdown-editor-host { --editor-control-bg: rgb(255 255 255 / 10%); }
 .live-editor-document {
   --editor-document-top: calc(46px + var(--editor-inset-top, 0px));
   --editor-document-bottom: calc(120px + var(--editor-inset-bottom, 0px));
@@ -38,7 +37,8 @@
 .markdown-editor-host .ProseMirror:not(:focus), .markdown-editor-host .ProseMirror[contenteditable="false"], .typora-web-source:not(:focus) { caret-color: transparent; }
 .markdown-editor-host .ProseMirror :is(input,textarea):focus { caret-color: auto; }
 .markdown-editor-host .ProseMirror :is(h1,h2,h3,h4,h5) { color: var(--text-strong); }
-.markdown-editor-host .ProseMirror :is(h6,blockquote,.syntax-hint,.syntax-hint-italic,.cb-language-label,.toc-item) { color: var(--muted); }
+.markdown-editor-host .ProseMirror :is(h6,blockquote,.cb-language-label,.toc-item) { color: var(--muted); }
+.markdown-editor-host .ProseMirror :is(.syntax-hint,.syntax-hint-italic) { color: var(--syntax-marker-color); }
 .markdown-editor-host .ProseMirror :is(a,ref-url) { color: var(--accent-text); }
 .markdown-editor-host .ProseMirror code { background: var(--surface-input); }
 .markdown-editor-host .ProseMirror pre { --editor-block-bg: var(--code-block-bg); --editor-block-border: var(--border); position: relative; isolation: isolate; min-height: 64px; margin-bottom: 16px; padding: 15px; border: 1px solid transparent; border-radius: 20px; background: transparent; color: var(--code-block-text); font-size: calc(13px + var(--font-adjust, 0px)); font-weight: 400; line-height: calc(20px + var(--font-adjust, 0px)); overflow: visible; }
@@ -98,7 +98,7 @@
 .markdown-editor-host .ProseMirror .mint-math-block > pre { min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; color: inherit; font: inherit; white-space: pre-wrap; }
 .markdown-editor-host .ProseMirror .mint-math-block > pre::before, .markdown-editor-host .ProseMirror .mint-math-block > pre::after { display: none; }
 .markdown-editor-host .ProseMirror .mint-math-block > pre code { padding: 0; border: 0; border-radius: 0; color: inherit; font: inherit; white-space: pre-wrap; }
-.markdown-editor-host .ProseMirror .mint-math-block .syntax-hint { color: var(--muted); }
+.markdown-editor-host .ProseMirror .mint-math-block .syntax-hint { color: var(--syntax-marker-color); }
 .mint-reading :is(.mint-math,.mint-display-math,.mint-math-preview) { cursor: auto; }
 .wiki-link { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; cursor: pointer; }
 .inline-footnote-body { display: none; }
@@ -115,7 +115,7 @@
   .mint-code-actions button:hover, .callout-toggle:hover { background: var(--editor-control-bg); }
 }
 .mint-code-actions button:focus-visible, .callout-toggle:focus-visible { background: var(--editor-control-bg); }
-.mint-code-actions button:active, .callout-toggle:active { background: color-mix(in srgb, var(--code-block-text) 18%, transparent); }
+.mint-code-actions button:active, .callout-toggle:active { background: var(--button-active); }
 .mint-code-actions button:active svg, .callout-toggle:active svg { transform: scale(.9); }
 @media (prefers-reduced-motion: reduce) {
   .mint-code-actions button, .mint-code-actions button svg, .callout-toggle, .callout-toggle svg { transition: none; }

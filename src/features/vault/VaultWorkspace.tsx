@@ -1,23 +1,11 @@
 import { lazy, Suspense, type CSSProperties, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowDownAZ,
   Copy,
   Ellipsis,
-  FilePlus2,
-  FolderPlus,
   History as HistoryIcon,
-  ListCollapse,
-  ListTree,
-  LocateFixed,
-  LockKeyhole,
-  PanelLeftClose,
-  PanelRightClose,
   Pin,
   RotateCcw,
-  Search,
-  Settings,
   Trash2,
-  X
 } from "lucide-react";
 import { ApiError, api, uploadAttachmentChunk } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
@@ -109,9 +97,10 @@ import type {
   UiPreferences,
   User
 } from "../../types";
-import { ContextMenu, draggedDocumentIds, TreeDocumentIcon, TreeLevel, type TreeDropTarget } from "./VaultTree";
+import { ContextMenu, draggedDocumentIds, TreeNoteLock, TreeLevel, type TreeDropTarget } from "./VaultTree";
 import { EmptyEditor, NoteToolbar } from "./NoteToolbar";
 import { NotePaneLayout } from "./NotePaneLayout";
+import { WorkspacePanelHeader, WorkspaceSidebar } from "./WorkspaceChrome";
 import { useObjectPersistence } from "./useObjectPersistence";
 import { useDocumentSaveQueue } from "./useDocumentSaveQueue";
 import { useDocumentNavigation } from "./useDocumentNavigation";
@@ -153,8 +142,8 @@ const DEFAULT_PREFERENCES: UiPreferences = {
   sortMode: "alphabetical",
   treeCollapsed: false,
   outlineCollapsed: false,
-  treeWidth: 272,
-  outlineWidth: 236,
+  treeWidth: 297,
+  outlineWidth: 297,
   rightPanelTab: "outline"
 };
 
@@ -2240,41 +2229,36 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const statusDetail = syncStatusDetailText(syncStatus, t);
   return (
     <div className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${settingsOpen ? "settings-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
-      <aside className="tree-pane">
-        <header className="side-header"><img className="brand-small" src="/icon.svg" alt="" aria-hidden="true" /><strong>Mint Notes</strong><button className="tree-pane-collapse" onClick={() => setPreferences({ ...preferences, treeCollapsed: true })} title={t("app.collapseDirectory")} aria-label={t("app.collapseDirectory")}><AppIcon icon={PanelLeftClose} /></button><button onClick={() => setTreeOpen(false)} className="mobile-tree-close" aria-label={t("app.closeDirectory")}><AppIcon icon={PanelLeftClose} /></button></header>
-        {pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>
-          <div className="tree-section-label"><AppIcon icon={Pin} size={13} />{t("app.pinned")}</div>
+      <WorkspaceSidebar
+        searchInput={searchInput}
+        search={search}
+        onSearchChange={setSearch}
+        onCreate={kind => { void createNewDocument(kind, null); }}
+        sortMode={preferences.sortMode}
+        onSortChange={sortMode => setPreferences({ ...preferences, sortMode })}
+        canLocate={Boolean(activeDocument)}
+        onLocate={revealActiveDocument}
+        onCollapseAll={() => setExpanded(new Set())}
+        onCollapse={() => setPreferences({ ...preferences, treeCollapsed: true })}
+        onClose={() => setTreeOpen(false)}
+        displayName={displayName}
+        username={user.username}
+        avatarUrl={avatarUrl}
+        onLock={manualLock}
+        onSettings={() => setSettingsOpen(true)}
+        pinned={pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>
+          <div className="tree-section-label"><AppIcon icon={Pin} size={8} />{t("app.pinned")}</div>
           {pinned.map((entry) => <div className={`tree-row pinned-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""}`} key={`pinned-${entry.objectId}`} role="treeitem" aria-selected={selectedIds.has(entry.objectId)} onContextMenu={(event) => { event.preventDefault(); openTreeContext(entry, event.clientX, event.clientY); }}>
-            <button className="tree-main" onClick={(event) => selectPinnedEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><TreeDocumentIcon document={entry} /><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>
-            <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); openTreeContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={17} /></button>
+            <button className="tree-main" onClick={(event) => selectPinnedEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><span className="tree-title">{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}<TreeNoteLock document={entry} /></button>
+            <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); openTreeContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={16} /></button>
           </div>)}
         </div>}
-        <div className="search-box">
-          <AppIcon icon={Search} size={16} />
-          <input ref={searchInput} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("app.search")} />
-          {search && <button type="button" className="search-clear" onClick={() => { setSearch(""); searchInput.current?.focus(); }} title={t("app.clearSearch")} aria-label={t("app.clearSearch")}><AppIcon icon={X} size={15} /></button>}
-        </div>
-        <nav className="tree-actions" aria-label={t("app.noteActions")}>
-          <button onClick={() => void createNewDocument("note", null)} title={t("app.newNote")} aria-label={t("app.newNote")}><AppIcon icon={FilePlus2} /></button>
-          <button onClick={() => void createNewDocument("folder", null)} title={t("app.createFolder")} aria-label={t("app.createFolder")}><AppIcon icon={FolderPlus} /></button>
-          <span className="tree-view-actions">
-            <button onClick={() => setExpanded(new Set())} title={t("app.collapseAll")} aria-label={t("app.collapseAll")}><AppIcon icon={ListCollapse} /></button>
-            <button disabled={!activeDocument} onClick={revealActiveDocument} title={t("app.locateCurrent")} aria-label={t("app.locateCurrent")}><AppIcon icon={LocateFixed} /></button>
-            <label className="tree-sort-action" title={t("app.sort")}><AppIcon icon={ArrowDownAZ} /><select value={preferences.sortMode} onChange={(event) => setPreferences({ ...preferences, sortMode: event.target.value as UiPreferences["sortMode"] })} aria-label={t("app.sort")}><option value="alphabetical">A–Z</option><option value="created">{t("app.sortCreated")}</option><option value="updated">{t("app.sortUpdated")}</option><option value="manual">{t("app.sortManual")}</option></select></label>
-          </span>
-        </nav>
+      >
         <div ref={documentTree} className="document-tree" role="tree" aria-multiselectable="true" onClick={(event) => { if (event.target === event.currentTarget) { setSelectedIds(new Set()); selectionAnchor.current = null; } }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTreeDropTarget(null); }} onDrop={(event) => { setTreeDropTarget(null); setTreeDraggingIds(new Set()); const ids = draggedDocumentIds(event.dataTransfer); if (ids.length) void moveDocuments(ids, null); }}>
           <TreeLevel childrenByParent={treeChildren} parentId={null} activeId={activeId} selectedIds={selectedIds} expanded={expanded} draggingIds={treeDraggingIds} dropTarget={treeDropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={updateTreeDropTarget} onSelect={selectTreeEntry} onContext={openTreeContext} onDragSelection={beginTreeDrag} onDragFinish={() => setTreeDraggingIds(new Set())} onMove={moveDocuments} onRenameCommit={commitTreeRename} onRenameCancel={() => setRenamingDocumentId(null)} />
           {!searched.length && <p className="empty-tree">{t("app.noMatches")}</p>}
         </div>
-        <footer className="side-footer">
-          <div className="sidebar-user" title={`@${user.username}`}>
-            <span className="sidebar-avatar" aria-hidden="true">{avatarUrl ? <img src={avatarUrl} alt="" /> : (displayName.trim().charAt(0).toLocaleUpperCase() || user.username.charAt(0).toLocaleUpperCase())}</span>
-            <span className="sidebar-user-name"><strong>{displayName}</strong><small>@{user.username}</small></span>
-          </div>
-          <div className="side-footer-actions"><button onClick={() => setSettingsOpen(true)} title={t("settings.title")} aria-label={t("settings.title")}><AppIcon icon={Settings} size={17} /></button><button onClick={manualLock} title={t("app.lock")} aria-label={t("app.lock")}><AppIcon icon={LockKeyhole} size={17} /></button></div>
-        </footer>
-      </aside>
+      </WorkspaceSidebar>
 
       <PaneResizer label={t("app.resizeLeft")} side="left" value={preferences.treeWidth} min={TREE_WIDTH_MIN} max={TREE_WIDTH_MAX} onResize={(treeWidth) => setPreferences((current) => ({ ...current, treeWidth }))} />
 
@@ -2341,14 +2325,12 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       <PaneResizer label={t("app.resizeRight")} side="right" value={preferences.outlineWidth} min={OUTLINE_WIDTH_MIN} max={OUTLINE_WIDTH_MAX} onResize={(outlineWidth) => setPreferences((current) => ({ ...current, outlineWidth }))} />
 
       <aside className="outline-pane">
-        <header className="side-header right-panel-header">
-          <nav className="right-panel-tabs" aria-label={t("app.rightPanel")}>
-            <button className={preferences.rightPanelTab === "outline" ? "active" : ""} aria-current={preferences.rightPanelTab === "outline" ? "page" : undefined} onClick={() => setPreferences({ ...preferences, rightPanelTab: "outline" })}><AppIcon icon={ListTree} size={16} />{t("app.outline")}</button>
-            <button className={preferences.rightPanelTab === "history" ? "active" : ""} aria-current={preferences.rightPanelTab === "history" ? "page" : undefined} onClick={() => setPreferences({ ...preferences, rightPanelTab: "history" })}><AppIcon icon={HistoryIcon} size={16} />{t("history.title")}</button>
-          </nav>
-          <button className="right-pane-collapse" onClick={() => setPreferences({ ...preferences, outlineCollapsed: true })} title={t("app.collapseRight")} aria-label={t("app.collapseRight")}><AppIcon icon={PanelRightClose} /></button>
-          <button onClick={() => setOutlineOpen(false)} className="mobile-outline-close" aria-label={t("app.closeRight")}><AppIcon icon={PanelRightClose} /></button>
-        </header>
+        <WorkspacePanelHeader
+          tab={preferences.rightPanelTab}
+          onTabChange={rightPanelTab => setPreferences({ ...preferences, rightPanelTab })}
+          onCollapse={() => setPreferences({ ...preferences, outlineCollapsed: true })}
+          onClose={() => setOutlineOpen(false)}
+        />
         <section className="right-panel-content" aria-label={preferences.rightPanelTab === "outline" ? t("app.noteOutline") : t("history.list")}>
           {preferences.rightPanelTab === "outline"
             ? <nav className="outline-list">{outline.map((item) => <button key={item.id} style={{ paddingLeft: `${16 + (item.level - 1) * 14}px` }} onClick={() => jumpToHeading(item.index)}>{item.text}</button>)}{!outline.length && <p className="outline-empty">{t("app.outlineEmpty")}</p>}</nav>

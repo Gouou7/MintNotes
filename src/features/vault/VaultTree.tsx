@@ -7,7 +7,6 @@ import {
   Ellipsis,
   FilePlus2,
   FileText,
-  Folder,
   FolderPlus,
   LockKeyhole,
   LockKeyholeOpen,
@@ -18,7 +17,6 @@ import {
   Trash2
 } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
-import { ProtectionBadge } from "../../components/ProtectionBadge";
 import { TreeRenameInput } from "../../components/TreeRenameInput";
 import { useI18n } from "../../i18n";
 import type { OpenDocument } from "../../types";
@@ -52,13 +50,12 @@ export function draggedDocumentIds(dataTransfer: DataTransfer): string[] {
   return single ? [single] : [];
 }
 
-export function TreeDocumentIcon({ document }: { document: OpenDocument }) {
+export function TreeNoteLock({ document }: { document: OpenDocument }) {
   const { t } = useI18n();
-  const locked = isLockedNote(document);
-  return <span className={`tree-document-icon ${locked ? "locked" : ""}`}>
-    <AppIcon icon={document.kind === "folder" ? Folder : FileText} size={17} />
-    {locked && <ProtectionBadge label={t("app.noteLockedBadge")} />}
-  </span>;
+  return isLockedNote(document) ? <span className="tree-note-lock" title={t("app.noteLockedBadge")}>
+    <AppIcon icon={LockKeyhole} size={14} />
+    <span className="sr-only">{t("app.noteLockedBadge")}</span>
+  </span> : null;
 }
 
 export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, expanded, draggingIds, dropTarget, renamingDocumentId, onDropTarget, onSelect, onContext, onDragSelection, onDragFinish, onMove, onRenameCommit, onRenameCancel }: {
@@ -124,11 +121,11 @@ export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, e
         onContextMenu={(event) => { event.preventDefault(); onContext(entry, event.clientX, event.clientY); }}
       >
         {renamingDocumentId === entry.objectId
-          ? <div className="tree-main tree-main-renaming"><span className={entry.kind === "note" ? "tree-spacer" : undefined}>{entry.kind === "folder" && <AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={14} />}</span><TreeDocumentIcon document={entry} /><TreeRenameInput initialValue={entry.title} label={t("app.rename")} onCommit={(value) => onRenameCommit(entry.objectId, value)} onCancel={onRenameCancel} /></div>
+          ? <div className="tree-main tree-main-renaming"><span className={entry.kind === "note" ? "tree-spacer" : undefined}>{entry.kind === "folder" && <AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={16} />}</span><TreeRenameInput initialValue={entry.title} label={t("app.rename")} onCommit={(value) => onRenameCommit(entry.objectId, value)} onCancel={onRenameCancel} /><TreeNoteLock document={entry} /></div>
           : entry.kind === "folder"
-            ? <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span><AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={14} /></span><TreeDocumentIcon document={entry} /><span>{entry.title}</span></button>
-            : <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span className="tree-spacer" /><TreeDocumentIcon document={entry} /><span>{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}</button>}
-        <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); onContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={17} /></button>
+            ? <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span><AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={16} /></span><span className="tree-title">{entry.title}</span></button>
+            : <button className="tree-main" onClick={(event) => onSelect(entry, event)}><span className="tree-spacer" /><span className="tree-title">{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}<TreeNoteLock document={entry} /></button>}
+        <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); onContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={16} /></button>
       </div>
       {entry.kind === "folder" && expanded.has(entry.objectId) && <div className="tree-children" role="group"><TreeLevel childrenByParent={childrenByParent} parentId={entry.objectId} activeId={activeId} selectedIds={selectedIds} expanded={expanded} draggingIds={draggingIds} dropTarget={dropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={onDropTarget} onSelect={onSelect} onContext={onContext} onDragSelection={onDragSelection} onDragFinish={onDragFinish} onMove={onMove} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} /></div>}
     </div>
