@@ -99,7 +99,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .app-shell.outline-collapsed { --outline-track: 0px; --outline-resizer-track: 0px; }
 .tree-collapsed > .tree-pane, .outline-collapsed > .outline-pane { visibility: hidden; overflow: hidden; border: 0; }
 
-.tree-pane, .outline-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--sidebar); border-color: var(--border); z-index: 20; color: var(--text); }
+.tree-pane, .outline-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--sidebar); border-color: var(--border); z-index: 20; color: var(--text); caret-color: transparent; }
+.tree-pane :is(input,textarea):read-write:focus, .outline-pane :is(input,textarea):read-write:focus { caret-color: auto; }
 .tree-pane { grid-column: 1; }
 .pane-resizer-left { grid-column: 2; }
 .note-pane { --editor-inset-top: var(--note-toolbar-height); --editor-inset-bottom: var(--note-status-height); position: relative; grid-column: 3; min-width: 0; min-height: 0; width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); }

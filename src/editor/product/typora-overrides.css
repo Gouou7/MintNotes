@@ -1,11 +1,27 @@
 /* Mint owns colors, preferences, containers and additive feature UI here.
    The upstream widgets.css and theme-typora.css remain untouched. */
-.live-editor-document { width: min(900px, calc(100% - 48px)); min-height: 100%; margin: 0 auto; padding: calc(46px + var(--editor-inset-top, 0px)) 24px calc(120px + var(--editor-inset-bottom, 0px)); }
-.markdown-editor-host { position: relative; min-height: 180px; }
-.markdown-editor-host.is-empty:not(:focus-within)::before { content: attr(data-empty-hint); position: absolute; color: var(--muted); pointer-events: none; }
+.live-editor-document {
+  --editor-document-top: calc(46px + var(--editor-inset-top, 0px));
+  --editor-document-bottom: calc(120px + var(--editor-inset-bottom, 0px));
+  --editor-document-left: max(48px, calc((100% - 852px) / 2));
+  --editor-document-right: var(--editor-document-left);
+  --editor-body-top: var(--editor-document-top);
+  width: 100%; min-height: 100%; display: flex; flex-direction: column;
+}
+.live-editor-document:has(> .properties-panel) { --editor-body-top: 0px; }
+.live-editor-document > .properties-panel { flex: 0 0 auto; margin: var(--editor-document-top) var(--editor-document-right) 28px var(--editor-document-left); }
+.markdown-editor-host { position: relative; min-height: 180px; flex: 1 0 auto; display: flex; flex-direction: column; }
+.markdown-editor-host.is-empty:not(:focus-within)::before { content: attr(data-empty-hint); position: absolute; top: var(--editor-body-top); left: var(--editor-document-left); color: var(--muted); pointer-events: none; }
 .typora-web-wrap, .typora-web-editor-host { min-height: 180px; }
 .typora-web-editor-host[hidden], .typora-web-source[hidden] { display: none; }
+.markdown-editor-host > .typora-web-wrap, .markdown-editor-host > .typora-web-wrap > .typora-web-editor-host:not([hidden]) { flex: 1 0 auto; display: flex; flex-direction: column; }
+/* The input surface owns the page margins, including clickable blank space. */
+.markdown-editor-host > .typora-web-wrap > .typora-web-editor-host > .ProseMirror,
+.markdown-editor-host > .typora-web-wrap > .typora-web-source { flex: 1 0 auto; padding: var(--editor-body-top) var(--editor-document-right) var(--editor-document-bottom) var(--editor-document-left); }
 .markdown-editor-host .ProseMirror { min-height: 180px; font-size: calc(16px + var(--font-adjust, 0px)); color: var(--text); }
+/* A retained selection must not look editable after blur or in reading mode. */
+.markdown-editor-host .ProseMirror:not(:focus), .markdown-editor-host .ProseMirror[contenteditable="false"], .typora-web-source:not(:focus) { caret-color: transparent; }
+.markdown-editor-host .ProseMirror :is(input,textarea):focus { caret-color: auto; }
 .markdown-editor-host .ProseMirror :is(h1,h2,h3,h4,h5) { color: var(--text-strong); }
 .markdown-editor-host .ProseMirror :is(h6,blockquote,.syntax-hint,.syntax-hint-italic,.cb-language-label,.toc-item) { color: var(--muted); }
 .markdown-editor-host .ProseMirror :is(a,ref-url) { color: var(--accent-text); }
@@ -18,7 +34,7 @@
 .markdown-editor-host .ProseMirror hr { background: var(--border); }
 .markdown-editor-host .ProseMirror mark { background: var(--highlight-bg); color: var(--highlight-text); }
 .markdown-editor-host .ProseMirror > yaml-block { display: none; }
-.typora-web-source { width: 100%; min-height: 180px; padding: 0; border: 0; outline: none; resize: none; background: transparent; color: var(--text); font-size: calc(16px + var(--font-adjust, 0px)); overflow: hidden; }
+.typora-web-source { width: 100%; min-height: 180px; border: 0; outline: none; resize: none; background: transparent; color: var(--text); font-size: calc(16px + var(--font-adjust, 0px)); overflow: hidden; }
 .wrap-code-blocks .ProseMirror pre, .wrap-code-blocks .ProseMirror pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .mint-image-icon::before { display: none; }
 .mint-reading :is(.cb-chrome,.table-toolbar,.emoji-completion) { display: none; }
@@ -62,7 +78,7 @@
 .mint-callout-editing > .callout-content > p > .callout-marker-source { color: var(--callout-color); }
 .mint-callout-folded.mint-callout-rendered > .callout-content { display: none; }
 @media (max-width: 720px) {
-  .live-editor-document { width: 100%; padding: calc(30px + var(--editor-inset-top, 0px)) max(18px, var(--safe-area-right, 0px)) calc(80px + var(--safe-area-bottom, 0px) + var(--editor-inset-bottom, 0px)) max(18px, var(--safe-area-left, 0px)); }
+  .live-editor-document { --editor-document-top: calc(30px + var(--editor-inset-top, 0px)); --editor-document-bottom: calc(80px + var(--safe-area-bottom, 0px) + var(--editor-inset-bottom, 0px)); --editor-document-left: max(18px, var(--safe-area-left, 0px)); --editor-document-right: max(18px, var(--safe-area-right, 0px)); }
   .properties-panel .property-row { grid-template-columns: 20px minmax(75px, 110px) minmax(0, 1fr) 28px; gap: 5px; }
 }
 .markdown-callout { --callout-color: #6b7280; --callout-soft: color-mix(in srgb, var(--callout-color) 13%, transparent); }
@@ -123,6 +139,8 @@
 .mint-footnote-backlinks { display: inline-flex; gap: 5px; }
 .mint-inline-footnotes:empty { display: none; }
 .mint-inline-footnotes { border-top: 1px solid var(--border); margin-top: 1em; padding-top: 1em; color: var(--text); }
+.markdown-editor-host > .typora-web-wrap > .typora-web-editor-host:has(> .mint-inline-footnotes:not(:empty)) > .ProseMirror { padding-bottom: 0; }
+.markdown-editor-host > .typora-web-wrap > .typora-web-editor-host > .mint-inline-footnotes:not(:empty) { margin-left: var(--editor-document-left); margin-right: var(--editor-document-right); margin-bottom: var(--editor-document-bottom); }
 .mint-inline-footnotes > div { display: flex; gap: 8px; }
 .mint-inline-footnotes .ProseMirror { min-height: 0; }
 .mint-inline-footnotes :is(.typora-web-wrap,.typora-web-editor-host) { min-height: 0; }
