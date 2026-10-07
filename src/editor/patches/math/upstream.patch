@@ -16,3 +16,77 @@
    referenceDefinitions,
    htmlComment,
    emoji,
+--- a/src/inline-parse.ts
++++ b/src/inline-parse.ts
+@@ -38,6 +38,7 @@
+     // a code fence — it should disappear in the stable view but remain
+     // visible (and editable) while the user has the fence open.
+     softInside?: boolean;
++    revealOnSelection?: boolean;
+     // forceHidden: chars are visually absent regardless of cursor — used
+     // by atomic markers like task-list `[ ] ` whose source the user can
+     // not navigate into.
+@@ -69,6 +70,7 @@
+   widgetDecorations?: Array<{
+     pos: number;
+     when: "inside" | "outside" | "always";
++    revealOnSelection?: boolean;
+     kind: string;
+     attrs?: Record<string, string>;
+     side?: number;
+--- a/src/normalize.ts
++++ b/src/normalize.ts
+@@ -27,6 +27,7 @@
+   // and rendered as plain text (no decoration) when the cursor is inside.
+   // Used for soft whitespace ranges inside a code fence.
+   softInside?: boolean;
++  revealOnSelection?: boolean;
+   // When true, the range is hidden regardless of cursor — used for atomic
+   // markers like task-list `[ ] ` whose source is not user-editable.
+   forceHidden?: boolean;
+@@ -46,6 +47,7 @@
+   spanFrom: number;
+   spanTo: number;
+   when: "inside" | "outside" | "always";
++  revealOnSelection?: boolean;
+   kind: string;
+   attrs?: Record<string, string>;
+   side?: number;
+@@ -92,6 +94,7 @@
+             spanTo,
+             forceVisible: dr.forceVisible,
+             softInside: dr.softInside,
++            revealOnSelection: dr.revealOnSelection,
+             forceHidden: dr.forceHidden,
+             className: dr.className,
+           });
+@@ -117,6 +120,7 @@
+             spanFrom,
+             spanTo,
+             when: w.when,
++            revealOnSelection: w.revealOnSelection,
+             kind: w.kind,
+             attrs: w.attrs,
+             side: w.side,
+--- a/src/decorations.ts
++++ b/src/decorations.ts
+@@ -127,7 +127,8 @@
+   const cursor = !context.readOnly && state.selection.empty ? state.selection.from : null;
+   for (const d of getDelims(state)) {
+     const cursorInside =
+-      cursor !== null && cursor >= d.spanFrom && cursor <= d.spanTo;
++      cursor !== null && cursor >= d.spanFrom && cursor <= d.spanTo ||
++      !!d.revealOnSelection && !context.readOnly && !state.selection.empty && state.selection.from < d.spanTo && state.selection.to > d.spanFrom;
+     if (d.forceHidden) {
+       decos.push(
+         Decoration.inline(d.from, d.to, {
+@@ -155,7 +156,8 @@
+   }
+   for (const w of getWidgets(state)) {
+     const cursorInsideSpan =
+-      cursor !== null && cursor >= w.spanFrom && cursor <= w.spanTo;
++      cursor !== null && cursor >= w.spanFrom && cursor <= w.spanTo ||
++      !!w.revealOnSelection && !context.readOnly && !state.selection.empty && state.selection.from < w.spanTo && state.selection.to > w.spanFrom;
+     if (w.when === "inside" && !cursorInsideSpan) continue;
+     if (w.when === "outside" && cursorInsideSpan) continue;
+     decos.push(

@@ -1,31 +1,21 @@
-import { Plugin, TextSelection } from "prosemirror-state";
+import { Plugin } from "prosemirror-state";
 import { closeHistory } from "prosemirror-history";
-import { Decoration, DecorationSet } from "prosemirror-view";
+import type { Decoration } from "prosemirror-view";
+import { calloutBehavior, calloutBody, calloutKey, calloutLine, enterCalloutBody, leaveCallout } from "./callout-behavior.ts";
 import { literalFeature } from "./syntax.ts";
 import { inlineTextEditor } from "./inline-edit.ts";
 import type { FeatureSpec } from "../features/_types.ts";
 
 export const callout: FeatureSpec = {
   ...literalFeature("mint-callout", ["callout-marker"]),
-  plugins: (_schema, context = {}) => [new Plugin({ props: {
-    handleKeyDown(view, event) {
-      if (context.readOnly || view.composing || event.isComposing || event.key !== "Backspace" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return false;
-      const { selection } = view.state, { $from } = selection;
-      if (!selection.empty || $from.parent.type.name !== "paragraph" || $from.parent.content.size || $from.parentOffset || $from.depth < 2) return false;
-      const quote = $from.node(-1);
-      // Only remove the sole empty body paragraph; never swallow a nested or nonempty body.
-      if (quote.type.name !== "blockquote" || quote.childCount !== 2 || $from.index(-1) !== 1 || !context.parseCallout?.(quote.firstChild?.textContent ?? "")) return false;
-      const markerEnd = $from.before() - 1;
-      const transaction = closeHistory(view.state.tr.delete($from.before(), $from.after()));
-      view.dispatch(transaction.setSelection(TextSelection.create(transaction.doc, markerEnd)).scrollIntoView());
-      return true;
-    },
-    nodeViews: { blockquote: (initial, view, getPos) => {
-      const markerText = (node: typeof initial) => node.firstChild?.type.name === "paragraph" ? node.firstChild.textContent.split("\n")[0] : "";
+  plugins: (_schema, context = {}) => [calloutBehavior(context), new Plugin({ props: {
+    nodeViews: { blockquote: (initial, view, getPos, decorations) => {
+      const markerText = calloutLine;
       const appearance = (node: typeof initial) => context.parseCallout?.(markerText(node));
-      if (!appearance(initial)) {
+      const draft = (decorations: readonly Decoration[]) => decorations.some(decoration => decoration.spec.calloutDraft);
+      if (!appearance(initial) || draft(decorations)) {
         const dom = document.createElement("blockquote");
-        return { dom, contentDOM: dom, update: next => next.type === initial.type && !appearance(next) };
+        return { dom, contentDOM: dom, update: (next, decorations) => next.type === initial.type && (!appearance(next) || draft(decorations)) };
       }
       let node = initial, folded: boolean | null = null, disposed = false, drawnFold: string | undefined;
       let drawnMarker = "", drawnRevision: number | undefined;
@@ -37,7 +27,7 @@ export const callout: FeatureSpec = {
         const pos = getPos(); if (pos === undefined || view.state.doc.nodeAt(pos)?.type.name !== "blockquote") return;
         const line = markerText(node), next = context.editCalloutMarker?.(line, change);
         if (next === null || next === undefined || next === line) return;
-        view.dispatch(closeHistory(view.state.tr.insertText(next, pos + 2, pos + 2 + line.length)));
+        view.dispatch(closeHistory(view.state.tr.insertText(next, pos + 2, pos + 2 + line.length)).setMeta(calloutKey, { titleFocus: null }));
         view.dispatch(closeHistory(view.state.tr));
       };
       const icon = document.createElement("span"), iconHost = document.createElement("span"), types = document.createElement("select"), title = document.createElement("strong"), toggle = document.createElement("button");
@@ -45,12 +35,22 @@ export const callout: FeatureSpec = {
       types.setAttribute("aria-label", context.label?.("calloutType") ?? "Callout type");
       const titleEditor = inlineTextEditor({ value: appearance(node)!.title, display: appearance(node)!.title,
         label: context.label?.("calloutTitle") ?? "Callout title", readOnly: () => !editable(), commit: value => commit({ title: value }),
-        confirm() {
-          const pos = getPos(); if (disposed || pos === undefined) return;
-          const first = node.firstChild!, line = markerText(node);
-          const body = first.textContent.includes("\n") ? pos + 3 + line.length : node.childCount > 1 ? pos + 2 + first.nodeSize : undefined;
-          if (body === undefined) { titleEditor.element.querySelector("button")?.focus(); return; }
-          view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(body)))); view.focus();
+        endEditing() {
+          const pos = getPos();
+          if (pos !== undefined && calloutKey.getState(view.state)?.titleFocus === pos) view.dispatch(view.state.tr.setMeta(calloutKey, { titleFocus: null }));
+        },
+        confirm(event) {
+          const pos = getPos();
+          if (editable() && pos !== undefined && !event.shiftKey) enterCalloutBody(view, pos);
+        },
+        keyDown(event) {
+          if (event.key !== "ArrowUp" && event.key !== "ArrowDown" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
+          event.preventDefault();
+          if (titleEditor.finish()) {
+            const pos = getPos();
+            if (editable() && pos !== undefined) event.key === "ArrowUp" ? leaveCallout(view, pos, -1, context) : enterCalloutBody(view, pos);
+          }
+          return true;
         },
       });
       titleEditor.element.classList.add("callout-title-editor"); title.append(titleEditor.element); icon.append(iconHost, types); header.append(icon, title, toggle);
@@ -65,8 +65,7 @@ export const callout: FeatureSpec = {
         drawnMarker = markerText(node); drawnRevision = context.revision;
         if (folded === null || current.fold !== drawnFold) folded = current.fold === "-";
         drawnFold = current.fold;
-        const presentation = ["mint-callout-editing", "mint-callout-rendered"].filter(name => dom.classList.contains(name)).join(" ");
-        dom.className = `${presentation} markdown-callout callout-${current.kind}${current.color ? ` callout-color-${current.color}` : ""}${folded ? " mint-callout-folded" : ""}`;
+        dom.className = `mint-callout-rendered markdown-callout callout-${current.kind}${current.color ? ` callout-color-${current.color}` : ""}${folded ? " mint-callout-folded" : ""}`;
         const nextTypeIcon = `callout-${current.icon ?? current.kind}`;
         if (nextTypeIcon !== typeIconName) {
           typeIcon?.destroy(); typeIcon = context.icon?.(nextTypeIcon); typeIconName = nextTypeIcon; iconHost.replaceChildren(); if (typeIcon) iconHost.append(typeIcon.element);
@@ -85,33 +84,28 @@ export const callout: FeatureSpec = {
           foldIcon?.destroy(); foldIcon = context.icon?.(nextFoldIcon); foldIconName = nextFoldIcon; toggle.replaceChildren(); if (foldIcon) toggle.append(foldIcon.element);
         }
       };
-      draw();
+      const applyDecorations = (decorations: readonly Decoration[]) => {
+        if (!context.readOnly && decorations.some(decoration => decoration.spec.calloutReveal)) { folded = false; draw(); }
+        if (decorations.some(decoration => decoration.spec.calloutTitleFocus)) titleEditor.begin();
+      };
+      content.addEventListener("mousedown", event => {
+        const pos = getPos();
+        if (editable() && pos !== undefined && !calloutBody(view.state.doc, pos)) { event.preventDefault(); event.stopPropagation(); enterCalloutBody(view, pos); }
+      });
+      draw(); applyDecorations(decorations);
       return {
         dom, contentDOM: content,
-        update(next) {
-          if (next.type !== node.type || !appearance(next)) return false;
+        update(next, decorations) {
+          if (next.type !== node.type || !appearance(next) || draft(decorations)) return false;
           node = next;
           // Keep focused native controls and the body caret mounted during edits.
           if (markerText(node) !== drawnMarker || context.revision !== drawnRevision) draw();
-          return true;
+          applyDecorations(decorations); return true;
         },
         stopEvent: event => header.contains(event.target as Node),
         ignoreMutation: mutation => header.contains(mutation.target) || mutation.target === dom && mutation.type === "attributes",
         destroy() { disposed = true; titleEditor.destroy(); typeIcon?.destroy(); foldIcon?.destroy(); }
       };
     } },
-    decorations(state) {
-      const decorations: Decoration[] = [];
-      state.doc.descendants((node, pos) => {
-        if (node.type.name !== "blockquote" || node.firstChild?.type.name !== "paragraph" || !context.parseCallout?.(node.firstChild.textContent.split("\n")[0])) return true;
-        const line = node.firstChild.textContent.split("\n")[0], markerStart = pos + 2, markerEnd = markerStart + line.length;
-        const editingMarker = !context.readOnly && state.selection.from <= markerEnd && state.selection.to >= markerStart;
-        decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: editingMarker ? "mint-callout-editing" : "mint-callout-rendered", "data-mint-presentation": `${context.revision ?? 0}:${context.readOnly ? 1 : 0}` }));
-        if (line.length === node.firstChild.textContent.length) decorations.push(Decoration.node(pos + 1, pos + 1 + node.firstChild.nodeSize, { class: "callout-source-marker" }));
-        else decorations.push(Decoration.inline(markerStart, markerEnd + 1, { class: "callout-marker-source" }));
-        return true;
-      });
-      return DecorationSet.create(state.doc, decorations);
-    }
   } })]
 };

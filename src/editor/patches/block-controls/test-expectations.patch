@@ -1,0 +1,79 @@
+--- a/specs/features/fenced-code.specs.ts
++++ b/specs/features/fenced-code.specs.ts
+@@ -138,15 +138,14 @@
+     // ──────────────────────────────────────────────────────────────
+-    // 8. NodeView: ArrowDown from end of main body enters the virtual
+-    //    lang input. Pretty: the `|` moves from inside <code> to after
+-    //    the lang string in the opening fence.
++    // 8. The language editor is above the body. ArrowDown at the body
++    //    end exits below, adding a paragraph at the document edge.
+     // ──────────────────────────────────────────────────────────────
+     {
+-      id: "arrow-down-enters-lang",
+-      label: "main body end + ArrowDown → caret virtually in lang input",
++      id: "arrow-down-exits-body",
++      label: "main body end + ArrowDown → paragraph below",
+       seed: "```ts\nfoo\n```",
+       events: ["<ArrowDown>"],
+       checkpoints: [
+         { at: 0, expect: "```ts\nfoo|\n```" },
+-        { at: 1, expect: "```ts|\nfoo\n```" },
++        { at: 1, expect: "```ts\nfoo\n```\n|" },
+       ],
+     },
+@@ -154,13 +153,15 @@
+     // ──────────────────────────────────────────────────────────────
+-    // 9. ArrowUp from lang input → returns to end of main body.
++    // 9. ArrowUp from the body start enters the language editor;
++    //    ArrowDown from language returns to the body start.
+     // ──────────────────────────────────────────────────────────────
+     {
+-      id: "arrow-up-back-to-main",
+-      label: "lang input + ArrowUp → caret back to end of main body",
++      id: "arrow-down-back-to-main",
++      label: "body start + ArrowUp → language; ArrowDown → body start",
+       seed: "```ts\nfoo\n```",
+-      events: ["<ArrowDown>", "<ArrowUp>"],
++      events: ["<Home>", "<ArrowUp>", "<ArrowDown>"],
+       checkpoints: [
+-        { at: 1, expect: "```ts|\nfoo\n```" },
+-        { at: 2, expect: "```ts\nfoo|\n```" },
++        { at: 1, expect: "```ts\n|foo\n```" },
++        { at: 2, expect: "```ts|\nfoo\n```" },
++        { at: 3, expect: "```ts\n|foo\n```" },
+       ],
+     },
+@@ -168,18 +169,27 @@
+     // ──────────────────────────────────────────────────────────────
+-    // 10. Below-block ArrowUp lands in the lang input (not main body).
++    // 10. Below-block ArrowUp lands in the body before the language.
+     //     Seed has a trailing paragraph below the code_block.
+     // ──────────────────────────────────────────────────────────────
+     {
+-      id: "below-block-arrow-up-enters-lang",
+-      label: "paragraph below code_block + ArrowUp → prev block's lang input",
++      id: "below-block-arrow-up-enters-body",
++      label: "paragraph below code_block + ArrowUp → prev block's body end",
+       seed: "```ts\nfoo\n```\n\nhello",
+       events: ["<Home>", "<ArrowUp>"],
+       checkpoints: [
+         // After Home: caret at start of "hello" paragraph.
+         { at: 1, expect: "```ts\nfoo\n```\n|hello" },
+-        // ArrowUp from start-of-block: enters the lang input of the
+-        // preceding code_block.
+-        { at: 2, expect: "```ts|\nfoo\n```\nhello" },
++        { at: 2, expect: "```ts\nfoo|\n```\nhello" },
++      ],
++    },
++    {
++      id: "above-block-arrow-down-enters-lang",
++      label: "language + ArrowUp → paragraph above; ArrowDown → language",
++      seed: "above\n\n```ts\nfoo\n```",
++      events: ["<Home>", "<ArrowUp>", "<ArrowUp>", "<ArrowDown>"],
++      checkpoints: [
++        { at: 2, expect: "above\n```ts|\nfoo\n```" },
++        { at: 3, expect: "above|\n```ts\nfoo\n```" },
++        { at: 4, expect: "above\n```ts|\nfoo\n```" },
+       ],
+     },
+   ],

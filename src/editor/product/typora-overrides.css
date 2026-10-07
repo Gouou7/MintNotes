@@ -62,6 +62,7 @@
 .markdown-editor-host .ProseMirror th { background: var(--surface-raised); }
 .markdown-editor-host .ProseMirror blockquote { border-color: var(--border); }
 .markdown-editor-host .ProseMirror hr { background: var(--document-divider); }
+.markdown-editor-host .ProseMirror[contenteditable="true"]:focus hr.ProseMirror-selectednode { outline: 2px solid var(--accent); }
 .markdown-editor-host .ProseMirror mark { background: var(--highlight-bg); color: var(--highlight-text); }
 .markdown-editor-host .ProseMirror > yaml-block { display: none; }
 .typora-web-source { width: 100%; min-height: 180px; border: 0; outline: none; resize: none; background: transparent; color: var(--text); font-size: calc(16px + var(--font-adjust, 0px)); overflow: hidden; }
@@ -76,6 +77,13 @@
 .mint-block-preview .ProseMirror { min-height: 0; font-size: inherit; }
 .mint-block-preview :is(.typora-web-wrap,.typora-web-editor-host) { min-height: 0; }
 .mint-display-math, .katex-display { overflow-x: auto; overflow-y: hidden; }
+.mint-math, .mint-display-math, .mint-math-preview { cursor: text; }
+.mint-math, .mint-display-math { display: inline-block; max-width: 100%; vertical-align: baseline; }
+.mint-math-block { min-width: 0; margin-bottom: 1em; }
+.mint-math-preview { min-height: 1.5em; overflow-x: auto; }
+.mint-math-rendered:not(.mint-math-incomplete) > pre, .mint-math-editing > .mint-math-preview, .mint-math-incomplete > .mint-math-preview { display: none; }
+.mint-math-block > pre { margin-bottom: 0; }
+.mint-reading :is(.mint-math,.mint-display-math,.mint-math-preview) { cursor: auto; }
 .wiki-link { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; cursor: pointer; }
 .inline-footnote-body { display: none; }
 .mint-inline-footnote:hover .inline-footnote-body { display: inline; }
@@ -117,7 +125,10 @@
 :root[data-theme="dark"] .hljs-number,:root[data-theme="dark"] .hljs-type { color: #e9bf87; }
 :root[data-theme="dark"] .hljs-title,:root[data-theme="dark"] .hljs-name { color: #9ecdf9; }
 .markdown-editor-host .ProseMirror blockquote.markdown-callout { --editor-block-bg: var(--callout-soft); --editor-block-border: var(--callout-color); position: relative; isolation: isolate; min-height: 64px; margin-bottom: 16px; border: 1px solid transparent; border-radius: 20px; padding: 15px; color: var(--code-block-text); background: transparent; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: calc(14px + var(--font-adjust, 0px)); }
-.callout-header { min-width: 0; min-height: 20px; display: flex; align-items: center; gap: 6px; color: var(--callout-color); }
+.markdown-editor-host .ProseMirror[contenteditable="true"]:focus blockquote.markdown-callout { caret-color: var(--code-block-text); }
+/* Display controls and hidden marker text must never paint a native caret.
+   Focused title inputs keep their own text-colored caret via the input rule. */
+.callout-header { min-width: 0; min-height: 20px; display: flex; align-items: center; gap: 6px; color: var(--callout-color); caret-color: transparent; user-select: none; }
 .callout-header:has(> .callout-toggle:not([hidden])) { padding-right: 28px; }
 .callout-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-weight: 600; font-size: 1em; line-height: calc(20px + var(--font-adjust, 0px)); }
 .callout-icon { position: relative; width: 20px; height: 20px; display: grid; place-items: center; flex: 0 0 20px; }
@@ -127,16 +138,12 @@
 .callout-icon:has(.callout-type-select:enabled):hover::before { background: var(--editor-control-bg); }
 .callout-icon:has(.callout-type-select:focus-visible)::before { outline: 2px solid var(--accent); outline-offset: 2px; }
 .callout-toggle { position: absolute; top: 9px; right: 9px; }
-.callout-content { margin-top: 14px; color: var(--code-block-text); line-height: calc(20px + var(--font-adjust, 0px)); }
+.callout-content { min-height: calc(20px + var(--font-adjust, 0px)); margin-top: 14px; color: var(--code-block-text); line-height: calc(20px + var(--font-adjust, 0px)); }
 .callout-content > :first-child { margin-top: 0; }
 .callout-content > :last-child { margin-bottom: 0; }
-.mint-callout-rendered > .callout-content > .callout-source-marker,
-.mint-callout-rendered > .callout-content > p > .callout-marker-source { display: none; }
-.mint-callout-editing > .callout-header { display: none; }
-.mint-callout-editing > .callout-content { margin-top: 0; }
-.mint-callout-editing > .callout-content > .callout-source-marker,
-.mint-callout-editing > .callout-content > p > .callout-marker-source { color: var(--callout-color); }
-.mint-callout-folded.mint-callout-rendered > .callout-content { display: none; }
+.markdown-callout > .callout-content > .callout-source-marker,
+.markdown-callout > .callout-content > p > .callout-marker-source { display: none; caret-color: transparent; }
+.mint-callout-folded > .callout-content { display: none; caret-color: transparent; }
 @media (max-width: 720px) {
   .live-editor-document { --editor-document-top: calc(30px + var(--editor-inset-top, 0px)); --editor-document-bottom: calc(80px + var(--safe-area-bottom, 0px) + var(--editor-inset-bottom, 0px)); --editor-document-left: max(18px, var(--safe-area-left, 0px)); --editor-document-right: max(18px, var(--safe-area-right, 0px)); }
   .properties-panel .property-row { grid-template-columns: 20px minmax(75px, 110px) minmax(0, 1fr) 28px; gap: 5px; }

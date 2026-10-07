@@ -11,7 +11,7 @@
    if (w.kind === "file-input") { const fallback = document.createElement("span"); fallback.className = "image-unavailable"; return fallback; }
    if (w.kind === "image-render") {
      const img = document.createElement("img"); img.className = "image-render"; img.referrerPolicy = "no-referrer"; img.alt = w.attrs?.alt ?? "";
-@@ -162,7 +166,7 @@
+@@ -164,7 +168,7 @@
        Decoration.widget(w.pos, () => buildWidget(w, context), {
          side: w.side ?? -1,
          key: `${w.kind}@${w.pos}:${JSON.stringify(w.attrs)}:${context.footnotes?.get(w.kind === "mint-inline-footnote" ? `inline-${w.pos}` : w.attrs?.target ?? "")?.number ?? ""}:${context.revision ?? 0}:${context.readOnly ? 1 : 0}`,

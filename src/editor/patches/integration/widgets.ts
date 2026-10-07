@@ -1,14 +1,15 @@
 import type { WidgetDecoration } from "../normalize.ts";
 import type { MintContext } from "./context.ts";
+import { mathWidget } from "./math-widget.ts";
 const cleanups = new WeakMap<HTMLElement, () => void>();
 export function destroyMintWidget(element: HTMLElement): void { cleanups.get(element)?.(); cleanups.delete(element); }
 export function mintWidget(widget: WidgetDecoration, context: MintContext): HTMLElement | null {
   if (!widget.kind.startsWith("mint-")) return null;
+  const math = mathWidget(widget, context);
+  if (math) { cleanups.set(math.element, math.destroy); return math.element; }
   const attrs = widget.attrs ?? {}, kind = widget.kind.slice(5), host = document.createElement("span");
   host.className = widget.kind;
-  if (kind === "math" || kind === "display-math") {
-    const cleanup = context.renderMath?.(host, attrs.source, kind === "display-math"); if (cleanup) cleanups.set(host, cleanup);
-  } else if (kind === "wikilink" || kind === "wiki-embed") {
+  if (kind === "wikilink" || kind === "wiki-embed") {
     const button = document.createElement("button"); button.type = "button"; button.className = "wiki-link"; button.textContent = attrs.source; button.dataset.wikilinkTarget = attrs.target;
     button.addEventListener("mousedown", event => event.preventDefault()); button.addEventListener("click", () => context.onNavigate?.(attrs.target)); host.append(button);
   } else if (kind === "footnote-ref" || kind === "inline-footnote") {

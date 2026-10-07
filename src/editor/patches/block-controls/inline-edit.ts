@@ -13,6 +13,7 @@ export function inlineTextEditor(options: {
   readOnly(): boolean;
   validate?(value: string): string;
   commit(value: string): void;
+  endEditing?(): void;
   confirm?(event: KeyboardEvent): void;
   keyDown?(event: KeyboardEvent): boolean;
 }): InlineTextEditor {
@@ -31,6 +32,7 @@ export function inlineTextEditor(options: {
     if (!options.readOnly() && error) { input.setCustomValidity(error); input.reportValidity(); return false; }
     close();
     if (!options.readOnly() && draft !== value) options.commit(draft);
+    options.endEditing?.();
     return true;
   };
   const begin = () => {
@@ -47,7 +49,7 @@ export function inlineTextEditor(options: {
     if (disposed || composing || event.isComposing || event.keyCode === 229) return;
     if (options.keyDown?.(event)) return;
     if (event.key === "Enter") { event.preventDefault(); finish(); if (!editing) options.confirm?.(event); }
-    else if (event.key === "Escape") { event.preventDefault(); close(); label.focus(); }
+    else if (event.key === "Escape") { event.preventDefault(); close(); options.endEditing?.(); label.focus(); }
   });
   const update = (next: string, nextDisplay: string, presentation?: { label?: string; placeholder?: string }) => {
     if (disposed) return;

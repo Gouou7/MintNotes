@@ -8,7 +8,7 @@
 
 `series.json` 是应用顺序、用途、依赖及验收测试的唯一清单。每个功能使用不带序号的语义目录，`upstream.patch` 描述对上游文件的必要改动，同目录的新增模块按 `additions` 映射复制到生成树，不修改原始上游。目录名不参与排序；清单中的现有补丁 ID 保持稳定，供依赖引用。
 
-例如公式功能由 `math/upstream.patch` 和 `math/math.ts` 组成；公共控制器和展示上下文位于 `integration/`，共享语法保护和块预览接入位于 `syntax/`。运行引擎仍生成在仓库根目录的 `.generated/typora-web/`，`src/editor/product/` 中的产品代码通过 `src/editor/engine.ts` 引用。
+例如公式功能在 `math/` 内维护共用语法、行内装饰、块解析、键盘行为与预览生命周期，`upstream.patch` 接入功能注册及选区展示；公共控制器和展示上下文位于 `integration/`，共享语法保护、转义判断和通用块预览接入位于 `syntax/`。运行引擎仍生成在仓库根目录的 `.generated/typora-web/`，`src/editor/product/` 中的产品代码通过 `src/editor/engine.ts` 引用。
 
 | 补丁 | 上游缺口／用途 | 主要验收 |
 | --- | --- | --- |
@@ -16,19 +16,20 @@
 | [02-data-integrity](data-integrity/upstream.patch) | 解析会消费引用定义；保留所有定义并阻止可执行链接 | engine.test.ts、往返测试 |
 | [03-safe-images](safe-images/upstream.patch) | 禁用上游正文 Blob 插入与额外网络探测；只读任务保护 | engine.test.ts、浏览器 |
 | [04-mint-syntax](syntax/upstream.patch) | 保护产品字面语法，提供受限块预览接入 | features.test.ts |
-| [05-math](math/upstream.patch) | 行内与块级公式，依赖本地 KaTeX | features.test.ts、浏览器 |
+| [05-math](math/upstream.patch) | 共用美元分隔符语法；行内源码与预览、单行／多行独行公式、创建和边界导航，依赖本地 KaTeX | math.test.ts、features.test.ts、math.spec.ts |
 | [06-wikilink](wikilink/upstream.patch) | 目标、别名、标题导航及嵌入入口 | features.test.ts、浏览器 |
 | [07-comments](comments/upstream.patch) | 注释显隐与跨段注释保存 | features.test.ts |
 | [08-footnotes](footnotes/upstream.patch) | 引用、行内脚注、编号、回链与定义预览 | features.test.ts、浏览器 |
-| [09-callouts](callouts/upstream.patch) | 类型、折叠、嵌套、旧版外观与空正文退格；正文编辑保留标题 | callout-interaction.test.ts、features.test.ts、浏览器 |
+| [09-callouts](callouts/upstream.patch) | 类型、折叠、嵌套、创建与正文回车；上下导航经过名称与正文，已创建块保持标题显示，空块保留正文空位 | callout-interaction.test.ts、features.test.ts、浏览器 |
 | [10-code](code/upstream.patch) | 代码复制及本地 highlight.js 装饰 | features.test.ts、浏览器 |
 | [11-mermaid](mermaid/upstream.patch) | Mermaid 安全预览，普通代码继续使用上游 NodeView | features.test.ts、浏览器 |
 | [12-product-controls](product-controls/upstream.patch) | AppIcon、可访问名称、三语表格控件与只读工具栏 | 浏览器 |
 | [13-upstream-test-expectations](upstream-test-expectations/upstream.patch) | 仅改变图片 specs 的安全预期，全部检查点继续运行 | 补丁后的上游测试 |
 | [14-blockquote-input](blockquote/upstream.patch) | 停止自动转义 `>`，保留手写引用转义；补齐浏览器合并输入的引用触发，沿用上游嵌套、延续与退出行为 | blockquote.test.ts、浏览器 |
-| [15-block-controls](block-controls/upstream.patch) | 代码语言与 Callout 标题直接编辑，回车／失焦提交；原生类型选单、右侧折叠与编辑状态 | block-controls.test.ts、calloutMarker.test.ts、浏览器 |
+| [15-block-controls](block-controls/upstream.patch) | 代码语言与 Callout 标题直接编辑，回车／失焦提交；代码上下键按头部在正文之前的顺序导航；原生类型选单、右侧折叠与编辑状态 | block-controls.test.ts、calloutMarker.test.ts、浏览器 |
+| [16-block-controls-tests](block-controls/test-expectations.patch) | 类型编辑框移到顶部后调整代码上下键导航预期，保留检查点并补齐从上方进入的检查 | 补丁后的上游测试 |
 
-测试差异补丁移除直接文件选择占位，阻止 `u`／`url` 这类相对图片 URL 出现在预览 src；图片源码与说明文字不变。Mint 只允许 HTTPS 或经附件解析器取得的 Blob URL。普通引用、键盘、表格、链接及其余上游预期继续原样验证。
+图片测试差异补丁移除直接文件选择占位，阻止 `u`／`url` 这类相对图片 URL 出现在预览 src；图片源码与说明文字不变。Mint 只允许 HTTPS 或经附件解析器取得的 Blob URL。代码测试差异补丁调整类型编辑框所在位置对应的上下键路径，其余上游预期继续原样验证。
 
 ## 准备与验证
 

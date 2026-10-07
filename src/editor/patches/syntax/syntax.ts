@@ -1,11 +1,11 @@
 import type MarkdownIt from "markdown-it";
 import type { FeatureSpec } from "../features/_types.ts";
 import { markConsumed, type InlineSpan } from "../inline-parse.ts";
+import { escaped } from "./escapes.ts";
+import { mathAt } from "./math-syntax.ts";
+export { escaped } from "./escapes.ts";
 
 export interface Literal { from: number; to: number; source: string; body: string; target?: string; kind: string }
-export function escaped(text: string, position: number): boolean {
-  let count = 0; while (position > 0 && text[--position] === "\\") count++; return count % 2 === 1;
-}
 export function literals(text: string): Literal[] {
   const result: Literal[] = [];
   const pattern = /`+|%%|!?\[\[|\[\^|\^\[|\[!|\$/g;
@@ -40,14 +40,9 @@ export function literals(text: string): Literal[] {
     } else if (start === "[!") {
       const header = /^\[![a-z0-9_-]+\][+-]?[^\n]*/i.exec(text.slice(from));
       if (header) { kind = "callout-marker"; body = header[0]; to = from + header[0].length; }
-    } else if (start === "$" && text[from - 1] !== "$" && !/\s/.test(text[from + 1] ?? " ")) {
-      const width = text[from + 1] === "$" ? 2 : 1;
-      for (let end = from + width; end < text.length; end++) {
-        if (text[end] === "\n" && width === 1) break;
-        if (text.startsWith("$".repeat(width), end) && !escaped(text, end) && end > from + width && !/\s/.test(text[end - 1])) {
-          body = text.slice(from + width, end); kind = width === 2 ? "display-math" : "math"; to = end + width; break;
-        }
-      }
+    } else if (start === "$") {
+      const math = mathAt(text, from, true);
+      if (math) { body = math.body; kind = math.complete ? math.kind : "math-draft"; to = math.to; }
     }
     if (to > from) { result.push({ from, to, source: text.slice(from, to), body, target, kind }); pattern.lastIndex = to; }
   }

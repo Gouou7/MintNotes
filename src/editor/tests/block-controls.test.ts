@@ -6,6 +6,7 @@ import { defaultPlugins } from "../../../.generated/typora-web/src/editor";
 import { parse } from "../../../.generated/typora-web/src/parser";
 import { serialize } from "../../../.generated/typora-web/src/serializer";
 import { schema } from "../../../.generated/typora-web/src/schema";
+import { getLangFocus } from "../../../.generated/typora-web/src/features/fenced-code";
 import { createMintEditor } from "../engine";
 import { CALLOUT_TYPES, editCalloutMarker, parseCalloutMarker } from "../product/calloutMarker";
 
@@ -17,10 +18,18 @@ function setup(source: string, readOnly = false) {
     cursorWidget: false, readOnly, parseCallout: parseCalloutMarker, editCalloutMarker, calloutTypes: CALLOUT_TYPES,
     icon: name => { const element = document.createElement("span"); element.dataset.icon = name; return { element, destroy: vi.fn() }; },
   }) }) });
+  vi.spyOn(view, 'endOfTextblock').mockReturnValue(false);
   views.push(view); return view;
 }
 function draft(input: HTMLInputElement, value: string) { input.value = value; input.dispatchEvent(new Event("input", { bubbles: true })); }
 function enter(input: HTMLInputElement, isComposing = false) { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing, bubbles: true, cancelable: true })); }
+function select(view: EditorView, pos: number) { view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos))); }
+function arrow(view: EditorView, key: 'ArrowUp' | 'ArrowDown', options: KeyboardEventInit = {}) {
+  return !!view.someProp('handleKeyDown', handler => handler(view, new KeyboardEvent('keydown', { key, ...options })));
+}
+function inputArrow(input: HTMLInputElement, key: 'ArrowUp' | 'ArrowDown') {
+  input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+}
 function choose(view: EditorView, value: string, index = 0) {
   const select = view.dom.querySelectorAll<HTMLSelectElement>(".callout-type-select")[index]; select.value = value; select.dispatchEvent(new Event("change", { bubbles: true }));
 }
@@ -35,6 +44,7 @@ describe("code language header editing", () => {
     if (finish === "enter") enter(input); else input.blur();
     expect(view.state.doc.firstChild?.attrs.lang).toBe("ts metadata"); expect(view.state.doc.firstChild?.textContent).toBe(before.firstChild?.textContent);
     expect(input.hidden).toBe(true); expect(view.dom.querySelector(".mint-code-language-label")?.textContent).toBe("ts metadata");
+    if (finish === 'enter') expect(view.state.selection.$from.parentOffset).toBe(0);
     expect(serialize(view.state.doc)).toContain('```ts metadata');
     expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
     expect(redo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.firstChild?.attrs.lang).toBe("ts metadata");
@@ -46,22 +56,96 @@ describe("code language header editing", () => {
     button.click(); draft(input, 'python'); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(input.hidden).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
     button.click(); draft(input, 'js```'); enter(input); expect(view.state.doc.eq(before)).toBe(true); expect(input.hidden).toBe(false);
+    inputArrow(input, 'ArrowDown'); expect(view.state.doc.eq(before)).toBe(true); expect(input.hidden).toBe(false);
   });
   it("waits for IME completion and commits a blurred composition once", () => {
     const view = setup('```js\nbody\n```'), before = view.state.doc;
     view.dom.querySelector<HTMLButtonElement>('.mint-code-language-label')!.click(); const input = view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!;
-    input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })); draft(input, 'python'); enter(input, true); input.blur();
+    input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })); draft(input, 'python'); enter(input, true); inputArrow(input, 'ArrowDown');
+    expect(input.hidden).toBe(false); input.blur();
     expect(view.state.doc.eq(before)).toBe(true);
     input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })); expect(view.state.doc.firstChild?.attrs.lang).toBe('python');
     expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
   });
-  it("retains the upstream keyboard entry to the language field", () => {
-    const view = setup('```js\nbody\n```');
-    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.firstChild!.nodeSize - 1)));
-    view.someProp('handleKeyDown', handler => handler(view, new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+});
+
+describe('code block arrow navigation', () => {
+  it('visits above → language → body → below and reverses that order, committing drafts before leaving', () => {
+    const view = setup('Above\n\n```js\nfirst\nlast\n```\n\nBelow'), before = view.state.doc;
+    const codePos = before.firstChild!.nodeSize, codeEnd = codePos + before.child(1).nodeSize - 1, below = codeEnd + 2;
     const input = view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!;
-    expect(input.hidden).toBe(false); draft(input, 'python'); enter(input); expect(input.hidden).toBe(true);
-    expect(view.state.doc.firstChild?.attrs.lang).toBe('python'); expect(view.state.selection.$from.parent.type.name).toBe('code_block');
+    select(view, codePos - 1); expect(arrow(view, 'ArrowDown')).toBe(true);
+    expect(input.hidden).toBe(false); expect(document.activeElement).toBe(input); expect(getLangFocus(view.state)?.pos).toBe(codePos);
+    expect(view.state.doc.eq(before)).toBe(true);
+    draft(input, 'python metadata'); inputArrow(input, 'ArrowDown');
+    expect(input.hidden).toBe(true); expect(view.state.selection.from).toBe(codePos + 1);
+    expect(view.state.doc.child(1).attrs.lang).toBe('python metadata');
+    select(view, codeEnd); expect(arrow(view, 'ArrowDown')).toBe(true); expect(view.state.selection.from).toBe(below); expect(getLangFocus(view.state)).toBeNull();
+    expect(arrow(view, 'ArrowUp')).toBe(true); expect(view.state.selection.from).toBe(codeEnd); expect(input.hidden).toBe(true);
+    select(view, codePos + 1); expect(arrow(view, 'ArrowUp')).toBe(true); expect(input.hidden).toBe(false);
+    draft(input, 'ts'); inputArrow(input, 'ArrowUp');
+    expect(view.state.selection.from).toBe(codePos - 1); expect(input.hidden).toBe(true); expect(getLangFocus(view.state)).toBeNull();
+    expect(view.state.doc.child(1).attrs.lang).toBe('ts'); expect(view.state.doc.child(1).textContent).toBe('first\nlast');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.child(1).attrs.lang).toBe('python metadata');
+    expect(undo(view.state, view.dispatch)).toBe(true); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('keeps an empty code body as a separate navigation stop', () => {
+    const view = setup('Above\n\n```\n```\n\nBelow'), before = view.state.doc, pos = before.firstChild!.nodeSize;
+    const input = view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!;
+    select(view, pos - 1); arrow(view, 'ArrowDown'); expect(input.hidden).toBe(false);
+    inputArrow(input, 'ArrowDown'); expect(view.state.selection.from).toBe(pos + 1); expect(input.hidden).toBe(true);
+    arrow(view, 'ArrowDown'); expect(view.state.selection.$from.parent.textContent).toBe('Below');
+    arrow(view, 'ArrowUp'); expect(view.state.selection.$from.parent.type.name).toBe('code_block'); expect(input.hidden).toBe(true);
+    arrow(view, 'ArrowUp'); expect(input.hidden).toBe(false); inputArrow(input, 'ArrowUp');
+    expect(view.state.selection.from).toBe(pos - 1); expect(view.state.doc.eq(before)).toBe(true); expect(undo(view.state, view.dispatch)).toBe(false);
+  });
+  it('opens the next header between adjacent code blocks and returns to the preceding body', () => {
+    const view = setup('```js\none\n```\n\n```ts\ntwo\n```'), before = view.state.doc, second = before.firstChild!.nodeSize;
+    const inputs = view.dom.querySelectorAll<HTMLInputElement>('.cb-lang-input');
+    select(view, second - 1); arrow(view, 'ArrowDown'); expect(inputs[0].hidden).toBe(true); expect(inputs[1].hidden).toBe(false);
+    inputArrow(inputs[1], 'ArrowDown'); expect(view.state.selection.from).toBe(second + 1);
+    arrow(view, 'ArrowUp'); expect(inputs[1].hidden).toBe(false);
+    inputArrow(inputs[1], 'ArrowUp'); expect(view.state.selection.from).toBe(second - 1); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  for (const nested of [false, true]) it(`provides paragraphs at ${nested ? 'quote' : 'document'} edges without losing code`, () => {
+    const view = setup(nested ? '> ```js\n> body\n> ```' : '```js\nbody\n```');
+    const initialPos = nested ? 1 : 0;
+    select(view, initialPos + 1); arrow(view, 'ArrowUp');
+    const input = view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!; inputArrow(input, 'ArrowUp');
+    const container = nested ? view.state.doc.firstChild! : view.state.doc;
+    expect(container.firstChild?.type.name).toBe('paragraph'); expect(container.child(1).textContent).toBe('body');
+    const pos = initialPos + container.firstChild!.nodeSize;
+    select(view, pos + container.child(1).nodeSize - 1); arrow(view, 'ArrowDown');
+    const updated = nested ? view.state.doc.firstChild! : view.state.doc;
+    expect(updated.childCount).toBe(3); expect(updated.lastChild?.type.name).toBe('paragraph');
+    expect(updated.child(1).attrs.lang).toBe('js'); expect(updated.child(1).textContent).toBe('body'); expect(getLangFocus(view.state)).toBeNull();
+  });
+  it('uses visual line edges and leaves internal code movement to the browser', () => {
+    const view = setup('Above\n\n```js\nfirst\nlast\n```\n\nBelow'), pos = view.state.doc.firstChild!.nodeSize;
+    const input = view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!;
+    select(view, pos + 3); expect(arrow(view, 'ArrowUp')).toBe(false); expect(arrow(view, 'ArrowDown')).toBe(false); expect(input.hidden).toBe(true);
+    vi.mocked(view.endOfTextblock).mockReturnValue(true);
+    arrow(view, 'ArrowUp'); expect(input.hidden).toBe(false); inputArrow(input, 'ArrowUp');
+    select(view, 3); arrow(view, 'ArrowDown'); expect(input.hidden).toBe(false); inputArrow(input, 'ArrowDown');
+    select(view, pos + 9); arrow(view, 'ArrowDown'); expect(view.state.selection.$from.parent.textContent).toBe('Below');
+    select(view, view.state.selection.from + 2); arrow(view, 'ArrowUp'); expect(view.state.selection.$from.parent.textContent).toBe('first\nlast'); expect(input.hidden).toBe(true);
+  });
+  for (const options of [{ shiftKey: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }, { isComposing: true }]) it(`preserves native modified/composing arrows ${JSON.stringify(options)}`, () => {
+    const view = setup('Above\n\n```js\nbody\n```'), before = view.state.doc;
+    select(view, before.firstChild!.nodeSize - 1);
+    expect(arrow(view, 'ArrowDown', options)).toBe(false); expect(getLangFocus(view.state)).toBeNull(); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  it('does not enter a disabled language editor in reading mode', () => {
+    const view = setup('Above\n\n```js\nbody\n```', true), before = view.state.doc;
+    select(view, before.firstChild!.nodeSize - 1);
+    expect(arrow(view, 'ArrowDown')).toBe(false); expect(getLangFocus(view.state)).toBeNull(); expect(view.state.doc.eq(before)).toBe(true);
+  });
+  for (const finish of ['blur', 'escape'] as const) it(`clears unchanged virtual language focus on ${finish}`, () => {
+    const view = setup('Above\n\n```js\nbody\n```'), before = view.state.doc;
+    select(view, before.firstChild!.nodeSize - 1); arrow(view, 'ArrowDown');
+    const input = view.dom.querySelector<HTMLInputElement>('.cb-lang-input')!;
+    if (finish === 'blur') input.blur(); else input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(input.hidden).toBe(true); expect(getLangFocus(view.state)).toBeNull(); expect(view.state.doc.eq(before)).toBe(true);
   });
 });
 

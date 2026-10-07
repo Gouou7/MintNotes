@@ -1,15 +1,91 @@
 --- a/src/features/fenced-code.ts
 +++ b/src/features/fenced-code.ts
-@@ -14,6 +14,8 @@
- 
+@@ -15,3 +15,5 @@
  import { leaveLineDraft } from "../block-draft.ts";
  import type { MintContext } from "../mint/context.ts";
 +import { inlineTextEditor, type InlineTextEditor } from "../mint/inline-edit.ts";
 +import { closeHistory } from "prosemirror-history";
  import type { FeatureSpec } from "./_types.ts";
- 
- // Fenced code block feature.
-@@ -92,7 +94,9 @@
+@@ -35,16 +37,12 @@
+ //
+ // Post-commit affordances implemented here:
+ //
+-//   - NodeView renders a chrome overlay next to the `<code>` body
+-//     containing a `<input class="cb-lang-input">` for editing the
+-//     code_block's `lang` attribute. Chrome shows only when the caret
+-//     is inside the block (CSS-only: decoration toggles `cb-active`).
+-//
+-//   - Arrow navigation: from the LAST position of the main code body,
+-//     ArrowDown "enters" the lang input (a virtual plugin state).
+-//     From the lang input, ArrowUp returns to the end of the main body.
+-//     From a block IMMEDIATELY AFTER a code_block, ArrowUp enters that
+-//     preceding code_block's lang input instead of the usual last-line.
++//   - NodeView renders an inline language editor above the `<code>` body.
++//     The input edits the complete code_block `lang` attribute.
++//
++//   - ArrowDown follows document order: block above → language → body
++//     → block below. ArrowUp follows the reverse order. Native arrows
++//     within the body still handle visual lines and wrapped code.
+ //
+ //     The lang-focus state is tracked by a PluginKey and visualized
+ //     three ways:
+@@ -54,5 +52,5 @@
+ //       * Pretty renderCase reads `data-lang-focus` on <pre> and emits
+ //         the `|` marker AFTER the lang string instead of inside the
+ //         code body.
+-//       * PM selection is kept at the end of the code body so that
+-//         "leaving" the lang input naturally resumes editing there.
++//       * PM selection is parked at the start of the body; ArrowDown
++//         or Enter from the language input resumes editing there.
+@@ -85,3 +83,47 @@
++export function focusCodeLanguage(view: EditorView, pos: number): boolean {
++  view.dispatch(view.state.tr
++    .setSelection(TextSelection.create(view.state.doc, pos + 1))
++    .setMeta(langFocusKey, { pos }));
++  return true;
++}
++
++// Move past the block in its own container, including adjacent code blocks.
++// At a container edge, provide an empty paragraph for continued editing.
++function moveOutsideCode(view: EditorView, pos: number, direction: -1 | 1): boolean {
++  const node = view.state.doc.nodeAt(pos);
++  if (node?.type.name !== "code_block") return false;
++  const boundary = direction < 0 ? pos : pos + node.nodeSize;
++  const $boundary = view.state.doc.resolve(boundary);
++  const neighbor = direction < 0 ? $boundary.nodeBefore : $boundary.nodeAfter;
++  if (direction > 0 && neighbor?.type.name === "code_block") {
++    return focusCodeLanguage(view, boundary);
++  }
++  const tr = view.state.tr.setMeta(langFocusKey, null);
++  if (neighbor) {
++    tr.setSelection(TextSelection.near($boundary, direction));
++  } else {
++    const paragraph = view.state.schema.nodes.paragraph?.createAndFill();
++    if (!paragraph || !$boundary.parent.canReplaceWith($boundary.index(), $boundary.index(), paragraph.type)) return false;
++    tr.insert(boundary, paragraph);
++    tr.setSelection(TextSelection.create(tr.doc, boundary + 1));
++  }
++  view.dispatch(tr);
++  // Another block may redirect this selection to its native header input.
++  const active = view.dom?.ownerDocument.activeElement;
++  if (!active?.matches("input:not([hidden])") || !view.dom.contains(active)) view.focus?.();
++  return true;
++}
++
++function leaveCodeLanguage(view: EditorView, pos: number, direction: -1 | 1): boolean {
++  if (view.state.doc.nodeAt(pos)?.type.name !== "code_block") return false;
++  if (direction < 0) return moveOutsideCode(view, pos, -1);
++  view.dispatch(view.state.tr
++    .setSelection(TextSelection.create(view.state.doc, pos + 1))
++    .setMeta(langFocusKey, null));
++  view.focus?.();
++  return true;
++}
++
+ // ─────────────────────────────────────────────────────────────────────────────
+ // NodeView: outer <pre data-lang><code/></pre> plus a chrome overlay with
+ // a <input class="cb-lang-input">. The input mutates code_block.attrs.lang
+@@ -92,6 +134,8 @@
    dom: HTMLElement;
    contentDOM: HTMLElement;
    private chromeEl: HTMLElement;
@@ -19,8 +95,7 @@
 +  private context: MintContext;
    private view: EditorView;
    private getPos: () => number | undefined;
- 
-@@ -105,6 +109,7 @@
+@@ -105,6 +149,7 @@
    ) {
      this.view = view;
      this.getPos = getPos;
@@ -28,9 +103,7 @@
      const pre = document.createElement("pre");
      const lang = (node.attrs.lang as string) ?? "";
      if (lang) pre.setAttribute("data-lang", lang);
-@@ -112,23 +117,34 @@
-     pre.appendChild(code);
- 
+@@ -114,10 +159,31 @@
      const chrome = document.createElement("div");
 -    chrome.className = "cb-chrome";
 +    chrome.className = "cb-chrome mint-code-language";
@@ -50,10 +123,17 @@
 +      readOnly: () => !this.view.editable || !!this.context.readOnly,
 +      validate: value => /[`\r\n]/.test(value) ? context.label?.("invalidCodeLanguage") ?? "Code language cannot contain backticks or line breaks." : "",
 +      commit: value => this.onInput(value),
++      endEditing: () => {
++        const pos = this.getPos();
++        if (pos != null && getLangFocus(this.view.state)?.pos === pos) {
++          this.view.dispatch(this.view.state.tr.setMeta(langFocusKey, null));
++        }
++      },
 +      confirm: event => this.onInputKeyDown(event),
 +      keyDown: event => {
 +        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
 +        if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
++        event.preventDefault();
 +        if (this.languageEditor.finish()) this.onInputKeyDown(event); return true;
 +      },
 +    });
@@ -62,7 +142,7 @@
 +    this.languageEditor.element.querySelector("button")!.classList.add("mint-code-language-label");
 +    chrome.appendChild(this.languageEditor.element);
      pre.appendChild(chrome);
- 
+@@ -125,10 +191,7 @@
      this.dom = pre;
      this.contentDOM = code;
      this.chromeEl = chrome;
@@ -74,7 +154,7 @@
      input.addEventListener("mousedown", (e) => e.stopPropagation());
      // Apply initial decorations (PM doesn't call update() right after
      // construction with the starting deco set — do it manually).
-@@ -147,20 +163,22 @@
+@@ -147,18 +210,20 @@
      this.dom.classList.toggle("cb-lang-focus", langFocus);
      if (langFocus) this.dom.setAttribute("data-lang-focus", "1");
      else this.dom.removeAttribute("data-lang-focus");
@@ -107,9 +187,52 @@
      this.view.dispatch(tr);
 +    this.view.dispatch(closeHistory(this.view.state.tr));
    };
- 
+@@ -166,39 +231,7 @@
    private onInputKeyDown = (e: KeyboardEvent): void => {
-@@ -208,7 +226,7 @@
+-    if (e.key === "ArrowUp" || (e.key === "Enter" && !e.shiftKey)) {
+-      e.preventDefault();
+-      const pos = this.getPos();
+-      if (pos == null) return;
+-      const node = this.view.state.doc.nodeAt(pos);
+-      if (!node) return;
+-      // Move PM selection to end of code body, clear lang-focus.
+-      const endInside = pos + node.nodeSize - 1;
+-      const tr = this.view.state.tr.setSelection(
+-        TextSelection.create(this.view.state.doc, endInside),
+-      );
+-      tr.setMeta(langFocusKey, null);
+-      this.view.dispatch(tr);
+-      this.view.focus();
+-    } else if (e.key === "ArrowDown") {
+-      e.preventDefault();
+-      const pos = this.getPos();
+-      if (pos == null) return;
+-      const node = this.view.state.doc.nodeAt(pos);
+-      if (!node) return;
+-      const afterBlock = pos + node.nodeSize;
+-      const tr = this.view.state.tr;
+-      tr.setMeta(langFocusKey, null);
+-      if (afterBlock < this.view.state.doc.content.size) {
+-        tr.setSelection(TextSelection.create(tr.doc, afterBlock + 1));
+-      } else {
+-        // At doc end: append a paragraph below (Typora style).
+-        const paraType = this.view.state.schema.nodes.paragraph;
+-        const newPara = paraType?.createAndFill();
+-        if (newPara) {
+-          tr.insert(afterBlock, newPara);
+-          tr.setSelection(TextSelection.create(tr.doc, afterBlock + 1));
+-        }
+-      }
+-      this.view.dispatch(tr);
+-      this.view.focus();
+-    }
++    if (!this.view.editable || this.context.readOnly) return;
++    if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && (e.key !== "Enter" || e.shiftKey)) return;
++    e.preventDefault();
++    const pos = this.getPos();
++    if (pos != null) leaveCodeLanguage(this.view, pos, e.key === "ArrowUp" ? -1 : 1);
+   };
+@@ -208,7 +241,7 @@
      const lang = (node.attrs.lang as string) ?? "";
      if (lang) this.dom.setAttribute("data-lang", lang);
      else this.dom.removeAttribute("data-lang");
@@ -118,9 +241,7 @@
      this.applyDecorations(decorations);
      return true;
    }
-@@ -223,8 +241,8 @@
-   }
- 
+@@ -225,5 +258,5 @@
    destroy(): void {
 -    this.inputEl.removeEventListener("input", this.onInput);
 -    this.inputEl.removeEventListener("keydown", this.onInputKeyDown);
@@ -128,4 +249,128 @@
 +    this.languageIcon?.destroy();
    }
  }
- 
+@@ -242,6 +275,7 @@
+         const m = tr.getMeta(langFocusKey);
+         if (m === null) return null;
+         if (m !== undefined) return m as LangFocus;
++        if (tr.selectionSet) return null;
+         // Map old pos through tr.mapping; if code_block no longer exists, drop.
+         if (!old) return null;
+         const mapped = tr.mapping.map(old.pos);
+@@ -294,5 +328,6 @@
+       handleKeyDown(view, e) {
+         if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return false;
+         if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return false;
++        if (view.editable === false || view.composing || e.isComposing || e.keyCode === 229) return false;
+         const state = view.state;
+         const lf = langFocusKey.getState(state);
+@@ -300,32 +335,10 @@
+-        // Case A: already in lang-focus → ArrowUp exits back to code body,
+-        // ArrowDown exits to the block below (or spawns one).
++        // Headless specs use virtual language focus; the native input uses
++        // the same navigation after committing its draft.
+         if (lf) {
+           const node = state.doc.nodeAt(lf.pos);
+           if (!node || node.type.name !== "code_block") {
+             view.dispatch(state.tr.setMeta(langFocusKey, null));
+             return true;
+           }
+-          if (e.key === "ArrowUp") {
+-            const endInside = lf.pos + node.nodeSize - 1;
+-            const tr = state.tr
+-              .setSelection(TextSelection.create(state.doc, endInside))
+-              .setMeta(langFocusKey, null);
+-            view.dispatch(tr);
+-            return true;
+-          }
+-          // ArrowDown
+-          const afterBlock = lf.pos + node.nodeSize;
+-          const tr = state.tr.setMeta(langFocusKey, null);
+-          if (afterBlock < state.doc.content.size) {
+-            tr.setSelection(TextSelection.create(tr.doc, afterBlock + 1));
+-          } else {
+-            const paraType = state.schema.nodes.paragraph;
+-            const newPara = paraType?.createAndFill();
+-            if (newPara) {
+-              tr.insert(afterBlock, newPara);
+-              tr.setSelection(TextSelection.create(tr.doc, afterBlock + 1));
+-            }
+-          }
+-          view.dispatch(tr);
+-          return true;
++          return leaveCodeLanguage(view, lf.pos, e.key === "ArrowUp" ? -1 : 1);
+         }
+@@ -333,53 +346,25 @@
+         const sel = state.selection;
+-        if (!sel.empty) return false;
++        if (!(sel instanceof TextSelection) || !sel.empty) return false;
+         const $from = sel.$from;
+-
+-        // Case B: cursor at END of a code_block's body → ArrowDown enters
+-        // that code_block's lang input.
+-        if (
+-          e.key === "ArrowDown" &&
+-          $from.parent.type.name === "code_block" &&
+-          $from.parentOffset === $from.parent.content.size
+-        ) {
+-          const cbPos = $from.before();
+-          // PM selection stays put (end of code body); lang-focus hides
+-          // the caret via `data-lang-focus` + CSS `.cb-lang-focus
+-          // .play-caret{display:none}` and the pretty renderCase.
+-          view.dispatch(state.tr.setMeta(langFocusKey, { pos: cbPos }));
+-          return true;
+-        }
+-
+-        // Case C: cursor at START of a block whose previous sibling is a
+-        // code_block → ArrowUp enters that preceding code_block's lang input.
+-        if (
+-          e.key === "ArrowUp" &&
+-          $from.depth >= 1 &&
+-          $from.parentOffset === 0
+-        ) {
+-          const parentPos = $from.before();
+-          if (parentPos > 0) {
+-            // Previous sibling starts at the depth-1 index just before.
+-            const $before = state.doc.resolve(parentPos);
+-            const index = $before.index();
+-            if (index > 0) {
+-              const prev = $before.parent.child(index - 1);
+-              if (prev.type.name === "code_block") {
+-                const prevPos = parentPos - prev.nodeSize;
+-                // Park PM selection at the end of the prev code_block's body
+-                // so the PM caret isn't left in the block below. It gets
+-                // hidden by `data-lang-focus`; on ArrowUp-exit it becomes
+-                // visible at the body end, which is what the user wants.
+-                const endInside = prevPos + prev.nodeSize - 1;
+-                const tr = state.tr
+-                  .setSelection(TextSelection.create(state.doc, endInside))
+-                  .setMeta(langFocusKey, { pos: prevPos });
+-                view.dispatch(tr);
+-                return true;
+-              }
+-            }
+-          }
+-        }
+-        return false;
++        if ($from.depth < 1) return false;
++        const up = e.key === "ArrowUp";
++        const atVisualEdge = () =>
++          (up ? $from.parentOffset === 0 : $from.parentOffset === $from.parent.content.size) ||
++          view.endOfTextblock(up ? "up" : "down");
++        if ($from.parent.type.name === "code_block") {
++          if (!atVisualEdge()) return false;
++          return up ? focusCodeLanguage(view, $from.before()) : moveOutsideCode(view, $from.before(), 1);
++        }
++        const boundary = up ? $from.before() : $from.after();
++        const $boundary = state.doc.resolve(boundary);
++        const neighbor = up ? $boundary.nodeBefore : $boundary.nodeAfter;
++        if (neighbor?.type.name !== "code_block" || !atVisualEdge()) return false;
++        if (!up) return focusCodeLanguage(view, boundary);
++        // From below, return to the body before reaching the language header.
++        view.dispatch(state.tr
++          .setSelection(TextSelection.create(state.doc, boundary - 1))
++          .setMeta(langFocusKey, null));
++        return true;
+       },
+     },
+   });

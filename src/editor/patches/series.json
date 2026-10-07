@@ -51,7 +51,8 @@
       "patch": "syntax/upstream.patch",
       "additions": {
         "src/mint/syntax.ts": "syntax/syntax.ts",
-        "src/mint/blocks.ts": "syntax/blocks.ts"
+        "src/mint/blocks.ts": "syntax/blocks.ts",
+        "src/mint/escapes.ts": "syntax/escapes.ts"
       },
       "tests": [
         "src/editor/tests/features.test.ts"
@@ -62,14 +63,22 @@
     },
     {
       "id": "05-math",
-      "reason": "KaTeX 行内与块级公式",
+      "reason": "公式共用语法与 KaTeX 预览，行内源码装饰及独行公式创建、换行、导航与输入法保护",
       "patch": "math/upstream.patch",
       "additions": {
-        "src/mint/math.ts": "math/math.ts"
+        "src/mint/math.ts": "math/math.ts",
+        "src/mint/math-syntax.ts": "math/syntax.ts",
+        "src/mint/math-inline.ts": "math/inline.ts",
+        "src/mint/math-block.ts": "math/block.ts",
+        "src/mint/math-behavior.ts": "math/behavior.ts",
+        "src/mint/math-view.ts": "math/view.ts",
+        "src/mint/math-preview.ts": "math/preview.ts",
+        "src/mint/math-widget.ts": "math/widget.ts"
       },
       "tests": [
+        "src/editor/tests/math.test.ts",
         "src/editor/tests/features.test.ts",
-        "tests/editor/browser/editor.spec.ts"
+        "tests/editor/browser/math.spec.ts"
       ],
       "requires": [
         "04-mint-syntax",
@@ -123,10 +132,11 @@
     },
     {
       "id": "09-callouts",
-      "reason": "Callout 类型、标题、折叠与旧版外观交互；正文编辑保留标题，空正文退格返回标记",
+      "reason": "Callout 类型、标题、折叠与嵌套；创建后正文回车留在块内，键盘导航经过名称与正文，标记行仅用于保存",
       "patch": "callouts/upstream.patch",
       "additions": {
-        "src/mint/callout.ts": "callouts/callout.ts"
+        "src/mint/callout.ts": "callouts/callout.ts",
+        "src/mint/callout-behavior.ts": "callouts/behavior.ts"
       },
       "tests": [
         "src/editor/tests/callout-interaction.test.ts",
@@ -214,7 +224,7 @@
     },
     {
       "id": "15-block-controls",
-      "reason": "代码语言与 Callout 标题直接编辑、原生类型选单及右侧折叠控件；回车或失焦提交",
+      "reason": "代码语言与 Callout 标题直接编辑、原生类型选单及右侧折叠控件；回车或失焦提交，代码导航遵循头部在正文之前的顺序",
       "patch": "block-controls/upstream.patch",
       "additions": {
         "src/mint/inline-edit.ts": "block-controls/inline-edit.ts"
@@ -231,6 +241,18 @@
         "10-code",
         "11-mermaid",
         "12-product-controls"
+      ]
+    },
+    {
+      "id": "16-block-controls-tests",
+      "reason": "代码语言编辑框移到顶部后，调整上下键导航的 specs；保留原有检查点并补齐从上方进入头部的检查",
+      "patch": "block-controls/test-expectations.patch",
+      "additions": {},
+      "tests": [
+        ".generated/typora-web/tests/features/fenced-code.test.ts"
+      ],
+      "requires": [
+        "15-block-controls"
       ]
     }
   ]

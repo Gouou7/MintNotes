@@ -74,6 +74,31 @@ test('code language controls remain editable after returning from readonly mode'
   await expect(page.locator('.mint-code-language-label')).toHaveText('python');
   await expect(language).toBeHidden();
 });
+test('code arrows follow above, language, body, below in both directions without saving', async ({ page }) => {
+  await load(page, 'Above\n\n```js\nbody\n```\n\nBelow');
+  const live = page.locator('.markdown-editor-host .ProseMirror').first();
+  const language = page.getByRole('textbox', { name: 'Code language' });
+  const caret = () => live.evaluate(root => {
+    const selection = root.ownerDocument.getSelection(), node = selection?.focusNode;
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node as Element : node?.parentElement;
+    const block = element?.closest('p, code');
+    if (!selection || !block) return null;
+    const range = root.ownerDocument.createRange(); range.selectNodeContents(block); range.setEnd(selection.focusNode!, selection.focusOffset);
+    return { text: block.textContent, offset: range.toString().length };
+  });
+  await page.getByText('Above', { exact: true }).click(); await page.keyboard.press('End'); await page.keyboard.press('ArrowDown');
+  await expect(language).toBeFocused(); expect(await saved(page)).toBe(0);
+  await language.press('ArrowDown'); await expect(language).toBeHidden();
+  await expect.poll(caret).toEqual({ text: 'body', offset: 0 });
+  await page.keyboard.press('End'); await page.keyboard.press('ArrowDown');
+  await expect.poll(caret).toEqual({ text: 'Below', offset: 0 });
+  await page.keyboard.press('ArrowUp'); await expect(language).toBeHidden();
+  await expect.poll(caret).toEqual({ text: 'body', offset: 4 });
+  await page.keyboard.press('Home'); await page.keyboard.press('ArrowUp'); await expect(language).toBeFocused();
+  await language.press('ArrowUp'); await expect(language).toBeHidden();
+  await expect.poll(caret).toEqual({ text: 'Above', offset: 5 });
+  expect(await saved(page)).toBe(0);
+});
 test('pending attachment cannot write into another note', async ({ page }) => {
   await load(page, 'Alpha'); await page.getByText('Alpha', { exact: true }).click();
   await page.locator('.markdown-editor-host').evaluate(element => { const transfer = new DataTransfer(); transfer.items.add(new File(['image'], 'photo.png', { type: 'image/png' })); const rect = element.querySelector('.ProseMirror p')!.getBoundingClientRect(); element.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: rect.left + 10, clientY: rect.top + 8 })); });
@@ -175,20 +200,66 @@ test('Callout header controls edit titles and types while retaining body and nes
   await expect(outer.locator(':scope > .callout-content')).not.toBeVisible(); expect(await saved(page)).toBe(savedBeforeFold);
 });
 
-test('empty Callout body Backspace returns to its marker and undo restores the empty body', async ({ page }) => {
-  await load(page, 'Before\n\n> [!note] Title');
+test('Callout display and folded content have no caret while native inputs remain editable', async ({ page }) => {
+  await load(page, 'Before\n\n> [!note]+ note\n>\n> Body');
   const quote = page.locator('.markdown-callout'), header = quote.locator('.callout-header');
-  await expect(quote).toHaveCount(1); await expect(header.locator('strong')).toHaveText('Title');
-  await page.getByRole('button', { name: 'source', exact: true }).click();
-  await page.locator('textarea.typora-web-source:not([hidden])').evaluate(element => {
-    const source = element as HTMLTextAreaElement; source.setSelectionRange(source.value.length, source.value.length);
+  const label = header.getByRole('button', { name: 'Callout title' });
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    await page.getByText('Body', { exact: true }).click();
+    await expect(quote).toHaveCSS('caret-color', theme === 'light' ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)');
+    await expect(header).toHaveCSS('caret-color', 'rgba(0, 0, 0, 0)');
+    await expect(header).toHaveCSS('user-select', 'none');
+    await expect(label).toHaveCSS('caret-color', 'rgba(0, 0, 0, 0)');
+    const before = await saved(page); await label.click();
+    const input = header.getByRole('textbox', { name: 'Callout title' });
+    await expect(input).toBeFocused(); await expect(input).toHaveCSS('user-select', 'text');
+    await expect(input).not.toHaveCSS('caret-color', 'rgba(0, 0, 0, 0)');
+    await expect(input).toHaveCSS('color', theme === 'light' ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)');
+    await input.press('Enter'); await expect(label).toBeVisible();
+    await header.getByRole('button', { name: 'Toggle callout' }).click();
+    await expect(quote.locator(':scope > .callout-content')).toHaveCSS('caret-color', 'rgba(0, 0, 0, 0)');
+    await expect(page.locator('.play-caret')).toHaveCount(0); expect(await saved(page)).toBe(before);
+    await header.getByRole('button', { name: 'Toggle callout' }).click();
+  }
+});
+
+test('Callout creation keeps empty Enter and Backspace inside the new header/body interaction', async ({ page }) => {
+  await load(page, '');
+  const live = page.locator('.markdown-editor-host .ProseMirror').first(); await live.click();
+  await page.keyboard.type('> [!note] Title'); await expect(page.locator('.markdown-callout')).toHaveCount(0);
+  await page.keyboard.press('Enter');
+  const quote = page.locator('.markdown-callout'), header = quote.locator(':scope > .callout-header');
+  await expect(header).toBeVisible(); await expect(header.locator('strong')).toHaveText('Title');
+  await expect(quote.locator(':scope > .callout-content > p')).toHaveCount(2);
+  await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
+  await expect(quote.locator(':scope > .callout-content > p')).toHaveCount(4); await expect(live.locator(':scope > p')).toHaveCount(0);
+  await page.keyboard.type('Body'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('> Body');
+  await load(page, '> [!note] Title');
+  await quote.locator(':scope > .callout-content').click(); await page.keyboard.press('Backspace');
+  await expect(header.getByRole('textbox', { name: 'Callout title' })).toBeFocused(); await expect(header).toBeVisible();
+  await expect(quote.locator(':scope > .callout-content > p')).toHaveCount(2); await expect(page.locator('.mint-callout-editing')).toHaveCount(0);
+});
+
+test('Callout arrows visit title before body in both directions and never expose marker source', async ({ page }) => {
+  await load(page, 'Above\n\n> [!note] Title\n> Body\n\nBelow');
+  const live = page.locator('.markdown-editor-host .ProseMirror').first();
+  const quote = page.locator('.markdown-callout'), header = quote.locator(':scope > .callout-header');
+  const title = header.getByRole('textbox', { name: 'Callout title' });
+  const caret = () => live.evaluate(root => {
+    const selection = root.ownerDocument.getSelection(), node = selection?.focusNode;
+    const paragraph = (node?.nodeType === Node.ELEMENT_NODE ? node as Element : node?.parentElement)?.closest('p');
+    if (!selection || !paragraph) return null;
+    const range = root.ownerDocument.createRange(); range.selectNodeContents(paragraph); range.setEnd(selection.focusNode!, selection.focusOffset);
+    return { text: paragraph.textContent, offset: range.toString().length };
   });
-  await page.getByRole('button', { name: 'live', exact: true }).click();
-  await quote.locator('.callout-content > p').last().click();
-  await page.keyboard.press('End'); await page.keyboard.press('Enter');
-  await expect(header).toBeVisible(); await expect(quote.locator('.callout-content > p')).toHaveCount(2);
-  await page.keyboard.press('Backspace'); await expect(header).not.toBeVisible();
-  await expect(quote.locator('.callout-content > p')).toHaveCount(1);
-  await page.keyboard.press('ControlOrMeta+z'); await expect(quote.locator('.callout-content > p')).toHaveCount(2); await expect(header).toBeVisible();
-  await page.keyboard.type('Body'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('> Body'); await expect(header).toBeVisible();
+  await page.getByText('Above', { exact: true }).click(); await page.keyboard.press('End'); await page.keyboard.press('ArrowDown');
+  await expect(title).toBeFocused(); await title.press('ArrowDown'); await expect(title).toBeHidden();
+  await expect.poll(caret).toEqual({ text: '[!note] Title\nBody', offset: '[!note] Title\n'.length });
+  await page.keyboard.press('End'); await page.keyboard.press('ArrowDown'); await expect.poll(caret).toEqual({ text: 'Below', offset: 0 });
+  await page.keyboard.press('ArrowUp'); await expect(title).toBeHidden();
+  await page.keyboard.press('Home'); await page.keyboard.press('ArrowUp'); await expect(title).toBeFocused();
+  await title.press('ArrowUp'); await expect.poll(caret).toEqual({ text: 'Above', offset: 5 });
+  await expect(header).toBeVisible(); await expect(quote.locator('.callout-marker-source')).toHaveCSS('display', 'none');
+  await expect(page.locator('.mint-callout-editing')).toHaveCount(0); expect(await saved(page)).toBe(0);
 });
