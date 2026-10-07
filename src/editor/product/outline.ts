@@ -1,5 +1,5 @@
-import type { OutlineItem } from "../types";
-import { documentOutline } from "./engine";
+import type { OutlineItem } from "../../types";
+import { documentOutline } from "../engine";
 
 function headingText(source: string): string {
   return source

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calloutDefinition, parseCalloutMarker } from "./callouts";
+import { calloutDefinition, parseCalloutMarker } from "./calloutMarker";
 
 describe("callouts", () => {
   it("maps every official Obsidian type and alias while keeping unknown types usable", () => {

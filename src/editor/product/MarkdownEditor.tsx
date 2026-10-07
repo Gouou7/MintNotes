@@ -1,14 +1,14 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
-import { useI18n } from "../i18n";
-import type { WorkspaceEditorMode } from "../types";
-import { createMintEditor, type Editor } from "./engine";
+import { useI18n } from "../../i18n";
+import type { WorkspaceEditorMode } from "../../types";
+import { createMintEditor, type Editor } from "../engine";
 import { editorPresentation } from "./controls";
 import { FrontmatterProperties } from "./FrontmatterProperties";
 import { parseFrontmatter } from "./frontmatter";
 import { editorScrollViewport } from "./scrollViewport";
 import { useImageReconnectRetry } from "./useImageReconnectRetry";
-import "../../.generated/typora-web/src/styles/widgets.css";
-import "../../.generated/typora-web/src/styles/theme-typora.css";
+import "../../../.generated/typora-web/src/styles/widgets.css";
+import "../../../.generated/typora-web/src/styles/theme-typora.css";
 import "./typora-overrides.css";
 
 interface Props {

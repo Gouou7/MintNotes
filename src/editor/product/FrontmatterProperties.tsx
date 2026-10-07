@@ -10,8 +10,8 @@ import {
   X
 } from "lucide-react";
 import { type KeyboardEvent, useEffect, useState } from "react";
-import { AppIcon } from "../components/AppIcon";
-import { useI18n } from "../i18n";
+import { AppIcon } from "../../components/AppIcon";
+import { useI18n } from "../../i18n";
 import {
   addFrontmatterProperty,
   deleteFrontmatterProperty,

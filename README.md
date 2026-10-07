@@ -53,7 +53,7 @@ pnpm install
 pnpm dev
 ```
 
-编辑器开发和构建会自动校验上游快照并应用本地补丁，生成目录无需手动维护；维护方式见[补丁说明](src/editor/typora-web-patches/README.md)，行为约束见[编辑器架构](docs/editor-architecture.md)。实时编辑遵循上游的 Markdown 序列化行为，编辑后可能发生等价格式变化，跨源码／实时模式不共享撤销历史。
+编辑器开发和构建会自动校验上游快照并应用本地补丁，生成目录无需手动维护；维护方式见[补丁说明](src/editor/patches/README.md)，行为约束见[编辑器架构](docs/editor-architecture.md)。实时编辑遵循上游的 Markdown 序列化行为，编辑后可能发生等价格式变化，跨源码／实时模式不共享撤销历史。
 
 Vite 默认运行在 `http://localhost:5173`，并将 `/api` 转发到 `http://127.0.0.1:8787` 的 Fastify 服务。常用检查命令为 `pnpm typecheck`、`pnpm test` 与 `pnpm build`；`pnpm test:crypto-worker`、`pnpm test:smoke` 分别检查加密 Worker 与 API，运行前需重新构建。
 

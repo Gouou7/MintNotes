@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { prepareTyporaWeb, applyStrictPatch } from './prepare-typora-web.mjs';
 const roots = [];
 const sourcePath = 'src/editor/typora-web';
-const patchesPath = 'src/editor/typora-web-patches';
+const patchesPath = 'src/editor/patches';
 afterEach(() => roots.splice(0).forEach(root => rmSync(root, { recursive: true, force: true })));
 function fresh() {
   const root = mkdtempSync(resolve(tmpdir(), 'mint-prepare-')); roots.push(root);

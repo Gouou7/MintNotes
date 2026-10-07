@@ -1,7 +1,7 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { parse, postprocess, preprocess } from "micromark";
 import type { Definition, RootContent } from "mdast";
-import { parseFrontmatter } from "../editor/frontmatter";
+import { parseFrontmatter } from "../editor/product/frontmatter";
 
 interface Range { from: number; to: number }
 export interface MarkdownImage {

@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { buildOutline } from "../../editor/outline";
+import { buildOutline } from "../../editor/product/outline";
 import type { OpenDocument, SortMode } from "../../types";
 import { compareDocuments, pinnedDocuments } from "../tree";
 import { countText } from "../wordCount";

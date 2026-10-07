@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
-import type { MarkdownEditorHandle } from "../../editor/MarkdownEditor";
+import type { MarkdownEditorHandle } from "../../editor/product/MarkdownEditor";
 import type { OutlineItem, WorkspaceEditorMode } from "../../types";
-import { editorScrollViewport } from "../../editor/scrollViewport";
-import { visibleScrollBounds, type EditorScrollViewport } from "../../editor/viewport";
-import { textareaCaretRect } from "../../editor/viewport";
+import { editorScrollViewport } from "../../editor/product/scrollViewport";
+import { visibleScrollBounds, type EditorScrollViewport } from "../../editor/product/viewport";
+import { textareaCaretRect } from "../../editor/product/viewport";
 
 export const HEADING_VIEWPORT_POSITION = 0.4;
 

@@ -11,9 +11,11 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `src/App.tsx`、`src/features/session/` | 应用入口、认证、设备解锁与会话生命周期 |
 | `src/features/vault/` | 保险库工作区、视图、保存队列、同步与历史控制器 |
 | `src/features/` | 树与排序、附件、导入导出、历史等领域逻辑及功能界面 |
-| `src/editor/` | 编辑器产品集成、阅读模式、Front Matter 与派生展示 |
+| `src/editor/engine.ts` | 产品访问生成引擎的受限控制器入口 |
+| `src/editor/product/` | 编辑器产品集成、阅读模式、Front Matter 与派生展示及相邻测试 |
+| `src/editor/tests/`、`src/editor/types/` | 引擎回归测试与上游类型声明 |
 | `src/editor/typora-web/` | 不修改的原始上游快照、测试与许可 |
-| `src/editor/typora-web-patches/` | 按功能归档的补丁、新增模块与应用清单 |
+| `src/editor/patches/` | 按功能归档的补丁、新增模块与应用清单 |
 | `src/crypto/`、`src/storage/`、`src/api.ts` | 加密 Worker 及调用入口、Dexie 存储、HTTP 接口 |
 | `src/components/`、`src/i18n/`、`src/styles.css` | 公共控件、界面翻译、应用样式 |
 | `server/` | 服务组合、领域路由、认证、SQLite、日志、维护与备份 |
@@ -22,7 +24,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `public/` | 随应用发布的静态资源与第三方许可声明 |
 | `docs/` | 系统设计、编辑器原则与自托管文档 |
 
-上游可运行源码生成于忽略的 `.generated/typora-web/`；不要直接修改生成树或原始上游。原始上游和补丁目录是维护素材，从常规 TypeScript 检查和 Mint 测试收集中排除；运行引擎的类型检查通过生成代码完成。测试与实现相邻，命名为 `*.test.ts`／`*.test.tsx`；原始上游测试与 specs 位于 `src/editor/typora-web/`，浏览器验收位于 `tests/editor/browser/`。`dist/`、`server-dist/` 是构建产物；`data/`、`notes-data/`、`backups/` 是运行数据，不作为源码维护或提交。
+上游可运行源码生成于忽略的 `.generated/typora-web/`；不要直接修改生成树或原始上游。原始上游和补丁目录是维护素材，从常规 TypeScript 检查和 Mint 测试收集中排除；运行引擎的类型检查通过生成代码完成。测试与实现相邻，命名为 `*.test.ts`／`*.test.tsx`；编辑器引擎回归测试集中于 `src/editor/tests/`，原始上游测试与 specs 位于 `src/editor/typora-web/`，浏览器验收位于 `tests/editor/browser/`。`dist/`、`server-dist/` 是构建产物；`data/`、`notes-data/`、`backups/` 是运行数据，不作为源码维护或提交。
 
 ## 开发与命令
 
@@ -37,7 +39,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `pnpm test:upstream`／`pnpm test:patched-upstream` | 分别验证原始与生成的完整上游测试 |
 | `pnpm prepare:editor` | 离线校验上游并应用严格补丁 |
 | `pnpm test:editor-browser` | 构建夹具并运行 Chromium／Firefox／WebKit 验收 |
-| `pnpm exec vitest run src/editor/engine.test.ts` | 定向运行单个测试文件；按任务替换路径 |
+| `pnpm exec vitest run src/editor/tests/engine.test.ts` | 定向运行单个测试文件；按任务替换路径 |
 | `pnpm build` | 构建客户端与服务端；也可用 `pnpm build:web`／`pnpm build:server` 分别构建 |
 | `pnpm start` | 运行已构建的服务端 |
 | `pnpm backup` | 对已构建的服务端执行 SQLite 在线备份；构建后运行，输出路径与摘要 |
@@ -69,7 +71,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 - `src/features/vault/VaultWorkspace.tsx` 与 `server/routes.ts` 仍是需要逐步提取的协调边界。修改相关行为时，先将其提取到职责单一的 Hook、控制器、领域路由或服务并测试，再扩展功能。
 - 视图通过 Hook／控制器访问数据，不直接调用 Dexie、加密 Worker 或同步 API。
 - 编辑器优先采用上游 FeatureSpec 与插件；ProseMirror 类型及视图访问仅在引擎、补丁和引擎测试内部。业务组件通过 `src/editor/engine.ts` 的 Mint 控制器接入，不另建语法或阅读转换链。
-- 上游和补丁的维护方式见 `src/editor/typora-web-patches/README.md`。新功能使用独立的语义目录，将 `upstream.patch` 与新增模块放在一起；在 `series.json` 声明应用顺序、用途、依赖与测试，不依赖目录排序。准备脚本失败时人工核对，不模糊合并。引入或更新第三方代码时核对 `public/THIRD_PARTY_NOTICES.txt`。
+- 上游和补丁的维护方式见 `src/editor/patches/README.md`。新功能使用独立的语义目录，将 `upstream.patch` 与新增模块放在一起；在 `series.json` 声明应用顺序、用途、依赖与测试，不依赖目录排序。准备脚本失败时人工核对，不模糊合并。引入或更新第三方代码时核对 `public/THIRD_PARTY_NOTICES.txt`。
 - 新增界面文案使用 `src/i18n/index.tsx` 的消息键，补齐英文、简体中文、繁体中文。控件图标显式导入 `lucide-react` 并通过 `AppIcon` 渲染，不用 Emoji、字体或 CDN 图标替代；纯图标按钮提供可翻译的可访问名称。
 
 ## 不变量

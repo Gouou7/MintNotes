@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parse } from "../../.generated/typora-web/src/parser";
-import { serialize } from "../../.generated/typora-web/src/serializer";
-import { safeLink } from "../../.generated/typora-web/src/mint/context";
-import { literals } from "../../.generated/typora-web/src/mint/syntax";
-import { highlightRanges } from "../../.generated/typora-web/src/mint/code";
-import { createMintEditor } from "./engine";
-import { parseCalloutMarker } from "./callouts";
+import { parse } from "../../../.generated/typora-web/src/parser";
+import { serialize } from "../../../.generated/typora-web/src/serializer";
+import { safeLink } from "../../../.generated/typora-web/src/mint/context";
+import { literals } from "../../../.generated/typora-web/src/mint/syntax";
+import { highlightRanges } from "../../../.generated/typora-web/src/mint/code";
+import { createMintEditor } from "../engine";
+import { parseCalloutMarker } from "../product/calloutMarker";
 const cases = [
   '$x_1 + y$ and $$a^2$$', '$$\nx = \\frac{a}{b}\n$$',
   '[[Note#Heading|别名]] ![[Note]]', '%%hidden **text** [[link]]%% visible',

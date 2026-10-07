@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { undoInputRule } from "prosemirror-inputrules";
-import { defaultPlugins } from "../../.generated/typora-web/src/editor";
-import { parse } from "../../.generated/typora-web/src/parser";
-import { schema } from "../../.generated/typora-web/src/schema";
-import { serialize } from "../../.generated/typora-web/src/serializer";
+import { defaultPlugins } from "../../../.generated/typora-web/src/editor";
+import { parse } from "../../../.generated/typora-web/src/parser";
+import { schema } from "../../../.generated/typora-web/src/schema";
+import { serialize } from "../../../.generated/typora-web/src/serializer";
 
 const views: EditorView[] = [];
 afterEach(() => { views.splice(0).forEach(view => view.destroy()); document.body.replaceChildren(); });

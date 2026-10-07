@@ -1,11 +1,11 @@
 import { createRoot } from "react-dom/client";
 import { useRef, useState } from "react";
-import { MarkdownEditor } from "../../../src/editor/MarkdownEditor";
-import { ReadingEditor } from "../../../src/editor/ReadingEditor";
+import { MarkdownEditor } from "../../../src/editor/product/MarkdownEditor";
+import { ReadingEditor } from "../../../src/editor/product/ReadingEditor";
 import { I18nProvider } from "../../../src/i18n";
 import { NotePaneLayout } from "../../../src/features/vault/NotePaneLayout";
 import { useNoteEditorIntegration } from "../../../src/features/vault/useNoteEditorIntegration";
-import { buildOutline } from "../../../src/editor/outline";
+import { buildOutline } from "../../../src/editor/product/outline";
 import type { OpenDocument, WorkspaceEditorMode } from "../../../src/types";
 import "../../../src/styles.css";
 import "./fixture.css";

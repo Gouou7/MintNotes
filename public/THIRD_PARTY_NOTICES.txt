@@ -6,7 +6,7 @@ typora-web
 Mint Notes 实时与阅读编辑器采用 typora-web v0.3.1。
 来源：https://github.com/Yuyz0112/typora-web
 提交：317fdb0f89a38cfc98a0bba753deec979c6722e6
-原始源码与完整许可保留于 src/editor/typora-web，产品接入及功能补丁按功能归档于 src/editor/typora-web-patches。
+原始源码与完整许可保留于 src/editor/typora-web，产品集成位于 src/editor/product，上游接入及功能补丁按功能归档于 src/editor/patches。
 
 MIT License
 

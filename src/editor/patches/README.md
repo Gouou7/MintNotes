@@ -8,7 +8,7 @@
 
 `series.json` 是应用顺序、用途、依赖及验收测试的唯一清单。每个功能使用不带序号的语义目录，`upstream.patch` 描述对上游文件的必要改动，同目录的新增模块按 `additions` 映射复制到生成树，不修改原始上游。目录名不参与排序；清单中的现有补丁 ID 保持稳定，供依赖引用。
 
-例如公式功能由 `math/upstream.patch` 和 `math/math.ts` 组成；公共控制器和展示上下文位于 `integration/`，共享语法保护和块预览接入位于 `syntax/`。运行引擎仍生成在仓库根目录的 `.generated/typora-web/`，产品通过 `src/editor/engine.ts` 引用。
+例如公式功能由 `math/upstream.patch` 和 `math/math.ts` 组成；公共控制器和展示上下文位于 `integration/`，共享语法保护和块预览接入位于 `syntax/`。运行引擎仍生成在仓库根目录的 `.generated/typora-web/`，`src/editor/product/` 中的产品代码通过 `src/editor/engine.ts` 引用。
 
 | 补丁 | 上游缺口／用途 | 主要验收 |
 | --- | --- | --- |

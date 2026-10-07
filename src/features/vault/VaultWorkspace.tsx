@@ -33,11 +33,11 @@ import {
   hasDevicePin,
   markEndpointRevocationPending,
 } from "../../crypto/deviceUnlock";
-import { buildOutline, findOutlineHeading } from "../../editor/outline";
-import { ReadingEditor } from "../../editor/ReadingEditor";
+import { buildOutline, findOutlineHeading } from "../../editor/product/outline";
+import { ReadingEditor } from "../../editor/product/ReadingEditor";
 import { useNoteEditorIntegration } from "./useNoteEditorIntegration";
-import { MarkdownEditor } from "../../editor/MarkdownEditor";
-import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/wikilinks";
+import { MarkdownEditor } from "../../editor/product/MarkdownEditor";
+import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/product/wikiLinkResolver";
 import { ATTACHMENT_TRANSFER_CONCURRENCY, attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
 import { AttachmentCloneService } from "../attachmentClone";
 import { documentPatchChanges } from "../documentPatch";

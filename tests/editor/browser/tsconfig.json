@@ -1,4 +1,4 @@
 {
   "extends": "../../../tsconfig.json",
-  "include": ["*.ts", "*.tsx", "../../../playwright.config.ts", "../../../src/editor/upstream.d.ts"]
+  "include": ["*.ts", "*.tsx", "../../../playwright.config.ts", "../../../src/editor/types/upstream.d.ts"]
 }

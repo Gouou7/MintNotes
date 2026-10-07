@@ -1,4 +1,4 @@
-import type { OpenDocument } from "../types";
+import type { OpenDocument } from "../../types";
 
 export interface WikiLinkTarget {
   note: string;

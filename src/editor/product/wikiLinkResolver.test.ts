@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { OpenDocument } from "../types";
-import { parseWikiLinkTarget, resolveWikiLink } from "./wikilinks";
+import type { OpenDocument } from "../../types";
+import { parseWikiLinkTarget, resolveWikiLink } from "./wikiLinkResolver";
 
 function document(objectId: string, kind: "note" | "folder", title: string, parentId: string | null): OpenDocument {
   return {

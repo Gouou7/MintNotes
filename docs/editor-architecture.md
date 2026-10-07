@@ -12,15 +12,17 @@ Mint 编辑器以原版 Typora-web 的功能组织、解析、序列化和交互
 | --- | --- |
 | `src/editor/typora-web/` | 不修改的上游源码、样式、测试、specs、README、包信息与完整 MIT 许可 |
 | `src/editor/typora-web/upstream.json` | 来源、版本、完整提交号与逐文件 SHA-256 清单 |
-| `src/editor/typora-web-patches/` | 按功能归档的补丁、新增模块及 `series.json` 应用顺序 |
+| `src/editor/patches/` | 按功能归档的补丁、新增模块及 `series.json` 应用顺序 |
 | `.generated/typora-web/` | 忽略的可运行源码，由准备脚本重建 |
-| `src/editor/` | React 集成、受限控制器入口、属性面板与安全渲染 |
+| `src/editor/engine.ts` | 产品访问生成引擎的受限控制器入口 |
+| `src/editor/product/` | React 集成、属性面板、安全渲染与产品辅助模块及相邻测试 |
+| `src/editor/tests/`、`src/editor/types/` | 引擎回归测试与上游类型声明 |
 
 `scripts/prepare-typora-web.mjs` 校验完整基准、复制文件、按声明顺序应用补丁，并校验生成文件。补丁只接受指定偏移与完全一致的上下文；上下文不匹配、基准被改动或路径越界时立即失败，不猜测合并。开发、类型检查、测试和客户端构建调用同一准备流程；构建不联网，不需要系统 Git 或 patch 命令，也不导入上游包管理器锁文件。
 
 每个补丁功能使用不带序号的语义目录，包含 `upstream.patch` 和该功能新增模块；应用顺序由 `series.json` 的数组顺序决定。原始上游和补丁素材不直接参与 Mint 常规类型检查或测试收集；类型检查沿产品入口检查生成引擎，上游测试使用独立配置。
 
-新增功能优先使用上游 `FeatureSpec`、MarkdownIt 插件、解析 token、序列化处理器和 ProseMirror 插件。补丁承担上游缺口及必要的产品接入点，不复制旧核心的源码映射、输入重建和独立阅读转换。补丁职责、依赖、测试与升级步骤见[补丁来源与维护说明](../src/editor/typora-web-patches/README.md)。
+新增功能优先使用上游 `FeatureSpec`、MarkdownIt 插件、解析 token、序列化处理器和 ProseMirror 插件。补丁承担上游缺口及必要的产品接入点，不复制旧核心的源码映射、输入重建和独立阅读转换。补丁职责、依赖、测试与升级步骤见[补丁来源与维护说明](../src/editor/patches/README.md)。
 
 ## 正文与编辑提交
 
@@ -71,7 +73,7 @@ Mint 编辑器以原版 Typora-web 的功能组织、解析、序列化和交互
 
 ## 样式边界
 
-上游 `widgets.css` 和 `theme-typora.css` 原样使用，实时和阅读模式共用正文样式。`src/editor/typora-overrides.css` 是唯一 Mint 编辑器覆盖入口，仅管理主题颜色、字号偏好、代码换行、容器滚动、移动布局及新增功能样式。后续视觉调整集中于该文件，不修改上游主题或恢复旧版排版覆盖。
+上游 `widgets.css` 和 `theme-typora.css` 原样使用，实时和阅读模式共用正文样式。`src/editor/product/typora-overrides.css` 是唯一 Mint 编辑器覆盖入口，仅管理主题颜色、字号偏好、代码换行、容器滚动、移动布局及新增功能样式。后续视觉调整集中于该文件，不修改上游主题或恢复旧版排版覆盖。
 
 控件图标通过 AppIcon 和显式 Lucide 导入渲染；新增产品文案提供英文、简体中文与繁体中文，纯图标按钮具有可翻译的可访问名称。
 

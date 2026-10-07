@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMintEditor, type Editor } from "./engine";
+import { createMintEditor, type Editor } from "../engine";
 const editors: Editor[] = [];
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); document.body.replaceChildren(); });
 function setup(markdown: string, readOnly = false) {

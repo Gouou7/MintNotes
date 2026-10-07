@@ -52,7 +52,7 @@ export function applyStrictPatch(files, patch, name) {
 
 export function prepareTyporaWeb({ write = true, rootDirectory = root } = {}) {
   const root = rootDirectory;
-  const source = resolve(root, "src/editor/typora-web"), patches = resolve(root, "src/editor/typora-web-patches");
+  const source = resolve(root, "src/editor/typora-web"), patches = resolve(root, "src/editor/patches");
   const manifest = JSON.parse(readFileSync(resolve(source, "upstream.json"), "utf8"));
   const series = JSON.parse(readFileSync(resolve(patches, "series.json"), "utf8"));
   if (series.commit !== manifest.commit) throw new Error("Typora-web patch baseline does not match upstream commit");

@@ -32,6 +32,6 @@
   ],
   "exclude": [
     "src/editor/typora-web/**",
-    "src/editor/typora-web-patches/**"
+    "src/editor/patches/**"
   ]
 }

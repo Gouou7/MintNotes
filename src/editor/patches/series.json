@@ -11,7 +11,7 @@
         "src/mint/widgets.ts": "integration/widgets.ts"
       },
       "tests": [
-        "src/editor/engine.test.ts"
+        "src/editor/tests/engine.test.ts"
       ],
       "requires": [
         "ProseMirror",
@@ -26,7 +26,7 @@
         "src/mint/references.ts": "data-integrity/references.ts"
       },
       "tests": [
-        "src/editor/engine.test.ts"
+        "src/editor/tests/engine.test.ts"
       ],
       "requires": [
         "01-integration"
@@ -38,7 +38,7 @@
       "patch": "safe-images/upstream.patch",
       "additions": {},
       "tests": [
-        "src/editor/engine.test.ts",
+        "src/editor/tests/engine.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
       "requires": [
@@ -54,7 +54,7 @@
         "src/mint/blocks.ts": "syntax/blocks.ts"
       },
       "tests": [
-        "src/editor/features.test.ts"
+        "src/editor/tests/features.test.ts"
       ],
       "requires": [
         "01-integration"
@@ -68,7 +68,7 @@
         "src/mint/math.ts": "math/math.ts"
       },
       "tests": [
-        "src/editor/features.test.ts",
+        "src/editor/tests/features.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
       "requires": [
@@ -84,7 +84,7 @@
         "src/mint/wikilink.ts": "wikilink/wikilink.ts"
       },
       "tests": [
-        "src/editor/features.test.ts",
+        "src/editor/tests/features.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
       "requires": [
@@ -99,7 +99,7 @@
         "src/mint/comment.ts": "comments/comment.ts"
       },
       "tests": [
-        "src/editor/features.test.ts",
+        "src/editor/tests/features.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
       "requires": [
@@ -114,7 +114,7 @@
         "src/mint/footnote.ts": "footnotes/footnote.ts"
       },
       "tests": [
-        "src/editor/features.test.ts",
+        "src/editor/tests/features.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
       "requires": [
@@ -129,8 +129,8 @@
         "src/mint/callout.ts": "callouts/callout.ts"
       },
       "tests": [
-        "src/editor/callout-interaction.test.ts",
-        "src/editor/features.test.ts",
+        "src/editor/tests/callout-interaction.test.ts",
+        "src/editor/tests/features.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
       "requires": [
@@ -145,7 +145,7 @@
         "src/mint/code.ts": "code/code.ts"
       },
       "tests": [
-        "src/editor/features.test.ts",
+        "src/editor/tests/features.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
       "requires": [
@@ -161,7 +161,7 @@
         "src/mint/mermaid.ts": "mermaid/mermaid.ts"
       },
       "tests": [
-        "src/editor/features.test.ts",
+        "src/editor/tests/features.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
       "requires": [
@@ -204,7 +204,7 @@
         "src/mint/blockquote.ts": "blockquote/blockquote.ts"
       },
       "tests": [
-        "src/editor/blockquote.test.ts",
+        "src/editor/tests/blockquote.test.ts",
         "tests/editor/browser/editor.spec.ts"
       ],
       "requires": [

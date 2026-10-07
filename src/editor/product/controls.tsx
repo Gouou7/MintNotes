@@ -1,9 +1,9 @@
 import { AlignCenter, AlignLeft, AlignRight, Beaker, BookOpen, Bug, ChevronDown, ChevronRight, CircleCheck, CircleHelp, CircleX, ClipboardList, Copy, CornerUpLeft, Image, ImageOff, Info, Lightbulb, ListMinus, MessageSquareWarning, OctagonAlert, Quote, ShieldAlert, Sparkles, TableProperties, Trash2, TriangleAlert, type LucideIcon } from "lucide-react";
 import { createRoot } from "react-dom/client";
-import { AppIcon } from "../components/AppIcon";
-import type { MessageKey, Translate } from "../i18n";
-import type { EditorOptions } from "./engine";
-import { parseCalloutMarker } from "./callouts";
+import { AppIcon } from "../../components/AppIcon";
+import type { MessageKey, Translate } from "../../i18n";
+import type { EditorOptions } from "../engine";
+import { parseCalloutMarker } from "./calloutMarker";
 import { renderMathInto, renderMermaidInto } from "./richRenderers";
 
 const icons: Record<string, LucideIcon> = {
