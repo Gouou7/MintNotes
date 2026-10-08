@@ -68,7 +68,7 @@
 .typora-web-source { width: 100%; min-height: 180px; border: 0; outline: none; resize: none; background: transparent; color: var(--text); font-size: calc(16px + var(--font-adjust, 0px)); overflow: hidden; }
 .wrap-code-blocks .ProseMirror pre, .wrap-code-blocks .ProseMirror pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .markdown-editor-host .ProseMirror .mint-image-icon { display: none; }
-.markdown-editor-host .ProseMirror img.image-render { border-radius: 20px; height: auto; }
+.markdown-editor-host .ProseMirror img.image-render { border: 1px solid var(--border); border-radius: 20px; height: auto; }
 .markdown-editor-host .ProseMirror[contenteditable="true"] img.image-render { cursor: text; }
 .markdown-editor-host .ProseMirror[contenteditable="true"]:focus img.mint-image-selected { outline: 2px solid var(--accent); }
 /* An image-only paragraph must not add anonymous lines for hidden source

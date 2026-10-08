@@ -12,6 +12,7 @@
   --workspace-header-height: 50px;
   --workspace-button-size: 30px;
   --workspace-button-radius: 8px;
+  --tree-row-gap: 4px;
   --button-foreground: #000000;
   --button-hover: color-mix(in srgb, var(--button-foreground) 10%, transparent);
   --button-active: color-mix(in srgb, var(--button-foreground) 30%, transparent);
@@ -159,7 +160,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .document-tree { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: 8px var(--workspace-spacing) 16px; }
 .pinned-section { flex: 0 1 auto; min-height: 0; max-height: min(240px, 32dvh); overflow: auto; margin: 0 var(--workspace-spacing); padding-bottom: 9px; border-bottom: 1px solid var(--border); }
 .tree-section-label { min-height: 13px; display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 8px; font-weight: 600; }
-.tree-row { position: relative; display: flex; align-items: center; min-width: 0; min-height: 30px; border-radius: 8px; color: var(--text); }
+.tree-row { position: relative; display: flex; align-items: center; min-width: 0; min-height: 30px; margin-bottom: var(--tree-row-gap); border-radius: 8px; color: var(--text); }
 .tree-row.active, .tree-row.selected { background: var(--button-hover); }
 .tree-row.active { color: var(--accent-text); }
 .tree-row.selected { color: var(--accent-text); }
