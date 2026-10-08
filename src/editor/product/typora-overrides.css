@@ -34,7 +34,7 @@
 .markdown-editor-host > .typora-web-wrap > .typora-web-source { flex: 1 0 auto; padding: var(--editor-body-top) var(--editor-document-right) var(--editor-document-bottom) var(--editor-document-left); }
 .markdown-editor-host .ProseMirror { min-height: 180px; font-size: calc(16px + var(--font-adjust, 0px)); color: var(--text); }
 /* A retained selection must not look editable after blur or in reading mode. */
-.markdown-editor-host .ProseMirror:not(:focus), .markdown-editor-host .ProseMirror[contenteditable="false"], .typora-web-source:not(:focus) { caret-color: transparent; }
+.markdown-editor-host .ProseMirror:not(:focus), .markdown-editor-host .ProseMirror[contenteditable="false"], .typora-web-source:not(:focus), .typora-web-source:read-only { caret-color: transparent; }
 .markdown-editor-host .ProseMirror :is(input,textarea):focus { caret-color: auto; }
 .markdown-editor-host .ProseMirror :is(h1,h2,h3,h4,h5) { color: var(--text-strong); }
 .markdown-editor-host .ProseMirror :is(h6,blockquote,.cb-language-label,.toc-item) { color: var(--muted); }

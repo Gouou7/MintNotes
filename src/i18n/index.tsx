@@ -521,7 +521,7 @@ const messages = {
   "app.editorMode": { en: "Editor mode", "zh-CN": "编辑模式", "zh-TW": "編輯模式" },
   "app.modeLive": { en: "Live", "zh-CN": "实时", "zh-TW": "即時" },
   "app.modeSource": { en: "Source", "zh-CN": "源码", "zh-TW": "原始碼" },
-  "app.modeReading": { en: "Reading", "zh-CN": "阅读", "zh-TW": "閱讀" },
+  "app.modeReading": { en: "Read-only", "zh-CN": "只读模式", "zh-TW": "唯讀模式" },
   "app.addImage": { en: "Add image attachment", "zh-CN": "添加图片附件", "zh-TW": "新增圖片附件" },
   "app.openRight": { en: "Open right sidebar", "zh-CN": "打开右侧栏", "zh-TW": "開啟右側欄" },
   "app.emptyTitle": { en: "Select or create a note", "zh-CN": "选择或创建一篇笔记", "zh-TW": "選擇或建立一篇筆記" },

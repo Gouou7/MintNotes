@@ -9,7 +9,7 @@
   --border-dark: #333333;
   --neutral: #b1b1b1;
   --workspace-spacing: 16px;
-  --workspace-header-height: 50px;
+  --workspace-header-height: 48px;
   --workspace-button-size: 30px;
   --workspace-button-radius: 8px;
   --tree-row-gap: 4px;
@@ -110,6 +110,8 @@ body { color: var(--text); background: var(--surface); }
    顶部工具栏另行固定到视口，不能靠此背景遮挡系统层。 */
 .pwa-status-surface { position: fixed; top: 0; right: 0; left: 0; height: max(1px, var(--safe-area-top)); background: var(--surface); pointer-events: none; z-index: 6; }
 button, input, textarea, select { font: inherit; color: inherit; }
+/* Keep icon strokes at 1.5 CSS pixels even when the 24px viewBox is scaled. */
+:is(button svg.lucide, .tree-sort-action > svg.lucide, .tree-note-lock > svg.lucide) > * { stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .app-shell { --font-adjust: 0px; --tree-track: var(--tree-width, 297px); --tree-resizer-track: 1px; --outline-track: var(--outline-width, 297px); --outline-resizer-track: 1px; --note-pane-left: calc(var(--tree-track) + var(--tree-resizer-track)); --note-pane-right: calc(var(--outline-track) + var(--outline-resizer-track)); --safe-area-bottom: var(--workspace-safe-area-bottom, env(safe-area-inset-bottom, 0px)); --note-status-height: calc(25px + var(--safe-area-bottom)); position: fixed; top: var(--workspace-viewport-top, 0px); left: 0; display: grid; grid-template-columns: var(--tree-track) var(--tree-resizer-track) minmax(0, 1fr) var(--outline-resizer-track) var(--outline-track); width: 100%; height: var(--workspace-viewport-height, 100%); min-height: 0; overflow: hidden; background: var(--surface); font-size: calc(14px + var(--font-adjust)); }
@@ -175,19 +177,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .tree-main { min-width: 0; flex: 1; height: 30px; display: flex; gap: 4px; align-items: center; padding: 0 5px 0 0; text-align: left; border: 0; background: transparent; cursor: pointer; color: inherit; }
 .tree-main > span:first-child { width: 20px; height: 20px; flex: 0 0 20px; display: grid; place-items: center; color: var(--muted); }
 .tree-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tree-note-lock { width: 14px; height: 14px; flex: 0 0 14px; display: grid; place-items: center; color: var(--muted); }
+.tree-row:has(.tree-more, .tree-note-lock) .tree-main { padding-right: 30px; }
+.tree-note-lock { position: absolute; top: 50%; right: 7px; transform: translateY(-50%); width: 16px; height: 16px; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
 .protection-badge { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; display: grid; place-items: center; border: 1px solid var(--surface); border-radius: 50%; color: var(--accent-on); background: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.22); }
 .tree-main-renaming { cursor: default; }
 .tree-rename-input { min-width: 0; width: 100%; padding: 4px 6px; border: 1px solid var(--accent); border-radius: 5px; outline: 0; color: var(--text-strong); background: var(--surface-raised); box-shadow: 0 0 0 2px var(--accent-soft); font: inherit; }
 .tree-main i { width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #dda43d; }
 .tree-spacer { width: 10px; }
-.tree-more { position: absolute; right: 0; opacity: 0; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; color: var(--muted); }
-.tree-more:focus-visible { opacity: 1; }
+.tree-more { position: absolute; right: 0; opacity: 0; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; color: var(--muted); pointer-events: none; }
+.tree-more:focus-visible { opacity: 1; pointer-events: auto; }
+.tree-row:has(> .tree-more:focus-visible) .tree-note-lock > svg { opacity: 0; }
 @media (hover: hover) and (pointer: fine) {
-  .tree-row:hover .tree-more { opacity: 1; }
+  .tree-row:hover .tree-more { opacity: 1; pointer-events: auto; }
+  .tree-row:hover:has(> .tree-more) .tree-note-lock > svg { opacity: 0; }
 }
 @media (hover: none), (pointer: coarse) {
-  .tree-more { opacity: 1; }
+  .tree-more { opacity: 1; pointer-events: auto; }
+  .tree-row:has(> .tree-more) .tree-note-lock > svg { opacity: 0; }
 }
 .tree-children { margin-left: 9px; border-left: 1px solid var(--border); padding-left: 14px; }
 .empty-tree, .outline-empty { padding: 24px 16px; color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center; }
@@ -211,7 +217,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .mode-switch { display: flex; flex: 0 0 auto; gap: 6px; height: var(--toolbar-control-height); }
 .mode-switch button { display: grid; place-items: center; cursor: pointer; }
 .mode-switch button:disabled { cursor: default; opacity: .42; }
-.mode-switch button:disabled.active { opacity: 1; }
+.mode-switch button:disabled.active { color: var(--muted); opacity: .45; }
 .toolbar-icon, .pane-toggle { flex: 0 0 var(--workspace-button-size); display: grid; place-items: center; cursor: pointer; }
 
 .toolbar-icon:disabled { color: var(--muted); cursor: not-allowed; opacity: .45; }
@@ -250,14 +256,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .right-panel-header > button { margin-left: 0; }
 /* Icon controls share Sketch's transparent, hover and pressed states. */
 :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button) { width: var(--workspace-button-size); height: var(--workspace-button-size); min-height: var(--workspace-button-size); padding: 0; border: 0; border-radius: var(--workspace-button-radius); background: transparent; color: inherit; transition: background-color 120ms ease; }
-:is(.mode-switch button.active, .note-lock-toggle.active) { color: var(--accent-text); background: var(--button-hover); }
+:is(.mode-switch button.active, .note-lock-toggle.active) { color: var(--accent); background: var(--button-hover); }
+.mode-switch button.active:disabled { color: var(--muted); }
 :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):focus-visible { background: var(--button-hover); }
 @media (hover: hover) and (pointer: fine) {
   :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):not(:disabled):hover, .tree-more:hover, .tree-row:hover { background: var(--button-hover); }
-  .tree-row:hover .tree-main { padding-right: 30px; }
 }
 :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):not(:disabled):active, .tree-more:active { background: var(--button-active); }
-.tree-row:has(.tree-more:focus-visible) .tree-main { padding-right: 30px; }
 @media (hover: none), (pointer: coarse) {
   .tree-main { padding-right: 30px; }
 }
@@ -498,6 +503,18 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-section .user-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding-inline: 12px; white-space: nowrap; }
 .settings-section button.danger { color: var(--danger); }
 .settings-section button.danger-solid { border-color: var(--danger); color: #fff; background: var(--danger); }
+.settings-section button.settings-action-button, .settings-logout-section button.settings-action-button { min-height: var(--workspace-button-size); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 7px; border: 0; border-radius: var(--workspace-button-radius); background: var(--button-hover); color: var(--text); font-size: 14px; font-weight: 400; line-height: 20px; cursor: pointer; transition: background-color 120ms ease; }
+.settings-action-button > svg { width: 16px; height: 16px; flex: 0 0 16px; }
+.settings-section button.settings-action-button.primary { background: var(--accent); color: rgb(0 0 0 / 90%); }
+.settings-section button.settings-action-button.danger, .settings-logout-section button.settings-action-button.danger { color: var(--danger); }
+:root[data-theme="dark"] :is(.settings-section, .settings-logout-section) button.settings-action-button.danger { color: rgb(255 93 93 / 90%); }
+@media (hover: hover) and (pointer: fine) {
+  :is(.settings-section, .settings-logout-section) button.settings-action-button:not(:disabled):hover { background: color-mix(in srgb, var(--button-foreground) 20%, transparent); }
+  .settings-section button.settings-action-button.primary:not(:disabled):hover { background: color-mix(in srgb, var(--accent) 85%, var(--surface)); }
+}
+:is(.settings-section, .settings-logout-section) button.settings-action-button:not(:disabled):active { background: var(--button-active); }
+.settings-section button.settings-action-button.primary:not(:disabled):active { background: color-mix(in srgb, var(--accent) 70%, var(--surface)); }
+:is(.settings-section, .settings-logout-section) button.settings-action-button:disabled { opacity: .45; cursor: default; }
 .danger-confirm { position: fixed; z-index: 180; inset: 50% auto auto 50%; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; transform: translate(-50%, -50%); padding: 18px; border: 1px solid color-mix(in srgb, var(--danger) 50%, var(--border)); border-radius: 14px; background: var(--surface-raised); box-shadow: 0 24px 80px rgba(0,0,0,.5); }
 .danger-confirm > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .danger-confirm > header h3 { margin: 0; color: var(--danger); }
@@ -543,7 +560,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .app-shell, .app-shell.tree-collapsed, .app-shell.outline-collapsed, .app-shell.tree-collapsed.outline-collapsed { --note-pane-left: 0px; display: block; }
   .tree-pane, .tree-collapsed > .tree-pane { visibility: hidden; }
   .tree-pane { position: fixed; top: var(--workspace-viewport-top, 0px); left: 0; height: var(--workspace-viewport-height, 100%); width: min(310px, 88vw); transform: translateX(-101%); transition: transform .2s ease, visibility 0s .2s; }
-  .tree-more { opacity: 1; }
+  .tree-more { opacity: 1; pointer-events: auto; }
+  .tree-row:has(> .tree-more) .tree-note-lock > svg { opacity: 0; }
   .app-shell.tree-open > .tree-pane { border-right: 1px solid var(--border); }
   .pane-resizer { display: none; }
   .app-shell.tree-open .tree-pane { visibility: visible; transform: translateX(0); transition-delay: 0s; }

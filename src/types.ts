@@ -195,6 +195,7 @@ export interface UiPreferences {
   activeNoteId: string | null;
   openNoteIds: string[];
   editorMode: WorkspaceEditorMode;
+  editorReadOnly: boolean;
   theme: ThemePreference;
   fontSize: number;
   wrapCodeBlocks: boolean;

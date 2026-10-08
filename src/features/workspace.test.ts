@@ -67,6 +67,7 @@ describe("workspace state", () => {
       activeNoteId: "local-note",
       openNoteIds: ["local-note"],
       editorMode: "reading",
+      editorReadOnly: true,
       treeCollapsed: false,
       outlineCollapsed: true
     });
@@ -141,5 +142,12 @@ describe("workspace state", () => {
   it("excludes the legacy workspace control object from synchronization", () => {
     expect(shouldSynchronizeWorkspaceObject(WORKSPACE_OBJECT_ID)).toBe(false);
     expect(shouldSynchronizeWorkspaceObject("note-a")).toBe(true);
+  });
+
+  it("restores independent source and read-only switches only from device preferences", () => {
+    expect(resolveDeviceWorkspacePreferences({ workspaceVersion: 1, editorMode: "source", editorReadOnly: true }, null))
+      .toMatchObject({ editorMode: "source", editorReadOnly: true });
+    expect(resolveDeviceWorkspacePreferences({ workspaceVersion: 1, editorMode: "source" }, null).editorReadOnly).toBe(false);
+    expect(resolveDeviceWorkspacePreferences({ workspaceVersion: 1, editorMode: "readonly" }, null).editorReadOnly).toBe(true);
   });
 });

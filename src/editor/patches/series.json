@@ -3,7 +3,7 @@
   "patches": [
     {
       "id": "01-integration",
-      "reason": "受限 Mint 控制器、渲染上下文及代码区域保护",
+      "reason": "受限 Mint 控制器、渲染上下文、独立源码只读权限及代码区域保护",
       "patch": "integration/upstream.patch",
       "additions": {
         "src/mint/context.ts": "integration/context.ts",

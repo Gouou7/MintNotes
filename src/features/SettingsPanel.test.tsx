@@ -31,6 +31,7 @@ const preferences: UiPreferences = {
   activeNoteId: null,
   openNoteIds: [],
   editorMode: "live",
+  editorReadOnly: false,
   theme: "system",
   fontSize: 14,
   wrapCodeBlocks: true,
@@ -555,7 +556,7 @@ describe("SettingsPanel", () => {
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("确认从当前设备登出？");
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("已同步到服务器的数据不会被删除");
-    await act(async () => (container.querySelector(".logout-confirm .danger-solid") as HTMLButtonElement).click());
+    await act(async () => (container.querySelector(".logout-confirm .settings-action-button.danger") as HTMLButtonElement).click());
     expect(onLogout).toHaveBeenCalledOnce();
   });
 

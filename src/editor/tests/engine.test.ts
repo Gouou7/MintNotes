@@ -33,6 +33,40 @@ describe("Mint upstream controller", () => {
     expect(host.querySelector('[contenteditable="false"]')).not.toBeNull(); expect(changed).not.toHaveBeenCalled();
     editor.destroy(); expect(host.textContent).toBe(""); expect(editor.getMarkdown()).toBe("");
   });
+  it("keeps protected source selectable and rejects all source mutations without saving", () => {
+    const { editor, host, changed } = setup("__secret__", true);
+    editor.setMode("source"); const source = host.querySelector("textarea")!;
+    expect(source.readOnly).toBe(true); expect(source.hidden).toBe(false);
+    source.setSelectionRange(0, source.value.length); expect(source.selectionEnd).toBe(10);
+    source.value = "wrong"; source.dispatchEvent(new Event("input", { bubbles: true }));
+    editor.replaceMarkdown("wrong"); expect(editor.createInsertionBookmark().insert("wrong")).toBe(false);
+    expect(source.value).toBe("__secret__");
+    editor.setMode("reading"); editor.setMode("source"); editor.loadDocument("b", "other");
+    expect(source.readOnly).toBe(true); expect(editor.getMarkdown()).toBe("other"); expect(changed).not.toHaveBeenCalled();
+  });
+  it("changes source permissions without saving and invalidates pending insertion permanently", () => {
+    const { editor, host, changed } = setup("abc"); editor.setMode("source");
+    const bookmark = editor.createInsertionBookmark(); const source = host.querySelector("textarea")!;
+    editor.setReadOnly(true); expect(source.readOnly).toBe(true);
+    editor.setReadOnly(false); expect(source.readOnly).toBe(false); expect(bookmark.insert("wrong")).toBe(false);
+    expect(editor.getMarkdown()).toBe("abc"); expect(changed).not.toHaveBeenCalled();
+    source.value = "abcd"; source.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(changed).toHaveBeenCalledOnce(); expect(editor.getMarkdown()).toBe("abcd");
+  });
+  it("finishes composition before making source read-only", () => {
+    const { editor, host, changed } = setup("a"); editor.setMode("source"); const source = host.querySelector("textarea")!;
+    source.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })); source.value = "a中文";
+    source.dispatchEvent(new Event("input", { bubbles: true })); editor.setReadOnly(true);
+    expect(changed).not.toHaveBeenCalled(); source.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true })); editor.flush();
+    expect(editor.getMarkdown()).toBe("a中文"); expect(changed).toHaveBeenCalledOnce(); expect(source.readOnly).toBe(true);
+  });
+  it("cancels a deferred surface switch when the user returns to source during composition", () => {
+    const { editor, host, changed } = setup("a"); editor.setMode("source"); const source = host.querySelector("textarea")!;
+    source.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })); source.value = "a中文";
+    source.dispatchEvent(new Event("input", { bubbles: true })); editor.setMode("live"); editor.setMode("source");
+    source.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true })); editor.flush();
+    expect(source.hidden).toBe(false); expect(source.value).toBe("a中文"); expect(changed).toHaveBeenCalledOnce();
+  });
   it("creates only mounted previews and disposes them on refresh and destruction", () => {
     const host = document.createElement("div"), cleanup = vi.fn(), render = vi.fn(() => cleanup); document.body.append(host);
     const editor = createMintEditor(host, { initialContent: "Before $x$ after", renderMath: render }); editors.push(editor);

@@ -8,7 +8,7 @@ Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户�
 
 ## 主要能力
 
-- **Markdown 编辑：**实时、源码与阅读三种模式，基于 Typora-web，支持 GFM、代码高亮与复制、脚注、注释、数学公式、Mermaid、WikiLink、Callout、YAML Front Matter 与 HTTPS 外部图片。
+- **Markdown 编辑：**实时、源码与只读显示，源码和只读开关可独立切换，并作为当前设备的统一偏好；基于 Typora-web，支持 GFM、代码高亮与复制、脚注、注释、数学公式、Mermaid、WikiLink、Callout、YAML Front Matter 与 HTTPS 外部图片。
 - **笔记整理：**文件夹、搜索、排序、固定、笔记锁、回收站、加密历史与图片附件。
 - **本地优先：**内容先加密写入浏览器的 IndexedDB，离线仍可使用，恢复网络后后台同步。
 - **账户与恢复：**多用户、恢复密钥、已记住设备与可选本地 PIN；保险库指该账户的加密笔记数据。

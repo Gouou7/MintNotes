@@ -7,12 +7,12 @@ vi.mock('../../crypto/client', () => ({ cryptoClient: {} }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;
 afterEach(async () => { await act(async () => root?.unmount()); document.body.replaceChildren(); });
-async function setup() {
+async function setup(readOnly = false) {
   const note = (id: string) => ({ objectId: id, markdown: id, attachmentIds: [], locked: false, deleted: false, kind: 'note' } as unknown as OpenDocument);
   const documents = new Map([['a', note('a')], ['b', note('b')]]);
   const patchDocument = vi.fn(), saveImage = vi.fn(async () => 'image');
   let document = documents.get('a')!, controller!: ReturnType<typeof useNoteEditorIntegration>;
-  function Harness() { controller = useNoteEditorIntegration({ document, previewing: false, findDocument: id => documents.get(id), patchDocument, saveImage }); return null; }
+  function Harness() { controller = useNoteEditorIntegration({ document, previewing: false, readOnly, findDocument: id => documents.get(id), patchDocument, saveImage }); return null; }
   const host = documentWindow(); root = createRoot(host); await act(async () => root.render(<Harness />));
   return { documents, patchDocument, saveImage, get controller() { return controller; }, switch: async () => { document = documents.get('b')!; await act(async () => root.render(<Harness />)); } };
 }
@@ -27,4 +27,12 @@ it('starts attachment persistence against the original note identity', async () 
   const pending = state.controller.onImageInsert(file); await state.switch(); await pending;
   expect(state.saveImage).toHaveBeenCalledWith('a', file); state.documents.get('b')!.locked = true;
   expect(await state.controller.onImageInsert(file)).toBeNull(); expect(state.saveImage).toHaveBeenCalledTimes(1);
+});
+it('blocks new attachment persistence in device read-only mode without losing identified composition commits', async () => {
+  const state = await setup(true);
+  expect(await state.controller.onImageInsert(new File(['image'], 'photo.png', { type: 'image/png' }))).toBeNull();
+  expect(state.saveImage).not.toHaveBeenCalled(); state.controller.onChange('blocked');
+  expect(state.patchDocument).not.toHaveBeenCalled();
+  state.controller.onChange('finished composition', 'a');
+  expect(state.patchDocument).toHaveBeenCalledWith('a', { markdown: 'finished composition', attachmentIds: [] });
 });

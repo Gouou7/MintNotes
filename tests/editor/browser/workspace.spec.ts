@@ -4,10 +4,10 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
   test(`${name} workspace matches theme tokens and keeps pane and mode controls usable`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
     await page.goto("/workspace.html");
-    const source = page.getByRole("button", { name: "Source", exact: true }), reading = page.getByRole("button", { name: "Reading", exact: true });
+    const source = page.getByRole("button", { name: "Source", exact: true }), reading = page.getByRole("button", { name: "Read-only", exact: true });
     for (const theme of ["dark", "light"]) {
       await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
-      await expect(page.locator(".note-toolbar")).toHaveCSS("height", "50px");
+      await expect(page.locator(".note-toolbar")).toHaveCSS("height", "48px");
       await expect(page.locator(".tree-pane")).toHaveCSS("background-color", theme === "dark" ? "rgb(30, 30, 30)" : "rgb(232, 233, 233)");
       await expect(page.locator(".side-header").first()).toHaveCSS("border-bottom-color", theme === "dark" ? "rgb(51, 51, 51)" : "rgb(151, 151, 151)");
       const codeOutline = await page.locator(".ProseMirror pre").evaluate(element => getComputedStyle(element, "::after").backgroundColor);
@@ -21,6 +21,23 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await expect(page.locator(".ProseMirror")).toHaveAttribute("contenteditable", "false");
       await reading.click();
       await expect(page.locator(".ProseMirror")).toHaveAttribute("contenteditable", "true");
+      await reading.click(); await source.click();
+      const textarea = page.locator("textarea.typora-web-source:not([hidden])");
+      await expect(reading).toHaveAttribute("aria-pressed", "true"); await expect(source).toHaveAttribute("aria-pressed", "true");
+      await expect(textarea).toHaveJSProperty("readOnly", true);
+      const original = await textarea.inputValue();
+      await textarea.focus(); await page.keyboard.press("ControlOrMeta+a"); await page.keyboard.insertText("BLOCKED");
+      await expect(textarea).toHaveValue(original);
+      await source.click(); await reading.click();
+      await page.getByRole("button", { name: "Lock note", exact: true }).click();
+      await expect(reading).toBeDisabled(); await expect(reading).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("button", { name: "Unlock note", exact: true })).toHaveAttribute("aria-pressed", "true");
+      await source.click(); await expect(source).toBeEnabled(); await expect(textarea).toHaveJSProperty("readOnly", true);
+      await textarea.press("ControlOrMeta+/"); await expect(source).toHaveAttribute("aria-pressed", "false");
+      await source.click(); await expect(source).toHaveAttribute("aria-pressed", "true");
+      await page.getByRole("button", { name: "Unlock note", exact: true }).click();
+      await expect(reading).toBeEnabled(); await expect(reading).toHaveAttribute("aria-pressed", "false");
+      await expect(textarea).toHaveJSProperty("readOnly", false); await source.click();
       await page.locator(".ProseMirror strong").filter({ hasText: "bold" }).click();
       await expect(page.locator(".ProseMirror .syntax-hint").first()).toHaveCSS("color", "rgb(177, 177, 177)");
       await expect(page.locator(".ProseMirror hr")).toHaveCSS("height", "1px");
@@ -28,19 +45,40 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       expect(await page.evaluate(() => window.mintWorkspaceFixture.saves())).toBe(0);
 
       await expect(page.locator(".note-toolbar button svg").first()).toHaveAttribute("width", "16");
+      const toolbarStroke = page.locator(".note-toolbar button svg > *").first();
+      await expect(toolbarStroke).toHaveCSS("stroke-width", "1.5px");
+      await expect(toolbarStroke).toHaveCSS("vector-effect", "non-scaling-stroke");
       const buttons = page.locator(".note-toolbar button:visible");
       for (const button of await buttons.all()) {
         const bounds = (await button.boundingBox())!;
         expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
       }
-      if (name === "mobile") await page.getByRole("button", { name: "Open left sidebar" }).click();
+      if (name === "mobile") {
+        await page.getByRole("button", { name: "Open left sidebar" }).click();
+        await expect(page.locator(".tree-pane")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+      }
       await expect(page.locator(".search-box")).toBeVisible();
       await expect(page.locator(".tree-pane .side-header button:visible")).toHaveCount(1);
       await expect.poll(() => page.locator(".brand-small").evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
-      if (name === "mobile") {
-        const row = page.locator('.tree-row[data-object-id="locked"]');
-        const lock = (await row.locator(".tree-note-lock").boundingBox())!, menu = (await row.locator(".tree-more").boundingBox())!;
-        expect(lock.x + lock.width).toBeLessThanOrEqual(menu.x);
+      const row = page.locator('.tree-row[data-object-id="locked"]');
+      const lockIcon = row.locator(".tree-note-lock > svg");
+      await expect(lockIcon).toHaveClass(/lucide-file-lock(?:\s|$)/);
+      const lock = (await lockIcon.boundingBox())!, menu = (await row.locator(".tree-more").boundingBox())!;
+      expect(lock.x + lock.width / 2).toBeCloseTo(menu.x + menu.width / 2, 1);
+      expect(lock.y + lock.height / 2).toBeCloseTo(menu.y + menu.height / 2, 1);
+      if (name === "mobile") await expect(lockIcon).toHaveCSS("opacity", "0");
+      else {
+        await page.mouse.move(width - 10, height - 10);
+        await expect(lockIcon).toHaveCSS("opacity", "1");
+        const titleBounds = await row.locator(".tree-title").boundingBox();
+        await row.hover(); await expect(lockIcon).toHaveCSS("opacity", "0");
+        await expect(row.locator(".tree-more")).toHaveCSS("opacity", "1");
+        expect(await row.locator(".tree-title").boundingBox()).toEqual(titleBounds);
+        await page.mouse.move(width - 10, height - 10); await expect(lockIcon).toHaveCSS("opacity", "1");
+        await row.locator(".tree-main").focus();
+        await page.keyboard.press(testInfo.project.name === "webkit" ? "Alt+Tab" : "Tab");
+        await expect(row.locator(".tree-more")).toBeFocused(); await expect(lockIcon).toHaveCSS("opacity", "0");
+        await row.locator(".tree-more").blur();
       }
       const searchBounds = (await page.locator(".search-box").boundingBox())!, pinnedBounds = (await page.locator(".pinned-section").boundingBox())!;
       expect(searchBounds.y + searchBounds.height).toBeLessThan(pinnedBounds.y);
@@ -54,6 +92,16 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await page.mouse.up();
       await page.mouse.move(width - 10, height - 10);
       await expect(newNote).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      for (const label of ["Save", "Cancel", "Delete"]) {
+        const action = page.getByRole("button", { name: label, exact: true });
+        await expect(action).toHaveCSS("height", "30px"); await expect(action).toHaveCSS("border-radius", "8px");
+        await expect(action.locator("svg")).toHaveAttribute("width", "16");
+        await expect(action.locator("svg > *").first()).toHaveCSS("stroke-width", "1.5px");
+        await expect(action.locator("svg > *").first()).toHaveCSS("vector-effect", "non-scaling-stroke");
+      }
+      await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCSS("background-color", "rgb(97, 210, 153)");
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
       await page.screenshot({ path: testInfo.outputPath(`workspace-${theme}.png`) });
       if (name === "mobile") await page.getByRole("button", { name: "Close directory" }).click();
     }

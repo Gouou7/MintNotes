@@ -7,6 +7,7 @@ import {
   Ellipsis,
   FilePlus2,
   FileText,
+  FileLock,
   FolderPlus,
   LockKeyhole,
   LockKeyholeOpen,
@@ -53,7 +54,7 @@ export function draggedDocumentIds(dataTransfer: DataTransfer): string[] {
 export function TreeNoteLock({ document }: { document: OpenDocument }) {
   const { t } = useI18n();
   return isLockedNote(document) ? <span className="tree-note-lock" title={t("app.noteLockedBadge")}>
-    <AppIcon icon={LockKeyhole} size={14} />
+    <AppIcon icon={FileLock} size={16} />
     <span className="sr-only">{t("app.noteLockedBadge")}</span>
   </span> : null;
 }

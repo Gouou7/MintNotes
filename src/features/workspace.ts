@@ -18,7 +18,7 @@ export interface LegacyWorkspaceState {
 
 export type DeviceWorkspacePreferences = Pick<
   UiPreferences,
-  "workspaceVersion" | "activeNoteId" | "openNoteIds" | "editorMode" | "treeCollapsed" | "outlineCollapsed"
+  "workspaceVersion" | "activeNoteId" | "openNoteIds" | "editorMode" | "editorReadOnly" | "treeCollapsed" | "outlineCollapsed"
 >;
 
 type StoredUiPreferences = Omit<Partial<UiPreferences>, "editorMode"> & {
@@ -30,6 +30,7 @@ export const DEFAULT_DEVICE_WORKSPACE_PREFERENCES: DeviceWorkspacePreferences = 
   activeNoteId: null,
   openNoteIds: [],
   editorMode: "live",
+  editorReadOnly: false,
   treeCollapsed: false,
   outlineCollapsed: false
 };
@@ -78,6 +79,7 @@ export function resolveDeviceWorkspacePreferences(
       activeNoteId,
       openNoteIds,
       editorMode: normalizeEditorMode(stored.editorMode),
+      editorReadOnly: typeof stored.editorReadOnly === "boolean" ? stored.editorReadOnly : normalizeEditorMode(stored.editorMode) === "reading",
       treeCollapsed: stored.treeCollapsed === true,
       outlineCollapsed: stored.outlineCollapsed === true
     };
@@ -88,6 +90,7 @@ export function resolveDeviceWorkspacePreferences(
       activeNoteId: legacy.activeNoteId,
       openNoteIds: [...legacy.openNoteIds],
       editorMode: legacy.editorMode,
+      editorReadOnly: legacy.editorMode === "reading",
       treeCollapsed: typeof stored.treeCollapsed === "boolean" ? stored.treeCollapsed : legacy.treeCollapsed,
       outlineCollapsed: typeof stored.outlineCollapsed === "boolean" ? stored.outlineCollapsed : legacy.outlineCollapsed
     };

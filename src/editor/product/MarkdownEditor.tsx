@@ -15,6 +15,7 @@ interface Props {
   documentKey?: string;
   markdown: string;
   mode: WorkspaceEditorMode;
+  readOnly?: boolean;
   onChange: (markdown: string, documentKey?: string) => void;
   onModeChange?: (mode: WorkspaceEditorMode) => void;
   attachmentUrls?: Map<string, string>;
@@ -39,12 +40,13 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
     if (!host.current) return;
     const instance = createMintEditor(host.current, {
       ...editorPresentation(() => current.current.t), initialContent: current.current.markdown, documentKey: identity.current,
-      readOnly: current.current.mode === "reading",
+      readOnly: current.current.readOnly || current.current.mode === "reading",
       getScrollViewport: () => { const area = host.current?.closest<HTMLElement>(".editor-area"); return area ? editorScrollViewport(area) : null; },
       resolveImageSource: source => { const id = /^webmd-attachment:([0-9a-f-]{36})$/i.exec(source)?.[1].toLowerCase(); return id ? current.current.attachmentUrls?.get(id) ?? (current.current.attachmentsPending ? null : undefined) : undefined; },
       onNavigate: target => current.current.onWikiLink?.(target),
       onChange: (text, key) => { if (identity.current === key) shown.current = text; current.current.onChange(text, key); },
       onModeChange: mode => { setDisplayMode(mode); current.current.onModeChange?.(mode); },
+      canToggleSource: () => current.current.mode !== "reading" || Boolean(current.current.onModeChange),
     });
     editor.current = instance; instance.setMode(current.current.mode);
     return () => { editor.current = null; instance.destroy(); };
@@ -55,12 +57,13 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
       identity.current = key; shown.current = props.markdown; editor.current?.loadDocument(key, props.markdown);
     }
   }, [props.markdown, props.documentKey]);
+  useEffect(() => { editor.current?.setReadOnly(props.readOnly === true || props.mode === "reading"); }, [props.readOnly, props.mode]);
   useEffect(() => { editor.current?.setMode(props.mode); }, [props.mode]);
   useEffect(() => { editor.current?.refreshPresentation(); }, [props.attachmentUrls, props.attachmentsPending, t]);
   const insertImage = async (event: ClipboardEvent<HTMLDivElement> | DragEvent<HTMLDivElement>) => {
     const transfer = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
     const file = imageFileFromTransfer(transfer), instance = editor.current;
-    if (!file || !props.onImageInsert || !instance || displayMode === "reading") return;
+    if (!file || !props.onImageInsert || !instance || props.readOnly || displayMode === "reading") return;
     event.preventDefault(); event.stopPropagation();
     const bookmark = "clientX" in event && displayMode !== "source" ? instance.createInsertionBookmarkAtPoint(event.clientX, event.clientY) : instance.createInsertionBookmark();
     const key = identity.current;
@@ -71,9 +74,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
   };
   const frontmatter = parseFrontmatter(props.markdown);
   return <div className={`live-editor-document mode-${displayMode}${displayMode === "reading" ? " reading-editor" : ""}${props.wrapCodeBlocks !== false ? " wrap-code-blocks" : ""}`}>
-    {displayMode !== "source" && <FrontmatterProperties markdown={props.markdown} editable={displayMode !== "reading"} onChange={next => editor.current?.replaceMarkdown(next)} />}
+    {displayMode !== "source" && <FrontmatterProperties markdown={props.markdown} editable={!props.readOnly && displayMode !== "reading"} onChange={next => editor.current?.replaceMarkdown(next)} />}
     <div ref={host} className={`markdown-editor-host${props.emptyHint && frontmatter.status === "absent" && !frontmatter.body.trim() ? " is-empty" : ""}`} data-empty-hint={props.emptyHint}
-      onDragOver={event => { if (displayMode !== "reading" && Array.from(event.dataTransfer.items).some(item => item.kind === "file")) event.preventDefault(); }}
+      onDragOver={event => { if (!props.readOnly && displayMode !== "reading" && Array.from(event.dataTransfer.items).some(item => item.kind === "file")) event.preventDefault(); }}
       onDropCapture={event => void insertImage(event)} onPasteCapture={event => void insertImage(event)} />
   </div>;
 });

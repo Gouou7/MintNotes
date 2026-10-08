@@ -11,12 +11,13 @@ export interface EditorOptions extends MintContext {
   initialContent?: string; documentKey?: string;
   onChange?: (markdown: string, documentKey: string) => void;
   onModeChange?: (mode: EditorMode) => void;
+  canToggleSource?: () => boolean;
   getScrollViewport?: () => { element: HTMLElement; top: number; bottom: number } | null;
 }
 export interface InsertionBookmark { insert(markdown: string): boolean; dispose(): void }
 export interface Editor {
   getMarkdown(): string; loadDocument(key: string, markdown: string): void; setMarkdown(markdown: string): void;
-  replaceMarkdown(markdown: string): void; setMode(mode: EditorMode): void;
+  replaceMarkdown(markdown: string): void; setMode(mode: EditorMode): void; setReadOnly(readOnly: boolean): void;
   getSelectionOffset(): number; setSelectionOffset(offset: number): void;
   getMarkdownOffsetAtPoint(x: number, y: number): number;
   createInsertionBookmark(offset?: number): InsertionBookmark; createInsertionBookmarkAtPoint(x: number, y: number): InsertionBookmark;
@@ -38,6 +39,7 @@ export function documentOutline(markdown: string): { level: number; text: string
 export function createMintEditor(host: HTMLElement, options: EditorOptions = {}, depth = 0): Editor {
   let markdown = options.initialContent ?? "", documentKey = options.documentKey ?? "note", generation = 0;
   let mode: EditorMode = options.readOnly ? "reading" : "live", composing = false, destroyed = false, suppress = false;
+  let forcedReadOnly = options.readOnly === true, pendingReadOnly: boolean | null = null;
   let pendingMode: EditorMode | null = null, pendingLoad: { key: string; source: string } | null = null;
   let sourcePrevious = markdown;
   let compositionTimer: ReturnType<typeof setTimeout> | undefined;
@@ -47,7 +49,7 @@ export function createMintEditor(host: HTMLElement, options: EditorOptions = {},
   const context: MintContext = { ...options, readOnly: mode === "reading", revision: 0,
     renderMarkdown: (container, text) => {
       if (depth >= 4) { container.textContent = text; return; }
-      const nested = createMintEditor(container, { ...options, documentKey, initialContent: text, readOnly: true, onChange: undefined, getScrollViewport: undefined }, depth + 1); return () => nested.destroy();
+      const nested = createMintEditor(container, { ...options, documentKey, initialContent: text, readOnly: true, onChange: undefined, onModeChange: undefined, getScrollViewport: undefined }, depth + 1); return () => nested.destroy();
     } };
   const readonly = new Plugin({ filterTransaction: tr => suppress || !context.readOnly || !tr.docChanged });
   const makeState = (text: string) => {
@@ -73,14 +75,14 @@ export function createMintEditor(host: HTMLElement, options: EditorOptions = {},
       bookmark.valid = !from.deletedAcross && !to.deletedAcross; bookmark.from = from.pos; bookmark.to = Math.max(from.pos, to.pos);
     }
     view.updateState(result.state);
-    if (!suppress && mode !== "reading" && tr.docChanged && !previous.eq(result.state.doc) && !composing && !view.composing) {
+    if (!suppress && !context.readOnly && tr.docChanged && !previous.eq(result.state.doc) && !composing && !view.composing) {
       const next = serialize(result.state.doc);
       // Empty body placeholders may change the model without editing Markdown.
       if (!tr.getMeta("mint-presentation-only") || next !== serialize(previous)) emit(next);
     }
     if (tr.scrolledIntoView) revealCaret();
   };
-  const view = new EditorView(live, { state: makeState(markdown), editable: () => mode !== "reading", dispatchTransaction: onTransaction,
+  const view = new EditorView(live, { state: makeState(markdown), editable: () => !context.readOnly, dispatchTransaction: onTransaction,
     handleDOMEvents: {
       compositionstart: () => { composing = true; return false; },
       compositionend: () => { scheduleFlush(); return false; },
@@ -107,8 +109,9 @@ export function createMintEditor(host: HTMLElement, options: EditorOptions = {},
     if (destroyed) return;
     if (compositionTimer) clearTimeout(compositionTimer); compositionTimer = undefined;
     if (view.composing) { scheduleFlush(); return; }
-    if (composing) { composing = false; if (mode === "source") emit(source.value); else if (mode !== "reading") emit(serialize(view.state.doc)); }
+    if (composing) { composing = false; if (!context.readOnly) { if (mode === "source") emit(source.value); else emit(serialize(view.state.doc)); } }
     if (pendingLoad) { const load = pendingLoad; pendingLoad = null; loadDocument(load.key, load.source); }
+    if (pendingReadOnly !== null) { const next = pendingReadOnly; pendingReadOnly = null; setReadOnly(next); }
     if (pendingMode) { const next = pendingMode; pendingMode = null; setMode(next); }
   }
   function offsetAtPosition(pos: number): number {
@@ -123,19 +126,36 @@ export function createMintEditor(host: HTMLElement, options: EditorOptions = {},
     view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(positionAtOffset(clamped)))).scrollIntoView());
   }
   function resizeSource() { source.style.height = "auto"; source.style.height = `${Math.max(source.scrollHeight, 168)}px`; }
+  function refreshReadOnly() {
+    context.readOnly = forcedReadOnly || mode === "reading";
+    source.readOnly = context.readOnly;
+    live.classList.toggle("mint-reading", context.readOnly);
+    view.setProps({ editable: () => !context.readOnly });
+    const previous = suppress; suppress = true;
+    try { view.dispatch(view.state.tr.setMeta("mint-refresh", ++context.revision!)); } finally { suppress = previous; }
+  }
+  function setReadOnly(next: boolean) {
+    if (destroyed) return;
+    if (next) bookmarks.forEach(bookmark => { bookmark.valid = false; });
+    if (composing || view.composing) { pendingReadOnly = next; return; }
+    if (next === forcedReadOnly) return;
+    forcedReadOnly = next; refreshReadOnly();
+  }
   function setMode(next: EditorMode) {
-    if (destroyed || next === mode) return;
-    if (composing || view.composing) { pendingMode = next; return; }
+    if (destroyed) return;
+    if (composing || view.composing) { pendingMode = next === mode ? null : next; return; }
+    if (next === mode) return;
     const offset = getSelectionOffset();
     // Positions are owned by a specific input surface, never guessed across a mode boundary.
     bookmarks.forEach(bookmark => { bookmark.valid = false; });
-    const wasSource = mode === "source"; mode = next; context.readOnly = next === "reading";
+    const wasSource = mode === "source"; mode = next; context.readOnly = forcedReadOnly || next === "reading";
+    source.readOnly = context.readOnly;
     if (next === "source") { source.value = markdown; sourcePrevious = markdown; source.hidden = false; live.hidden = true; resizeSource(); source.setSelectionRange(offset, offset); }
     else { source.hidden = true; live.hidden = false; suppress = true;
       if (wasSource) view.updateState(makeState(markdown));
-      view.setProps({ editable: () => mode !== "reading" }); view.dispatch(view.state.tr.setMeta("mint-refresh", ++context.revision!)); setSelectionOffset(offset); suppress = false;
+      view.setProps({ editable: () => !context.readOnly }); view.dispatch(view.state.tr.setMeta("mint-refresh", ++context.revision!)); setSelectionOffset(offset); suppress = false;
     }
-    live.classList.toggle("mint-reading", next === "reading"); options.onModeChange?.(next);
+    live.classList.toggle("mint-reading", context.readOnly); options.onModeChange?.(next);
   }
   function loadDocument(key: string, text: string) {
     if (destroyed) return;
@@ -144,11 +164,14 @@ export function createMintEditor(host: HTMLElement, options: EditorOptions = {},
     generation++; documentKey = key; bookmarks.clear(); markdown = text;
     suppress = true; view.updateState(makeState(text)); suppress = false; source.value = text; sourcePrevious = text; if (mode === "source") resizeSource();
   }
-  source.addEventListener("input", () => { const before = sourcePrevious; sourcePrevious = source.value; mapSourceBookmarks(before, source.value); if (!composing) emit(source.value); resizeSource(); });
+  source.addEventListener("input", () => {
+    if (context.readOnly) { source.value = markdown; sourcePrevious = markdown; return; }
+    const before = sourcePrevious; sourcePrevious = source.value; mapSourceBookmarks(before, source.value); if (!composing) emit(source.value); resizeSource();
+  });
   source.addEventListener("compositionstart", () => { composing = true; }); source.addEventListener("compositionend", scheduleFlush);
   const keydown = (event: KeyboardEvent) => {
-    if (event.key !== "/" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || mode === "reading") return;
-    event.preventDefault(); setMode(mode === "source" ? "live" : "source"); if (mode === "source") source.focus(); else view.focus();
+    if (event.key !== "/" || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || options.canToggleSource?.() === false || (mode === "reading" && !options.onModeChange)) return;
+    event.preventDefault(); setMode(mode === "source" ? (forcedReadOnly ? "reading" : "live") : "source"); if (mode === "source") source.focus(); else view.focus();
   };
   wrap.addEventListener("keydown", keydown);
   function createBookmark(offset?: number, position?: number): InsertionBookmark {
@@ -169,7 +192,7 @@ export function createMintEditor(host: HTMLElement, options: EditorOptions = {},
       if (destroyed || context.readOnly || composing || view.composing || text === markdown) return;
       if (mode === "source") { const before = markdown; source.value = text; sourcePrevious = text; mapSourceBookmarks(before, text); emit(text); resizeSource(); }
       else view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, parse(text).content).setMeta("uiEvent", "mint-property"));
-    }, setMode, getSelectionOffset, setSelectionOffset,
+    }, setMode, setReadOnly, getSelectionOffset, setSelectionOffset,
     getMarkdownOffsetAtPoint: (x, y) => { const pos = view.posAtCoords({ left: x, top: y })?.pos; return pos === undefined ? getSelectionOffset() : offsetAtPosition(pos); },
     createInsertionBookmark: offset => createBookmark(offset),
     createInsertionBookmarkAtPoint(x, y) {

@@ -67,8 +67,7 @@ import {
   resolveDeviceActiveNoteId,
   resolveDeviceWorkspacePreferences,
   shouldSynchronizeWorkspaceObject,
-  WORKSPACE_OBJECT_ID,
-  type WorkspaceEditorMode
+  WORKSPACE_OBJECT_ID
 } from "../workspace";
 import {
   chunkKey,
@@ -103,7 +102,7 @@ import { NotePaneLayout } from "./NotePaneLayout";
 import { WorkspacePanelHeader, WorkspaceSidebar } from "./WorkspaceChrome";
 import { useObjectPersistence } from "./useObjectPersistence";
 import { useDocumentSaveQueue } from "./useDocumentSaveQueue";
-import { useDocumentNavigation } from "./useDocumentNavigation";
+import { useWorkspaceEditorMode } from "./useWorkspaceEditorMode";
 import { useVaultDerivedView } from "./useVaultDerivedView";
 import { useMobileDrawerGestures, useWorkspaceAutoLock } from "./useWorkspaceInteractions";
 
@@ -131,7 +130,6 @@ import {
   normalizeWrapCodeBlocks
 } from "../appearance";
 
-type EditorMode = WorkspaceEditorMode;
 type CreateDocumentOptions = { focusName?: boolean; activate?: boolean };
 const DEFAULT_PREFERENCES: UiPreferences = {
   ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
@@ -190,7 +188,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const { activeId, activeIdRef, activateDocument, selectedIds, setSelectedIds, selectionAnchor } = useWorkspaceSelection();
   const [editorSessionId, setEditorSessionId] = useState(0);
   const [titleDraft, setTitleDraft] = useState("");
-  const [mode, setMode] = useState<EditorMode>("live");
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [treeDraggingIds, setTreeDraggingIds] = useState<Set<string>>(new Set());
@@ -664,7 +661,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       const previousActiveId = activeIdRef.current;
       if (previousActiveId && previousActiveId !== document.objectId) applyDeferredActiveRemote(previousActiveId);
       if (options.focusName) pendingTitleFocus.current = document.objectId;
-      setMode("live");
       activateDocument(document.objectId);
       setEditorSessionId((current) => current + 1);
       if (options.focusName) setTreeOpen(false);
@@ -1201,7 +1197,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         replaceDocuments(opened.documents.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID));
         replaceAttachments(opened.attachments);
         setPreferences(loadedPreferences);
-        setMode(loadedPreferences.editorMode);
         setPreferencesLoaded(true);
 
         const failedLocalObjects = opened.failed.filter((object) => object.objectId !== WORKSPACE_OBJECT_ID);
@@ -1324,7 +1319,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       const openNoteIds = activeId ? [activeId] : [];
       if (current.workspaceVersion === 1
         && current.activeNoteId === activeId
-        && current.editorMode === mode
         && current.openNoteIds.length === openNoteIds.length
         && current.openNoteIds.every((id, index) => id === openNoteIds[index])) {
         return current;
@@ -1333,11 +1327,10 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         ...current,
         workspaceVersion: 1,
         activeNoteId: activeId,
-        openNoteIds,
-        editorMode: mode
+        openNoteIds
       };
     });
-  }, [activeId, mode, workspaceLoaded]);
+  }, [activeId, workspaceLoaded]);
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-color-scheme: dark)");
@@ -1368,10 +1361,12 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   const indexedActiveDocument = activeId ? documentIndexRef.current.get(activeId) : null;
   const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
   const activeDocumentLocked = isLockedNote(activeDocument);
-  const effectiveMode = effectiveEditorMode(mode, activeDocument);
-  const documentNavigation = useDocumentNavigation(effectiveMode);
+  const editorMode = useWorkspaceEditorMode({ preferences, document: activeDocument, previewing: Boolean(historyPreview), onPreferences: setPreferences });
+  const { effectiveMode, navigation: documentNavigation } = editorMode;
+  const editorModeRef = useRef({ readOnly: editorMode.readOnly, previewing: Boolean(historyPreview) });
+  editorModeRef.current = { readOnly: editorMode.readOnly, previewing: Boolean(historyPreview) };
   const noteEditor = useNoteEditorIntegration({
-    document: activeDocument, previewing: Boolean(historyPreview),
+    document: activeDocument, previewing: Boolean(historyPreview), readOnly: editorMode.readOnly,
     findDocument: id => documentIndexRef.current.get(id), patchDocument,
     saveImage: async (id, file) => {
       try { const attachment = await addAttachment(id, file); return attachmentMarkdown(attachment.objectId, attachment.originalName); }
@@ -1379,10 +1374,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     },
   });
 
-  const changeEditorMode = (nextMode: EditorMode) => {
-    if (!documentNavigation.prepareModeChange(nextMode)) return;
-    setMode(nextMode);
-  };
   useEffect(() => {
     setHistoryPreview(null);
     setHistoryItems([]);
@@ -1739,7 +1730,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     const persisted = await persistDocumentCopy(copy, source.markdown, source.attachmentIds);
     const previousActiveId = activeIdRef.current;
     if (previousActiveId && previousActiveId !== persisted.objectId) applyDeferredActiveRemote(previousActiveId);
-    setMode("live");
     activateDocument(persisted.objectId);
     setEditorSessionId((current) => current + 1);
     requestPush("structural");
@@ -2054,7 +2044,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       if (!current || current.kind !== "note") return;
       const locked = !isLockedNote(current);
       if (noteId === activeIdRef.current) {
-        documentNavigation.prepareModeChange(locked ? "reading" : mode);
+        documentNavigation.prepareModeChange(effectiveEditorMode(preferences.editorMode, { kind: "note", locked }));
       }
       await persistObject(
         { ...current, locked, dirty: true },
@@ -2269,14 +2259,15 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
           titleInput={titleInput}
           active={Boolean(activeDocument)}
           title={historyPreview?.payload.title ?? titleDraft}
-          titleReadOnly={Boolean(historyPreview) || activeDocumentLocked}
+          titleReadOnly={Boolean(historyPreview) || editorMode.readOnly}
           locked={activeDocumentLocked}
           historyPreview={Boolean(historyPreview)}
-          effectiveEditorMode={effectiveMode}
+          sourceMode={editorMode.sourceMode}
+          readOnly={editorMode.readOnly}
           onOpenLeft={() => preferences.treeCollapsed ? setPreferences({ ...preferences, treeCollapsed: false }) : setTreeOpen(true)}
           onTitleChange={(event) => setTitleDraft(event.target.value)}
           onTitleBlur={(event) => {
-            if (historyPreview || activeDocumentLocked) return;
+            if (historyPreview || editorMode.readOnly) return;
             if (!activeDocument) return;
             const noteId = activeDocument.objectId;
             void commitDocumentTitle(noteId, event.currentTarget.value).then((updated) => {
@@ -2284,7 +2275,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
             });
           }}
           onTitleKeyDown={(event) => { focusEditorFromTitle(event, documentNavigation.editorSurface.current); }}
-          onModeChange={changeEditorMode}
+          onToggleSource={editorMode.toggleSource}
+          onToggleReadOnly={editorMode.toggleReadOnly}
           onToggleLock={() => void toggleActiveNoteLock()}
           onAddImage={() => attachmentInput.current?.click()}
           onOpenRight={() => preferences.outlineCollapsed ? setPreferences({ ...preferences, outlineCollapsed: false }) : setOutlineOpen(true)}
@@ -2293,9 +2285,9 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
             const file = event.target.files?.[0];
             const noteId = activeDocument?.objectId;
             event.target.value = "";
-            if (file && noteId) void addAttachment(noteId, file).then((attachment) => {
+            if (file && noteId && !editorMode.readOnly && !historyPreview) void addAttachment(noteId, file).then((attachment) => {
               const latest = documentIndexRef.current.get(noteId);
-              if (latest) patchDocument(noteId, { markdown: latest.markdown + attachmentMarkdown(attachment.objectId, attachment.originalName) }, 0);
+              if (latest && !latest.locked && !editorModeRef.current.readOnly && !editorModeRef.current.previewing) patchDocument(noteId, { markdown: latest.markdown + attachmentMarkdown(attachment.objectId, attachment.originalName) }, 0);
             }).catch((error) => showMessage(translateError(error, t, "notice.attachmentSaveFailed"), "critical"));
           }} />
         </>}
@@ -2318,7 +2310,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       >
           {activeDocument ? historyPreview
             ? <ReadingEditor markdown={historyPreview.payload.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
-            : <MarkdownEditor ref={documentNavigation.editorSurface} key={editorSessionId} documentKey={activeDocument.objectId} markdown={activeDocument.markdown} mode={effectiveMode} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={noteEditor.onChange} onWikiLink={openWikiLink} onImageInsert={noteEditor.onImageInsert} onInsertionCancelled={() => showMessage(t("editor.insertRetry"), "critical")} onModeChange={next => { if (!activeDocument.locked) setMode(next); }} />
+            : <MarkdownEditor ref={documentNavigation.editorSurface} key={editorSessionId} documentKey={activeDocument.objectId} markdown={activeDocument.markdown} mode={effectiveMode} readOnly={editorMode.readOnly} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={noteEditor.onChange} onWikiLink={openWikiLink} onImageInsert={noteEditor.onImageInsert} onInsertionCancelled={() => showMessage(t("editor.insertRetry"), "critical")} onModeChange={editorMode.onModeChange} />
             : <EmptyEditor />}
       </NotePaneLayout>
 

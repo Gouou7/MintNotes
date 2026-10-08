@@ -8,6 +8,20 @@ import { MarkdownEditor } from "./MarkdownEditor";
 let root: Root | undefined;
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; document.body.replaceChildren(); });
 
+it("retains source visibility and independent permissions when switching notes and unlocking", async () => {
+  const host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+  const changed = vi.fn();
+  const render = async (documentKey: string, readOnly: boolean) => act(async () => root!.render(<I18nProvider>
+    <MarkdownEditor documentKey={documentKey} markdown={`Body ${documentKey}`} mode="source" readOnly={readOnly} onChange={changed} />
+  </I18nProvider>));
+  await render("a", true); const source = host.querySelector<HTMLTextAreaElement>("textarea")!;
+  expect(source.readOnly).toBe(true); expect(source.hidden).toBe(false); expect(source.value).toBe("Body a");
+  await render("b", true); expect(source.value).toBe("Body b"); expect(source.readOnly).toBe(true);
+  await render("b", false); expect(source.readOnly).toBe(false); expect(changed).not.toHaveBeenCalled();
+  await act(async () => { source.value += "!"; source.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(changed).toHaveBeenCalledWith("Body b!", "b");
+});
+
 it("keeps a new note's native quote input unescaped through controlled save updates", async () => {
   const changed = vi.fn();
   function Note() {

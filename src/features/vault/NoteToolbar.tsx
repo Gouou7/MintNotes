@@ -3,7 +3,6 @@ import {
   CodeXml,
   FileLock2,
   ImagePlus,
-  FileKey2,
   PanelLeftOpen,
   PanelRightOpen,
   PencilOff,
@@ -11,7 +10,6 @@ import {
 } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
 import { useI18n } from "../../i18n";
-import type { WorkspaceEditorMode } from "../workspace";
 
 interface NoteToolbarProps {
   titleInput: RefObject<HTMLInputElement | null>;
@@ -20,12 +18,14 @@ interface NoteToolbarProps {
   titleReadOnly: boolean;
   locked: boolean;
   historyPreview: boolean;
-  effectiveEditorMode: WorkspaceEditorMode;
+  sourceMode: boolean;
+  readOnly: boolean;
   onOpenLeft: () => void;
   onTitleChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTitleBlur: (event: FocusEvent<HTMLInputElement>) => void;
   onTitleKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
-  onModeChange: (mode: WorkspaceEditorMode) => void;
+  onToggleSource: () => void;
+  onToggleReadOnly: () => void;
   onToggleLock: () => void;
   onAddImage: () => void;
   onOpenRight: () => void;
@@ -38,18 +38,20 @@ export function NoteToolbar({
   titleReadOnly,
   locked,
   historyPreview,
-  effectiveEditorMode,
+  sourceMode,
+  readOnly,
   onOpenLeft,
   onTitleChange,
   onTitleBlur,
   onTitleKeyDown,
-  onModeChange,
+  onToggleSource,
+  onToggleReadOnly,
   onToggleLock,
   onAddImage,
   onOpenRight
 }: NoteToolbarProps) {
   const { t } = useI18n();
-  const modeDisabled = !active || historyPreview || locked;
+  const modeDisabled = !active || historyPreview;
   const noteActionDisabled = !active || historyPreview;
 
   return <header className="note-toolbar">
@@ -66,10 +68,13 @@ export function NoteToolbar({
           aria-label={t("app.noteTitle")}
         />
       : <strong className="empty-title-slot">{t("app.selectNote")}</strong>}
-    <div className="mode-switch" role="group" aria-label={t("app.editorMode")}>
-      <button disabled={modeDisabled} className={active && effectiveEditorMode === "source" ? "active" : ""} aria-pressed={active && effectiveEditorMode === "source"} title={t("app.modeSource")} aria-label={t("app.modeSource")} onClick={() => onModeChange(effectiveEditorMode === "source" ? "live" : "source")}><AppIcon icon={CodeXml} size={16} /></button>
-      <button disabled={modeDisabled} className={active && effectiveEditorMode === "reading" ? "active" : ""} aria-pressed={active && effectiveEditorMode === "reading"} title={t("app.modeReading")} aria-label={t("app.modeReading")} onClick={() => onModeChange(effectiveEditorMode === "reading" ? "live" : "reading")}><AppIcon icon={PencilOff} size={16} /></button>
-    </div>
+    <button
+      className="toolbar-icon"
+      disabled={noteActionDisabled || readOnly}
+      onClick={onAddImage}
+      title={locked ? t("app.unlockToEdit") : t("app.addImage")}
+      aria-label={t("app.addImage")}
+    ><AppIcon icon={ImagePlus} size={16} strokeWidth={1.5} /></button>
     <button
       className={`toolbar-icon note-lock-toggle ${active && locked ? "active" : ""}`}
       disabled={noteActionDisabled}
@@ -77,14 +82,11 @@ export function NoteToolbar({
       title={locked ? t("app.unlockNote") : t("app.lockNote")}
       aria-label={locked ? t("app.unlockNote") : t("app.lockNote")}
       aria-pressed={active && locked}
-    ><AppIcon icon={active && locked ? FileKey2 : FileLock2} size={16} /></button>
-    <button
-      className="toolbar-icon"
-      disabled={noteActionDisabled || locked}
-      onClick={onAddImage}
-      title={locked ? t("app.unlockToEdit") : t("app.addImage")}
-      aria-label={t("app.addImage")}
-    ><AppIcon icon={ImagePlus} size={16} /></button>
+    ><AppIcon icon={FileLock2} size={16} strokeWidth={1.5} /></button>
+    <div className="mode-switch" role="group" aria-label={t("app.editorMode")}>
+      <button disabled={modeDisabled || locked} className={active && readOnly ? "active" : ""} aria-pressed={active && readOnly} title={t("app.modeReading")} aria-label={t("app.modeReading")} onClick={onToggleReadOnly}><AppIcon icon={PencilOff} size={16} strokeWidth={1.5} /></button>
+      <button disabled={modeDisabled} className={active && sourceMode ? "active" : ""} aria-pressed={active && sourceMode} title={t("app.modeSource")} aria-label={t("app.modeSource")} onClick={onToggleSource}><AppIcon icon={CodeXml} size={16} strokeWidth={1.5} /></button>
+    </div>
     <button className="toolbar-icon right-pane-toggle" onClick={onOpenRight} title={t("app.openRight")} aria-label={t("app.openRight")}><AppIcon icon={PanelRightOpen} size={16} /></button>
   </header>;
 }
