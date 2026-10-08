@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ChevronDown, ChevronRight, ChevronsUp, Check, Copy, Download, Ellipsis, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, RotateCcw, Search, Settings2, Shield, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ChevronRight, ChevronsUp, Check, Copy, Download, Ellipsis, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, RotateCcw, Search, Settings, Settings2, Shield, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
@@ -558,7 +558,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
   const changeTab = (next: Tab) => setTab(next);
 
   return <div
-    className="modal-backdrop"
+    className="modal-backdrop settings-backdrop"
     role="dialog"
     aria-modal="true"
     aria-label={t("settings.title")}
@@ -567,124 +567,129 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
     }}
   >
     <section className="modal settings-modal">
-      <header><h2>{t("settings.title")}</h2><button disabled={Boolean(newRecoveryKey)} onClick={onClose} aria-label={t("settings.close")}><AppIcon icon={X} /></button></header>
-      {!serverSessionVerified && <p className="auth-guidance warning">{t("settings.localOnly")}</p>}
       <div className="settings-layout">
-        <nav className="settings-tabs">
-          <button className={tab === "general" ? "active" : ""} onClick={() => changeTab("general")}><AppIcon icon={Settings2} size={16} />{t("settings.general")}</button>
-          <button className={tab === "security" ? "active" : ""} onClick={() => changeTab("security")}><AppIcon icon={Shield} size={16} />{t("settings.security")}</button>
-          <button className={tab === "history" ? "active" : ""} onClick={() => changeTab("history")}><AppIcon icon={HistoryIcon} size={16} />{t("settings.history")}</button>
-          <button className={tab === "trash" ? "active" : ""} onClick={() => changeTab("trash")}><AppIcon icon={Trash2} size={16} />{t("settings.trash")}</button>
-          <button className={tab === "data" ? "active" : ""} onClick={() => changeTab("data")}><AppIcon icon={ArrowLeftRight} size={16} />{t("settings.data")}</button>
-          <button className={tab === "about" ? "active" : ""} onClick={() => changeTab("about")}><AppIcon icon={Info} size={16} />{t("settings.about")}</button>
-          {user.role === "admin" && serverSessionVerified && <button className={`admin-tab ${tab === "users" ? "active" : ""}`} onClick={() => changeTab("users")}><AppIcon icon={ShieldCheck} size={16} />{t("settings.admin")}</button>}
-        </nav>
-        <div className="settings-content">
-          {tab === "general" && <div className="settings-section">
-            <div className="profile-summary"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={30} />}</span><span className="profile-identity"><strong>{user.displayName}</strong><small>@{user.username}</small></span><SettingsButton className="primary" disabled={busy || !serverSessionVerified} onClick={openProfileDialog}><AppIcon icon={Pencil} size={15} />{t("settings.editProfile")}</SettingsButton></div>
-            <h3>{t("settings.appearance")}</h3>
-            <label className="settings-control-row"><span>{t("language.label")}</span><LanguageSelect value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} /></label>
-            <label className="settings-control-row"><span>{t("settings.theme")}</span><select value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select></label>
-            <div className="settings-control-row font-size-setting">
-              <span>{t("settings.fontSize")}</span>
-              <div className="font-size-controls">
-                <label className="font-size-input">
-                  <input type="number" min={MIN_FONT_SIZE} max={MAX_FONT_SIZE} step="1" inputMode="numeric" aria-label={t("settings.fontSizePixels")} value={fontSizeInput} onChange={(event) => updateFontSizeInput(event.target.value)} onBlur={() => setFontSizeInput(String(preferences.fontSize))} />
-                  <span aria-hidden="true">px</span>
-                </label>
-                <SettingsButton type="button" className="font-size-reset" disabled={preferences.fontSize === DEFAULT_FONT_SIZE} onClick={restoreDefaultFontSize}><AppIcon icon={RotateCcw} size={15} />{t("settings.restoreDefaultFontSize")}</SettingsButton>
+        <aside className="settings-sidebar">
+          <h2 className="settings-title"><AppIcon icon={Settings} size={16} />{t("settings.title")}</h2>
+          <nav className="settings-tabs">
+            <button className={tab === "general" ? "active" : ""} onClick={() => changeTab("general")}><AppIcon icon={Settings2} size={16} />{t("settings.general")}</button>
+            <button className={tab === "security" ? "active" : ""} onClick={() => changeTab("security")}><AppIcon icon={Shield} size={16} />{t("settings.security")}</button>
+            <button className={tab === "history" ? "active" : ""} onClick={() => changeTab("history")}><AppIcon icon={HistoryIcon} size={16} />{t("settings.history")}</button>
+            <button className={tab === "trash" ? "active" : ""} onClick={() => changeTab("trash")}><AppIcon icon={Trash2} size={16} />{t("settings.trash")}</button>
+            <button className={tab === "data" ? "active" : ""} onClick={() => changeTab("data")}><AppIcon icon={ArrowLeftRight} size={16} />{t("settings.data")}</button>
+            <button className={tab === "about" ? "active" : ""} onClick={() => changeTab("about")}><AppIcon icon={Info} size={16} />{t("settings.about")}</button>
+            {user.role === "admin" && serverSessionVerified && <button className={`admin-tab ${tab === "users" ? "active" : ""}`} onClick={() => changeTab("users")}><AppIcon icon={ShieldCheck} size={16} />{t("settings.admin")}</button>}
+          </nav>
+        </aside>
+        <div className="settings-main">
+          <header className="settings-header"><button disabled={Boolean(newRecoveryKey)} onClick={onClose} aria-label={t("settings.close")}><AppIcon icon={X} size={16} /></button></header>
+          <div className="settings-content">
+            {!serverSessionVerified && <p className="auth-guidance warning">{t("settings.localOnly")}</p>}
+            {tab === "general" && <div className="settings-section">
+              <div className="profile-summary"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={30} />}</span><span className="profile-identity"><strong>{user.displayName}</strong><small>@{user.username}</small></span><SettingsButton className="primary" disabled={busy || !serverSessionVerified} onClick={openProfileDialog}><AppIcon icon={Pencil} size={15} />{t("settings.editProfile")}</SettingsButton></div>
+              <h3>{t("settings.appearance")}</h3>
+              <label className="settings-control-row"><span>{t("language.label")}</span><LanguageSelect value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} /></label>
+              <label className="settings-control-row"><span>{t("settings.theme")}</span><select value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select></label>
+              <div className="settings-control-row font-size-setting">
+                <span>{t("settings.fontSize")}</span>
+                <div className="font-size-controls">
+                  <label className="font-size-input">
+                    <input type="number" min={MIN_FONT_SIZE} max={MAX_FONT_SIZE} step="1" inputMode="numeric" aria-label={t("settings.fontSizePixels")} value={fontSizeInput} onChange={(event) => updateFontSizeInput(event.target.value)} onBlur={() => setFontSizeInput(String(preferences.fontSize))} />
+                    <span aria-hidden="true">px</span>
+                  </label>
+                  <SettingsButton type="button" className="font-size-reset" disabled={preferences.fontSize === DEFAULT_FONT_SIZE} onClick={restoreDefaultFontSize}><AppIcon icon={RotateCcw} size={15} />{t("settings.restoreDefaultFontSize")}</SettingsButton>
+                </div>
               </div>
-            </div>
-            <h3>{t("settings.editor")}</h3>
-            <label className="settings-control-row">
-              <span>{t("settings.wrapCodeBlocks")}</span>
-              <span className="settings-switch">
-                <input
-                  type="checkbox"
-                  role="switch"
-                  aria-label={t("settings.wrapCodeBlocks")}
-                  checked={preferences.wrapCodeBlocks}
-                  onChange={(event) => onPreferences({ ...preferences, wrapCodeBlocks: event.target.checked })}
-                />
-                <span className="settings-switch-track" aria-hidden="true" />
-              </span>
-            </label>
-          </div>}
-
-          {tab === "trash" && <div className="settings-section trash-settings">
-            <h3>{t("settings.trash")}</h3><p className="settings-help">{t("settings.trashHelp")}</p>
-            <label className="settings-control-row"><span>{t("settings.autoDelete")}</span><select disabled={busy || !serverSessionVerified} value={trashRetentionDays === null ? "never" : String(trashRetentionDays)} onChange={(event) => void updateTrashRetention(event.target.value === "never" ? null : Number(event.target.value))}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 30 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></select></label>
-            <div className="trash-heading"><span><h3>{t("settings.deletedItems")}</h3>{trashItems.length > 0 && <small>{trashView.filtering ? t("settings.trashFilterSummary", { count: trashView.matchCount }) : t("settings.trashSummary", { roots: trashView.roots.length, total: trashItems.length })}</small>}</span>{trashItems.length > 0 && <span className="trash-heading-actions">{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton className="trash-collapse-all" onClick={() => setExpandedTrashIds(new Set())}><AppIcon icon={ChevronsUp} size={15} />{t("settings.collapseAll")}</SettingsButton>}<SettingsButton className="trash-clear danger" disabled={purging} onClick={onClearTrash}><AppIcon icon={Trash2} size={15} />{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></span>}</div>
-            {trashItems.length > 0 && <div className="trash-toolbar">
-              <label className="trash-search"><AppIcon icon={Search} size={16} /><input type="search" value={trashQuery} onChange={(event) => setTrashQuery(event.target.value)} placeholder={t("settings.searchTrash")} aria-label={t("settings.searchTrash")} /></label>
-              <select value={trashKindFilter} onChange={(event) => setTrashKindFilter(event.target.value as TrashKindFilter)} aria-label={t("settings.trashTypeFilter")}><option value="all">{t("settings.allTypes")}</option><option value="folder">{t("settings.foldersOnly")}</option><option value="note">{t("settings.notesOnly")}</option></select>
-              <select value={trashSortMode} onChange={(event) => setTrashSortMode(event.target.value as TrashSortMode)} aria-label={t("settings.trashSort")}><option value="deleted-desc">{t("settings.deletedNewest")}</option><option value="deleted-asc">{t("settings.deletedOldest")}</option><option value="name">{t("settings.sortByName")}</option></select>
+              <h3>{t("settings.editor")}</h3>
+              <label className="settings-control-row">
+                <span>{t("settings.wrapCodeBlocks")}</span>
+                <span className="settings-switch">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label={t("settings.wrapCodeBlocks")}
+                    checked={preferences.wrapCodeBlocks}
+                    onChange={(event) => onPreferences({ ...preferences, wrapCodeBlocks: event.target.checked })}
+                  />
+                  <span className="settings-switch-track" aria-hidden="true" />
+                </span>
+              </label>
             </div>}
-            {visibleTrashRoots.length ? <><div className="trash-list" role="tree">{visibleTrashRoots.map((item) => <TrashBranch key={item.objectId} item={item} childrenByParent={trashView.childrenByParent} descendantCounts={trashView.descendantCounts} expandedIds={expandedTrashIds} automaticallyExpandedIds={trashView.automaticallyExpandedIds} root restoring={restoringTrashId} purging={purging} onToggle={toggleTrashFolder} onRestore={(entry) => void restoreTrashItem(entry)} onPurge={onPurgeTrash} />)}</div>{visibleTrashRootCount < trashView.roots.length && <SettingsButton icon={ChevronDown} className="trash-load-more" onClick={() => setVisibleTrashRootCount((count) => count + TRASH_PAGE_SIZE)}>{t("settings.showMore", { count: Math.min(TRASH_PAGE_SIZE, trashView.roots.length - visibleTrashRootCount) })}</SettingsButton>}</> : <p className="trash-empty">{trashItems.length ? t("settings.noTrashMatches") : t("settings.trashEmpty")}</p>}
-          </div>}
 
-          {tab === "history" && <div className="settings-section history-settings">
-            <h3>{t("settings.history")}</h3>
-            <p className="settings-help">{t("settings.historyHelp")}</p>
-            <label className="settings-control-row">
-              <span>{t("settings.historyAutomatic")}</span>
-              <span className="settings-switch">
-                <input
-                  type="checkbox"
-                  role="switch"
-                  aria-label={t("settings.historyAutomatic")}
-                  disabled={busy || !serverSessionVerified}
-                  checked={historySettings.enabled}
-                  onChange={(event) => void updateHistorySettings({ enabled: event.target.checked })}
-                />
-                <span className="settings-switch-track" aria-hidden="true" />
-              </span>
-            </label>
-            <label className="settings-control-row"><span>{t("settings.historyFrequency")}</span><select disabled={busy || !serverSessionVerified || !historySettings.enabled} value={historySettings.intervalMinutes} onChange={(event) => void updateHistorySettings({ intervalMinutes: Number(event.target.value) as HistorySettings["intervalMinutes"] })}>{[5, 10, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t("settings.minutes", { count: minutes })}</option>)}</select></label>
-            <label className="settings-control-row"><span>{t("settings.historyRetention")}</span><select disabled={busy || !serverSessionVerified} value={historySettings.retentionDays === null ? "never" : historySettings.retentionDays} onChange={(event) => void updateHistorySettings({ retentionDays: event.target.value === "never" ? null : Number(event.target.value) as HistorySettings["retentionDays"] })}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 90 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></select></label>
-            <p className="settings-help">{t("settings.historyTiered")}</p>
-            <div className="history-usage">
-              <span><strong>{t("settings.historyStorage")}</strong><small>{t("settings.historyVersionCount", { count: historySettings.count })}</small></span>
-              <span>{formatHistoryBytes(historySettings.usedBytes)} / {formatHistoryBytes(historySettings.quotaBytes)}</span>
-              <progress max={historySettings.quotaBytes} value={Math.min(historySettings.usedBytes, historySettings.quotaBytes)} />
-            </div>
-            <div className="settings-actions"><SettingsButton className="danger" disabled={busy || !serverSessionVerified || historySettings.count === 0} onClick={() => void onClearHistory()}><AppIcon icon={Trash2} size={15} />{t("settings.historyClearAll")}</SettingsButton></div>
-          </div>}
+            {tab === "trash" && <div className="settings-section trash-settings">
+              <h3>{t("settings.trash")}</h3><p className="settings-help">{t("settings.trashHelp")}</p>
+              <label className="settings-control-row"><span>{t("settings.autoDelete")}</span><select disabled={busy || !serverSessionVerified} value={trashRetentionDays === null ? "never" : String(trashRetentionDays)} onChange={(event) => void updateTrashRetention(event.target.value === "never" ? null : Number(event.target.value))}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 30 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></select></label>
+              <div className="trash-heading"><span><h3>{t("settings.deletedItems")}</h3>{trashItems.length > 0 && <small>{trashView.filtering ? t("settings.trashFilterSummary", { count: trashView.matchCount }) : t("settings.trashSummary", { roots: trashView.roots.length, total: trashItems.length })}</small>}</span>{trashItems.length > 0 && <span className="trash-heading-actions">{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton className="trash-collapse-all" onClick={() => setExpandedTrashIds(new Set())}><AppIcon icon={ChevronsUp} size={15} />{t("settings.collapseAll")}</SettingsButton>}<SettingsButton className="trash-clear danger" disabled={purging} onClick={onClearTrash}><AppIcon icon={Trash2} size={15} />{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></span>}</div>
+              {trashItems.length > 0 && <div className="trash-toolbar">
+                <label className="trash-search"><AppIcon icon={Search} size={16} /><input type="search" value={trashQuery} onChange={(event) => setTrashQuery(event.target.value)} placeholder={t("settings.searchTrash")} aria-label={t("settings.searchTrash")} /></label>
+                <select value={trashKindFilter} onChange={(event) => setTrashKindFilter(event.target.value as TrashKindFilter)} aria-label={t("settings.trashTypeFilter")}><option value="all">{t("settings.allTypes")}</option><option value="folder">{t("settings.foldersOnly")}</option><option value="note">{t("settings.notesOnly")}</option></select>
+                <select value={trashSortMode} onChange={(event) => setTrashSortMode(event.target.value as TrashSortMode)} aria-label={t("settings.trashSort")}><option value="deleted-desc">{t("settings.deletedNewest")}</option><option value="deleted-asc">{t("settings.deletedOldest")}</option><option value="name">{t("settings.sortByName")}</option></select>
+              </div>}
+              {visibleTrashRoots.length ? <><div className="trash-list" role="tree">{visibleTrashRoots.map((item) => <TrashBranch key={item.objectId} item={item} childrenByParent={trashView.childrenByParent} descendantCounts={trashView.descendantCounts} expandedIds={expandedTrashIds} automaticallyExpandedIds={trashView.automaticallyExpandedIds} root restoring={restoringTrashId} purging={purging} onToggle={toggleTrashFolder} onRestore={(entry) => void restoreTrashItem(entry)} onPurge={onPurgeTrash} />)}</div>{visibleTrashRootCount < trashView.roots.length && <SettingsButton icon={ChevronDown} className="trash-load-more" onClick={() => setVisibleTrashRootCount((count) => count + TRASH_PAGE_SIZE)}>{t("settings.showMore", { count: Math.min(TRASH_PAGE_SIZE, trashView.roots.length - visibleTrashRootCount) })}</SettingsButton>}</> : <p className="trash-empty">{trashItems.length ? t("settings.noTrashMatches") : t("settings.trashEmpty")}</p>}
+            </div>}
 
-          {tab === "security" && <div className="settings-section">
-            <h3>{t("settings.devicePin")}</h3><p className="settings-help">{t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}</p>
-            <div className="settings-actions"><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</div>
-            <h3>{t("settings.autoLock")}</h3><p className="settings-help">{t("settings.autoLockHelp")}</p>
-            <label className="settings-control-row"><span>{t("settings.autoLockAfter")}</span><select disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select></label>
-            <h3>{t("settings.loginDevices")}</h3><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
-            {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
-            {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && device.active) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row ${device.current ? "current" : ""}`} key={device.id}><span className="session-device-icon"><AppIcon icon={Laptop} /></span><span className="session-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && (device.active ? <SettingsButton className="session-revoke danger" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={LogOut} size={15} />{t("settings.signOut")}</SettingsButton> : <SettingsButton className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={Trash2} size={15} />{t("common.remove")}</SettingsButton>)}</article>)}</div></>}
-            <h3>{t("settings.accountCredentials")}</h3><p className="settings-help">{t("settings.accountCredentialsHelp")}</p>
-            <div className="settings-actions"><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</SettingsButton><SettingsButton type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecovery")}</SettingsButton></div>
-          </div>}
+            {tab === "history" && <div className="settings-section history-settings">
+              <h3>{t("settings.history")}</h3>
+              <p className="settings-help">{t("settings.historyHelp")}</p>
+              <label className="settings-control-row">
+                <span>{t("settings.historyAutomatic")}</span>
+                <span className="settings-switch">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label={t("settings.historyAutomatic")}
+                    disabled={busy || !serverSessionVerified}
+                    checked={historySettings.enabled}
+                    onChange={(event) => void updateHistorySettings({ enabled: event.target.checked })}
+                  />
+                  <span className="settings-switch-track" aria-hidden="true" />
+                </span>
+              </label>
+              <label className="settings-control-row"><span>{t("settings.historyFrequency")}</span><select disabled={busy || !serverSessionVerified || !historySettings.enabled} value={historySettings.intervalMinutes} onChange={(event) => void updateHistorySettings({ intervalMinutes: Number(event.target.value) as HistorySettings["intervalMinutes"] })}>{[5, 10, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t("settings.minutes", { count: minutes })}</option>)}</select></label>
+              <label className="settings-control-row"><span>{t("settings.historyRetention")}</span><select disabled={busy || !serverSessionVerified} value={historySettings.retentionDays === null ? "never" : historySettings.retentionDays} onChange={(event) => void updateHistorySettings({ retentionDays: event.target.value === "never" ? null : Number(event.target.value) as HistorySettings["retentionDays"] })}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 90 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></select></label>
+              <p className="settings-help">{t("settings.historyTiered")}</p>
+              <div className="history-usage">
+                <span><strong>{t("settings.historyStorage")}</strong><small>{t("settings.historyVersionCount", { count: historySettings.count })}</small></span>
+                <span>{formatHistoryBytes(historySettings.usedBytes)} / {formatHistoryBytes(historySettings.quotaBytes)}</span>
+                <progress max={historySettings.quotaBytes} value={Math.min(historySettings.usedBytes, historySettings.quotaBytes)} />
+              </div>
+              <div className="settings-actions"><SettingsButton className="danger" disabled={busy || !serverSessionVerified || historySettings.count === 0} onClick={() => void onClearHistory()}><AppIcon icon={Trash2} size={15} />{t("settings.historyClearAll")}</SettingsButton></div>
+            </div>}
 
-          {tab === "data" && <div className="settings-section"><h3>{t("settings.data")}</h3><p className="settings-help">{t("settings.portableHelp")}</p><input ref={fileInput} type="file" accept=".md,.markdown,.txt,.zip" multiple hidden onChange={(event) => { void importSelected(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><SettingsButton icon={Upload} disabled={busy} onClick={() => fileInput.current?.click()}>{t("settings.import")}</SettingsButton><SettingsButton icon={Download} disabled={busy} onClick={() => void onExport()}>{t("settings.export")}</SettingsButton></div></div>}
-          {tab === "about" && <div className="settings-section about-settings">
-            <div className="about-product">
-              <h3>Mint Notes</h3>
-              <p>{t("settings.version")} {APP_VERSION}</p>
-            </div>
-            <div className="about-introduction">
-              <p>{t("settings.aboutDescription")}</p>
-            </div>
-            <h3>{t("settings.acknowledgements")}</h3>
-            <p className="settings-help">{t("settings.aboutHelp")}</p>
-            <ul className="about-credits">
-              <li><a href="https://github.com/Yuyz0112/typora-web" target="_blank" rel="noreferrer">typora-web</a><span>{t("settings.editorCoreOrigin")}</span></li>
-              <li><a href="https://katex.org/" target="_blank" rel="noreferrer">KaTeX</a><span>{t("settings.mathFormulaRendering")}</span></li>
-              <li><a href="https://mermaid.js.org/" target="_blank" rel="noreferrer">Mermaid</a><span>{t("settings.diagramRendering")}</span></li>
-              <li><a href="https://lucide.dev" target="_blank" rel="noreferrer">Lucide React</a><span>{t("settings.iconLibrary")}</span></li>
-            </ul>
-          </div>}
-          {tab === "users" && user.role === "admin" && serverSessionVerified && <div className="admin-settings"><AdminPanel currentUser={user} onNotify={onNotify} /></div>}
-          {tab === "general" && <div className="settings-logout-section">
-            <SettingsButton type="button" className="settings-logout danger" onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} size={16} />{t("app.logout")}</SettingsButton>
-          </div>}
+            {tab === "security" && <div className="settings-section">
+              <h3>{t("settings.devicePin")}</h3><p className="settings-help">{t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}</p>
+              <div className="settings-actions"><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</div>
+              <h3>{t("settings.autoLock")}</h3><p className="settings-help">{t("settings.autoLockHelp")}</p>
+              <label className="settings-control-row"><span>{t("settings.autoLockAfter")}</span><select disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select></label>
+              <h3>{t("settings.loginDevices")}</h3><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
+              {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
+              {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && device.active) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row ${device.current ? "current" : ""}`} key={device.id}><span className="session-device-icon"><AppIcon icon={Laptop} /></span><span className="session-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && (device.active ? <SettingsButton className="session-revoke danger" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={LogOut} size={15} />{t("settings.signOut")}</SettingsButton> : <SettingsButton className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={Trash2} size={15} />{t("common.remove")}</SettingsButton>)}</article>)}</div></>}
+              <h3>{t("settings.accountCredentials")}</h3><p className="settings-help">{t("settings.accountCredentialsHelp")}</p>
+              <div className="settings-actions"><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</SettingsButton><SettingsButton type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecovery")}</SettingsButton></div>
+            </div>}
+
+            {tab === "data" && <div className="settings-section"><h3>{t("settings.data")}</h3><p className="settings-help">{t("settings.portableHelp")}</p><input ref={fileInput} type="file" accept=".md,.markdown,.txt,.zip" multiple hidden onChange={(event) => { void importSelected(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><SettingsButton icon={Upload} disabled={busy} onClick={() => fileInput.current?.click()}>{t("settings.import")}</SettingsButton><SettingsButton icon={Download} disabled={busy} onClick={() => void onExport()}>{t("settings.export")}</SettingsButton></div></div>}
+            {tab === "about" && <div className="settings-section about-settings">
+              <div className="about-product">
+                <h3>Mint Notes</h3>
+                <p>{t("settings.version")} {APP_VERSION}</p>
+              </div>
+              <div className="about-introduction">
+                <p>{t("settings.aboutDescription")}</p>
+              </div>
+              <h3>{t("settings.acknowledgements")}</h3>
+              <p className="settings-help">{t("settings.aboutHelp")}</p>
+              <ul className="about-credits">
+                <li><a href="https://github.com/Yuyz0112/typora-web" target="_blank" rel="noreferrer">typora-web</a><span>{t("settings.editorCoreOrigin")}</span></li>
+                <li><a href="https://katex.org/" target="_blank" rel="noreferrer">KaTeX</a><span>{t("settings.mathFormulaRendering")}</span></li>
+                <li><a href="https://mermaid.js.org/" target="_blank" rel="noreferrer">Mermaid</a><span>{t("settings.diagramRendering")}</span></li>
+                <li><a href="https://lucide.dev" target="_blank" rel="noreferrer">Lucide React</a><span>{t("settings.iconLibrary")}</span></li>
+              </ul>
+            </div>}
+            {tab === "users" && user.role === "admin" && serverSessionVerified && <div className="admin-settings"><AdminPanel currentUser={user} onNotify={onNotify} /></div>}
+            {tab === "general" && <div className="settings-logout-section">
+              <SettingsButton type="button" className="settings-logout danger" onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} size={16} />{t("app.logout")}</SettingsButton>
+            </div>}
+          </div>
         </div>
       </div>
       {profileDialogOpen && <div className="danger-confirm profile-edit-dialog settings-section" role="dialog" aria-modal="true" aria-label={t("settings.editProfile")}>

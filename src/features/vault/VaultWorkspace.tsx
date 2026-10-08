@@ -11,7 +11,8 @@ import { ApiError, api, uploadAttachmentChunk } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
 import { PaneResizer } from "../../components/PaneResizer";
 import { HistoryPanel } from "../../components/HistoryPanel";
-import { Toast, type ToastNotice, type ToastTone } from "../../components/Toast";
+import { ToastStack } from "../../components/Toast";
+import { useToastNotifications } from "./useToastNotifications";
 import { cryptoClient, type EncryptedProfileAvatar } from "../../crypto/client";
 import {
   broadcastAccountLogout,
@@ -31,6 +32,7 @@ import { AttachmentCloneService } from "../attachmentClone";
 import { documentPatchChanges } from "../documentPatch";
 import { useImportExport } from "./useImportExport";
 import { ImportResultPanel } from "../ImportResultPanel";
+import { SettingsPanelLoading } from "../SettingsPanelLoading";
 import { makeDocument } from "./documentFactory";
 import { NameReservations } from "../siblingNames";
 import { useSiblingNameRepair } from "./useSiblingNameRepair";
@@ -206,8 +208,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     markLocalFailure,
     markLocalSuccess
   } = useSyncStatus(serverSessionVerified);
-  const [message, setMessage] = useState<ToastNotice | null>(null);
-  const messageSequence = useRef(0);
+  const { notices, showMessage, dismissMessage } = useToastNotifications();
   const [loading, setLoading] = useState(true);
   const [loadFailure, setLoadFailure] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ objectId: string; x: number; y: number } | null>(null);
@@ -264,10 +265,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       historyPeriodicTimer.current = null;
     };
   }, []);
-
-  const showMessage = (text: string, tone: ToastTone = "warning", action?: ToastNotice["action"]) => {
-    setMessage({ id: ++messageSequence.current, text, tone, action });
-  };
 
   const applyHistorySettings = (settings: HistorySettings) => {
     historySettingsRef.current = settings;
@@ -1250,7 +1247,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
                 const fingerprints = new Set(ignoredFailureFingerprints);
                 for (const object of visibleFailures) fingerprints.add(decryptFailureFingerprint(object));
                 await localDb.meta.put({ key: ignoredDecryptFailuresKey(user.id), value: JSON.stringify([...fingerprints]) });
-                setMessage(null);
               }
             }
           );
@@ -2349,8 +2345,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       {(treeOpen || outlineOpen) && <button className="drawer-scrim" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} aria-label={t("app.closeSidebars")} />}
       {importExport.result && <ImportResultPanel result={importExport.result} onClose={importExport.dismiss} />}
       {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onToggleLock={toggleNoteLock} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
-      {settingsOpen && <Suspense fallback={<div className="modal-backdrop"><section className="modal loading-shell" aria-label={t("settings.title")} aria-busy="true"><div className="spinner" /></section></div>}><SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} /></Suspense>}
-      {message && <Toast notice={message} onDismiss={() => setMessage(null)} />}
+      {settingsOpen && <Suspense fallback={<SettingsPanelLoading onClose={() => setSettingsOpen(false)} />}><SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} /></Suspense>}
+      <ToastStack notices={notices} onDismiss={dismissMessage} />
     </div>
   );
 }

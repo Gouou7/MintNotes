@@ -21,7 +21,7 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['tablet', 834, 111
       await expect(page.locator('.note-pane')).toHaveCSS('background-color', theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(24, 24, 24)');
       const surface = await code.evaluate(element => ({ fill: getComputedStyle(element, '::before').backgroundColor, outline: getComputedStyle(element, '::after').backgroundColor, mask: getComputedStyle(element, '::before').maskImage }));
       expect(surface.fill).toBe(theme === 'light' ? 'rgb(242, 243, 243)' : 'rgb(42, 42, 42)');
-      expect(surface.outline).toBe(theme === 'light' ? 'rgb(151, 151, 151)' : 'rgb(51, 51, 51)');
+      expect(surface.outline).toBe(theme === 'light' ? 'rgb(226, 226, 226)' : 'rgb(51, 51, 51)');
       expect(surface.mask).toContain('data:image/svg+xml');
       await expect(wiki).toHaveCSS('color', 'rgb(97, 210, 153)');
       await expect(wiki).toHaveCSS('text-decoration-line', 'underline');

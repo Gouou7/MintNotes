@@ -8,6 +8,8 @@ import { NotePaneLayout } from "../../../src/features/vault/NotePaneLayout";
 import { useWorkspaceEditorMode } from "../../../src/features/vault/useWorkspaceEditorMode";
 import { DEFAULT_DEVICE_WORKSPACE_PREFERENCES } from "../../../src/features/workspace";
 import { SettingsButton } from "../../../src/components/SettingsButton";
+import { ToastStack, type ToastNotice, type ToastTone } from "../../../src/components/Toast";
+import { useToastNotifications } from "../../../src/features/vault/useToastNotifications";
 import { NoteToolbar } from "../../../src/features/vault/NoteToolbar";
 import { TreeLevel, TreeNoteLock } from "../../../src/features/vault/VaultTree";
 import { WorkspacePanelHeader, WorkspaceSidebar } from "../../../src/features/vault/WorkspaceChrome";
@@ -27,10 +29,12 @@ const tree = new Map<string | null, OpenDocument[]>([
   ["subfolder", [document("nested", "Nested note", "note", "subfolder")]]
 ]);
 let saves = 0;
-declare global { interface Window { mintWorkspaceFixture: { saves(): number } } }
-window.mintWorkspaceFixture = { saves: () => saves };
+let notify!: ReturnType<typeof useToastNotifications>["showMessage"];
+declare global { interface Window { mintWorkspaceFixture: { saves(): number; notify(text: string, tone: ToastTone, action?: ToastNotice["action"]): void } } }
+window.mintWorkspaceFixture = { saves: () => saves, notify: (...args) => notify(...args) };
 
 function Workspace() {
+  const notifications = useToastNotifications(); notify = notifications.showMessage;
   const [search, setSearch] = useState("");
   const [preferences, setPreferences] = useState<UiPreferences>({ ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES, theme: "system", fontSize: 14, wrapCodeBlocks: true, language: "en", sortMode: "alphabetical", treeWidth: 297, outlineWidth: 297, rightPanelTab: "outline" });
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -64,6 +68,7 @@ function Workspace() {
     <aside className="outline-pane"><WorkspacePanelHeader tab={tab} onTabChange={setTab} onCollapse={() => setOutlineCollapsed(true)} onClose={() => setOutlineOpen(false)} /><section className="right-panel-content"><nav className="outline-list">{tab === "outline" ? <button>Main page</button> : <p className="outline-empty">No history</p>}</nav></section></aside>
     {settingsOpen && <div className="modal-backdrop"><section className="settings-modal"><div className="settings-section"><div className="settings-actions"><SettingsButton icon={Check} className="primary">Save</SettingsButton><SettingsButton icon={X} onClick={() => setSettingsOpen(false)}>Cancel</SettingsButton><SettingsButton icon={Trash2} className="danger">Delete</SettingsButton></div></div></section></div>}
     {(treeOpen || outlineOpen) && <button className="drawer-scrim" aria-label="Close panels" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} />}
+    <ToastStack notices={notifications.notices} onDismiss={notifications.dismissMessage} />
   </div>;
 }
 

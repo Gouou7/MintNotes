@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { CircleAlert, Info, TriangleAlert, X } from "lucide-react";
+import { BellRing, CircleAlert, X } from "lucide-react";
 import { useI18n } from "../i18n";
 import { AppIcon } from "./AppIcon";
 
@@ -28,7 +28,7 @@ export function Toast({ notice, onDismiss }: { notice: ToastNotice; onDismiss: (
     return () => window.clearTimeout(timer);
   }, [notice.id, notice.tone]);
 
-  const NoticeIcon = notice.tone === "critical" ? CircleAlert : notice.tone === "warning" ? TriangleAlert : Info;
+  const NoticeIcon = notice.tone === "info" ? BellRing : CircleAlert;
 
   return (
     <aside
@@ -36,10 +36,17 @@ export function Toast({ notice, onDismiss }: { notice: ToastNotice; onDismiss: (
       role={notice.tone === "critical" ? "alert" : "status"}
       aria-live={notice.tone === "critical" ? "assertive" : "polite"}
     >
-      <span className="toast-indicator"><AppIcon icon={NoticeIcon} size={19} /></span>
+      <span className="toast-indicator"><AppIcon icon={NoticeIcon} size={16} strokeWidth={2} /></span>
       <p>{notice.text}</p>
       {notice.action && <button className="toast-action" onClick={() => void notice.action?.run()}>{notice.action.label}</button>}
-      <button onClick={onDismiss} aria-label={t("app.closeNotification")}><AppIcon icon={X} size={16} /></button>
+      <button className="toast-close" onClick={onDismiss} aria-label={t("app.closeNotification")}><AppIcon icon={X} size={16} /></button>
     </aside>
   );
+}
+
+export function ToastStack({ notices, onDismiss }: { notices: readonly ToastNotice[]; onDismiss: (id: number) => void }) {
+  if (!notices.length) return null;
+  return <div className="toast-stack">
+    {notices.map(notice => <Toast key={notice.id} notice={notice} onDismiss={() => onDismiss(notice.id)} />)}
+  </div>;
 }

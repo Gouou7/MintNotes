@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+test.use({
+  deviceScaleFactor: 2,
+  launchOptions: async ({ browserName, launchOptions }, use) => use(browserName === "chromium" ? { ...launchOptions, args: [...(launchOptions.args ?? []), "--force-device-scale-factor=2"] } : launchOptions),
+});
+
 for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 1112], ["mobile", 320, 844]] as const) {
   test(`${name} workspace matches theme tokens and keeps pane and mode controls usable`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
@@ -9,11 +14,20 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
       await expect(page.locator(".note-toolbar")).toHaveCSS("height", "48px");
       await expect(page.locator(".tree-pane")).toHaveCSS("background-color", theme === "dark" ? "rgb(30, 30, 30)" : "rgb(232, 233, 233)");
-      await expect(page.locator(".side-header").first()).toHaveCSS("border-bottom-color", theme === "dark" ? "rgb(51, 51, 51)" : "rgb(151, 151, 151)");
+      await expect(page.locator(".side-header").first()).toHaveCSS("border-bottom-color", theme === "dark" ? "rgb(51, 51, 51)" : "rgb(226, 226, 226)");
+      await expect(page.locator(".side-header").first()).toHaveCSS("border-bottom-width", "0.5px");
+      await expect(page.locator(".note-toolbar")).toHaveCSS("border-bottom-width", "0.5px");
+      await expect(page.locator(".status-bar")).toHaveCSS("border-top-width", "0.5px");
+      for (const divider of await page.locator(".pane-resizer:visible").all()) expect((await divider.boundingBox())!.width).toBe(0.5);
       const codeOutline = await page.locator(".ProseMirror pre").evaluate(element => getComputedStyle(element, "::after").backgroundColor);
-      expect(codeOutline).toBe(theme === "dark" ? "rgb(51, 51, 51)" : "rgb(151, 151, 151)");
+      expect(codeOutline).toBe(theme === "dark" ? "rgb(51, 51, 51)" : "rgb(226, 226, 226)");
       await source.click();
       await expect(source).toHaveAttribute("aria-pressed", "true");
+      await expect(source).toHaveCSS("color", "rgb(97, 210, 153)");
+      await expect(source).toHaveCSS("border-width", "0px");
+      expect(await page.evaluate(() => ["--accent", "--accent-text"].map(name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()))).toEqual(["#61d299", "#61d299"]);
+      await page.mouse.move(width - 10, height - 10);
+      await expect(source).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       await expect(page.locator("textarea.typora-web-source:not([hidden])")).toBeVisible();
       await source.click();
       await expect(source).toHaveAttribute("aria-pressed", "false");
@@ -41,7 +55,7 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await page.locator(".ProseMirror strong").filter({ hasText: "bold" }).click();
       await expect(page.locator(".ProseMirror .syntax-hint").first()).toHaveCSS("color", "rgb(177, 177, 177)");
       await expect(page.locator(".ProseMirror hr")).toHaveCSS("height", "1px");
-      await expect(page.locator(".ProseMirror hr")).toHaveCSS("background-color", theme === "dark" ? "rgb(51, 51, 51)" : "rgb(151, 151, 151)");
+      await expect(page.locator(".ProseMirror hr")).toHaveCSS("background-color", theme === "dark" ? "rgb(51, 51, 51)" : "rgb(226, 226, 226)");
       expect(await page.evaluate(() => window.mintWorkspaceFixture.saves())).toBe(0);
 
       await expect(page.locator(".note-toolbar button svg").first()).toHaveAttribute("width", "16");
@@ -114,8 +128,22 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
     await page.getByRole("button", { name: "Open right sidebar" }).click();
     await expect(page.locator(".right-panel-header")).toBeVisible();
     await expect(page.locator(".right-panel-header > button:visible")).toHaveCount(1);
-    await page.getByRole("button", { name: "History", exact: true }).click();
-    await expect(page.locator(".outline-empty")).toHaveText("No history");
+    const outline = page.getByRole("button", { name: "Outline", exact: true }), history = page.getByRole("button", { name: "History", exact: true });
+    for (const theme of ["dark", "light"]) {
+      await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+      for (const [active, inactive] of [[outline, history], [history, outline]]) {
+        await active.click();
+        await page.mouse.move(width - 10, height - 10);
+        await active.blur();
+        await expect(active).toHaveAttribute("aria-current", "page");
+        await expect(inactive).not.toHaveAttribute("aria-current", "page");
+        await expect(active).toHaveCSS("color", "rgb(97, 210, 153)");
+        await expect(inactive).not.toHaveCSS("color", "rgb(97, 210, 153)");
+        await expect(active).toHaveCSS("border-top-width", "0px");
+        await expect(active).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      }
+      await expect(page.locator(".outline-empty")).toHaveText("No history");
+    }
     if (name !== "desktop") await page.getByRole("button", { name: "Close right sidebar" }).click();
   });
 }

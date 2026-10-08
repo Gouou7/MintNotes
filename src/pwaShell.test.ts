@@ -25,12 +25,13 @@ describe("installed PWA shell", () => {
     expect(styles).toMatch(/\.side-header\s*\{[^}]*var\(--safe-area-top\)/s);
     expect(styles).toMatch(/\.side-footer\s*\{[^}]*var\(--safe-area-bottom\)/s);
     expect(styles).toMatch(/\.status-bar\s*\{[^}]*var\(--safe-area-bottom\)/s);
-    expect(styles).toMatch(/\.settings-modal > header\s*\{[^}]*var\(--safe-area-top\)/s);
+    expect(styles).toMatch(/\.settings-header\s*\{[^}]*var\(--safe-area-top\)/s);
     expect(styles).toMatch(/\.auth-shell, \.loading-shell\s*\{[^}]*height: 100%;[^}]*overflow: auto/s);
   });
 
   it("renders each desktop pane boundary as a single line with a wider resize target", () => {
-    expect(styles).toMatch(/\.app-shell\s*\{[^}]*--tree-resizer-track: 1px;[^}]*--outline-resizer-track: 1px;/s);
+    expect(styles).toContain("--pane-divider-width: 0.5px;");
+    expect(styles).toMatch(/\.app-shell\s*\{[^}]*--tree-resizer-track: var\(--pane-divider-width\);[^}]*--outline-resizer-track: var\(--pane-divider-width\);/s);
     expect(styles).toMatch(/\.pane-resizer\s*\{[^}]*background: var\(--border\);/s);
     expect(styles).toMatch(/\.pane-resizer::before\s*\{[^}]*width: 12px;/s);
   });
@@ -43,7 +44,7 @@ describe("installed PWA shell", () => {
   });
 
   it("places transient notifications below the top toolbar", () => {
-    expect(styles).toMatch(/\.toast-notice\s*\{[^}]*top: calc\(73px \+ var\(--safe-area-top\)\)/s);
+    expect(styles).toMatch(/\.toast-stack\s*\{[^}]*top: calc\(64px \+ var\(--safe-area-top\)\)/s);
   });
 
   it("keeps the editor pane constrained so the document owns vertical scrolling", () => {
