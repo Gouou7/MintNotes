@@ -82,10 +82,10 @@ pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。
 | `USER_HISTORY_QUOTA_MB` | `256` | 独立历史配额。 |
 | `SESSION_TTL_HOURS` | `168` | 普通会话寿命。 |
 | `TRUST_PROXY` | 标准部署为 `true` | 高级配置；Compose、`.env.example` 和上面的 pnpm 启动命令均已设置，无须修改。直接运行服务且未设置或留空时为 `false`。 |
-| `BACKUP_DIR` | `/data/backups` | 仅 pnpm 部署使用；备份输出目录，须为运行账户可写。Docker 部署固定写入容器的 `/data/backups`。 |
+| `BACKUP_DIR` | `/data/backups` | 由备份命令读取的输出目录，须为运行账户可写。Compose 未转发此变量，默认写入容器的 `/data/backups`。 |
 | `LOG_LEVEL` | `info` | `trace` 至 `fatal`、`silent`。 |
 
-Docker 部署在 `.env` 中填写这些变量；pnpm 部署通过进程管理器注入。不要在任何环境文件中保存主密码、恢复密钥或保险库密钥。
+Docker 部署在 `.env` 中填写 Compose 已声明的变量；pnpm 部署通过进程管理器注入。`BACKUP_DIR` 仅由备份命令读取，在 `.env` 中单独设置不会改变容器的备份目录；需要调整时须向该命令显式传入环境变量，并确保目标目录可写且已持久化。不要在任何环境文件中保存主密码、恢复密钥或保险库密钥。
 
 服务会在启动时严格校验端口、容量、会话时长和布尔开关；无效值会直接阻止启动，避免悄悄退回不符合预期的配置。`APP_ORIGIN` 未设置或留空不会阻止生产启动；显式填写无效值仍会拒绝启动。自动模式继续拒绝缺少 Origin、非 HTTPS 或跨源的状态更改请求，注册、登录、保存和同步不需要固定来源配置。
 
@@ -154,4 +154,4 @@ docker compose config
 
 官方镜像同时发布 `linux/amd64`、`linux/arm64` 的不可变版本标签与 `latest`；生产应固定版本或摘要。已公开标签不得移动，失败版本应发布补丁版本。
 
-镜像构建阶段安装完整依赖并生成前端资源，运行阶段只保留服务端生产依赖、`dist` 和 `server-dist`；仅供浏览器打包使用的依赖归入 `devDependencies`，必须先构建再执行 `pnpm prune --prod`。文件复制时直接设置所有者，避免递归修改所有者产生重复镜像层。
+镜像的构建阶段安装完整依赖并生成客户端与服务端产物，独立的生产依赖阶段使用 `pnpm install --frozen-lockfile --prod` 安装服务端依赖；运行阶段复制生产依赖、`dist` 和 `server-dist`。仅供浏览器打包使用的依赖归入 `devDependencies`；pnpm 部署须先构建，再执行 `pnpm prune --prod`。文件复制时直接设置所有者，避免递归修改所有者产生重复镜像层。

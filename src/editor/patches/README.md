@@ -6,7 +6,7 @@
 
 ## 补丁清单
 
-`series.json` 是应用顺序、用途、依赖及验收测试的唯一清单。每个功能使用不带序号的语义目录，`upstream.patch` 描述对上游文件的必要改动，同目录的新增模块按 `additions` 映射复制到生成树，不修改原始上游。目录名不参与排序；清单中的现有补丁 ID 保持稳定，供依赖引用。
+`series.json` 是应用顺序、用途、依赖及验收测试的唯一清单。每个功能使用不带序号的语义目录，清单项的 `patch` 指定补丁文件，同目录的新增模块按 `additions` 映射复制到生成树，不修改原始上游。补丁通常命名为 `upstream.patch`；同一功能可在同目录维护实现与测试预期等多个补丁，由不同清单项分别声明。目录名不参与排序；清单中的现有补丁 ID 保持稳定，供依赖引用。
 
 例如公式功能在 `math/` 内维护共用语法、行内装饰、块解析、键盘行为与预览生命周期，`upstream.patch` 接入功能注册及选区展示；公共控制器和展示上下文位于 `integration/`，共享语法保护、转义判断和通用块预览接入位于 `syntax/`。运行引擎仍生成在仓库根目录的 `.generated/typora-web/`，`src/editor/product/` 中的产品代码通过 `src/editor/engine.ts` 引用。
 
@@ -28,7 +28,7 @@
 | [14-blockquote-input](blockquote/upstream.patch) | 停止自动转义 `>`，保留手写引用转义；补齐浏览器合并输入的引用触发，沿用上游嵌套、延续与退出行为 | blockquote.test.ts、浏览器 |
 | [15-block-controls](block-controls/upstream.patch) | 代码语言与 Callout 标题直接编辑，回车／失焦提交；代码上下键按头部在正文之前的顺序导航；原生类型选单、右侧折叠与编辑状态 | block-controls.test.ts、calloutMarker.test.ts、浏览器 |
 | [16-block-controls-tests](block-controls/test-expectations.patch) | 类型编辑框移到顶部后调整代码上下键导航预期，保留检查点并补齐从上方进入的检查 | 补丁后的上游测试 |
-| [17-image-presentation](image-presentation/upstream.patch) | 图片点击进入上方源码行尾，文本选区保持展开与选中描边，收紧独立图片段落空隙，阅读模式保持只读 | images.test.ts、images.spec.ts |
+| [17-image-presentation](image-presentation/upstream.patch) | 图片点击进入上方源码行尾，文本选区保持展开与选中描边，收紧独立图片段落空隙，图片交互遵守只读约束 | images.test.ts、images.spec.ts |
 
 图片测试差异补丁移除直接文件选择占位，阻止 `u`／`url` 这类相对图片 URL 出现在预览 src；图片源码与说明文字不变。Mint 只允许 HTTPS 或经附件解析器取得的 Blob URL。代码测试差异补丁调整类型编辑框所在位置对应的上下键路径，其余上游预期继续原样验证。
 
@@ -44,6 +44,8 @@ pnpm test
 pnpm build
 pnpm test:editor-browser
 ```
+
+`pnpm prepare:editor` 校验基准、严格应用补丁并按需重建生成树；`--check` 只校验基准与补丁，不检查或修复现有生成文件。`pnpm typecheck`、Mint／上游测试和客户端构建命令会自动执行准备流程，单独运行 Vitest 前须先更新生成树。
 
 原始和生成测试的运行配置仅把上游测试工具入口映射到 Vitest；原始源码与测试文件不改写。两份素材目录从 Mint 常规测试收集与 TypeScript 根文件中排除，运行引擎通过生成代码接受类型检查。测试、构建和浏览器检查顺序执行，统一使用一个工作进程；浏览器夹具先构建，再由临时服务提供。
 
