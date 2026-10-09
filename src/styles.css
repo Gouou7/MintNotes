@@ -145,24 +145,31 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 .app-shell { --font-adjust: 0px; --tree-track: var(--tree-width, 297px); --tree-resizer-track: var(--pane-divider-width); --outline-track: var(--outline-width, 297px); --outline-resizer-track: var(--pane-divider-width); --note-pane-left: calc(var(--tree-track) + var(--tree-resizer-track)); --note-pane-right: calc(var(--outline-track) + var(--outline-resizer-track)); --safe-area-bottom: var(--workspace-safe-area-bottom, env(safe-area-inset-bottom, 0px)); --note-status-height: calc(25px + var(--safe-area-bottom)); position: fixed; top: var(--workspace-viewport-top, 0px); left: 0; display: grid; grid-template-columns: var(--tree-track) var(--tree-resizer-track) minmax(0, 1fr) var(--outline-resizer-track) var(--outline-track); width: 100%; height: var(--workspace-viewport-height, 100%); min-height: 0; overflow: hidden; background: var(--surface); font-size: calc(14px + var(--font-adjust)); }
 .app-shell.settings-open { z-index: 7; }
+.app-shell { --pane-motion-duration: 220ms; --pane-motion-easing: cubic-bezier(.2, 0, 0, 1); transition: grid-template-columns var(--pane-motion-duration) var(--pane-motion-easing); }
 .app-shell.tree-collapsed { --tree-track: 0px; --tree-resizer-track: 0px; }
 .app-shell.outline-collapsed { --outline-track: 0px; --outline-resizer-track: 0px; }
-.tree-collapsed > .tree-pane, .outline-collapsed > .outline-pane { visibility: hidden; overflow: hidden; border: 0; }
+.tree-collapsed > .tree-pane, .outline-collapsed > .outline-pane { visibility: hidden; overflow: hidden; border: 0; transition-delay: 0s, var(--pane-motion-duration); }
+.tree-collapsed > .tree-pane { transform: translateX(-100%); }
+.outline-collapsed > .outline-pane { transform: translateX(100%); }
 
 .tree-pane, .outline-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--sidebar); border-color: var(--border); z-index: 20; color: var(--text); caret-color: transparent; }
+.tree-pane, .outline-pane { transform: translateX(0); transition: transform var(--pane-motion-duration) var(--pane-motion-easing), visibility 0s; }
 .tree-pane :is(input,textarea):read-write:focus, .outline-pane :is(input,textarea):read-write:focus { caret-color: auto; }
-.tree-pane { grid-column: 1; }
+/* 侧栏保留完整宽度滑出视口，避免轨道收缩时挤压内容。 */
+.tree-pane { grid-column: 1; width: var(--tree-width, 297px); }
 .pane-resizer-left { grid-column: 2; }
 .note-pane { --editor-inset-top: var(--note-toolbar-height); --editor-inset-bottom: var(--note-status-height); position: relative; grid-column: 3; min-width: 0; min-height: 0; width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); }
 .note-pane-top { position: fixed; top: var(--workspace-viewport-top, 0px); right: var(--note-pane-right); left: var(--note-pane-left); z-index: 5; }
+.note-pane-top { transition: left var(--pane-motion-duration) var(--pane-motion-easing), right var(--pane-motion-duration) var(--pane-motion-easing); }
 .note-pane-bottom { position: absolute; right: 0; bottom: 0; left: 0; z-index: 5; }
 .pane-resizer-right { grid-column: 4; }
-.outline-pane { grid-column: 5; }
+.outline-pane { grid-column: 5; width: var(--outline-width, 297px); justify-self: end; }
 .pane-resizer { position: relative; min-width: 0; cursor: col-resize; touch-action: none; background: var(--border); z-index: 25; transition: background .12s ease, box-shadow .12s ease; }
 .pane-resizer::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 12px; transform: translateX(-50%); }
 .pane-resizer:hover, .pane-resizer:focus-visible { background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .pane-resizer:focus-visible { outline-offset: -2px; }
 .pane-resizing, .pane-resizing * { cursor: col-resize !important; user-select: none !important; }
+.pane-resizing :is(.app-shell, .note-pane-top) { transition: none; }
 .tree-collapsed > .pane-resizer-left, .outline-collapsed > .pane-resizer-right { display: none; }
 .side-header { height: var(--note-toolbar-height); min-height: var(--note-toolbar-height); flex: 0 0 var(--note-toolbar-height); padding: var(--safe-area-top) max(11px, var(--safe-area-right)) 0 max(13px, var(--safe-area-left)); display: flex; align-items: center; gap: 12px; border-bottom: var(--pane-divider-width) solid var(--border); background: var(--chrome-background); }
 .side-header > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 14px; font-weight: 600; }
@@ -296,6 +303,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .tree-main { padding-right: 30px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .app-shell { --pane-motion-duration: 0ms; }
   .toast-notice { animation: none; }
   :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button) { transition: none; }
 }
@@ -596,7 +604,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 @media (max-width: 1100px) {
   .app-shell, .app-shell.outline-collapsed { --note-pane-right: 0px; grid-template-columns: var(--tree-track) var(--tree-resizer-track) minmax(0, 1fr); }
   .outline-pane, .outline-collapsed > .outline-pane { visibility: hidden; }
-  .outline-pane { position: fixed; top: var(--workspace-viewport-top, 0px); right: 0; height: var(--workspace-viewport-height, 100%); width: min(300px, 85vw); transform: translateX(101%); transition: transform .2s ease, visibility 0s .2s; }
+  .outline-pane { position: fixed; top: var(--workspace-viewport-top, 0px); right: 0; height: var(--workspace-viewport-height, 100%); width: min(300px, 85vw); transform: translateX(101%); transition-delay: 0s, var(--pane-motion-duration); }
   .app-shell.outline-open > .outline-pane { border-left: var(--pane-divider-width) solid var(--border); }
   .pane-resizer-right { display: none; }
   .app-shell.outline-open .outline-pane { visibility: visible; transform: translateX(0); transition-delay: 0s; }
@@ -610,7 +618,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 @media (max-width: 720px) {
   .app-shell, .app-shell.tree-collapsed, .app-shell.outline-collapsed, .app-shell.tree-collapsed.outline-collapsed { --note-pane-left: 0px; display: block; }
   .tree-pane, .tree-collapsed > .tree-pane { visibility: hidden; }
-  .tree-pane { position: fixed; top: var(--workspace-viewport-top, 0px); left: 0; height: var(--workspace-viewport-height, 100%); width: min(310px, 88vw); transform: translateX(-101%); transition: transform .2s ease, visibility 0s .2s; }
+  .tree-pane { position: fixed; top: var(--workspace-viewport-top, 0px); left: 0; height: var(--workspace-viewport-height, 100%); width: min(310px, 88vw); transform: translateX(-101%); transition-delay: 0s, var(--pane-motion-duration); }
   .tree-more { opacity: 1; pointer-events: auto; }
   .tree-row:has(> .tree-more) .tree-note-lock > svg { opacity: 0; }
   .app-shell.tree-open > .tree-pane { border-right: var(--pane-divider-width) solid var(--border); }
