@@ -7,6 +7,8 @@
   --background-dark: #181818;
   --border-light: #e2e2e2;
   --border-dark: #333333;
+  --accent-light: #61d2a0;
+  --accent-dark: #61d299;
   --pane-divider-width: 0.5px;
   --neutral: #b1b1b1;
   --workspace-spacing: 16px;
@@ -23,10 +25,11 @@
   --muted: #6d6c65;
   --syntax-marker-color: var(--neutral);
   --syntax-marker-highlight-color: var(--neutral);
-  --accent: #61d299;
+  --accent: var(--accent-light);
   --accent-text: var(--accent);
-  --accent-soft: #e7f6ee;
-  --accent-on: #103422;
+  --accent-soft-opacity: 15%;
+  --accent-soft: color-mix(in srgb, var(--accent) var(--accent-soft-opacity), var(--surface));
+  --accent-on: rgb(0 0 0 / 90%);
   --border: var(--border-light);
   --sidebar: var(--background-light);
   --surface: #ffffff;
@@ -35,16 +38,17 @@
   --surface-input: var(--background-light);
   --settings-background: #ffffff;
   --settings-sidebar-background: #f6f6f6;
-  --settings-chrome-background: #f0f0f0;
+  --settings-header-opacity: 5%;
+  --settings-chrome-background: color-mix(in srgb, #000000 var(--settings-header-opacity), var(--settings-background));
   --settings-control-border: #808080;
   --settings-focus-ring: var(--text-strong);
   --settings-button-text: rgb(0 0 0 / 90%);
-  --settings-button-primary-text: rgb(255 255 255 / 90%);
+  --settings-button-primary-text: var(--accent-on);
   --settings-button-danger-text: rgb(255 93 93 / 90%);
   --settings-button-danger-background: rgb(255 93 93 / 20%);
   --settings-button-danger-hover: rgb(255 93 93 / 30%);
   --settings-button-danger-active: rgb(255 93 93 / 40%);
-  --settings-switch-off: #858585;
+  --settings-switch-off: #d7d7d7;
   --settings-switch-thumb: #ffffff;
   --search-background: color-mix(in srgb, var(--button-foreground) 10%, var(--sidebar));
   --code-block-bg: #f2f3f3;
@@ -87,8 +91,9 @@
   --muted: #b2b1aa;
   --syntax-marker-color: var(--neutral);
   --syntax-marker-highlight-color: var(--neutral);
-  --accent-soft: #294436;
-  --accent-on: #173522;
+  --accent: var(--accent-dark);
+  --accent-soft-opacity: 23%;
+  --accent-on: rgb(0 0 0 / 90%);
   --border: var(--border-dark);
   --sidebar: #1e1e1e;
   --surface: var(--background-dark);
@@ -97,13 +102,12 @@
   --surface-input: #2a2a2a;
   --settings-background: var(--background-dark);
   --settings-sidebar-background: color-mix(in srgb, var(--sidebar) 30%, var(--settings-background));
-  --settings-chrome-background: var(--chrome-background);
+  --settings-header-opacity: 30%;
   --settings-button-text: rgb(255 255 255 / 90%);
-  --settings-button-primary-text: rgb(0 0 0 / 90%);
   --settings-button-danger-background: rgb(255 93 93 / 10%);
   --settings-button-danger-hover: rgb(255 93 93 / 20%);
   --settings-button-danger-active: rgb(255 93 93 / 30%);
-  --settings-switch-off: #666666;
+  --settings-switch-off: #363636;
   --search-background: color-mix(in srgb, var(--button-foreground) 10%, var(--sidebar));
   --code-block-bg: #2a2a2a;
   --code-block-text: #ffffff;
@@ -442,12 +446,22 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-section .font-size-reset:disabled { cursor: default; opacity: .5; }
 .settings-switch { position: relative; width: 42px; height: 24px; justify-self: end; }
 .settings-switch input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
-.settings-switch-track { position: absolute; inset: 0; border: 1px solid var(--settings-control-border); border-radius: 999px; background: var(--settings-switch-off); cursor: pointer; transition: border-color .16s ease, background .16s ease; }
-.settings-switch-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--settings-switch-thumb); box-shadow: 0 1px 3px rgba(0,0,0,.28); transition: transform .16s ease; }
+.settings-switch-track { position: absolute; inset: 0; border: 0; border-radius: 999px; background: var(--settings-switch-off); cursor: pointer; transition: background-color .16s ease; }
+.settings-switch-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--settings-switch-thumb); transition: transform .16s ease; }
 .settings-switch input:checked + .settings-switch-track { background: var(--accent); }
-.settings-switch input:checked + .settings-switch-track::after { transform: translateX(18px); background: var(--accent-on); }
+.settings-switch input:checked + .settings-switch-track::after { transform: translateX(18px); }
 .settings-switch input:focus-visible + .settings-switch-track { outline: 2px solid var(--settings-focus-ring); outline-offset: 2px; }
 .settings-switch input:disabled + .settings-switch-track { cursor: not-allowed; opacity: .55; }
+@media (prefers-reduced-motion: reduce) {
+  .settings-switch-track, .settings-switch-track::after { transition: none; }
+}
+@media (forced-colors: active) {
+  .settings-switch-track { forced-color-adjust: none; background: ButtonFace; outline: 1px solid ButtonText; }
+  .settings-switch-track::after { background: ButtonText; }
+  .settings-switch input:checked + .settings-switch-track { background: Highlight; }
+  .settings-switch input:checked + .settings-switch-track::after { background: HighlightText; }
+  .settings-switch input:focus-visible + .settings-switch-track { outline: 2px solid Highlight; }
+}
 .settings-control-row > label { min-width: 0; grid-column: 1 / 3; }
 .settings-control-row > button { align-self: end; }
 .compact-form { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
@@ -694,10 +708,10 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   background: var(--glass-surface);
 }
 .note-pane-top, .status-bar { --glass-surface: var(--chrome-background); }
-.settings-header { --glass-surface: var(--settings-chrome-background); }
+.settings-header { --glass-surface: var(--settings-chrome-background); --glass-translucent: color-mix(in srgb, #000000 var(--settings-header-opacity), transparent); --glass-blur: 25px; }
 .toast-notice { --glass-surface: color-mix(in srgb, var(--toast-tint) var(--toast-opacity), var(--surface)); --glass-translucent: color-mix(in srgb, var(--toast-tint) var(--toast-opacity), transparent); --glass-blur: 25px; }
 @media (max-width: 720px) {
-  .settings-tabs { --glass-surface: var(--settings-chrome-background); --muted: var(--glass-muted); background: var(--glass-surface); }
+  .settings-tabs { --glass-surface: var(--settings-chrome-background); --glass-translucent: color-mix(in srgb, #000000 var(--settings-header-opacity), transparent); --glass-blur: 25px; --muted: var(--glass-muted); background: var(--glass-surface); }
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .note-pane-top, .status-bar, .context-menu, .toast-notice, .auth-card, .settings-header {
@@ -705,9 +719,9 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
     -webkit-backdrop-filter: blur(var(--glass-blur));
     backdrop-filter: blur(var(--glass-blur));
   }
-  .settings-backdrop { -webkit-backdrop-filter: blur(25px); backdrop-filter: blur(25px); }
+  .settings-backdrop { -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
   @media (max-width: 720px) {
-    .settings-tabs { background: color-mix(in srgb, var(--glass-surface) var(--glass-opacity), transparent); -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
+    .settings-tabs { background: var(--glass-translucent); -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
   }
 }
 @media (prefers-reduced-transparency: reduce), (forced-colors: active) {

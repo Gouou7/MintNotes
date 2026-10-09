@@ -22,8 +22,8 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
         await expect(button).toHaveCSS("font-weight", "600");
         await expect(button.locator("svg")).toHaveCSS("width", "16px");
       }
-      await expect(primary).toHaveCSS("background-color", "rgb(97, 210, 153)");
-      await expect(primary).toHaveCSS("color", theme === "dark" ? "rgba(0, 0, 0, 0.9)" : "rgba(255, 255, 255, 0.9)");
+      await expect(primary).toHaveCSS("background-color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
+      await expect(primary).toHaveCSS("color", "rgba(0, 0, 0, 0.9)");
       await expect(danger).toHaveCSS("color", "rgba(255, 93, 93, 0.9)");
       await expect(danger).toHaveCSS("background-color", theme === "dark" ? "rgba(255, 93, 93, 0.1)" : "rgba(255, 93, 93, 0.2)");
       await danger.hover();
@@ -62,8 +62,9 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await expect(modal).toHaveCSS("background-color", theme === "light" ? "rgb(255, 255, 255)" : "rgb(24, 24, 24)");
       await expect(header).toHaveCSS("border-bottom-color", theme === "light" ? "rgb(226, 226, 226)" : "rgb(51, 51, 51)");
       await expect(header).toHaveCSS("border-bottom-width", "0.5px");
-      await expect(header).toHaveCSS("backdrop-filter", "blur(12px)");
-      await expect(page.locator(".settings-backdrop")).toHaveCSS("backdrop-filter", "blur(25px)");
+      await expect(header).toHaveCSS("backdrop-filter", "blur(25px)");
+      await expect(header).toHaveCSS("background-color", theme === "light" ? "color(srgb 0 0 0 / 0.05)" : "color(srgb 0 0 0 / 0.3)");
+      await expect(page.locator(".settings-backdrop")).toHaveCSS("backdrop-filter", "blur(5px)");
       const bounds = (await modal.boundingBox())!, headerBounds = (await header.boundingBox())!;
       if (name !== "mobile") {
         expect(bounds.width).toBe(Math.min(798, width - 40)); expect(bounds.height).toBe(598);
@@ -103,10 +104,10 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await expect(modal).toHaveCSS("background-color", theme === "light" ? "rgb(255, 255, 255)" : "rgb(24, 24, 24)");
       await expect(header).toHaveCSS("border-bottom-color", outline);
       await expect(header).toHaveCSS("border-bottom-width", "0.5px");
-      const material = await header.evaluate(element => ({ opacity: getComputedStyle(element).getPropertyValue("--glass-opacity"), blur: getComputedStyle(element).backdropFilter }));
-      expect(material).toEqual(await page.locator(".note-pane-top").evaluate(element => ({ opacity: getComputedStyle(element).getPropertyValue("--glass-opacity"), blur: getComputedStyle(element).backdropFilter })));
-      expect(material.blur).toBe("blur(12px)");
-      await expect(page.locator(".settings-backdrop")).toHaveCSS("backdrop-filter", "blur(25px)");
+      await expect(header).toHaveCSS("backdrop-filter", "blur(25px)");
+      await expect(header).toHaveCSS("background-color", theme === "light" ? "color(srgb 0 0 0 / 0.05)" : "color(srgb 0 0 0 / 0.3)");
+      await expect(page.locator(".note-pane-top")).toHaveCSS("backdrop-filter", "blur(12px)");
+      await expect(page.locator(".settings-backdrop")).toHaveCSS("backdrop-filter", "blur(5px)");
       const bounds = (await modal.boundingBox())!;
       expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
       expect(bounds.y).toBeGreaterThanOrEqual(0); expect(bounds.y + bounds.height).toBeLessThanOrEqual(height);
@@ -115,7 +116,7 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
         await expect(tabs).toHaveCSS("border-bottom-color", outline);
         await expect(tabs).toHaveCSS("border-bottom-width", "0.5px");
         expect(await tabs.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
-        expect(await tabs.evaluate(element => getComputedStyle(element).backdropFilter)).toBe(material.blur);
+        await expect(tabs).toHaveCSS("backdrop-filter", "blur(25px)");
       } else {
         expect(bounds.width).toBe(Math.min(798, width - 40)); expect(bounds.height).toBe(598);
         await expect(modal).toHaveCSS("border-top-color", outline);
@@ -157,11 +158,12 @@ test("offline settings keep the notice below the chrome and honor reduced transp
   await expect(page.locator(".settings-modal")).toHaveCount(0);
 });
 
-test("settings controls distinguish switch states and keep theme borders and keyboard focus visible", async ({ page }) => {
+test("settings controls distinguish switch states and keep theme borders and keyboard focus visible", async ({ page, browserName }) => {
   await page.goto("/settings.html?offline");
   const themeSelect = page.getByRole("combobox", { name: "Theme", exact: true });
   const toggle = page.getByRole("switch", { name: "Wrap code blocks", exact: true });
   const track = page.locator(".settings-switch-track");
+  const tabKey = browserName === "webkit" ? "Alt+Tab" : "Tab", backTabKey = browserName === "webkit" ? "Alt+Shift+Tab" : "Shift+Tab";
   const contrast = async (kind: "switch" | "select") => page.evaluate(kind => {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
     const context = canvas.getContext("2d")!;
@@ -185,25 +187,32 @@ test("settings controls distinguish switch states and keep theme borders and key
     await themeSelect.selectOption(theme);
     await expect(toggle).not.toBeChecked();
     for (const select of await page.locator(".settings-content select").all()) await expect(select).toHaveCSS("border-top-color", theme === "light" ? "rgb(226, 226, 226)" : "rgb(51, 51, 51)");
-    await themeSelect.focus(); await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
+    await themeSelect.focus(); await page.keyboard.press(tabKey); await page.keyboard.press(backTabKey);
     await expect(themeSelect).toBeFocused(); await expect(themeSelect).toHaveCSS("outline-width", "2px");
     const [text, selectFocus] = await contrast("select");
     expect(text).toBeGreaterThanOrEqual(4.5);
     expect(selectFocus).toBeGreaterThanOrEqual(3);
     // Keyboard focus stays visible independently of the decorative pane outline.
-    await toggle.focus(); await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
+    await toggle.focus(); await page.keyboard.press(tabKey); await page.keyboard.press(backTabKey);
     await expect(toggle).toBeFocused(); await expect(track).toHaveCSS("outline-width", "2px");
-    for (const value of await contrast("switch")) expect(value).toBeGreaterThanOrEqual(3);
+    const [, , , switchFocus] = await contrast("switch");
+    expect(switchFocus).toBeGreaterThanOrEqual(3);
+    await expect(track).toHaveCSS("width", "42px"); await expect(track).toHaveCSS("height", "24px");
+    await expect(track).toHaveCSS("border-width", "0px");
+    const thumb = () => track.evaluate(element => {
+      const style = getComputedStyle(element, "::after");
+      return { width: style.width, height: style.height, top: style.top, left: style.left, color: style.backgroundColor, shadow: style.boxShadow, transform: style.transform };
+    });
+    expect(await thumb()).toEqual({ width: "18px", height: "18px", top: "3px", left: "3px", color: "rgb(255, 255, 255)", shadow: "none", transform: "none" });
     await toggle.press("Space"); await expect(toggle).toBeChecked();
-    await expect(track).toHaveCSS("background-color", "rgb(97, 210, 153)");
-    const [, boundary, thumb, focus] = await contrast("switch");
-    for (const value of [boundary, thumb, focus]) expect(value).toBeGreaterThanOrEqual(3);
+    await expect(track).toHaveCSS("background-color", theme === "light" ? "rgb(97, 210, 160)" : "rgb(97, 210, 153)");
+    await expect.poll(thumb).toEqual({ width: "18px", height: "18px", top: "3px", left: "3px", color: "rgb(255, 255, 255)", shadow: "none", transform: "matrix(1, 0, 0, 1, 18, 0)" });
     await toggle.press("Space"); await expect(toggle).not.toBeChecked();
-    await expect(track).toHaveCSS("background-color", theme === "light" ? "rgb(133, 133, 133)" : "rgb(102, 102, 102)");
+    await expect(track).toHaveCSS("background-color", theme === "light" ? "rgb(215, 215, 215)" : "rgb(54, 54, 54)");
   }
   await themeSelect.selectOption("light");
   const logout = page.getByRole("button", { name: "Log out", exact: true });
-  await toggle.focus(); await page.keyboard.press("Tab");
+  await toggle.focus(); await page.keyboard.press(tabKey);
   await expect(logout).toBeFocused(); await expect(logout).toHaveCSS("outline-width", "2px");
   await expect(logout).toHaveCSS("outline-color", "rgb(21, 21, 21)");
 });

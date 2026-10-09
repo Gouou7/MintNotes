@@ -23,7 +23,7 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['tablet', 834, 111
       expect(surface.fill).toBe(theme === 'light' ? 'rgb(242, 243, 243)' : 'rgb(42, 42, 42)');
       expect(surface.outline).toBe(theme === 'light' ? 'rgb(226, 226, 226)' : 'rgb(51, 51, 51)');
       expect(surface.mask).toContain('data:image/svg+xml');
-      await expect(wiki).toHaveCSS('color', 'rgb(97, 210, 153)');
+      await expect(wiki).toHaveCSS('color', theme === 'light' ? 'rgb(97, 210, 160)' : 'rgb(97, 210, 153)');
       await expect(wiki).toHaveCSS('text-decoration-line', 'underline');
       const tinted = await callout.evaluate(element => getComputedStyle(element, '::after').backgroundColor);
       expect(tinted).toBe('rgb(56, 168, 232)');

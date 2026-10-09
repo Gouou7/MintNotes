@@ -23,9 +23,9 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       expect(codeOutline).toBe(theme === "dark" ? "rgb(51, 51, 51)" : "rgb(226, 226, 226)");
       await source.click();
       await expect(source).toHaveAttribute("aria-pressed", "true");
-      await expect(source).toHaveCSS("color", "rgb(97, 210, 153)");
+      await expect(source).toHaveCSS("color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
       await expect(source).toHaveCSS("border-width", "0px");
-      expect(await page.evaluate(() => ["--accent", "--accent-text"].map(name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()))).toEqual(["#61d299", "#61d299"]);
+      expect(await page.evaluate(() => ["--accent", "--accent-text"].map(name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()))).toEqual(theme === "dark" ? ["#61d299", "#61d299"] : ["#61d2a0", "#61d2a0"]);
       await page.mouse.move(width - 10, height - 10);
       await expect(source).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       await expect(page.locator("textarea.typora-web-source:not([hidden])")).toBeVisible();
@@ -114,7 +114,7 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
         await expect(action.locator("svg > *").first()).toHaveCSS("stroke-width", "1.5px");
         await expect(action.locator("svg > *").first()).toHaveCSS("vector-effect", "non-scaling-stroke");
       }
-      await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCSS("background-color", "rgb(97, 210, 153)");
+      await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCSS("background-color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
       await page.getByRole("button", { name: "Cancel", exact: true }).click();
       await page.screenshot({ path: testInfo.outputPath(`workspace-${theme}.png`) });
       if (name === "mobile") await page.getByRole("button", { name: "Close directory" }).click();
@@ -137,8 +137,8 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
         await active.blur();
         await expect(active).toHaveAttribute("aria-current", "page");
         await expect(inactive).not.toHaveAttribute("aria-current", "page");
-        await expect(active).toHaveCSS("color", "rgb(97, 210, 153)");
-        await expect(inactive).not.toHaveCSS("color", "rgb(97, 210, 153)");
+        await expect(active).toHaveCSS("color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
+        await expect(inactive).not.toHaveCSS("color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
         await expect(active).toHaveCSS("border-top-width", "0px");
         await expect(active).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       }

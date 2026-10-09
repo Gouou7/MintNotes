@@ -25,7 +25,7 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['tablet', 834, 111
       await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
       await image.click();
       await expect(image).toHaveClass(/mint-image-selected/);
-      await expect(image).toHaveCSS('outline-width', '2px'); await expect(image).toHaveCSS('outline-color', 'rgb(97, 210, 153)');
+      await expect(image).toHaveCSS('outline-width', '2px'); await expect(image).toHaveCSS('outline-color', theme === 'light' ? 'rgb(97, 210, 160)' : 'rgb(97, 210, 153)');
       await expect(paragraph.locator('.syntax-hidden')).toHaveCount(0); await expect(paragraph.locator('.mint-image-icon')).toBeHidden();
       expect(await page.evaluate(() => {
         const selection = window.getSelection()!;
