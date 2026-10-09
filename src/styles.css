@@ -300,7 +300,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .mode-switch button.active:disabled { color: var(--muted); }
 :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):focus-visible { background: var(--button-hover); }
 @media (hover: hover) and (pointer: fine) {
-  :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):not(:disabled):hover, .tree-more:hover, .tree-row:hover { background: var(--button-hover); }
+  :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):not(:disabled):hover, .tree-more:hover { background: var(--button-hover); }
 }
 :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):not(:disabled):active, .tree-more:active { background: var(--button-active); }
 @media (hover: none), (pointer: coarse) {
@@ -315,7 +315,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .right-panel-content { min-width: 0; min-height: 0; flex: 1; display: flex; overflow: hidden; }
 .outline-list { min-width: 0; min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: 12px 7px; scrollbar-gutter: stable; }
 .outline-list button { width: 100%; min-height: 33px; padding-right: 9px; border: 0; border-radius: 6px; background: transparent; text-align: left; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.outline-list button:hover { color: var(--accent-text); background: var(--accent-soft); }
 .history-panel { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .history-panel-actions { display: flex; gap: 6px; padding: 10px 8px; border-bottom: var(--pane-divider-width) solid var(--border); }
 .history-panel-actions button { min-width: 0; min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); cursor: pointer; font-size: 12px; }
@@ -325,7 +324,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .history-day { display: grid; gap: 3px; margin-bottom: 10px; }
 .history-day > h3 { margin: 7px 7px 4px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .history-row { min-width: 0; display: flex; align-items: center; border-radius: 8px; }
-.history-row:hover, .history-row.active { color: var(--accent-text); background: var(--accent-soft); }
+.history-row.active { color: var(--accent-text); background: var(--button-hover); }
 .history-select { min-width: 0; flex: 1; min-height: 48px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 5px 7px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
 .history-select > span:last-child { min-width: 0; display: grid; gap: 2px; }
 .history-select strong, .history-select small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -403,7 +402,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .modal > header { height: 58px; flex: 0 0 58px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: var(--pane-divider-width) solid var(--border); }
 .modal > header h2 { margin: 0; color: var(--text-strong); }
 .modal > header button { border: 0; background: transparent; font-size: 25px; cursor: pointer; }
-.settings-backdrop { background: rgb(0 0 0 / 30%); }
+.settings-backdrop { background: rgb(0 0 0 / 30%); caret-color: transparent; }
+.settings-backdrop :is(input,textarea):read-write:focus { caret-color: auto; }
 .settings-modal { --settings-header-height: var(--workspace-header-height); --settings-content-inset: calc(var(--settings-header-height) + 26px); --muted: var(--glass-muted); position: relative; width: min(798px, 100%); height: min(598px, calc(100dvh - 40px)); max-height: none; border-color: var(--border); border-radius: 20px; background: var(--settings-background); box-shadow: none; }
 .settings-layout { min-height: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr); height: 100%; }
 .settings-sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: var(--pane-divider-width) solid var(--border); background: var(--settings-sidebar-background); }
@@ -412,7 +412,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-tabs { min-height: 0; flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 14px 10px; }
 .settings-tabs button { min-height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
 .settings-tabs button svg { flex: 0 0 auto; }
-.settings-tabs button.active { background: var(--surface-hover); color: var(--accent-text); font-weight: 650; }
+.settings-tabs button.active { background: var(--button-hover); color: var(--accent-text); font-weight: 650; }
 .settings-main { position: relative; min-width: 0; min-height: 0; }
 .settings-header { position: absolute; inset: 0 0 auto; z-index: 2; height: var(--settings-header-height); display: flex; align-items: center; justify-content: flex-end; padding: 0 9px; border-bottom: var(--pane-divider-width) solid var(--border); }
 .settings-header button { width: var(--workspace-button-size); height: var(--workspace-button-size); display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--workspace-button-radius); background: transparent; color: var(--text); cursor: pointer; }
@@ -606,14 +606,18 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .app-shell .settings-section label, .app-shell .notice, .app-shell .error { font-size: calc(13px + var(--font-adjust)); }
 
 .context-menu { position: fixed; z-index: 150; width: 204px; max-height: min(430px, calc(100dvh - 20px)); overflow: auto; padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); box-shadow: 0 12px 36px rgba(0,0,0,.32); }
-.context-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; cursor: pointer; font-size: calc(12px + var(--font-adjust)); line-height: 1.25; }
-.context-menu button > svg { width: 14px; height: 14px; flex: 0 0 14px; color: var(--muted); }
+.context-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; cursor: pointer; font-size: calc(14px + var(--font-adjust)); line-height: 1.25; }
+.context-menu button > svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--muted); }
 .context-menu button:hover { background: var(--surface-hover); }
 .context-menu button:disabled { cursor: not-allowed; opacity: .45; background: transparent; color: var(--muted); }
 .context-menu .danger { color: var(--danger); }
 .context-menu .danger > svg { color: currentColor; }
 .context-menu hr { margin: 4px; border: 0; border-top: var(--pane-divider-width) solid var(--border); }
-.context-selection-count { margin: 1px 4px 4px; padding: 5px 4px 7px; border-bottom: var(--pane-divider-width) solid var(--border); color: var(--muted); font-size: calc(11px + var(--font-adjust)); }
+.context-selection-count { margin: 1px 4px 4px; padding: 5px 4px 7px; border-bottom: var(--pane-divider-width) solid var(--border); color: var(--muted); font-size: calc(14px + var(--font-adjust)); }
+@media (hover: hover) and (pointer: fine) {
+  .tree-row:hover, .outline-list button:hover, .history-row:hover, .settings-tabs button:not(:disabled):hover { background: var(--button-hover); }
+}
+.outline-list button:active, .history-row:has(.history-select:active), .settings-tabs button:not(:disabled):active { background: var(--button-active); }
 
 @media (max-width: 1100px) {
   .app-shell, .app-shell.outline-collapsed { --note-pane-right: 0px; grid-template-columns: var(--tree-track) var(--tree-resizer-track) minmax(0, 1fr); }

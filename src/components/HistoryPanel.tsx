@@ -119,10 +119,10 @@ export function HistoryPanel({
       left: Math.min(menu.x, window.innerWidth - 214),
       top: Math.min(menu.y, window.innerHeight - 150)
     }} onPointerDown={(event) => event.stopPropagation()}>
-      <button onClick={() => { setMenu(null); onBeginRename(menu.item); }}><AppIcon icon={Pencil} size={14} />{t("history.rename")}</button>
-      <button onClick={() => { setMenu(null); onToggleProtection(menu.item); }}><AppIcon icon={menu.item.protected ? ShieldOff : ShieldCheck} size={14} />{menu.item.protected ? t("history.unprotect") : t("history.protect")}</button>
+      <button onClick={() => { setMenu(null); onBeginRename(menu.item); }}><AppIcon icon={Pencil} size={16} strokeWidth={1.5} />{t("history.rename")}</button>
+      <button onClick={() => { setMenu(null); onToggleProtection(menu.item); }}><AppIcon icon={menu.item.protected ? ShieldOff : ShieldCheck} size={16} strokeWidth={1.5} />{menu.item.protected ? t("history.unprotect") : t("history.protect")}</button>
       <hr />
-      <button className="danger" disabled={!canDeleteHistory(menu.item)} title={menu.item.protected ? t("history.protectedDeleteHint") : undefined} onClick={() => { setMenu(null); onDelete(menu.item); }}><AppIcon icon={Trash2} size={14} />{t("history.deleteOne")}</button>
+      <button className="danger" disabled={!canDeleteHistory(menu.item)} title={menu.item.protected ? t("history.protectedDeleteHint") : undefined} onClick={() => { setMenu(null); onDelete(menu.item); }}><AppIcon icon={Trash2} size={16} strokeWidth={1.5} />{t("history.deleteOne")}</button>
     </div>}
   </div>;
 }

@@ -32,7 +32,7 @@
 /* The input surface owns the page margins, including clickable blank space. */
 .markdown-editor-host > .typora-web-wrap > .typora-web-editor-host > .ProseMirror,
 .markdown-editor-host > .typora-web-wrap > .typora-web-source { flex: 1 0 auto; padding: var(--editor-body-top) var(--editor-document-right) var(--editor-document-bottom) var(--editor-document-left); }
-.markdown-editor-host .ProseMirror { min-height: 180px; font-size: calc(16px + var(--font-adjust, 0px)); color: var(--text); }
+.markdown-editor-host .ProseMirror { min-height: 180px; font-size: calc(14px + var(--font-adjust, 0px)); color: var(--text); }
 /* A retained selection must not look editable after blur or in reading mode. */
 .markdown-editor-host .ProseMirror:not(:focus), .markdown-editor-host .ProseMirror[contenteditable="false"], .typora-web-source:not(:focus), .typora-web-source:read-only { caret-color: transparent; }
 .markdown-editor-host .ProseMirror :is(input,textarea):focus { caret-color: auto; }
@@ -41,7 +41,7 @@
 .markdown-editor-host .ProseMirror :is(.syntax-hint,.syntax-hint-italic) { color: var(--syntax-marker-color); }
 .markdown-editor-host .ProseMirror :is(a,ref-url) { color: var(--accent-text); }
 .markdown-editor-host .ProseMirror code { background: var(--surface-input); }
-.markdown-editor-host .ProseMirror pre { --editor-block-bg: var(--code-block-bg); --editor-block-border: var(--border); position: relative; isolation: isolate; min-height: 64px; margin-bottom: 16px; padding: 15px; border: 1px solid transparent; border-radius: 20px; background: transparent; color: var(--code-block-text); font-size: calc(13px + var(--font-adjust, 0px)); font-weight: 400; line-height: calc(20px + var(--font-adjust, 0px)); overflow: visible; }
+.markdown-editor-host .ProseMirror pre { --editor-block-bg: var(--code-block-bg); --editor-block-border: var(--border); --code-block-muted: var(--neutral); position: relative; isolation: isolate; min-height: 64px; margin-bottom: 16px; padding: 15px; border: 1px solid transparent; border-radius: 20px; background: transparent; color: var(--code-block-text); font-size: calc(14px + var(--font-adjust, 0px)); font-weight: 400; line-height: calc(20px + var(--font-adjust, 0px)); overflow: visible; }
 .markdown-editor-host .ProseMirror pre:has(.mint-code-language) { padding-top: calc(50px + var(--font-adjust, 0px)); }
 .markdown-editor-host .ProseMirror pre code { display: block; overflow-x: auto; background: transparent; }
 .markdown-editor-host .ProseMirror :is(pre,blockquote.markdown-callout)::before,
@@ -65,7 +65,7 @@
 .markdown-editor-host .ProseMirror[contenteditable="true"]:focus hr.ProseMirror-selectednode { outline: 2px solid var(--accent); }
 .markdown-editor-host .ProseMirror mark { background: var(--highlight-bg); color: var(--highlight-text); }
 .markdown-editor-host .ProseMirror > yaml-block { display: none; }
-.typora-web-source { width: 100%; min-height: 180px; border: 0; outline: none; resize: none; background: transparent; color: var(--text); font-size: calc(16px + var(--font-adjust, 0px)); overflow: hidden; }
+.typora-web-source { width: 100%; min-height: 180px; border: 0; outline: none; resize: none; background: transparent; color: var(--text); font-size: calc(14px + var(--font-adjust, 0px)); overflow: hidden; }
 .wrap-code-blocks .ProseMirror pre, .wrap-code-blocks .ProseMirror pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .markdown-editor-host .ProseMirror .mint-image-icon { display: none; }
 .markdown-editor-host .ProseMirror img.image-render { border: 1px solid var(--border); border-radius: 20px; height: auto; }
@@ -104,7 +104,7 @@
 .inline-footnote-body { display: none; }
 .mint-inline-footnote:hover .inline-footnote-body { display: inline; }
 .mint-code-actions { display: flex; position: absolute; top: 9px; right: 9px; color: var(--code-block-muted); white-space: normal; }
-.markdown-editor-host .ProseMirror pre .cb-chrome { display: flex; position: absolute; top: 15px; left: 15px; right: 47px; bottom: auto; align-items: center; gap: 5px; min-width: 0; color: var(--code-block-muted); font: 600 calc(14px + var(--font-adjust, 0px))/calc(20px + var(--font-adjust, 0px)) Inter, ui-sans-serif, system-ui, sans-serif; white-space: normal; }
+.markdown-editor-host .ProseMirror pre .cb-chrome { display: flex; position: absolute; top: 15px; left: 15px; right: 47px; bottom: auto; align-items: center; gap: 5px; min-width: 0; color: var(--code-block-muted); font: 600 calc(12px + var(--font-adjust, 0px))/calc(20px + var(--font-adjust, 0px)) Inter, ui-sans-serif, system-ui, sans-serif; white-space: normal; }
 .mint-code-actions { user-select: none; }
 .mint-code-language > span:not(.mint-inline-editor), .mint-code-actions button > span, .callout-type-icon, .callout-type-icon > span { display: inline-flex; flex: 0 0 auto; }
 .mint-code-language svg, .callout-icon svg, .callout-toggle svg { width: 20px; height: 20px; }
@@ -140,13 +140,13 @@
 :root[data-theme="dark"] .hljs-string,:root[data-theme="dark"] .hljs-attr { color: #98d9aa; }
 :root[data-theme="dark"] .hljs-number,:root[data-theme="dark"] .hljs-type { color: #e9bf87; }
 :root[data-theme="dark"] .hljs-title,:root[data-theme="dark"] .hljs-name { color: #9ecdf9; }
-.markdown-editor-host .ProseMirror blockquote.markdown-callout { --editor-block-bg: var(--callout-soft); --editor-block-border: var(--callout-color); position: relative; isolation: isolate; min-height: 64px; margin-bottom: 16px; border: 1px solid transparent; border-radius: 20px; padding: 15px; color: var(--code-block-text); background: transparent; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: calc(14px + var(--font-adjust, 0px)); }
+.markdown-editor-host .ProseMirror blockquote.markdown-callout { --editor-block-bg: var(--callout-soft); --editor-block-border: var(--callout-color); position: relative; isolation: isolate; min-height: 64px; margin-bottom: 16px; border: 1px solid transparent; border-radius: 20px; padding: 15px; color: var(--code-block-text); background: transparent; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
 .markdown-editor-host .ProseMirror[contenteditable="true"]:focus blockquote.markdown-callout { caret-color: var(--code-block-text); }
 /* Display controls and hidden marker text must never paint a native caret.
    Focused title inputs keep their own text-colored caret via the input rule. */
 .callout-header { min-width: 0; min-height: 20px; display: flex; align-items: center; gap: 6px; color: var(--callout-color); caret-color: transparent; user-select: none; }
 .callout-header:has(> .callout-toggle:not([hidden])) { padding-right: 28px; }
-.callout-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-weight: 600; font-size: 1em; line-height: calc(20px + var(--font-adjust, 0px)); }
+.callout-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-weight: 600; font-size: calc(12px + var(--font-adjust, 0px)); line-height: calc(20px + var(--font-adjust, 0px)); }
 .callout-icon { position: relative; width: 20px; height: 20px; display: grid; place-items: center; flex: 0 0 20px; }
 .callout-type-select { position: absolute; inset: -2px; width: 24px; height: 24px; opacity: 0; cursor: pointer; }
 .callout-type-select:disabled { cursor: default; }
@@ -154,7 +154,7 @@
 .callout-icon:has(.callout-type-select:enabled):hover::before { background: var(--editor-control-bg); }
 .callout-icon:has(.callout-type-select:focus-visible)::before { outline: 2px solid var(--accent); outline-offset: 2px; }
 .callout-toggle { position: absolute; top: 9px; right: 9px; }
-.callout-content { min-height: calc(20px + var(--font-adjust, 0px)); margin-top: 14px; color: var(--code-block-text); line-height: calc(20px + var(--font-adjust, 0px)); }
+.callout-content { min-height: calc(20px + var(--font-adjust, 0px)); margin-top: 14px; color: var(--code-block-text); font-size: calc(14px + var(--font-adjust, 0px)); line-height: calc(20px + var(--font-adjust, 0px)); }
 .callout-content > :first-child { margin-top: 0; }
 .callout-content > :last-child { margin-bottom: 0; }
 .markdown-callout > .callout-content > .callout-source-marker,

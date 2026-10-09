@@ -122,8 +122,8 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['tablet', 834, 111
     await page.getByRole('button', { name: 'reading', exact: true }).click();
     const code = page.locator('.ProseMirror pre').first(); await expect(code).toHaveCSS('white-space', 'pre-wrap');
     await page.getByRole('button', { name: 'Code wrap' }).click(); await expect(code.locator('code')).toHaveCSS('white-space', 'pre');
-    await page.getByRole('button', { name: 'Font size' }).click(); await expect(page.locator('.ProseMirror').first()).toHaveCSS('font-size', '20px');
-    await page.getByRole('button', { name: 'Theme' }).click(); await expect(page.locator('.ProseMirror').first()).toHaveCSS('color', 'rgb(236, 235, 231)');
+    await page.getByRole('button', { name: 'Font size' }).click(); await expect(page.locator('.ProseMirror').first()).toHaveCSS('font-size', '18px');
+    await page.getByRole('button', { name: 'Theme' }).click(); await expect(page.locator('.ProseMirror').first()).toHaveCSS('color', 'rgba(255, 255, 255, 0.9)');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (width > 720) { await page.locator('.fixture-outline').getByRole('button', { name: 'End', exact: true }).click(); await expect(page.locator('.ProseMirror h2')).toBeInViewport(); }
     await page.screenshot({ path: `test-results/${test.info().project.name}-${name}.png` }); expect(await saved(page)).toBe(0);
