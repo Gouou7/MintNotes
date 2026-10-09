@@ -630,7 +630,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .tree-main { padding-right: 30px; }
   /* 固定的上下栏由窗格统一定位，安全区域计入其高度与正文留白。 */
 
-  .note-pane { --note-status-height: calc(34px + var(--safe-area-bottom)); height: 100%; }
   .note-toolbar { gap: 3px; padding: calc(7px + var(--safe-area-top)) max(7px, var(--safe-area-right)) 7px max(7px, var(--safe-area-left)); }
   .pane-toggle { display: grid; }
   .title-input, .empty-title-slot { min-width: 0; padding: 0 7px; font-size: 16px; }
