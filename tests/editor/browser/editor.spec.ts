@@ -163,9 +163,16 @@ test('quote input stays unescaped and creates nested quotes; authored escapes re
   await load(page, '');
   const live = page.locator('.markdown-editor-host .ProseMirror').first(); await live.click();
   await page.keyboard.type('>'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('>');
-  await page.keyboard.type(' quoted'); await expect(live.locator('blockquote')).toHaveCount(1);
+  await page.keyboard.press('Space'); await expect(live.locator('blockquote')).toHaveCount(1);
+  await expect(live.locator('blockquote p')).toHaveText('');
+  await expect(live.locator('blockquote')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('> ');
+  await page.keyboard.type('quoted');
   await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('> quoted');
-  await page.keyboard.press('Enter'); await page.keyboard.type('> nested'); await expect(live.locator('blockquote blockquote')).toHaveCount(1);
+  await page.keyboard.press('Enter'); await page.keyboard.type('>'); await page.keyboard.press('Space');
+  await expect(live.locator('blockquote blockquote')).toHaveCount(1);
+  await expect(live.locator('blockquote blockquote p')).toHaveText('');
+  await page.keyboard.type('nested');
   await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('> > nested');
   await page.keyboard.press('Enter'); await page.keyboard.press('Enter'); await page.keyboard.type('outer');
   await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('> outer');
