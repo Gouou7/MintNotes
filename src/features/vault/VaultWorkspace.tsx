@@ -107,6 +107,7 @@ import { useDocumentSaveQueue } from "./useDocumentSaveQueue";
 import { useWorkspaceEditorMode } from "./useWorkspaceEditorMode";
 import { useVaultDerivedView } from "./useVaultDerivedView";
 import { useMobileDrawerGestures, useWorkspaceAutoLock } from "./useWorkspaceInteractions";
+import { useTheme } from "../useTheme";
 
 const SettingsPanel = lazy(() => import("../SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
 import { hasPendingLocalObjectGraph, removePurgedLocalData } from "./localPurge";
@@ -1328,17 +1329,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     });
   }, [activeId, workspaceLoaded]);
 
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
-      const resolved = preferences.theme === "system" ? (query.matches ? "dark" : "light") : preferences.theme;
-      document.documentElement.dataset.theme = resolved;
-      document.documentElement.style.colorScheme = resolved;
-    };
-    apply();
-    query.addEventListener("change", apply);
-    return () => query.removeEventListener("change", apply);
-  }, [preferences.theme]);
+  useTheme(preferences.theme);
 
   const { requestFallbackPull, stop: stopSyncConnection } = useSyncConnection({
     userId: user.id,

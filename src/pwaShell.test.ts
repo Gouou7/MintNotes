@@ -6,6 +6,14 @@ const html = readFileSync(resolve("index.html"), "utf8");
 const styles = readFileSync(resolve("src/styles.css"), "utf8");
 
 describe("installed PWA shell", () => {
+  it("uses the transparent vector logo for browser tabs", () => {
+    const document = new DOMParser().parseFromString(html, "text/html");
+    const favicon = document.querySelector("#app-favicon");
+    expect(favicon?.getAttribute("href")).toBe("/icon.svg");
+    expect(favicon?.getAttribute("type")).toBe("image/svg+xml");
+    expect(favicon?.getAttribute("sizes")).toBe("any");
+  });
+
   it("requests a non-translucent iOS status bar while retaining device safe areas", () => {
     const document = new DOMParser().parseFromString(html, "text/html");
 

@@ -12,7 +12,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
-      includeAssets: ["icon.svg", "icon-192.png", "icon-512.png", "icon-maskable-192.png", "icon-maskable-512.png", "apple-touch-icon.png"],
+      includeAssets: [
+        "icon.svg", "icon-light.svg", "icon-dark.svg", "icon-maskable.svg", "favicon.ico",
+        "icon-192.png", "icon-512.png", "icon-1024.png",
+        "icon-maskable-192.png", "icon-maskable-512.png", "icon-maskable-1024.png",
+        "apple-touch-icon.png"
+      ],
       manifest: {
         name: "Mint Notes",
         short_name: "Mint Notes",
@@ -21,9 +26,10 @@ export default defineConfig({
         background_color: "#ffffff",
         display: "standalone",
         start_url: "/",
+        // Installed icons have no interoperable color-scheme override; use the light design.
         icons: [
           {
-            src: "/icon.svg",
+            src: "/icon-light.svg",
             sizes: "any",
             type: "image/svg+xml",
             purpose: "any"
@@ -41,6 +47,18 @@ export default defineConfig({
             purpose: "any"
           },
           {
+            src: "/icon-1024.png",
+            sizes: "1024x1024",
+            type: "image/png",
+            purpose: "any"
+          },
+          {
+            src: "/icon-maskable.svg",
+            sizes: "any",
+            type: "image/svg+xml",
+            purpose: "maskable"
+          },
+          {
             src: "/icon-maskable-192.png",
             sizes: "192x192",
             type: "image/png",
@@ -51,13 +69,19 @@ export default defineConfig({
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable"
+          },
+          {
+            src: "/icon-maskable-1024.png",
+            sizes: "1024x1024",
+            type: "image/png",
+            purpose: "maskable"
           }
         ]
       },
       workbox: {
         navigateFallback: "/index.html",
         runtimeCaching: [],
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"]
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"]
       }
     })
   ],

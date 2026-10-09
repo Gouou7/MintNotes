@@ -3,12 +3,12 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import { createPwaUpdatePrompt } from "./features/pwaUpdate";
+import { applyDocumentTheme } from "./features/theme";
 import { I18nProvider, translateCurrent } from "./i18n";
 import "./styles.css";
 
 const initialTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-document.documentElement.dataset.theme = initialTheme;
-document.documentElement.style.colorScheme = initialTheme;
+applyDocumentTheme(initialTheme);
 
 let promptForUpdate: () => Promise<void>;
 const updateServiceWorker = registerSW({

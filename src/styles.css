@@ -179,7 +179,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .side-header > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 14px; font-weight: 600; }
 .side-header > button { margin-left: auto; display: grid; place-items: center; cursor: pointer; }
 .side-header > :is(.mobile-tree-close, .mobile-outline-close) { display: none; }
-.brand-small, .brand-mark { display: block; object-fit: contain; border-radius: 50%; }
+.brand-small, .brand-mark { display: block; object-fit: contain; }
 .brand-small { width: 24px; height: 24px; flex: 0 0 24px; }
 .brand-mark { width: 68px; height: 68px; margin: 0 auto 16px; }
 
