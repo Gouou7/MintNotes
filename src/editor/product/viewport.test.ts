@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { scrollTopForRect, visibleScrollBounds } from "./viewport";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { scrollTopForRect, textareaCaretRects, visibleScrollBounds } from "./viewport";
+
+afterEach(() => { vi.restoreAllMocks(); document.body.replaceChildren(); });
 
 function viewport(top = 57, bottom = 28) {
   const element = document.createElement("div");
@@ -29,6 +31,30 @@ describe("editor scroll viewport", () => {
     expect(scrollTopForRect(area, { top: 5000, bottom: 5020 })).toBe(1400);
     expect(visibleScrollBounds(viewport(700, 100)).height).toBe(0);
     expect(Number.isFinite(scrollTopForRect(viewport(700, 100), { top: 10, bottom: 30 }))).toBe(true);
+  });
+
+  it("measures multiple source positions in one mirror and preserves source text, selection and offset order", () => {
+    const textarea = document.createElement("textarea");
+    textarea.value = "## One\n\n#### Two";
+    textarea.style.lineHeight = "20px";
+    document.body.append(textarea);
+    textarea.setSelectionRange(3, 6);
+    textarea.getBoundingClientRect = () => ({ top: 100, width: 300 } as DOMRect);
+    const append = vi.spyOn(document.body, "append");
+    vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(function (this: HTMLElement) {
+      const siblings = [...this.parentElement!.childNodes];
+      const at = siblings.slice(0, siblings.indexOf(this)).reduce((length, sibling) => length + (sibling.textContent?.length ?? 0), 0);
+      return [{ top: at > 0 ? 60 : 20 }] as unknown as DOMRectList;
+    });
+
+    expect(textareaCaretRects(textarea, [8, 0, 8])).toEqual([
+      { top: 160, bottom: 180 }, { top: 120, bottom: 140 }, { top: 160, bottom: 180 }
+    ]);
+    expect(append).toHaveBeenCalledTimes(1);
+    const mirror = append.mock.calls[0][0] as HTMLElement;
+    expect(mirror.textContent).toBe(textarea.value);
+    expect(mirror.isConnected).toBe(false);
+    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([3, 6]);
   });
 
 });

@@ -1,10 +1,10 @@
-import { Clock3, Ellipsis, Pencil, RotateCcw, Save, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { ClockPlus, Ellipsis, Pencil, Shield, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
 import { canDeleteHistory } from "../features/history";
 import type { HistoryCaptureKind, HistoryListItem } from "../types";
 import { AppIcon } from "./AppIcon";
-import { ProtectionBadge } from "./ProtectionBadge";
 import { TreeRenameInput } from "./TreeRenameInput";
 
 interface Props {
@@ -52,7 +52,10 @@ export function HistoryPanel({
   onClear,
   onLoadMore
 }: Props) {
-  const { formatDateTime, t } = useI18n();
+  const { formatDateTime, locale, t } = useI18n();
+  const timeFormatter = useMemo(() => new Intl.DateTimeFormat(locale, {
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }), [locale]);
   const panel = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ item: HistoryListItem; x: number; y: number } | null>(null);
   useEffect(() => {
@@ -74,7 +77,8 @@ export function HistoryPanel({
   const groups = useMemo(() => {
     const result: Array<{ day: string; items: HistoryListItem[] }> = [];
     for (const item of items) {
-      const day = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(item.capturedAt));
+      const date = new Date(item.capturedAt);
+      const day = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
       const group = result.at(-1);
       if (group?.day === day) group.items.push(item);
       else result.push({ day, items: [item] });
@@ -84,38 +88,47 @@ export function HistoryPanel({
 
   return <div className="history-panel" ref={panel}>
     <div className="history-panel-actions">
-      <button disabled={disabled} onClick={onSave}><AppIcon icon={Save} size={15} />{t("history.saveNow")}</button>
-      <button className="history-clear" disabled={disabled || !items.length} onClick={onClear} title={t("history.clearNote")} aria-label={t("history.clearNote")}><AppIcon icon={Trash2} size={15} /></button>
+      <button disabled={disabled} onClick={onSave}><AppIcon icon={ClockPlus} size={16} />{t("history.saveNow")}</button>
+      <button className="history-clear" disabled={disabled || !items.length} onClick={onClear}><AppIcon icon={Trash2} size={16} />{t("history.clearNote")}</button>
     </div>
     <div className="history-list" aria-label={t("history.list")}>
       {groups.map((group) => <section className="history-day" key={group.day}>
         <h3>{group.day}</h3>
-        {group.items.map((item) => <div className={`history-row ${selectedId === item.historyId ? "active" : ""}`} data-history-id={item.historyId} key={item.historyId} onContextMenu={(event) => {
-          if (renamingId === item.historyId) return;
-          event.preventDefault();
-          setMenu({ item, x: event.clientX, y: event.clientY });
-        }}>
-          {renamingId === item.historyId
-            ? <div className="history-select history-renaming">
-                <span className="history-row-icon"><AppIcon icon={item.captureKind === "restore-safety" ? RotateCcw : Clock3} size={15} />{item.protected && <ProtectionBadge icon={ShieldCheck} label={t("history.protectedBadge")} />}</span>
-                <TreeRenameInput className="history-rename-input" initialValue={item.name || formatDateTime(item.capturedAt)} label={t("history.rename")} onCommit={(name) => onRename(item, name)} onCancel={onRenameCancel} />
-              </div>
-            : <button className="history-select" onClick={() => onSelect(item)}>
-                <span className="history-row-icon"><AppIcon icon={item.captureKind === "restore-safety" ? RotateCcw : Clock3} size={15} />{item.protected && <ProtectionBadge icon={ShieldCheck} label={t("history.protectedBadge")} />}</span>
-                <span><strong>{item.name || formatDateTime(item.capturedAt)}</strong><small>{formatDateTime(item.capturedAt)} · {kindLabel(item.captureKind, t)}{item.pending ? ` · ${t("history.pending")}` : ""}</small></span>
-              </button>}
-          <button className="history-actions" onClick={(event) => {
-            event.stopPropagation();
-            const rect = event.currentTarget.getBoundingClientRect();
-            setMenu({ item, x: rect.right, y: rect.bottom });
-          }} title={t("history.openMenu")} aria-label={t("history.openMenu")}><AppIcon icon={Ellipsis} size={16} /></button>
-        </div>)}
+        {group.items.map((item) => {
+          const name = item.name || formatDateTime(item.capturedAt);
+          const renaming = renamingId === item.historyId;
+          const details = <span>
+            {renaming
+              ? <TreeRenameInput className="history-rename-input" initialValue={name} label={t("history.rename")} onCommit={(name) => onRename(item, name)} onCancel={onRenameCancel} />
+              : <strong>{name}</strong>}
+            <small>{timeFormatter.format(new Date(item.capturedAt))} · {kindLabel(item.captureKind, t)}{item.pending ? ` · ${t("history.pending")}` : ""}</small>
+          </span>;
+          return <div className={`history-row ${selectedId === item.historyId ? "active" : ""}`} data-history-id={item.historyId} key={item.historyId} onContextMenu={(event) => {
+            if (renamingId === item.historyId) return;
+            event.preventDefault();
+            setMenu({ item, x: event.clientX, y: event.clientY });
+          }}>
+            {renaming
+              ? <div className="history-select history-renaming">{details}</div>
+              : <button className="history-select" onClick={() => onSelect(item)}>{details}</button>}
+            {item.protected && <span className="history-protection" title={t("history.protectedBadge")}>
+              <AppIcon icon={Shield} size={16} />
+              <span className="sr-only">{t("history.protectedBadge")}</span>
+            </span>}
+            <button className="history-actions" onClick={(event) => {
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              setMenu({ item, x: rect.right, y: rect.bottom });
+            }} title={t("history.openMenu")} aria-label={t("history.openMenu")}><AppIcon icon={Ellipsis} size={16} /></button>
+          </div>;
+        })}
       </section>)}
       {!items.length && !loading && <p className="outline-empty">{t("history.empty")}</p>}
       {loading && <p className="history-loading">{t("history.loading")}</p>}
       {hasMore && !loading && <button className="history-more" onClick={onLoadMore}>{t("history.loadMore")}</button>}
     </div>
-    {menu && <div className="context-menu history-context-menu" style={{
+    {/* Keep viewport positioning outside the sidebar's transform and clipping, while inheriting workspace styles. */}
+    {menu && createPortal(<div className="context-menu history-context-menu" style={{
       left: Math.min(menu.x, window.innerWidth - 214),
       top: Math.min(menu.y, window.innerHeight - 150)
     }} onPointerDown={(event) => event.stopPropagation()}>
@@ -123,6 +136,6 @@ export function HistoryPanel({
       <button onClick={() => { setMenu(null); onToggleProtection(menu.item); }}><AppIcon icon={menu.item.protected ? ShieldOff : ShieldCheck} size={16} strokeWidth={1.5} />{menu.item.protected ? t("history.unprotect") : t("history.protect")}</button>
       <hr />
       <button className="danger" disabled={!canDeleteHistory(menu.item)} title={menu.item.protected ? t("history.protectedDeleteHint") : undefined} onClick={() => { setMenu(null); onDelete(menu.item); }}><AppIcon icon={Trash2} size={16} strokeWidth={1.5} />{t("history.deleteOne")}</button>
-    </div>}
+    </div>, panel.current?.closest(".app-shell") ?? document.body)}
   </div>;
 }

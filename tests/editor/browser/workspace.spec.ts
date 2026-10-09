@@ -96,6 +96,9 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       }
       const searchBounds = (await page.locator(".search-box").boundingBox())!, pinnedBounds = (await page.locator(".pinned-section").boundingBox())!;
       expect(searchBounds.y + searchBounds.height).toBeLessThan(pinnedBounds.y);
+      const pinnedLabel = (await page.locator(".pinned-section .tree-section-label").boundingBox())!;
+      const firstPinnedRow = (await page.locator(".pinned-section .tree-row").first().boundingBox())!;
+      expect(firstPinnedRow.y - pinnedLabel.y - pinnedLabel.height).toBeGreaterThanOrEqual(8);
       const newNote = page.getByRole("button", { name: "New note", exact: true });
       await expect(newNote.locator("svg")).toHaveAttribute("width", "16");
       await expect(newNote).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");

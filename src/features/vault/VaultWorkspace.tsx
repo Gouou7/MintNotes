@@ -11,6 +11,7 @@ import { ApiError, api, uploadAttachmentChunk } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
 import { PaneResizer } from "../../components/PaneResizer";
 import { HistoryPanel } from "../../components/HistoryPanel";
+import { WorkspaceOutline } from "./WorkspaceOutline";
 import { ToastStack } from "../../components/Toast";
 import { useToastNotifications } from "./useToastNotifications";
 import { cryptoClient, type EncryptedProfileAvatar } from "../../crypto/client";
@@ -95,6 +96,7 @@ import type {
   NoteHistoryPayload,
   OpenAttachment,
   OpenDocument,
+  OutlineItem,
   UiPreferences,
   User
 } from "../../types";
@@ -2161,9 +2163,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
 
   useMobileDrawerGestures({ treeOpen, outlineOpen, settingsOpen, setTreeOpen, setOutlineOpen });
 
-  const jumpToHeading = (index: number) => {
-    const item = outline[index];
-    if (item) documentNavigation.jumpToHeading(item);
+  const jumpToHeading = (item: OutlineItem) => {
+    documentNavigation.jumpToHeading(item);
     setOutlineOpen(false);
   };
 
@@ -2312,7 +2313,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
         />
         <section className="right-panel-content" aria-label={preferences.rightPanelTab === "outline" ? t("app.noteOutline") : t("history.list")}>
           {preferences.rightPanelTab === "outline"
-            ? <nav className="outline-list">{outline.map((item) => <button key={item.id} style={{ paddingLeft: `${16 + (item.level - 1) * 14}px` }} onClick={() => jumpToHeading(item.index)}>{item.text}</button>)}{!outline.length && <p className="outline-empty">{t("app.outlineEmpty")}</p>}</nav>
+            ? <WorkspaceOutline key={historyPreview?.item.historyId ?? activeDocument?.objectId ?? ""} items={outline} editorArea={documentNavigation.editorArea}
+                mode={historyPreview ? "reading" : effectiveMode} collapsed={preferences.outlineCollapsed} open={outlineOpen} onSelect={jumpToHeading} />
             : <HistoryPanel
                 items={historyItems}
                 selectedId={historyPreview?.item.historyId ?? null}
