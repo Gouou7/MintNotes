@@ -31,6 +31,35 @@ afterEach(() => {
 });
 
 describe("document save recovery queue", () => {
+  it("flushes edits queued while the previous generation is still saving", async () => {
+    vi.useFakeTimers();
+    const documents = new Map([[draft.objectId, draft]]);
+    let release!: (document: OpenDocument) => void;
+    const persist = vi.fn().mockImplementationOnce(() => new Promise<OpenDocument>((resolve) => { release = resolve; }))
+      .mockImplementation(async (current: OpenDocument) => current);
+    let queue!: ReturnType<typeof useDocumentSaveQueue>;
+    function Harness() {
+      queue = useDocumentSaveQueue({
+        isActive: () => true, getDocument: (id) => documents.get(id),
+        upsertDocument: (current) => documents.set(current.objectId, current),
+        persistDocument: persist, onPersisted: vi.fn()
+      });
+      return null;
+    }
+    const host = globalThis.document.createElement("div"); globalThis.document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => root.render(<Harness />));
+    act(() => queue.queue(draft));
+    const flushing = queue.flush(draft.objectId);
+    const newer = { ...draft, markdown: "newer" };
+    act(() => queue.queue(newer));
+    release(draft);
+    await act(async () => { await flushing; });
+    expect(persist).toHaveBeenCalledTimes(2);
+    expect(persist).toHaveBeenLastCalledWith(newer, expect.any(Function));
+    expect(queue.hasPending(draft.objectId)).toBe(false);
+    await act(async () => root.unmount());
+  });
   it("keeps a failed write pending and retries it", async () => {
     vi.useFakeTimers();
     const documents = new Map([[draft.objectId, draft]]);

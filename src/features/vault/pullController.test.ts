@@ -25,7 +25,7 @@ vi.mock("../../storage/database", () => {
     localDb: {
       meta: { get: vi.fn(async () => ({ value: "5" })), put: mocks.metaPut },
       outbox: { ...table, get: vi.fn(), bulkDelete: vi.fn() },
-      objects: { ...table, delete: mocks.objectDelete, bulkGet: vi.fn(async () => []), bulkPut: vi.fn() },
+      objects: { ...table, get: vi.fn(), put: vi.fn(), delete: mocks.objectDelete, bulkGet: vi.fn(async () => []), bulkPut: vi.fn() },
       attachmentChunks: table,
       attachmentOutbox: table,
       historySnapshots: table,
@@ -34,7 +34,7 @@ vi.mock("../../storage/database", () => {
       historyMetadataOutbox: table,
       transaction: vi.fn(async (...args: unknown[]) => {
         const operation = args.at(-1) as () => Promise<void>;
-        await operation();
+        return operation();
       })
     }
   };

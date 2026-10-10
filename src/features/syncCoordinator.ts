@@ -22,6 +22,8 @@ export class SyncCoordinator {
   private deadlineTimer: number | null = null;
   private deadlineAt: number | null = null;
   private running = false;
+  private retryTimer: number | null = null;
+  private retryCount = 0;
   private disposed = false;
   private readonly execute: SyncCoordinatorOptions["execute"];
   private readonly canRun: () => boolean;
@@ -86,6 +88,8 @@ export class SyncCoordinator {
     this.trailingTimer = null;
     this.deadlineTimer = null;
     this.deadlineAt = null;
+    if (this.retryTimer !== null) this.clearTimer(this.retryTimer);
+    this.retryTimer = null;
   }
 
   private async drain(): Promise<void> {
@@ -97,7 +101,20 @@ export class SyncCoordinator {
         const intent = { pull: this.pendingPull, push: this.pendingPush };
         this.pendingPull = false;
         this.pendingPush = false;
-        await this.execute(intent);
+        try {
+          await this.execute(intent);
+          this.retryCount = 0;
+        } catch {
+          if (this.disposed) return;
+          this.pendingPull ||= intent.pull;
+          this.pendingPush ||= intent.push;
+          const delay = Math.min(60_000, 2_000 * 2 ** Math.min(5, this.retryCount++));
+          this.retryTimer = this.setTimer(() => {
+            this.retryTimer = null;
+            void this.drain();
+          }, delay);
+          return;
+        }
       }
     } finally {
       this.running = false;

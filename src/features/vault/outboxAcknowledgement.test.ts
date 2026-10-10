@@ -55,6 +55,24 @@ beforeEach(() => {
 });
 
 describe("outbox acknowledgement", () => {
+  it("retries against the newest generation if crypto work races with another durable write", async () => {
+    const sent = entry(1, "sent");
+    const second = entry(2, "second");
+    stores.outbox.set(key, second);
+    let release!: (value: { ciphertext: string; nonce: string; encryptionVersion: number }) => void;
+    const cryptoPort = {
+      decryptObject: vi.fn(async (_user: string, _id: string, _kind: string, _revision: number, ciphertext: string) => ({ markdown: ciphertext })),
+      encryptObject: vi.fn().mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }))
+        .mockResolvedValue({ ciphertext: "newest-rebased", nonce: "new-nonce", encryptionVersion: 1 })
+    };
+    const acknowledging = acknowledgeOutboxEntry(userId, sent, 1, () => 4, cryptoPort as never);
+    await vi.waitFor(() => expect(cryptoPort.encryptObject).toHaveBeenCalledOnce());
+    stores.outbox.set(key, entry(3, "newest"));
+    release({ ciphertext: "obsolete-rebased", nonce: "obsolete-nonce", encryptionVersion: 1 });
+    expect((await acknowledging).status).toBe("rebased");
+    expect(stores.outbox.get(key)).toMatchObject({ ciphertext: "newest-rebased", baseRevision: 1 });
+    expect(cryptoPort.encryptObject).toHaveBeenLastCalledWith(userId, objectId, "note", 2, { markdown: "newest" });
+  });
   it("atomically rebases a newer generation after an older upload is accepted", async () => {
     const sent = entry(1, "old-ciphertext");
     const current = entry(2, "new-ciphertext");

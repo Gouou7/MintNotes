@@ -7,7 +7,7 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import { ApiError, api, uploadAttachmentChunk } from "../../api";
+import { ApiError, api } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
 import { PaneResizer } from "../../components/PaneResizer";
 import { HistoryPanel } from "../../components/HistoryPanel";
@@ -28,7 +28,7 @@ import { ReadingEditor } from "../../editor/product/ReadingEditor";
 import { useNoteEditorIntegration } from "./useNoteEditorIntegration";
 import { MarkdownEditor } from "../../editor/product/MarkdownEditor";
 import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/product/wikiLinkResolver";
-import { ATTACHMENT_TRANSFER_CONCURRENCY, attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
+import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
 import { AttachmentCloneService } from "../attachmentClone";
 import { documentPatchChanges } from "../documentPatch";
 import { useImportExport } from "./useImportExport";
@@ -39,9 +39,7 @@ import { NameReservations } from "../siblingNames";
 import { useSiblingNameRepair } from "./useSiblingNameRepair";
 import {
   SyncCoordinator,
-  acknowledgeByObjectId,
   mergeByObjectId,
-  packBySerializedSize,
   type SyncIntent
 } from "../syncCoordinator";
 import { decryptAvailableLocalObjects, decryptFailureFingerprint, shouldCreateWelcomeNote } from "../vaultLoad";
@@ -61,7 +59,6 @@ import {
   shouldCaptureHistoryBaseline
 } from "../history";
 import { focusAndSelectName } from "../focusName";
-import { mapWithConcurrency } from "../concurrency";
 import { focusEditorFromTitle } from "./editorFocus";
 import { isLanguagePreference, translateError, useI18n, type Translate } from "../../i18n";
 import {
@@ -85,6 +82,7 @@ import {
   type LocalEncryptedObject,
   type LocalHistorySnapshot,
   type OutboxEntry,
+  type ObjectUploadAttempt,
   type DeviceUnlockCredential
 } from "../../storage/database";
 import type {
@@ -114,7 +112,10 @@ import { useTheme } from "../useTheme";
 const SettingsPanel = lazy(() => import("../SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
 import { hasPendingLocalObjectGraph, removePurgedLocalData } from "./localPurge";
 import { acknowledgeOutboxEntry } from "./outboxAcknowledgement";
-import { pullVaultChanges } from "./pullController";
+import { pullVaultChanges, type PullControllerResult } from "./pullController";
+import { pushVaultPending } from "./pushController";
+import { executeVaultSync } from "./syncExecution";
+import { applyVaultAcknowledgement } from "../syncChanges";
 import {
   countPendingSyncEntries,
   settledSyncPhase,
@@ -505,7 +506,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     },
     onPersistenceSuccess: markLocalSuccess,
     upsertDocument,
-    upsertAttachment
+    upsertAttachment,
+    getServerRevision: (objectId) => documentIndexRef.current.get(objectId)?.serverRevision ?? attachmentIndexRef.current.get(objectId)?.serverRevision
   });
   const applyDeferredActiveRemote = (objectId: string) => {
     if (deferredActiveRemoteId.current !== objectId) return;
@@ -703,7 +705,7 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (rebindActive && activeIdRef.current === entry.objectId) {
       activateDocument(persisted.objectId);
     }
-    showMessage(t("notice.documentConflict", { title: local.title }), "critical");
+    if (commitState) showMessage(t("notice.documentConflict", { title: local.title }), "critical");
     return persisted;
   };
 
@@ -721,24 +723,43 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (selectionAnchor.current === objectId) selectionAnchor.current = null;
   };
 
-  const pullChanges = async () => {
-    const result = await pullVaultChanges({
-      userId: user.id,
-      isActive: () => !logoutStarted.current,
-      activeObjectId: () => activeIdRef.current,
-      hasPendingSave: documentSaveQueue.hasPending,
-      flushDocument,
-      preserveConflict: (entry) => preserveConflict(entry, false, false)
-    });
-    if (logoutStarted.current) return result.failedObjectIds;
+  const acknowledgeAcceptedUpload = async (entry: ObjectUploadAttempt, revision: number) => {
+    const result = await acknowledgeOutboxEntry(
+      user.id, entry, revision, () => Date.now() * 1000 + ++generation.current,
+      cryptoClient, () => !logoutStarted.current
+    );
+    if (logoutStarted.current || result.status === "missing") return;
+    const current = entry.objectType === "attachment"
+      ? attachmentIndexRef.current.get(entry.objectId) : documentIndexRef.current.get(entry.objectId);
+    if (current) {
+      const next = applyVaultAcknowledgement(
+        current, result.object, result.status === "rebased" ? result.entry.baseRevision : revision,
+        result.status === "rebased" || documentSaveQueue.hasPending(entry.objectId)
+      );
+      if (next.kind === "attachment") upsertAttachment(next);
+      else upsertDocument(next);
+    }
+    if (result.status === "rebased") requestPush("editor");
+  };
+
+  const publishPullResult = (result: PullControllerResult) => {
+    if (logoutStarted.current) return;
+    // Input can arrive while the IndexedDB commit finishes. Its plaintext draft
+    // must survive until the save queue makes it durable, even after a real conflict.
+    const documentUpserts = [...result.documentUpserts.values()].filter((entry) => !documentSaveQueue.hasPending(entry.objectId));
+    const removedDocumentIds = [...result.removedDocumentIds].filter((id) => !documentSaveQueue.hasPending(id));
+    for (const sourceId of result.conflicts.keys()) {
+      const title = documentIndexRef.current.get(sourceId)?.title ?? "";
+      showMessage(t("notice.documentConflict", { title }), "critical");
+    }
     if (result.documentUpserts.size || result.removedDocumentIds.size) {
-      replaceDocuments(mergeByObjectId(documentsRef.current, result.documentUpserts.values(), result.removedDocumentIds));
+      replaceDocuments(mergeByObjectId(documentsRef.current, documentUpserts, removedDocumentIds));
       for (const id of result.documentUpserts.keys()) nameReservations.current.release(id);
     }
     if (result.attachmentUpserts.size || result.removedAttachmentIds.size) {
       replaceAttachments(mergeByObjectId(attachmentsRef.current, result.attachmentUpserts.values(), result.removedAttachmentIds));
     }
-    if (result.activeConflictId) {
+    if (result.activeConflictId && !documentSaveQueue.hasPending(activeIdRef.current ?? "")) {
       deferredActiveRemoteId.current = null;
       deferredActiveRemote.current = null;
       activateDocument(result.activeConflictId);
@@ -759,24 +780,27 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       showMessage(result.deferredActive.deleted ? t("notice.activeRemoteDeleted") : t("notice.activeRemoteUpdated"), "info");
     }
     if (result.purgeDeferred) showMessage(t("notice.purgeWaitSync"), "critical");
-    return result.failedObjectIds;
   };
 
-  const outboxPayload = (entry: OutboxEntry) => ({
-    objectId: entry.objectId,
-    objectType: entry.objectType,
-    ciphertext: entry.ciphertext,
-    nonce: entry.nonce,
-    encryptionVersion: entry.encryptionVersion,
-    baseRevision: entry.baseRevision,
-    idempotencyKey: entry.idempotencyKey,
-    deleted: entry.deleted
-  });
-
-  type BatchWriteResult =
-    | { objectId: string; status: "accepted"; revision: number; sequence: number }
-    | { objectId: string; status: "idempotent"; revision: number }
-    | { objectId: string; status: "conflict"; currentRevision: number; reason: "revision" | "objectType" };
+  const pullChanges = async () => {
+    const result = await pullVaultChanges({
+      userId: user.id,
+      isActive: () => !logoutStarted.current,
+      activeObjectId: () => activeIdRef.current,
+      hasPendingSave: documentSaveQueue.hasPending,
+      flushDocument,
+      coordinate: objectPersistence.coordinate,
+      acknowledge: acknowledgeAcceptedUpload,
+      preserveConflict: (entry) => preserveConflict(entry, false, false),
+      discardConflict: async (copy) => {
+        for (const id of copy.attachmentIds) await removePurgedLocal(id);
+        await removePurgedLocal(copy.objectId, false);
+        nameReservations.current.release(copy.objectId);
+      },
+      onPage: publishPullResult
+    });
+    return result.failedObjectIds;
+  };
 
   const pushHistoryPending = async (): Promise<boolean> => {
     const entries = await localDb.historyOutbox.where("userId").equals(user.id).sortBy("generation");
@@ -912,110 +936,18 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     return pushed;
   };
 
-  const pushPending = async (): Promise<boolean> => {
-    if (logoutStarted.current) return false;
-    const chunkEntries = await localDb.attachmentOutbox.where("userId").equals(user.id).sortBy("generation");
-    await mapWithConcurrency(chunkEntries, ATTACHMENT_TRANSFER_CONCURRENCY, async (entry) => {
-      if (logoutStarted.current) return;
-      await uploadAttachmentChunk(`/api/attachments/${entry.attachmentId}/chunks/${entry.chunkIndex}`, entry.ciphertext, {
-        "X-WebMD-Nonce": entry.nonce,
-        "X-WebMD-Total-Chunks": String(entry.totalChunks),
-        "X-WebMD-Encryption-Version": String(entry.encryptionVersion),
-        "X-WebMD-Idempotency-Key": entry.idempotencyKey,
-        "X-WebMD-Sync-Client": syncClientId.current
-      });
-      if (logoutStarted.current) return;
-      const current = await localDb.attachmentOutbox.get(entry.key);
-      if (current?.generation === entry.generation) await localDb.attachmentOutbox.delete(entry.key);
-    });
-    if (logoutStarted.current) return false;
-
-    const storedEntries = await localDb.outbox.where("userId").equals(user.id).sortBy("generation");
-    if (logoutStarted.current) return false;
-    const legacyWorkspaceEntries = storedEntries.filter((entry) => !shouldSynchronizeWorkspaceObject(entry.objectId));
-    if (legacyWorkspaceEntries.length) {
-      await localDb.transaction("rw", localDb.objects, localDb.outbox, async () => {
-        await localDb.objects.delete(localKey(user.id, WORKSPACE_OBJECT_ID));
-        await localDb.outbox.bulkDelete(legacyWorkspaceEntries.map((entry) => entry.key));
-      });
-    }
-    const currentEntries = storedEntries.filter((entry) => shouldSynchronizeWorkspaceObject(entry.objectId));
-    const purgeEntries = currentEntries.filter((entry) => entry.operation === "purge");
-    if (purgeEntries.length) await localDb.outbox.bulkDelete(purgeEntries.map((entry) => entry.key));
-    const entries = currentEntries.filter((entry) => entry.operation === "upsert");
-    if (!entries.length) {
-      const historyPushed = await pushHistoryPending();
-      const metadataPushed = await pushHistoryMetadataPending();
-      return historyPushed || metadataPushed || chunkEntries.length > 0;
-    }
-
-    const packed = packBySerializedSize(
-      entries,
-      (batch) => JSON.stringify({ objects: batch.map(outboxPayload) })
-    );
-    const documentAcks = new Map<string, number>();
-    const attachmentAcks = new Map<string, number>();
-    let conflictDetected = false;
-
-    const acceptResult = async (entry: OutboxEntry, result: BatchWriteResult) => {
-      if (logoutStarted.current) return;
-      if (result.status === "conflict") {
-        conflictDetected = true;
-        return;
-      }
-      const acknowledgement = await acknowledgeOutboxEntry(
-        user.id,
-        entry,
-        result.revision,
-        () => Date.now() * 1000 + ++generation.current
-      );
-      if (acknowledgement.status === "acknowledged") {
-        if (entry.objectType === "attachment") attachmentAcks.set(entry.objectId, result.revision);
-        else documentAcks.set(entry.objectId, result.revision);
-        return;
-      }
-      if (acknowledgement.status === "rebased") requestPush("editor");
-    };
-
-    for (const batch of packed.batches) {
-      if (logoutStarted.current) return false;
-      const response = await api<{ results: BatchWriteResult[] }>("/api/objects/batch", {
-        method: "POST",
-        headers: { "X-WebMD-Sync-Client": syncClientId.current },
-        body: JSON.stringify({ objects: batch.map(outboxPayload) })
-      });
-      if (logoutStarted.current) return false;
-      for (let index = 0; index < batch.length; index += 1) {
-        await acceptResult(batch[index], response.results[index]);
-      }
-    }
-    for (const entry of packed.oversized) {
-      if (logoutStarted.current) return false;
-      try {
-        const result = await api<{ revision: number }>(`/api/objects/${entry.objectId}`, {
-          method: "PUT",
-          headers: { "X-WebMD-Sync-Client": syncClientId.current },
-          body: JSON.stringify(outboxPayload(entry))
-        });
-        if (logoutStarted.current) return false;
-        await acceptResult(entry, { objectId: entry.objectId, status: "accepted", revision: result.revision, sequence: 0 });
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 409) conflictDetected = true;
-        else throw error;
-      }
-    }
-
-    if (logoutStarted.current) return false;
-    if (documentAcks.size) replaceDocuments(acknowledgeByObjectId(documentsRef.current, documentAcks));
-    if (attachmentAcks.size) replaceAttachments(acknowledgeByObjectId(attachmentsRef.current, attachmentAcks));
-    if (conflictDetected) {
+  const pushPending = () => pushVaultPending({
+    userId: user.id,
+    clientId: syncClientId.current,
+    isActive: () => !logoutStarted.current,
+    acknowledge: (entry, revision) => objectPersistence.coordinate(entry.objectId, () => acknowledgeAcceptedUpload(entry, revision)),
+    onConflict: async () => {
       await localDb.meta.put({ key: cursorKey(user.id), value: "0" });
       requestPull(0);
-    }
-    await pushHistoryPending();
-    await pushHistoryMetadataPending();
-    return true;
-  };
+    },
+    pushHistory: pushHistoryPending,
+    pushHistoryMetadata: pushHistoryMetadataPending
+  });
 
   const executeSync = async (intent: SyncIntent) => {
     if (logoutStarted.current) return;
@@ -1030,24 +962,22 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
     syncStatusTimer.current = window.setTimeout(() => setSaveState("syncing"), 200);
     try {
-      if (intent.pull) {
-        const currentActiveId = activeIdRef.current;
-        if (currentActiveId && documentSaveQueue.hasPending(currentActiveId)) await flushDocument(currentActiveId);
-        const failedPulls = await pullChanges();
-        if (failedPulls.size) {
-          showMessage(t("notice.remoteIntegrity", { count: failedPulls.size }), "critical");
-        }
-      }
-      if (intent.push) await pushPending();
+      const result = await executeVaultSync({
+        isActive: () => !logoutStarted.current,
+        countPending: () => countPendingSyncEntries(user.id),
+        push: pushPending,
+        pull: pullChanges
+      }, intent);
       if (logoutStarted.current) return;
-      const remaining = await countPendingSyncEntries(user.id);
-      setSaveState(remaining ? "local" : "synced");
+      if (result.failedObjectIds.size) showMessage(t("notice.remoteIntegrity", { count: result.failedObjectIds.size }), "critical");
+      setSaveState(documentSaveQueue.pendingIds().length ? "saving" : result.pending ? "local" : "synced");
     } catch (error) {
       if (logoutStarted.current) return;
       if (!(error instanceof ApiError) && !navigator.onLine) setSaveState("offline");
       else setSyncError(synchronizationFailure(error, t));
       showMessage(error instanceof ApiError ? translateError(error, t, "notice.syncFailed") : t("notice.syncFailed"));
       requestFallbackPull();
+      throw error;
     } finally {
       if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
       syncStatusTimer.current = null;
@@ -2122,6 +2052,13 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
       if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
       syncStatusTimer.current = null;
     }
+    logoutStarted.current = true;
+    objectPersistence.pause();
+    syncCoordinator.current?.dispose();
+    syncCoordinator.current = null;
+    stopSyncConnection();
+    if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
+    syncStatusTimer.current = null;
     await cryptoClient.lock();
     documentsRef.current = [];
     documentIndexRef.current.clear();

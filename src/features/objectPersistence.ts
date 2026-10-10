@@ -28,6 +28,15 @@ export class ObjectWriteCoordinator {
   private closed = false;
 
   enqueue<T>(key: string, write: () => Promise<T>): Promise<CoordinatedWriteResult<T>> {
+    return this.schedule(key, write, true);
+  }
+
+  /** Acknowledgements and pull commits share the lane without superseding an edit. */
+  async runExclusive<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    return (await this.schedule(key, operation, false)).value;
+  }
+
+  private schedule<T>(key: string, write: () => Promise<T>, supersede: boolean): Promise<CoordinatedWriteResult<T>> {
     if (!this.accepting || this.closed) {
       return Promise.reject(new DOMException("Object persistence is paused", "AbortError"));
     }
@@ -35,7 +44,7 @@ export class ObjectWriteCoordinator {
     const previous = this.lanes.get(key);
     const token = ++this.nextToken;
     const lane: WriteLane = previous ?? { tail: Promise.resolve(), latestToken: token };
-    lane.latestToken = token;
+    if (supersede) lane.latestToken = token;
 
     const result = lane.tail.then(write).then((value) => ({
       value,

@@ -100,16 +100,14 @@ export function useDocumentSaveQueue(options: DocumentSaveQueueOptions) {
   };
 
   const flush = async (objectId: string) => {
-    const state = pending.current.get(objectId);
-    if (state) {
+    while (pending.current.has(objectId) && options.isActive()) {
+      const state = pending.current.get(objectId)!;
       if (state.timer !== null) {
         window.clearTimeout(state.timer);
         state.timer = null;
       }
       await run(objectId);
     }
-    const remaining = pending.current.get(objectId)?.running;
-    if (remaining) await remaining;
   };
 
   const flushAll = async () => {

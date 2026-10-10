@@ -43,6 +43,16 @@ describe("prepareObjectForPersistence", () => {
 });
 
 describe("ObjectWriteCoordinator", () => {
+  it("coordinates acknowledgements without treating them as a newer edit", async () => {
+    const coordinator = new ObjectWriteCoordinator();
+    let release!: () => void;
+    const saving = coordinator.enqueue("note", () => new Promise<string>((resolve) => { release = () => resolve("saved"); }));
+    const acknowledging = coordinator.runExclusive("note", async () => "accepted");
+    await Promise.resolve();
+    release();
+    expect(await saving).toEqual({ value: "saved", isLatest: true });
+    expect(await acknowledging).toBe("accepted");
+  });
   it("serializes writes for one object and marks only the newest request as latest", async () => {
     const coordinator = new ObjectWriteCoordinator();
     const events: string[] = [];

@@ -14,11 +14,16 @@ export interface LocalEncryptedObject {
   updatedAt: string;
 }
 
-export interface OutboxEntry extends LocalEncryptedObject {
+export interface ObjectUploadAttempt extends LocalEncryptedObject {
   operation: "upsert" | "purge";
   baseRevision: number;
   idempotencyKey: string;
   generation: number;
+}
+
+export interface OutboxEntry extends ObjectUploadAttempt {
+  /** Exact encrypted request retained until its server outcome is known. */
+  upload?: ObjectUploadAttempt;
 }
 
 export interface LocalAttachmentChunk {

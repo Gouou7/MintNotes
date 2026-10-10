@@ -56,6 +56,37 @@ describe("SyncCoordinator", () => {
     coordinator.dispose();
   });
 
+  it("retries failed uploads with bounded backoff without new editor or SSE events", async () => {
+    const execute = vi.fn().mockRejectedValueOnce(new Error("network"))
+      .mockRejectedValueOnce(new Error("network")).mockResolvedValue(undefined);
+    const coordinator = new SyncCoordinator({ execute });
+    await coordinator.runNow({ push: true });
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(execute).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(execute).toHaveBeenLastCalledWith({ pull: false, push: true });
+    coordinator.dispose();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(execute).toHaveBeenCalledTimes(3);
+  });
+
+  it("retains failed work while hidden and cancels its retry after disposal", async () => {
+    let visible = true;
+    const execute = vi.fn().mockRejectedValueOnce(new Error("network")).mockResolvedValue(undefined);
+    const coordinator = new SyncCoordinator({ execute, canRun: () => visible });
+    await coordinator.runNow({ push: true });
+    visible = false;
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(execute).toHaveBeenCalledOnce();
+    visible = true;
+    await coordinator.resume();
+    expect(execute).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
   it("limits a minute of continuous editor activity to four deadline batches", async () => {
     const execute = vi.fn(async () => undefined);
     const coordinator = new SyncCoordinator({ execute });

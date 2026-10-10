@@ -27,6 +27,7 @@ export interface ObjectPersistenceDependencies {
   onPersistenceSuccess: (objectId: string) => void;
   upsertDocument: (document: OpenDocument) => void;
   upsertAttachment: (attachment: OpenAttachment) => void;
+  getServerRevision?: (objectId: string) => number | undefined;
 }
 
 function plainObject(object: PersistableObject): VaultObject {
@@ -52,7 +53,7 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
     const coordinated = await coordinator.current.enqueue(key, async () => {
       const pending = await localDb.outbox.get(key);
       if (!dependencies.isActive()) return object;
-      const baseRevision = pending?.baseRevision ?? object.serverRevision;
+      const baseRevision = pending?.baseRevision ?? dependencies.getServerRevision?.(object.objectId) ?? object.serverRevision;
       const intendedRevision = baseRevision + 1;
       const next = prepareObjectForPersistence(object, baseRevision, {
         preserveUpdatedAt: options.preserveUpdatedAt
@@ -82,12 +83,16 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
         operation: "upsert",
         baseRevision,
         idempotencyKey: crypto.randomUUID(),
-        generation: Date.now() * 1000 + ++dependencies.generation.current
+        generation: Date.now() * 1000 + ++dependencies.generation.current,
+        ...(pending?.upload ? { upload: pending.upload } : {})
       };
       await localDb.transaction("rw", localDb.objects, localDb.outbox, async () => {
         if (!dependencies.isActive()) return;
+        const latest = await localDb.outbox.get(key);
         await localDb.objects.put(localObject);
-        await localDb.outbox.put(outbox);
+        // Upload staging can happen while encryption runs. Carry that exact
+        // request forward even when this save replaces its durable generation.
+        await localDb.outbox.put({ ...outbox, ...(latest?.upload ? { upload: latest.upload } : {}) });
       });
       return dependencies.isActive() ? next : object;
     }).catch((error: unknown) => {
@@ -115,6 +120,9 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
 
   return {
     persistObject,
+    coordinate: <T,>(objectId: string, operation: () => Promise<T>) => (
+      coordinator.current.runExclusive(localKey(dependencies.userId, objectId), operation)
+    ),
     drain: (objectId: string) => coordinator.current.drain(localKey(dependencies.userId, objectId)),
     drainAll: () => coordinator.current.drainAll(),
     pause: () => coordinator.current.pause(),
