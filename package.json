@@ -23,10 +23,7 @@
     "test:upstream": "pnpm prepare:editor && vitest run --config vitest.upstream.config.ts",
     "test:patched-upstream": "pnpm prepare:editor && vitest run --config vitest.patched-upstream.config.ts",
     "test:editor-browser": "pnpm prepare:editor && vite build --config tests/editor/browser/vite.config.ts && playwright test",
-    "build:client": "pnpm --filter @mint-notes/application-client build",
-    "build:openclaw": "pnpm build:client && pnpm --filter @mint-notes/openclaw build",
-    "typecheck:openclaw": "pnpm build:client && pnpm --filter @mint-notes/openclaw typecheck",
-    "test:openclaw": "pnpm build:openclaw && pnpm --filter @mint-notes/openclaw test:runtime"
+    "build:client": "pnpm --filter @mint-notes/application-client build"
   },
   "dependencies": {
     "@fastify/compress": "^9.2.0",

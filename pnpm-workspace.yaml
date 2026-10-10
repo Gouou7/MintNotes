@@ -1,7 +1,6 @@
 packages:
   - packages/*
-  - plugins/*
-# Keep filtered Mint builds independent from the OpenClaw host installation.
+# Keep filtered build and production installations usable.
 verifyDepsBeforeRun: false
 allowBuilds:
   better-sqlite3: true

@@ -57,8 +57,6 @@ pnpm dev
 
 编辑器开发和构建会自动校验上游快照并应用本地补丁，生成目录无需手动维护；维护方式见[补丁说明](src/editor/patches/README.md)，行为约束见[编辑器架构](docs/editor-architecture.md)。实时编辑遵循上游的 Markdown 序列化行为，编辑后可能发生等价格式变化，跨源码／渲染界面不共享撤销历史。
 
-只开发 Mint 本体时可用 `pnpm --filter mint-notes... install`；完整工作区还包含 OpenClaw SDK，插件要求 Node.js 24.16+。`pnpm build:openclaw` 与 `pnpm typecheck:openclaw` 构建和检查独立插件，安装配置见[插件说明](plugins/openclaw/README.md)。
-
 Vite 默认运行在 `http://localhost:5173`，并将 `/api` 转发到 `http://127.0.0.1:8787` 的 Fastify 服务。常用检查命令为 `pnpm typecheck`、`pnpm test` 与 `pnpm build`；`pnpm test:crypto-worker`、`pnpm test:smoke` 分别检查加密 Worker 与 API，运行前需重新构建。
 
 ## 文档

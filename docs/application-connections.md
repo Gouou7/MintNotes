@@ -1,6 +1,6 @@
 # 应用接口适配
 
-本文面向 OpenClaw 插件、未来读取软件和 MCP 适配器作者。安全承诺以[系统设计](system-design.md#应用连接与委托访问)为准；独立插件的安装见[OpenClaw 插件说明](../plugins/openclaw/README.md)。本版本提供通用客户端与原生应用 API，未提供 MCP 服务。
+本文面向 OpenClaw 插件、未来读取软件和 MCP 适配器作者。安全承诺以[系统设计](system-design.md#应用连接与委托访问)为准；OpenClaw 插件在独立的 `MintNotesOpenClaw` 仓库维护，安装配置见该仓库的 `README.md`。本版本提供通用客户端与原生应用 API，未提供 MCP 服务。
 
 ## 连接流程
 
@@ -23,9 +23,6 @@
 | `packages/application-client/src/node/` | 原生传输、SQLite 密文缓存、串行工具调用、同步及持久重试 |
 | `server/applications/` | 浏览器授权管理与原生 Bearer 认证 |
 | `src/features/applications/` | 安全设置界面及控制器 |
-| `plugins/openclaw/` | OpenClaw manifest、可选工具、单 Worker 生命周期与独立构建 |
-
-Mint 主程序仍使用 Node.js 22+。原生适配器使用 Node 内置 `node:sqlite`；本插件要求 Node.js 24.16+，SDK 固定为 OpenClaw 2026.9.8。插件的构建会打包通用客户端，不依赖源码工作区运行。通用客户端暂作为仓库内部包维护，未来独立发布须另外维护版本兼容。
 
 ## 凭据与版本
 

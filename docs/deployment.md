@@ -156,4 +156,4 @@ docker compose config
 
 官方镜像同时发布 `linux/amd64`、`linux/arm64` 的不可变版本标签与 `latest`；生产应固定版本或摘要。已公开标签不得移动，失败版本应发布补丁版本。
 
-镜像的构建阶段只安装 Mint 本体及通用客户端的依赖，不安装 OpenClaw SDK；构建生成通用客户端、浏览器及服务端产物。独立的 OpenClaw 插件不运行在 Mint 容器中。镜像的构建阶段安装本体完整依赖并生成客户端与服务端产物，独立的生产依赖阶段使用 `pnpm --filter mint-notes... install --frozen-lockfile --prod` 安装服务端依赖；运行阶段复制生产依赖、`dist`、`server-dist` 及 `packages/application-client` 的清单和构建产物。仅供浏览器打包使用的依赖归入 `devDependencies`；pnpm 部署须先构建，再执行 `pnpm prune --prod`。文件复制时直接设置所有者，避免递归修改所有者产生重复镜像层。
+镜像的构建阶段安装 Mint 本体及通用客户端的完整依赖，生成客户端与服务端产物；独立的生产依赖阶段使用 `pnpm --filter mint-notes... install --frozen-lockfile --prod` 安装服务端依赖。运行阶段复制生产依赖、`dist`、`server-dist` 及 `packages/application-client` 的清单和构建产物。OpenClaw 插件在独立的 `MintNotesOpenClaw` 仓库安装和构建，不运行在 Mint 容器中，本仓库的依赖不包含 OpenClaw SDK。仅供浏览器打包使用的依赖归入 `devDependencies`；pnpm 部署须先构建，再执行 `pnpm prune --prod`。文件复制时直接设置所有者，避免递归修改所有者产生重复镜像层。

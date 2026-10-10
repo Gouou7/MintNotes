@@ -19,7 +19,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `src/crypto/`、`src/storage/`、`src/api.ts` | 加密 Worker 及调用入口、Dexie 存储、HTTP 接口 |
 | `src/components/`、`src/i18n/`、`src/styles.css` | 公共控件、界面翻译、应用样式 |
 | `server/` | 服务组合、领域路由、认证、SQLite、日志、维护与备份 |
-| `packages/application-client/`、`plugins/openclaw/` | 通用密文协议、加密与 Node 缓存客户端；独立 OpenClaw 工具适配器 |
+| `packages/application-client/` | 通用密文协议、加密与 Node 缓存客户端；供本体与外部应用适配器复用 |
 | `scripts/`、`.github/workflows/` | 集成检查、版本校验与镜像发布 |
 | `Dockerfile`、`docker-compose.yml`、`deploy/`、`.env.example` | 容器、反向代理示例与配置模板 |
 | `public/` | 随应用发布的静态资源与第三方许可声明 |
@@ -41,7 +41,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `pnpm prepare:editor` | 离线校验上游并应用严格补丁 |
 | `pnpm test:editor-browser` | 构建夹具并运行 Chromium／Firefox／WebKit 验收 |
 | `pnpm exec vitest run src/editor/tests/engine.test.ts` | 定向运行单个测试文件；按任务替换路径 |
-| `pnpm build:client`／`pnpm build:openclaw`／`pnpm typecheck:openclaw` | 构建共享客户端、构建独立插件及检查插件；OpenClaw 插件要求 Node.js 24.16+ |
+| `pnpm build:client` | 构建共享客户端；OpenClaw 插件在独立的 `MintNotesOpenClaw` 仓库维护 |
 | `pnpm build` | 构建客户端与服务端；也可用 `pnpm build:web`／`pnpm build:server` 分别构建 |
 | `pnpm start` | 运行已构建的服务端 |
 | `pnpm backup` | 对已构建的服务端执行 SQLite 在线备份；构建后运行，输出路径与摘要 |
