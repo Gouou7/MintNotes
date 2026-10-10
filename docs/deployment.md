@@ -47,7 +47,7 @@ pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。
 
    ```bash
    corepack enable
-   pnpm install --frozen-lockfile
+   pnpm --filter mint-notes... install --frozen-lockfile
    APP_VERSION="$(node scripts/release-version.mjs "$(git describe --tags --exact-match)")" pnpm build
    pnpm prune --prod
    ```
@@ -87,7 +87,9 @@ pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。
 
 Docker 部署在 `.env` 中填写 Compose 已声明的变量；pnpm 部署通过进程管理器注入。`BACKUP_DIR` 仅由备份命令读取，在 `.env` 中单独设置不会改变容器的备份目录；需要调整时须向该命令显式传入环境变量，并确保目标目录可写且已持久化。不要在任何环境文件中保存主密码、恢复密钥或保险库密钥。
 
-服务会在启动时严格校验端口、容量、会话时长和布尔开关；无效值会直接阻止启动，避免悄悄退回不符合预期的配置。`APP_ORIGIN` 未设置或留空不会阻止生产启动；显式填写无效值仍会拒绝启动。自动模式继续拒绝缺少 Origin、非 HTTPS 或跨源的状态更改请求，注册、登录、保存和同步不需要固定来源配置。
+服务会在启动时严格校验端口、容量、会话时长和布尔开关；无效值会直接阻止启动，避免悄悄退回不符合预期的配置。`APP_ORIGIN` 未设置或留空不会阻止生产启动；显式填写无效值仍会拒绝启动。浏览器端自动模式继续拒绝缺少 Origin、非 HTTPS 或跨源的状态更改请求，注册、登录、保存和同步不需要固定来源配置。
+
+原生应用凭据通过 `/api/apps/v1` 访问同一个 HTTPS 源，无需新增监听端口或服务环境变量，反向代理须转发 `Authorization` 与现有 `X-WebMD-*` 附件头。应用管理仍需浏览器 Cookie 与 Origin；原生 API 的认证边界见[系统设计](system-design.md#应用连接与委托访问)。服务器备份包含应用连接哈希与包装信封；恢复旧备份可能恢复已撤销连接，应在恢复后检查并撤销旧连接。
 
 `TRUST_PROXY` 决定是否信任代理转交的协议与客户端 IP，影响自动来源校验、登录限流和设备 IP 记录。标准部署默认开启，并要求代理覆盖转发头、后端端口仅供受控代理访问；不要将后端端口改为公网监听。直接本地开发保持关闭即可；旧部署若显式设置了 `false`，会保留该设置，改用自动来源校验时应与标准代理方案保持一致。
 
@@ -132,18 +134,18 @@ pnpm 部署默认把备份写入 `/data/backups`；可通过 `BACKUP_DIR` 指定
 
 替换生产数据前先做最后一次在线备份并停止服务；完成验证前保留旧数据。Docker 部署应停止 Compose 服务后替换挂载目录中的数据库；pnpm 部署应通过进程管理器停止服务后替换 `/data/notes.sqlite`。不要手工修改 `PRAGMA user_version`。
 
-升级 Docker 部署时，先备份，再更新 `docker-compose.yml` 中固定的镜像版本或摘要，拉取镜像并重新启动。升级 pnpm 部署时，先备份并准备新的稳定标签，在独立目录完成 `pnpm install --frozen-lockfile`、构建和 `pnpm prune --prod`，停止旧进程后切换工作目录并启动新版本；确认恢复正常前保留旧构建目录。
+升级 Docker 部署时，先备份，再更新 `docker-compose.yml` 中固定的镜像版本或摘要，拉取镜像并重新启动。升级 pnpm 部署时，先备份并准备新的稳定标签，在独立目录完成 `pnpm --filter mint-notes... install --frozen-lockfile`、构建和 `pnpm prune --prod`，停止旧进程后切换工作目录并启动新版本；确认恢复正常前保留旧构建目录。
 
 iOS 上的主屏幕应用可能保留安装时的状态栏配置，刷新或更新 Service Worker 不一定能改变它。需要重新添加主屏幕应用时，先确认所有更改与附件已同步并导出备份，再从 Safari 打开更新后的站点执行操作；不要在有未同步内容时移除应用或清除站点数据。客户端在这部分的行为约束见[系统设计](system-design.md#布局滚动与焦点)。
 
-当前版本只支持服务器 schema v2 和浏览器数据库 `webmd-notes-v2`，不会迁移 v2 之前的数据。升级不兼容旧版本时，应从旧部署导出完整 Markdown ZIP、创建在线备份，再以全新 `/data` 启动并导入。启用历史保护或 v2 用户名信封后，不得回滚到不了解相应格式的版本；需要整体回退时恢复升级前备份。
+当前版本只支持服务器 schema v2 和浏览器数据库 `webmd-notes-v2`，不会迁移 v2 之前的数据。升级不兼容旧版本时，应从旧部署导出完整 Markdown ZIP、创建在线备份，再以全新 `/data` 启动并导入。启用应用连接后，不得回滚到忽略应用凭据撤销的版本；回退须恢复升级前的完整备份。启用历史保护或 v2 用户名信封后，不得回滚到不了解相应格式的版本；需要整体回退时恢复升级前备份。
 
 ## 发布镜像
 
 稳定 Git 标签 `vMAJOR.MINOR.PATCH` 是应用版本的唯一来源，`package.json` 中的 `0.0.0` 不是发布版本。发布前应在 `CHANGELOG.md` 中加入带日期的对应版本，并在准确的标签上运行：
 
 ```bash
-pnpm install --frozen-lockfile
+pnpm --filter mint-notes... install --frozen-lockfile
 pnpm typecheck
 pnpm test
 APP_VERSION="$(node scripts/release-version.mjs "$(git describe --tags --exact-match)")" pnpm build
@@ -154,4 +156,4 @@ docker compose config
 
 官方镜像同时发布 `linux/amd64`、`linux/arm64` 的不可变版本标签与 `latest`；生产应固定版本或摘要。已公开标签不得移动，失败版本应发布补丁版本。
 
-镜像的构建阶段安装完整依赖并生成客户端与服务端产物，独立的生产依赖阶段使用 `pnpm install --frozen-lockfile --prod` 安装服务端依赖；运行阶段复制生产依赖、`dist` 和 `server-dist`。仅供浏览器打包使用的依赖归入 `devDependencies`；pnpm 部署须先构建，再执行 `pnpm prune --prod`。文件复制时直接设置所有者，避免递归修改所有者产生重复镜像层。
+镜像的构建阶段只安装 Mint 本体及通用客户端的依赖，不安装 OpenClaw SDK；构建生成通用客户端、浏览器及服务端产物。独立的 OpenClaw 插件不运行在 Mint 容器中。镜像的构建阶段安装本体完整依赖并生成客户端与服务端产物，独立的生产依赖阶段使用 `pnpm --filter mint-notes... install --frozen-lockfile --prod` 安装服务端依赖；运行阶段复制生产依赖、`dist`、`server-dist` 及 `packages/application-client` 的清单和构建产物。仅供浏览器打包使用的依赖归入 `devDependencies`；pnpm 部署须先构建，再执行 `pnpm prune --prod`。文件复制时直接设置所有者，避免递归修改所有者产生重复镜像层。

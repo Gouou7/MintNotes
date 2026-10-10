@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ServerConfig } from "../config.js";
 import type { AppDatabase } from "../database.js";
-import { authenticatedScope, type AuthGuard } from "../types.js";
+import { authenticatedScope, type ScopeResolver, type AuthGuard } from "../types.js";
 import { LogReferenceFactory, logEvent } from "../logging.js";
 
 export function registerAttachmentRoutes(
@@ -11,10 +11,16 @@ export function registerAttachmentRoutes(
     db: AppDatabase;
     config: ServerConfig;
     authenticate: AuthGuard;
+    apiPrefix?: string;
+    scope?: ScopeResolver;
+    applicationOnly?: boolean;
     logRefs: LogReferenceFactory;
   }
 ) {
   const { db, config, authenticate, logRefs } = dependencies;
+  const apiPrefix = dependencies.apiPrefix ?? "/api";
+  const getScope = dependencies.scope ?? authenticatedScope;
+  const applicationOnly = dependencies.applicationOnly ?? false;
   const chunkHeaderSchema = z.object({
     "x-webmd-nonce": z.string().min(16).max(200),
     "x-webmd-total-chunks": z.coerce.number().int().min(1)
@@ -23,7 +29,7 @@ export function registerAttachmentRoutes(
     "x-webmd-idempotency-key": z.string().uuid()
   });
 
-  app.put("/api/attachments/:attachmentId/chunks/:index", { preHandler: authenticate }, async (request, reply) => {
+  app.put(`${apiPrefix}/attachments/:attachmentId/chunks/:index`, { preHandler: authenticate }, async (request, reply) => {
     const params = z.object({
       attachmentId: z.string().uuid(),
       index: z.coerce.number().int().min(0).max(999)
@@ -39,7 +45,7 @@ export function registerAttachmentRoutes(
     if (params.data.index >= headers.data["x-webmd-total-chunks"]) {
       return reply.code(400).send({ error: "Attachment chunk index exceeds declared total" });
     }
-    const scope = authenticatedScope(request);
+    const scope = getScope(request);
     const prior = db.prepare(
       `SELECT attachment_id, chunk_index, total_chunks, ciphertext, nonce, encryption_version
        FROM attachment_chunks WHERE user_id = ? AND idempotency_key = ?`
@@ -103,13 +109,13 @@ export function registerAttachmentRoutes(
     return { ok: true };
   });
 
-  app.get("/api/attachments/:attachmentId/chunks/:index", { preHandler: authenticate }, async (request, reply) => {
+  app.get(`${apiPrefix}/attachments/:attachmentId/chunks/:index`, { preHandler: authenticate }, async (request, reply) => {
     const params = z.object({
       attachmentId: z.string().uuid(),
       index: z.coerce.number().int().min(0).max(999)
     }).safeParse(request.params);
     if (!params.success) return reply.code(404).send({ error: "Attachment chunk not found" });
-    const scope = authenticatedScope(request);
+    const scope = getScope(request);
     const row = db.prepare(`
       SELECT ciphertext, nonce, total_chunks, encryption_version
       FROM attachment_chunks

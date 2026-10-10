@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ServerConfig } from "../config.js";
 import type { AppDatabase } from "../database.js";
 import { cleanupUserHistory, HISTORY_CAPTURE_KINDS, historyUsage } from "../history.js";
-import { authenticatedScope, type AuthGuard } from "../types.js";
+import { authenticatedScope, type ScopeResolver, type AuthGuard } from "../types.js";
 import { LogReferenceFactory, logEvent } from "../logging.js";
 
 const envelopeField = z.string().min(16).max(2_000_000);
@@ -68,10 +68,16 @@ export function registerHistoryRoutes(
     db: AppDatabase;
     config: ServerConfig;
     authenticate: AuthGuard;
+    apiPrefix?: string;
+    scope?: ScopeResolver;
+    applicationOnly?: boolean;
     logRefs: LogReferenceFactory;
   }
 ) {
   const { db, config, authenticate, logRefs } = dependencies;
+  const apiPrefix = dependencies.apiPrefix ?? "/api";
+  const getScope = dependencies.scope ?? authenticatedScope;
+  const applicationOnly = dependencies.applicationOnly ?? false;
 
   const historySettingsSchema = z.object({
     enabled: z.boolean().optional(),
@@ -127,14 +133,14 @@ export function registerHistoryRoutes(
     return rows.length === ids.length;
   };
 
-  app.get("/api/account/note-history-settings", { preHandler: authenticate }, async (request) => (
-    accountHistorySettings(authenticatedScope(request).userId)
+  if (!applicationOnly) app.get(`${apiPrefix}/account/note-history-settings`, { preHandler: authenticate }, async (request) => (
+    accountHistorySettings(getScope(request).userId)
   ));
 
-  app.patch("/api/account/note-history-settings", { preHandler: authenticate }, async (request, reply) => {
+  if (!applicationOnly) app.patch(`${apiPrefix}/account/note-history-settings`, { preHandler: authenticate }, async (request, reply) => {
     const parsed = historySettingsSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid note history settings" });
-    const { userId } = authenticatedScope(request);
+    const { userId } = getScope(request);
     const current = db.prepare(`
       SELECT history_enabled, history_interval_minutes, history_retention_days
       FROM users WHERE id = ?
@@ -151,7 +157,7 @@ export function registerHistoryRoutes(
     return accountHistorySettings(userId);
   });
 
-  app.get("/api/notes/:noteId/history", { preHandler: authenticate }, async (request, reply) => {
+  if (!applicationOnly) app.get(`${apiPrefix}/notes/:noteId/history`, { preHandler: authenticate }, async (request, reply) => {
     const noteId = z.string().uuid().safeParse((request.params as { noteId: string }).noteId);
     const query = z.object({
       cursor: z.string().max(500).optional(),
@@ -160,7 +166,7 @@ export function registerHistoryRoutes(
     if (!noteId.success || !query.success) return reply.code(400).send({ error: "Invalid note history request" });
     const cursor = decodeHistoryCursor(query.data.cursor);
     if (query.data.cursor && !cursor) return reply.code(400).send({ error: "Invalid note history request" });
-    const { userId } = authenticatedScope(request);
+    const { userId } = getScope(request);
     cleanupUserHistory(db, userId);
     const exists = db.prepare(`
       SELECT 1 FROM objects WHERE user_id = ? AND object_id = ? AND object_type = 'note'
@@ -211,11 +217,11 @@ export function registerHistoryRoutes(
     idempotencyKey: z.string().uuid()
   }).refine(hasCompleteMetadata);
 
-  app.post("/api/notes/:noteId/history/:historyId", { preHandler: authenticate }, async (request, reply) => {
+  app.post(`${apiPrefix}/notes/:noteId/history/:historyId`, { preHandler: authenticate }, async (request, reply) => {
     const params = z.object({ noteId: z.string().uuid(), historyId: z.string().uuid() }).safeParse(request.params);
     const parsed = historyEnvelopeSchema.safeParse(request.body);
     if (!params.success || !parsed.success) return reply.code(400).send({ error: "Invalid encrypted note history" });
-    const { userId } = authenticatedScope(request);
+    const { userId } = getScope(request);
     cleanupUserHistory(db, userId);
     const prior = db.prepare(`
       SELECT note_id, history_id, captured_at, capture_kind, ciphertext, nonce,
@@ -320,11 +326,11 @@ export function registerHistoryRoutes(
     value.metadataCiphertext !== undefined || value.protected !== undefined
   )).refine((value) => value.protected !== true || value.attachmentIds !== undefined);
 
-  app.patch("/api/notes/:noteId/history/:historyId", { preHandler: authenticate }, async (request, reply) => {
+  if (!applicationOnly) app.patch(`${apiPrefix}/notes/:noteId/history/:historyId`, { preHandler: authenticate }, async (request, reply) => {
     const params = z.object({ noteId: z.string().uuid(), historyId: z.string().uuid() }).safeParse(request.params);
     const parsed = historyMutationSchema.safeParse(request.body);
     if (!params.success || !parsed.success) return reply.code(400).send({ error: "Invalid note history update" });
-    const { userId } = authenticatedScope(request);
+    const { userId } = getScope(request);
     const row = db.prepare(`
       SELECT captured_at, capture_kind, ciphertext, nonce, encryption_version,
         metadata_ciphertext, metadata_nonce, metadata_encryption_version,
@@ -376,10 +382,10 @@ export function registerHistoryRoutes(
     return { ok: true, protected: nextProtected, byteSize };
   });
 
-  app.get("/api/notes/:noteId/history/:historyId", { preHandler: authenticate }, async (request, reply) => {
+  if (!applicationOnly) app.get(`${apiPrefix}/notes/:noteId/history/:historyId`, { preHandler: authenticate }, async (request, reply) => {
     const params = z.object({ noteId: z.string().uuid(), historyId: z.string().uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(404).send({ error: "History snapshot not found" });
-    const { userId } = authenticatedScope(request);
+    const { userId } = getScope(request);
     const row = db.prepare(`
       SELECT captured_at, capture_kind, ciphertext, nonce, encryption_version,
         metadata_ciphertext, metadata_nonce, metadata_encryption_version,
@@ -404,10 +410,10 @@ export function registerHistoryRoutes(
     };
   });
 
-  app.delete("/api/notes/:noteId/history/:historyId", { preHandler: authenticate }, async (request, reply) => {
+  if (!applicationOnly) app.delete(`${apiPrefix}/notes/:noteId/history/:historyId`, { preHandler: authenticate }, async (request, reply) => {
     const params = z.object({ noteId: z.string().uuid(), historyId: z.string().uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(404).send({ error: "History snapshot not found" });
-    const { userId } = authenticatedScope(request);
+    const { userId } = getScope(request);
     const row = db.prepare(`
       SELECT is_protected FROM note_history WHERE user_id = ? AND note_id = ? AND history_id = ?
     `).get(userId, params.data.noteId, params.data.historyId) as { is_protected: number } | undefined;
@@ -420,10 +426,10 @@ export function registerHistoryRoutes(
     return { ok: true };
   });
 
-  app.delete("/api/notes/:noteId/history", { preHandler: authenticate }, async (request, reply) => {
+  if (!applicationOnly) app.delete(`${apiPrefix}/notes/:noteId/history`, { preHandler: authenticate }, async (request, reply) => {
     const noteId = z.string().uuid().safeParse((request.params as { noteId: string }).noteId);
     if (!noteId.success) return reply.code(404).send({ error: "Note not found" });
-    const { userId } = authenticatedScope(request);
+    const { userId } = getScope(request);
     const note = db.prepare(`
       SELECT 1 FROM objects WHERE user_id = ? AND object_id = ? AND object_type = 'note'
     `).get(userId, noteId.data);
@@ -446,8 +452,8 @@ export function registerHistoryRoutes(
     return { ok: true, ...result, clearedBefore };
   });
 
-  app.delete("/api/account/note-history", { preHandler: authenticate }, async (request) => {
-    const { userId } = authenticatedScope(request);
+  if (!applicationOnly) app.delete(`${apiPrefix}/account/note-history`, { preHandler: authenticate }, async (request) => {
+    const { userId } = getScope(request);
     const clearedBefore = new Date().toISOString();
     const result = db.transaction(() => {
       db.prepare("UPDATE users SET history_cleared_before = ? WHERE id = ?").run(clearedBefore, userId);

@@ -43,7 +43,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm --filter mint-notes... install --frozen-lockfile
 
       - name: Type-check
         run: pnpm typecheck

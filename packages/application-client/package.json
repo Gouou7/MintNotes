@@ -1,0 +1,43 @@
+{
+  "name": "@mint-notes/application-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./crypto": {
+      "types": "./dist/crypto.d.ts",
+      "import": "./dist/crypto.js"
+    },
+    "./node": {
+      "types": "./dist/node/client.d.ts",
+      "import": "./dist/node/client.js"
+    },
+    "./attachments": {
+      "types": "./dist/attachmentFormat.d.ts",
+      "import": "./dist/attachmentFormat.js"
+    },
+    "./attachment-clone": {
+      "types": "./dist/attachmentClone.d.ts",
+      "import": "./dist/attachmentClone.js"
+    },
+    "./names": {
+      "types": "./dist/siblingNames.d.ts",
+      "import": "./dist/siblingNames.js"
+    },
+    "./documents": {
+      "types": "./dist/documentFactory.d.ts",
+      "import": "./dist/documentFactory.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

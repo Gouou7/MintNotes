@@ -6,23 +6,27 @@
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "dev": "pnpm prepare:editor && concurrently -k -n web,api -c cyan,magenta \"vite\" \"tsx watch server/index.ts\"",
-    "dev:web": "pnpm prepare:editor && vite",
-    "dev:server": "tsx watch server/index.ts",
-    "typecheck": "pnpm prepare:editor && tsc --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p tests/editor/browser/tsconfig.json --noEmit",
-    "test": "pnpm prepare:editor && vitest run",
+    "dev": "pnpm build:client && pnpm prepare:editor && concurrently -k -n web,api -c cyan,magenta \"vite\" \"tsx watch server/index.ts\"",
+    "dev:web": "pnpm build:client && pnpm prepare:editor && vite",
+    "dev:server": "pnpm build:client && tsx watch server/index.ts",
+    "typecheck": "pnpm build:client && pnpm prepare:editor && tsc --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p tests/editor/browser/tsconfig.json --noEmit",
+    "test": "pnpm build:client && pnpm prepare:editor && vitest run",
     "test:crypto-worker": "node scripts/test-crypto-worker.mjs",
     "test:smoke": "node scripts/smoke-api.mjs",
     "release:version": "node scripts/release-version.mjs",
-    "build:web": "pnpm prepare:editor && vite build",
-    "build:server": "tsc -p server/tsconfig.json",
-    "build": "pnpm prepare:editor && vite build && tsc -p server/tsconfig.json",
+    "build:web": "pnpm build:client && pnpm prepare:editor && vite build",
+    "build:server": "pnpm build:client && tsc -p server/tsconfig.json",
+    "build": "pnpm build:client && pnpm prepare:editor && vite build && tsc -p server/tsconfig.json",
     "start": "node server-dist/index.js",
     "backup": "node server-dist/backup.js",
     "prepare:editor": "node scripts/prepare-typora-web.mjs",
     "test:upstream": "pnpm prepare:editor && vitest run --config vitest.upstream.config.ts",
     "test:patched-upstream": "pnpm prepare:editor && vitest run --config vitest.patched-upstream.config.ts",
-    "test:editor-browser": "pnpm prepare:editor && vite build --config tests/editor/browser/vite.config.ts && playwright test"
+    "test:editor-browser": "pnpm prepare:editor && vite build --config tests/editor/browser/vite.config.ts && playwright test",
+    "build:client": "pnpm --filter @mint-notes/application-client build",
+    "build:openclaw": "pnpm build:client && pnpm --filter @mint-notes/openclaw build",
+    "typecheck:openclaw": "pnpm build:client && pnpm --filter @mint-notes/openclaw typecheck",
+    "test:openclaw": "pnpm build:openclaw && pnpm --filter @mint-notes/openclaw test:runtime"
   },
   "dependencies": {
     "@fastify/compress": "^9.2.0",
@@ -32,7 +36,8 @@
     "@fastify/static": "^10.1.3",
     "better-sqlite3": "^12.2.0",
     "fastify": "^5.12.4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.67",
+    "@mint-notes/application-client": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

@@ -1,3 +1,5 @@
+import { nextManualOrder } from "@mint-notes/application-client/names";
+export { nextManualOrder } from "@mint-notes/application-client/names";
 import type { OpenDocument, SortMode } from "../types";
 
 export function descendantsOf(documents: OpenDocument[], objectId: string): Set<string> {
@@ -136,10 +138,6 @@ export function selectionRoots(documents: OpenDocument[], selectedIds: Iterable<
   });
 }
 
-export function nextManualOrder(documents: OpenDocument[], parentId: string | null): number {
-  const orders = documents.filter((entry) => entry.parentId === parentId && !entry.deleted).map((entry) => entry.manualOrder);
-  return (orders.length ? Math.max(...orders) : 0) + 1024;
-}
 
 export function reorderedSiblings(
   documents: OpenDocument[],

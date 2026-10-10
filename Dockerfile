@@ -12,9 +12,10 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/application-client/package.json ./packages/application-client/package.json
 RUN set -eu; \
   status=0; \
-  pnpm install --frozen-lockfile || status=$?; \
+  pnpm --filter mint-notes... install --frozen-lockfile || status=$?; \
   if [ "$status" -ne 0 ] && [ "$status" -ne 134 ]; then exit "$status"; fi; \
   test -f node_modules/.modules.yaml; \
   test -e node_modules/better-sqlite3
@@ -31,9 +32,10 @@ RUN apt-get update \
   && corepack enable
 ENV NODE_ENV=production
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/application-client/package.json ./packages/application-client/package.json
 RUN set -eu; \
   status=0; \
-  pnpm install --frozen-lockfile --prod || status=$?; \
+  pnpm --filter mint-notes... install --frozen-lockfile --prod || status=$?; \
   if [ "$status" -ne 0 ] && [ "$status" -ne 134 ]; then exit "$status"; fi; \
   test -e node_modules/better-sqlite3; \
   test ! -e node_modules/vitest; \
@@ -58,6 +60,8 @@ COPY --chown=node:node package.json ./
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/server-dist ./server-dist
+COPY --from=build --chown=node:node /app/packages/application-client/package.json ./packages/application-client/package.json
+COPY --from=build --chown=node:node /app/packages/application-client/dist ./packages/application-client/dist
 RUN mkdir -p /data && chown node:node /data
 USER node
 EXPOSE 8787

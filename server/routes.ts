@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { openDatabase, runRegistrationTransaction, type AppDatabase } from "./database.js";
 import { loadServerConfig, type ServerConfig } from "./config.js";
+import { registerApplicationRoutes } from "./applications/routes.js";
+import { revokeUserCredentials } from "./auth/credentialRevocation.js";
 import { createSessionService } from "./auth/sessionService.js";
 import { registerOriginProtection } from "./auth/originProtection.js";
 import { registerAttachmentRoutes } from "./attachments/routes.js";
@@ -73,6 +75,7 @@ await registerSecurityHeaders(app);
 
 app.decorateRequest("sessionUser", null);
 app.decorateRequest("sessionContext", null);
+app.decorateRequest("applicationPrincipal", null);
 
 registerOriginProtection(app, config);
 
@@ -318,8 +321,7 @@ app.post(
         UPDATE users SET auth_salt = ?, auth_hash = ?, kdf_salt = ?, kdf_params = ?,
           wrapped_vault_key = ?, wrapped_vault_nonce = ? WHERE id = ?
       `).run(nextAuth.salt, nextAuth.hash, body.newKdfSalt, JSON.stringify(body.newKdfParams), body.newWrappedVaultKey, body.newWrappedVaultNonce, row.id);
-      db.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").run(new Date().toISOString(), row.id);
-      db.prepare("UPDATE trusted_endpoints SET remembered = 0, revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").run(new Date().toISOString(), row.id);
+      revokeUserCredentials(db, row.id);
     })();
     syncEvents.closeUser(row.id);
     logEvent(request.log, "info", "auth.recovery_succeeded", {
@@ -357,10 +359,7 @@ app.post("/api/auth/password", { preHandler: authenticate }, async (request, rep
       nextAuth.salt, nextAuth.hash, parsed.data.newKdfSalt, JSON.stringify(parsed.data.newKdfParams),
       parsed.data.newWrappedVaultKey, parsed.data.newWrappedVaultNonce, user.id
     );
-    db.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND token_hash <> ? AND revoked_at IS NULL").run(new Date().toISOString(), user.id, currentTokenHash);
-    db.prepare("UPDATE trusted_endpoints SET remembered = 0, revoked_at = ? WHERE user_id = ? AND endpoint_id <> ? AND revoked_at IS NULL").run(
-      new Date().toISOString(), user.id, request.sessionContext!.endpointId
-    );
+    revokeUserCredentials(db, user.id, { tokenHash: currentTokenHash, endpointId: request.sessionContext!.endpointId });
   })();
   syncEvents.closeUser(user.id, request.sessionContext!.id);
   logEvent(request.log, "info", "auth.password_changed", {
@@ -550,6 +549,7 @@ app.patch("/api/account/trash-retention", { preHandler: authenticate }, async (r
   return { days: parsed.data.days };
 });
 
+registerApplicationRoutes(app, { db, syncEvents, authenticate, config, logRefs });
 registerEndpointRoutes(app, { db, syncEvents, authenticate, logRefs });
 registerSyncRoutes(app, { db, syncEvents, authenticate, config, logRefs });
 registerAttachmentRoutes(app, { db, config, authenticate, logRefs });

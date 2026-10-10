@@ -53,6 +53,7 @@ const trashItems: OpenDocument[] = [
 
 function mockApi() {
   vi.mocked(api).mockImplementation(async (path, init) => {
+    if (path === "/api/account/application-connections") return { connections: [] } as never;
     if (path === "/api/account/trash-retention" && !init?.method) return { days: 30 } as never;
     if (path === "/api/account/trash-retention") return { days: JSON.parse(String(init?.body)).days } as never;
     if (path === "/api/account/endpoints") return {
@@ -340,7 +341,7 @@ describe("SettingsPanel", () => {
     expect(container.textContent).toContain("查看已登录的设备、登出不再使用的设备，并可移除失效记录。");
     expect(container.textContent).toContain("已登出和已过期的设备记录会在 30 天后自动删除");
     const headings = [...container.querySelectorAll(".settings-section h3")].map((entry) => entry.textContent?.trim());
-    expect(headings.slice(0, 4)).toEqual(["本机 PIN", "自动锁定", "登录设备", "账户凭据"]);
+    expect(headings.slice(0, 5)).toEqual(["本机 PIN", "自动锁定", "登录设备", "应用连接", "账户凭据"]);
     expect(button(container, "设置 PIN")).toBeTruthy();
     expect(container.querySelector("input[placeholder='至少 4 个字符']")).toBeNull();
     await act(async () => button(container, "设置 PIN").click());

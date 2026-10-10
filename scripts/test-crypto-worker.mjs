@@ -1,3 +1,4 @@
+import { VaultCipher } from "@mint-notes/application-client/crypto";
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { Worker } from "node:worker_threads";
@@ -92,6 +93,17 @@ const encrypted = await loginWorker.call("encryptObject", {
   revision: 1,
   document
 });
+const applicationCredential = await loginWorker.call("createApplicationCredential", { userId });
+const applicationCipher = await VaultCipher.unlock(applicationCredential.applicationKey, {
+  protocolVersion: 1, objectSchemaVersion: 2, encryptionVersion: 1, userId, historyEnabled: true,
+  serverTime: new Date().toISOString(), vaultEnvelope: applicationCredential.vaultEnvelope,
+  connection: { connectionId: applicationCredential.connectionId, name: "worker-test", access: "read-write",
+    idleTimeoutDays: 30, expiresAt: null, createdAt: new Date().toISOString(), lastUsedAt: null,
+    revokedAt: null, validUntil: null, status: "active" }
+});
+const delegatedDocument = await applicationCipher.decryptObject({ ...encrypted, objectId, objectType: "note", revision: 1, deleted: false, encryptionVersion: 1 });
+if (JSON.stringify(delegatedDocument) !== JSON.stringify(document)) throw new Error("Application credential cannot decrypt browser ciphertext");
+applicationCipher.dispose();
 const deviceKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 const deviceWrapped = await loginWorker.call("wrapVaultForDevice", { userId, deviceKey });
 const pinSalt = "MTIzNDU2Nzg5MGFiY2RlZg";
@@ -138,6 +150,9 @@ const deviceDecrypted = await deviceWorker.call("decryptObject", {
   ciphertext: encrypted.ciphertext,
   nonce: encrypted.nonce
 });
+const pendingCredentialRejected = deviceWorker.call("createApplicationCredential", { userId }).then(() => false, () => true);
+await deviceWorker.call("lock", {});
+if (!await pendingCredentialRejected) throw new Error("Locking did not invalidate an in-flight application credential");
 await deviceWorker.worker.terminate();
 
 const wrongPinWorker = createCryptoWorker();
@@ -461,6 +476,8 @@ if (JSON.stringify(decryptedHistoryMetadata) !== JSON.stringify(historyMetadata)
 }
 
 console.log(JSON.stringify({
+  applicationCredentialAcrossRuntimes: true,
+  lockedApplicationCredentialDiscarded: true,
   authenticationAcrossWorkers: true,
   recoveryAcrossWorkers: true,
   deviceUnlockAcrossWorkers: true,

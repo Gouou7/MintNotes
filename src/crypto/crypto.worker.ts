@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
 import { argon2id } from "hash-wasm";
+import { b64, fromB64, ownedBuffer, randomBytes, deriveSubkey, seal, open, sealBinary, openBinary, objectAad, attachmentChunkAad, historyAad, historyMetadataAad, createApplicationCredential, encryptAttachmentBytes, decryptAttachmentBytes } from "@mint-notes/application-client/crypto";
+
 import type { EncryptedAttachmentChunk, KdfParams, NoteHistoryMetadataPayload, NoteHistoryPayload, VaultAttachment, VaultObject } from "../types";
 
 type RequestMessage = { id: number; operation: string; payload?: any };
@@ -21,29 +23,6 @@ const PIN_KDF: KdfParams = {
 let vaultKey: Uint8Array | null = null;
 let pendingWrapKey: Uint8Array | null = null;
 
-function b64(bytes: Uint8Array): string {
-  const stableBytes = Uint8Array.from(bytes);
-  let binary = "";
-  for (let offset = 0; offset < stableBytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...stableBytes.subarray(offset, offset + 0x8000));
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function fromB64(value: string): Uint8Array {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-  return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
-}
-
-function ownedBuffer(bytes: Uint8Array): ArrayBuffer {
-  return Uint8Array.from(bytes).buffer;
-}
-
-function randomBytes(length: number): Uint8Array {
-  return crypto.getRandomValues(new Uint8Array(length));
-}
-
 async function deriveRoot(password: string, salt: Uint8Array, params: KdfParams): Promise<Uint8Array> {
   return Uint8Array.from(await argon2id({
     password,
@@ -54,62 +33,6 @@ async function deriveRoot(password: string, salt: Uint8Array, params: KdfParams)
     hashLength: 32,
     outputType: "binary"
   }));
-}
-
-async function deriveSubkey(root: Uint8Array, label: string): Promise<Uint8Array> {
-  // Keep domain separation outside the Argon2id WASM runtime. HMAC-SHA-256 via
-  // Web Crypto is deterministic across fresh workers and copies the root key
-  // before the next operation.
-  const key = await crypto.subtle.importKey(
-    "raw",
-    ownedBuffer(root),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(label)));
-}
-
-async function seal(message: Uint8Array, key: Uint8Array, aad: string) {
-  const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const cryptoKey = await crypto.subtle.importKey("raw", ownedBuffer(key), { name: "AES-GCM" }, false, ["encrypt"]);
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: ownedBuffer(nonce), additionalData: new TextEncoder().encode(aad), tagLength: 128 },
-    cryptoKey,
-    ownedBuffer(message)
-  ));
-  return { ciphertext: b64(ciphertext), nonce: b64(nonce) };
-}
-
-async function open(ciphertext: string, nonce: string, key: Uint8Array, aad: string): Promise<Uint8Array> {
-  const cryptoKey = await crypto.subtle.importKey("raw", ownedBuffer(key), { name: "AES-GCM" }, false, ["decrypt"]);
-  const nonceBytes = fromB64(nonce);
-  const ciphertextBytes = fromB64(ciphertext);
-  return new Uint8Array(await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: ownedBuffer(nonceBytes), additionalData: new TextEncoder().encode(aad), tagLength: 128 },
-    cryptoKey,
-    ownedBuffer(ciphertextBytes)
-  ));
-}
-
-async function sealBinary(message: Uint8Array, key: Uint8Array, aad: string) {
-  const nonce = randomBytes(12);
-  const cryptoKey = await crypto.subtle.importKey("raw", ownedBuffer(key), { name: "AES-GCM" }, false, ["encrypt"]);
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: ownedBuffer(nonce), additionalData: new TextEncoder().encode(aad), tagLength: 128 },
-    cryptoKey,
-    ownedBuffer(message)
-  );
-  return { ciphertext, nonce: b64(nonce) };
-}
-
-async function openBinary(ciphertext: ArrayBuffer, nonce: string, key: Uint8Array, aad: string): Promise<Uint8Array> {
-  const cryptoKey = await crypto.subtle.importKey("raw", ownedBuffer(key), { name: "AES-GCM" }, false, ["decrypt"]);
-  return new Uint8Array(await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: ownedBuffer(fromB64(nonce)), additionalData: new TextEncoder().encode(aad), tagLength: 128 },
-    cryptoKey,
-    ciphertext
-  ));
 }
 
 function envelopeAad(payload: { envelopeBinding?: { version?: unknown; context?: unknown }; username?: unknown }): string {
@@ -124,14 +47,6 @@ function envelopeAad(payload: { envelopeBinding?: { version?: unknown; context?:
   throw new Error("Invalid vault envelope binding");
 }
 
-function objectAad(userId: string, objectId: string, objectType: string, revision: number): string {
-  return `webmd:${userId}:${objectId}:${objectType}:schema:v2:encryption:v${ENCRYPTION_VERSION}:r${revision}`;
-}
-
-function attachmentChunkAad(userId: string, attachmentId: string, chunkIndex: number, totalChunks: number): string {
-  return `webmd:${userId}:${attachmentId}:attachment-chunk:schema:v2:${chunkIndex}:of:${totalChunks}:encryption:v${ENCRYPTION_VERSION}`;
-}
-
 function deviceUnlockAad(userId: string): string {
   return `webmd:${userId}:device-unlock:v1`;
 }
@@ -142,14 +57,6 @@ function devicePinUnlockAad(userId: string, endpointId: string): string {
 
 function profileAvatarAad(userId: string): string {
   return `webmd:${userId}:profile-avatar:v1`;
-}
-
-function historyAad(userId: string, noteId: string, historyId: string, capturedAt: string, captureKind: string): string {
-  return `webmd:${userId}:${noteId}:note-history:${historyId}:schema:v1:${capturedAt}:${captureKind}:encryption:v${ENCRYPTION_VERSION}`;
-}
-
-function historyMetadataAad(userId: string, noteId: string, historyId: string, capturedAt: string): string {
-  return `webmd:${userId}:${noteId}:note-history-metadata:${historyId}:schema:v1:${capturedAt}:encryption:v${ENCRYPTION_VERSION}`;
 }
 
 function validateDeviceKey(key: CryptoKey, usage: "encrypt" | "decrypt") {
@@ -275,6 +182,13 @@ async function handle(operation: string, payload: any): Promise<any> {
         wrappedVaultKey: wrapped.ciphertext,
         wrappedVaultNonce: wrapped.nonce
       };
+    }
+    case "createApplicationCredential": {
+      if (!vaultKey) throw new Error("Vault is locked");
+      const unlockedKey = vaultKey;
+      const credential = await createApplicationCredential(payload.userId, unlockedKey);
+      if (vaultKey !== unlockedKey) throw new Error("Vault is locked");
+      return credential;
     }
     case "rotateRecoveryKey": {
       if (!vaultKey) throw new Error("Vault is locked");
@@ -457,81 +371,14 @@ async function handle(operation: string, payload: any): Promise<any> {
     }
     case "createAttachment": {
       if (!vaultKey) throw new Error("Vault is locked");
-      const bytes = new Uint8Array(payload.data as ArrayBuffer);
-      const attachmentKey = randomBytes(32);
-      const chunkSize = Number(payload.chunkSize);
-      const chunkCount = Math.max(1, Math.ceil(bytes.byteLength / chunkSize));
-      const chunks: EncryptedAttachmentChunk[] = [];
-      for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
-        const start = chunkIndex * chunkSize;
-        const sealed = await sealBinary(
-          bytes.subarray(start, Math.min(bytes.byteLength, start + chunkSize)),
-          attachmentKey,
-          attachmentChunkAad(payload.userId, payload.attachmentId, chunkIndex, chunkCount)
-        );
-        chunks.push({
-          attachmentId: payload.attachmentId,
-          chunkIndex,
-          totalChunks: chunkCount,
-          ciphertext: sealed.ciphertext,
-          nonce: sealed.nonce,
-          encryptionVersion: ENCRYPTION_VERSION
-        });
-      }
-      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", ownedBuffer(bytes)));
-      const now = new Date().toISOString();
-      const metadata: VaultAttachment = {
-        kind: "attachment",
-        ownerNoteId: payload.ownerNoteId,
-        originalName: payload.originalName,
-        mime: payload.mime,
-        size: bytes.byteLength,
-        sha256: b64(digest),
-        chunkCount,
-        chunkSize,
-        attachmentKey: b64(attachmentKey),
-        deleted: false,
-        createdAt: now,
-        updatedAt: now,
-        schemaVersion: 2
-      };
-      attachmentKey.fill(0);
-      return { metadata, chunks };
+      return encryptAttachmentBytes(payload);
     }
+
     case "decryptAttachment": {
       if (!vaultKey) throw new Error("Vault is locked");
-      const metadata = payload.metadata as VaultAttachment;
-      const attachmentKey = fromB64(metadata.attachmentKey);
-      const chunks = (payload.chunks as EncryptedAttachmentChunk[]).slice().sort((a, b) => a.chunkIndex - b.chunkIndex);
-      if (chunks.length !== metadata.chunkCount) throw new Error("Attachment is incomplete");
-      const parts: Uint8Array[] = [];
-      let size = 0;
-      for (let expectedIndex = 0; expectedIndex < chunks.length; expectedIndex += 1) {
-        const chunk = chunks[expectedIndex];
-        if (chunk.attachmentId !== payload.attachmentId) throw new Error("Attachment chunk ID mismatch");
-        if (chunk.chunkIndex !== expectedIndex) throw new Error("Attachment chunk index mismatch");
-        if (chunk.totalChunks !== metadata.chunkCount) throw new Error("Attachment chunk count mismatch");
-        if (chunk.encryptionVersion !== ENCRYPTION_VERSION) throw new Error("Attachment encryption version mismatch");
-        const part = await openBinary(
-          chunk.ciphertext,
-          chunk.nonce,
-          attachmentKey,
-          attachmentChunkAad(payload.userId, payload.attachmentId, chunk.chunkIndex, chunk.totalChunks)
-        );
-        parts.push(part);
-        size += part.byteLength;
-      }
-      const result = new Uint8Array(size);
-      let offset = 0;
-      for (const part of parts) {
-        result.set(part, offset);
-        offset += part.byteLength;
-      }
-      const digest = b64(new Uint8Array(await crypto.subtle.digest("SHA-256", ownedBuffer(result))));
-      attachmentKey.fill(0);
-      if (digest !== metadata.sha256 || result.byteLength !== metadata.size) throw new Error("Attachment integrity check failed");
-      return result.buffer;
+      return decryptAttachmentBytes(payload);
     }
+
     case "lock": {
       if (vaultKey) vaultKey.fill(0);
       if (pendingWrapKey) pendingWrapKey.fill(0);

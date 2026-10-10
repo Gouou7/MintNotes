@@ -4,7 +4,7 @@ import type { ServerConfig } from "../config.js";
 import type { AppDatabase } from "../database.js";
 import { SyncEventHub } from "../syncEvents.js";
 import { purgeTargets } from "../trash.js";
-import { authenticatedScope, type AuthGuard, type SessionUser } from "../types.js";
+import { authenticatedScope, type ScopeResolver, type AuthGuard, type SessionUser } from "../types.js";
 import { objectBatchSchema, objectSchema, StorageQuotaError, writeObject } from "./objectStore.js";
 import { LogReferenceFactory, logEvent } from "../logging.js";
 
@@ -14,14 +14,20 @@ export function registerSyncRoutes(
     db: AppDatabase;
     syncEvents: SyncEventHub;
     authenticate: AuthGuard;
+    apiPrefix?: string;
+    scope?: ScopeResolver;
+    applicationOnly?: boolean;
     config: ServerConfig;
     logRefs: LogReferenceFactory;
   }
 ) {
   const { db, syncEvents, authenticate, config, logRefs } = dependencies;
+  const apiPrefix = dependencies.apiPrefix ?? "/api";
+  const getScope = dependencies.scope ?? authenticatedScope;
+  const applicationOnly = dependencies.applicationOnly ?? false;
   const syncClientHeader = z.string().uuid().optional();
 
-  app.get("/api/sync/events", { preHandler: authenticate, compress: false }, async (request, reply) => {
+  if (!applicationOnly) app.get(`${apiPrefix}/sync/events`, { preHandler: authenticate, compress: false }, async (request, reply) => {
     const parsed = z.object({
       since: z.coerce.number().int().nonnegative().default(0),
       clientId: z.string().uuid()
@@ -77,8 +83,8 @@ export function registerSyncRoutes(
     return reply;
   });
 
-  app.get("/api/sync", { preHandler: authenticate }, async (request) => {
-    const scope = authenticatedScope(request);
+  app.get(`${apiPrefix}/sync`, { preHandler: authenticate }, async (request) => {
+    const scope = getScope(request);
     const query = request.query as { since?: string; limit?: string; compact?: string };
     const since = Math.max(0, Number(query.since ?? 0));
     const limit = Math.min(500, Math.max(1, Number(query.limit ?? 200)));
@@ -120,8 +126,20 @@ export function registerSyncRoutes(
     };
   });
 
-  app.put("/api/objects/:objectId", { preHandler: authenticate }, async (request, reply) => {
-    const scope = authenticatedScope(request);
+  app.get(`${apiPrefix}/objects/:objectId`, { preHandler: authenticate }, async (request, reply) => {
+    const id = z.string().uuid().safeParse((request.params as { objectId: string }).objectId);
+    if (!id.success) return reply.code(400).send({ error: "Invalid object ID" });
+    const row = db.prepare(`SELECT object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted
+      FROM objects WHERE user_id = ? AND object_id = ?`).get(getScope(request).userId, id.data) as {
+        object_id: string; object_type: string; ciphertext: string; nonce: string; encryption_version: number; revision: number; deleted: number;
+      } | undefined;
+    if (!row) return reply.code(404).send({ error: "Object not found" });
+    return { objectId: row.object_id, objectType: row.object_type, ciphertext: row.ciphertext, nonce: row.nonce,
+      encryptionVersion: row.encryption_version, revision: row.revision, deleted: Boolean(row.deleted) };
+  });
+
+  app.put(`${apiPrefix}/objects/:objectId`, { preHandler: authenticate }, async (request, reply) => {
+    const scope = getScope(request);
     const objectId = z.string().uuid().safeParse(
       (request.params as { objectId: string }).objectId
     );
@@ -170,12 +188,12 @@ export function registerSyncRoutes(
     };
   });
 
-  app.post("/api/objects/batch", { preHandler: authenticate }, async (request, reply) => {
+  app.post(`${apiPrefix}/objects/batch`, { preHandler: authenticate }, async (request, reply) => {
     const parsed = objectBatchSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "Invalid encrypted object batch" });
     }
-    const scope = authenticatedScope(request);
+    const scope = getScope(request);
     let results;
     try {
       results = parsed.data.objects.map(({ objectId, ...body }) => (
@@ -218,8 +236,8 @@ export function registerSyncRoutes(
     return { results };
   });
 
-  app.post(
-    "/api/objects/purge",
+  if (!applicationOnly) app.post(
+    `${apiPrefix}/objects/purge`,
     {
       preHandler: authenticate,
       config: { rateLimit: { max: 10, timeWindow: "15 minutes" } }
@@ -232,7 +250,7 @@ export function registerSyncRoutes(
         })).min(1).max(20_000)
       }).safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ error: "Invalid purge request" });
-      const scope = authenticatedScope(request);
+      const scope = getScope(request);
       try {
         const changes = purgeTargets(db, scope.userId, parsed.data.objects);
         const cursor = changes.reduce(

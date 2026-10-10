@@ -1,3 +1,4 @@
+import { revokeUserCredentials } from "../auth/credentialRevocation.js";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -137,15 +138,7 @@ export function registerAdminRoutes(
       .run(body.data.disabled ? 1 : 0, targetId.data);
     if (!result.changes) return reply.code(404).send({ error: "User not found" });
     if (body.data.disabled) {
-      const revokedAt = new Date().toISOString();
-      db.transaction(() => {
-        db.prepare(
-          "UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL"
-        ).run(revokedAt, targetId.data);
-        db.prepare(
-          "UPDATE trusted_endpoints SET remembered = 0, revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL"
-        ).run(revokedAt, targetId.data);
-      })();
+      db.transaction(() => revokeUserCredentials(db, targetId.data))();
       syncEvents.closeUser(targetId.data);
     }
     logEvent(request.log, "info", "admin.account_status_changed", {

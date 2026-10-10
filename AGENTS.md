@@ -19,6 +19,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `src/crypto/`、`src/storage/`、`src/api.ts` | 加密 Worker 及调用入口、Dexie 存储、HTTP 接口 |
 | `src/components/`、`src/i18n/`、`src/styles.css` | 公共控件、界面翻译、应用样式 |
 | `server/` | 服务组合、领域路由、认证、SQLite、日志、维护与备份 |
+| `packages/application-client/`、`plugins/openclaw/` | 通用密文协议、加密与 Node 缓存客户端；独立 OpenClaw 工具适配器 |
 | `scripts/`、`.github/workflows/` | 集成检查、版本校验与镜像发布 |
 | `Dockerfile`、`docker-compose.yml`、`deploy/`、`.env.example` | 容器、反向代理示例与配置模板 |
 | `public/` | 随应用发布的静态资源与第三方许可声明 |
@@ -40,6 +41,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 | `pnpm prepare:editor` | 离线校验上游并应用严格补丁 |
 | `pnpm test:editor-browser` | 构建夹具并运行 Chromium／Firefox／WebKit 验收 |
 | `pnpm exec vitest run src/editor/tests/engine.test.ts` | 定向运行单个测试文件；按任务替换路径 |
+| `pnpm build:client`／`pnpm build:openclaw`／`pnpm typecheck:openclaw` | 构建共享客户端、构建独立插件及检查插件；OpenClaw 插件要求 Node.js 24.16+ |
 | `pnpm build` | 构建客户端与服务端；也可用 `pnpm build:web`／`pnpm build:server` 分别构建 |
 | `pnpm start` | 运行已构建的服务端 |
 | `pnpm backup` | 对已构建的服务端执行 SQLite 在线备份；构建后运行，输出路径与摘要 |
@@ -87,7 +89,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 
 - **明文边界**：服务器不得收到明文标题、Markdown、标签、文件夹结构、笔记锁定状态、历史名称／内容、头像、附件名称／MIME／字节、主密码或解密密钥。允许的元数据以系统设计为准，不要把端到端加密描述为隐藏全部元数据。
 - **认证与隔离**：所有用户对象、修订、变更、历史和附件查询从认证会话取得 `user_id`，不能接受请求指定所有者。生产使用 `Secure`、`HttpOnly`、`SameSite=Strict` Cookie 及 Origin 校验；服务器只存认证与会话凭据的哈希，端点标识不能单独认证。
-- **加密与设备密钥**：沿用现有 Worker 与 Web Crypto，不实现新密码学原语。AES-GCM 每次使用全新随机 96 位 nonce，AAD 绑定用户、对象／附件、领域、版本及修订或分块位置。主密码、PIN 派生密钥、恢复密钥、已解锁密钥、笔记明文与 Blob URL 不进入应用持久存储、日志、URL 或服务器；本机解锁所需的不可导出设备 `CryptoKey` 与加密凭据按现有协议保存，不扩大此例外。
+- **加密与设备密钥**：沿用现有 Worker 与 Web Crypto，不实现新密码学原语。AES-GCM 每次使用全新随机 96 位 nonce，AAD 绑定用户、对象／附件、领域、版本及修订或分块位置。主密码、PIN 派生密钥、恢复密钥、已解锁密钥、笔记明文与 Blob URL 不进入应用持久存储、日志、URL 或服务器；本机解锁所需的不可导出设备 `CryptoKey` 与加密凭据按现有协议保存，不扩大此例外。应用连接允许用户将独立应用密钥交给可信软件的凭据 provider，但应用 SQLite 缓存不得持久化原密钥或明文；遵循系统设计的应用连接边界。
 - **锁定与离线**：锁定清除解密内存与 Blob URL，保留密文和发件箱；登出还删除当前用户本地密文、发件箱及设备凭据。离线身份快照只允许本地路由，同一已记住端点经 `/api/auth/me` 验证前，禁用同步、SSE、远程附件、账户和管理请求。
 - **内容安全**：禁用原始 HTML、可执行嵌入、运行时 CDN 脚本与远程字体。新增网络源、分析或嵌入前，审查系统设计中的数据边界与 CSP。图片附件按签名验证栅格格式，拒绝 SVG；内置客户端上限为 25 MiB。
 - **日志**：复用 `server/logging.ts` 的结构化事件、安全错误与脱敏引用。不要直接记录请求／响应、原始 URL／查询、IP、用户名、完整 ID、标头、正文、凭据、密文、nonce 或附件字节。

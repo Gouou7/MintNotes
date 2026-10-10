@@ -1,0 +1,30 @@
+name: Application adapter compatibility
+on:
+  push:
+    paths: ["packages/application-client/**", "plugins/openclaw/**", "server/**", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/application-adapters.yml"]
+  pull_request:
+    paths: ["packages/application-client/**", "plugins/openclaw/**", "server/**", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/application-adapters.yml"]
+permissions:
+  contents: read
+jobs:
+  adapters:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:client
+      - run: pnpm exec vitest run server/applications/applications.test.ts packages/application-client/src/crypto.test.ts
+      - run: pnpm typecheck:openclaw
+      - run: pnpm test:openclaw

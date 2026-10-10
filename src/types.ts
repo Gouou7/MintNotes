@@ -1,4 +1,4 @@
-export type ObjectType = "note" | "folder" | "attachment";
+export type { ObjectType, VaultDocument, VaultAttachment, VaultObject, OpenDocument, OpenAttachment, EncryptedObject, SyncChange, EncryptedAttachmentChunk, HistoryCaptureKind, NoteHistoryPayload, NoteHistoryMetadataPayload, EncryptedHistoryMetadata, HistoryListItem, EncryptedHistorySnapshot, HistorySettings } from "@mint-notes/application-client";
 
 export interface User {
   id: string;
@@ -53,77 +53,6 @@ export interface AuthParameters {
   envelopeBinding: VaultEnvelopeBinding;
 }
 
-export interface VaultDocument {
-  kind: "note" | "folder";
-  title: string;
-  markdown: string;
-  parentId: string | null;
-  tags: string[];
-  favorite: boolean;
-  locked: boolean;
-  deleted: boolean;
-  createdAt: string;
-  updatedAt: string;
-  manualOrder: number;
-  attachmentIds: string[];
-  schemaVersion: 2;
-}
-
-export interface VaultAttachment {
-  kind: "attachment";
-  ownerNoteId: string;
-  originalName: string;
-  mime: "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "image/avif";
-  size: number;
-  sha256: string;
-  chunkCount: number;
-  chunkSize: number;
-  attachmentKey: string;
-  deleted: boolean;
-  createdAt: string;
-  updatedAt: string;
-  schemaVersion: 2;
-}
-
-export type VaultObject = VaultDocument | VaultAttachment;
-
-export interface OpenDocument extends VaultDocument {
-  objectId: string;
-  serverRevision: number;
-  dirty: boolean;
-}
-
-export interface OpenAttachment extends VaultAttachment {
-  objectId: string;
-  serverRevision: number;
-  dirty: boolean;
-}
-
-export interface EncryptedObject {
-  objectId: string;
-  objectType: ObjectType;
-  ciphertext: string;
-  nonce: string;
-  encryptionVersion: number;
-  revision: number;
-  deleted: boolean;
-  purged?: boolean;
-}
-
-export interface SyncChange extends EncryptedObject {
-  sequence: number;
-  serverUpdatedAt: string;
-}
-
-export interface EncryptedAttachmentChunk {
-  attachmentId: string;
-  chunkIndex: number;
-  totalChunks: number;
-  ciphertext: ArrayBuffer;
-  nonce: string;
-  encryptionVersion: number;
-}
-
 export interface OutlineItem {
   id: string;
   level: number;
@@ -131,58 +60,6 @@ export interface OutlineItem {
   index: number;
   sourceOffset: number;
   sourceLine: number;
-}
-
-export type HistoryCaptureKind = "baseline" | "interval" | "idle" | "manual" | "restore-safety";
-
-export interface NoteHistoryPayload {
-  schemaVersion: 1;
-  capturedAt: string;
-  title: string;
-  markdown: string;
-  tags: string[];
-  attachmentIds: string[];
-  sourceUpdatedAt: string;
-}
-
-export interface NoteHistoryMetadataPayload {
-  schemaVersion: 1;
-  name: string | null;
-  attachmentIds: string[];
-}
-
-export interface EncryptedHistoryMetadata {
-  metadataCiphertext: string;
-  metadataNonce: string;
-  metadataEncryptionVersion: 1;
-}
-
-export interface HistoryListItem extends Partial<EncryptedHistoryMetadata> {
-  historyId: string;
-  noteId: string;
-  capturedAt: string;
-  captureKind: HistoryCaptureKind;
-  name: string;
-  protected: boolean;
-  byteSize: number;
-  pending: boolean;
-  serverCreatedAt?: string;
-}
-
-export interface EncryptedHistorySnapshot extends Omit<HistoryListItem, "name">, Partial<EncryptedHistoryMetadata> {
-  ciphertext: string;
-  nonce: string;
-  encryptionVersion: 1;
-}
-
-export interface HistorySettings {
-  enabled: boolean;
-  intervalMinutes: 5 | 10 | 30 | 60;
-  retentionDays: 7 | 30 | 90 | 180 | 365 | null;
-  count: number;
-  usedBytes: number;
-  quotaBytes: number;
-  clearedBefore: string | null;
 }
 
 export type SortMode = "alphabetical" | "created" | "updated" | "manual";

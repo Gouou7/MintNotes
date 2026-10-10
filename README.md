@@ -12,6 +12,7 @@ Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户�
 - **笔记整理：**文件夹、搜索、排序、固定、笔记锁、回收站、加密历史与图片附件。
 - **本地优先：**内容先加密写入浏览器的 IndexedDB，离线仍可使用，恢复网络后后台同步。
 - **账户与恢复：**多用户、恢复密钥、已记住设备与可选本地 PIN；保险库指该账户的加密笔记数据。
+- **应用连接：**在已解锁客户端创建仅显示一次、可撤销或到期的独立应用密钥，连接 OpenClaw；插件支持离线读取、在线编辑与现有附件读取。
 - **数据迁移：**导入、导出 Markdown 与 ZIP，保留目录结构和附件；重名自动编号，缺失图片等问题在导入结果中列出。
 
 ## Docker 快速开始
@@ -35,6 +36,7 @@ docker compose ps
 - **恢复密钥**：保存到密码管理器或受保护的离线位置；忘记主密码且没有恢复密钥时，无法恢复保险库。
 - **导出与备份**：导出结果是明文，应保存到可信或另行加密的位置；服务器备份方法见[部署指南](docs/deployment.md#备份)。
 - **本地数据**：锁定保留本地密文与待同步更改；登出会删除当前账户的浏览器数据，清除站点数据也可能丢失尚未同步的唯一副本。出现本地保存失败警告时，不要关闭保险库或清除数据。
+- **应用密钥**：连接软件获得整个保险库的解密能力，请仅授权可信软件；撤销不能清除软件已保存的数据。
 - **应用更新**：激活 PWA 新版本前，先确认最新编辑已保存到本地。
 
 ## 技术概览
@@ -55,6 +57,8 @@ pnpm dev
 
 编辑器开发和构建会自动校验上游快照并应用本地补丁，生成目录无需手动维护；维护方式见[补丁说明](src/editor/patches/README.md)，行为约束见[编辑器架构](docs/editor-architecture.md)。实时编辑遵循上游的 Markdown 序列化行为，编辑后可能发生等价格式变化，跨源码／渲染界面不共享撤销历史。
 
+只开发 Mint 本体时可用 `pnpm --filter mint-notes... install`；完整工作区还包含 OpenClaw SDK，插件要求 Node.js 24.16+。`pnpm build:openclaw` 与 `pnpm typecheck:openclaw` 构建和检查独立插件，安装配置见[插件说明](plugins/openclaw/README.md)。
+
 Vite 默认运行在 `http://localhost:5173`，并将 `/api` 转发到 `http://127.0.0.1:8787` 的 Fastify 服务。常用检查命令为 `pnpm typecheck`、`pnpm test` 与 `pnpm build`；`pnpm test:crypto-worker`、`pnpm test:smoke` 分别检查加密 Worker 与 API，运行前需重新构建。
 
 ## 文档
@@ -63,6 +67,7 @@ Vite 默认运行在 `http://localhost:5173`，并将 `/api` 转发到 `http://1
 | --- | --- |
 | [部署指南](docs/deployment.md) | 部署、配置、备份、恢复、升级与发布 |
 | [系统设计](docs/system-design.md) | 已采纳的系统架构、数据流、安全边界与设计约束 |
+| [应用接口适配](docs/application-connections.md) | 应用连接流程、密文 API、通用客户端与 OpenClaw 插件接入 |
 | [编辑器架构](docs/editor-architecture.md) | Markdown 编辑器的设计原则与验收要求 |
 | [变更日志](CHANGELOG.md) | 未发布与已发布版本的新增、调整和修复 |
 

@@ -179,6 +179,8 @@ export interface ServerLogEventFields {
   "server.stopped": { signal: "SIGINT" | "SIGTERM" | "fatal" };
   "server.fatal": { source: "startup" | "uncaughtException" | "unhandledRejection" } & SafeError;
   "security.origin_rejected": { reason: "missing" | "mismatch" };
+  "application.created": { actorRef: LogReference };
+  "application.revoked": { actorRef: LogReference };
   "auth.registered": { actorRef: LogReference; role: "admin" | "user" };
   "auth.activated": { actorRef: LogReference };
   "auth.login_succeeded": { actorRef: LogReference; endpointRef: LogReference; remembered: boolean };
@@ -208,6 +210,8 @@ const EVENT_MESSAGES: Record<keyof ServerLogEventFields, string> = {
   "server.stopped": "server stopped",
   "server.fatal": "server fatal error",
   "security.origin_rejected": "state-changing request rejected by origin policy",
+  "application.created": "application connection created",
+  "application.revoked": "application connection revoked",
   "auth.registered": "account registered",
   "auth.activated": "account activated",
   "auth.login_succeeded": "login succeeded",

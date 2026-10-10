@@ -1,0 +1,97 @@
+{
+  "id": "mint-notes",
+  "name": "Mint Notes",
+  "description": "使用独立应用密钥读写 Mint Notes 的加密保险库",
+  "categories": [
+    "productivity"
+  ],
+  "contracts": {
+    "tools": [
+      "mint_notes_status",
+      "mint_notes_list",
+      "mint_notes_search",
+      "mint_notes_get",
+      "mint_notes_create",
+      "mint_notes_update",
+      "mint_notes_append",
+      "mint_notes_trash",
+      "mint_notes_read_attachment"
+    ]
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "configContracts": {
+    "secretInputs": {
+      "paths": [
+        {
+          "path": "applicationKey",
+          "expected": "string",
+          "ownerKind": "capability"
+        }
+      ]
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "baseUrl",
+      "applicationKey"
+    ],
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "format": "uri"
+      },
+      "applicationKey": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^mint-app-v1\\.[0-9a-f-]{36}\\.[A-Za-z0-9_-]{43}$"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "provider",
+              "id"
+            ],
+            "properties": {
+              "source": {
+                "enum": [
+                  "env",
+                  "file",
+                  "exec",
+                  "store"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      },
+      "offlineReads": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "uiHints": {
+    "applicationKey": {
+      "label": "Application key",
+      "sensitive": true
+    },
+    "baseUrl": {
+      "label": "Mint Notes URL"
+    }
+  }
+}

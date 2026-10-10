@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { initializeApplicationConnections } from "./applications/service.js";
 
 export type AppDatabase = Database.Database;
 export type RegistrationRole = "admin" | "user";
@@ -320,5 +321,6 @@ export function openDatabase(dataDirectory: string): AppDatabase {
     CREATE INDEX IF NOT EXISTS protected_history_attachment_lookup
       ON protected_history_attachments(user_id, attachment_id);
   `);
+  initializeApplicationConnections(db);
   return db;
 }

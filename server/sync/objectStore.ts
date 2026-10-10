@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AppDatabase } from "../database.js";
-import type { AuthenticatedScope } from "../types.js";
+import type { ObjectScope } from "../types.js";
 
 const envelopeField = z.string().min(16).max(2_000_000);
 
@@ -44,7 +44,7 @@ export class StorageQuotaError extends Error {
 
 export function writeObject(
   db: AppDatabase,
-  scope: AuthenticatedScope,
+  scope: ObjectScope,
   objectId: string,
   body: ObjectWrite,
   quotaBytes: number

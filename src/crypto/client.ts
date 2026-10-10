@@ -1,3 +1,4 @@
+import type { ApplicationCredential } from "@mint-notes/application-client";
 import type {
   EncryptedAttachmentChunk,
   HistoryCaptureKind,
@@ -40,6 +41,7 @@ export function createVaultEnvelopeBinding(): VaultEnvelopeBinding {
 }
 
 export interface CryptoClient {
+  createApplicationCredential(userId: string): Promise<ApplicationCredential>;
   createRegistration(username: string, password: string): Promise<RegistrationCrypto>;
   prepareLogin(password: string, kdfSalt: string, kdfParams: KdfParams): Promise<{ authSecret: string }>;
   discardPendingLogin(): Promise<unknown>;
@@ -116,6 +118,7 @@ export function createCryptoClient(): CryptoClient {
   };
 
   return {
+    createApplicationCredential: (userId) => call("createApplicationCredential", { userId }),
     createRegistration: (username, password) => call("createRegistration", { username, password }),
     prepareLogin: (password, kdfSalt, kdfParams) => call("prepareLogin", { password, kdfSalt, kdfParams }),
     discardPendingLogin: () => call("discardPendingLogin"),

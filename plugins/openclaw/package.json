@@ -1,0 +1,43 @@
+{
+  "name": "@mint-notes/openclaw",
+  "version": "0.1.0",
+  "description": "OpenClaw tools for an end-to-end encrypted Mint Notes vault",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist",
+    "openclaw.plugin.json",
+    "README.md",
+    "THIRD_PARTY_NOTICES.txt"
+  ],
+  "engines": {
+    "node": ">=24.16.0"
+  },
+  "peerDependencies": {
+    "openclaw": "2026.9.8"
+  },
+  "devDependencies": {
+    "@mint-notes/application-client": "workspace:*",
+    "esbuild": "0.28.1",
+    "openclaw": "2026.9.8",
+    "typebox": "1.3.34"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:runtime": "node test-runtime.mjs"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "compat": {
+      "pluginApi": "2026.9.8",
+      "minGatewayVersion": "2026.9.8"
+    },
+    "build": {
+      "openclawVersion": "2026.9.8",
+      "pluginSdkVersion": "2026.9.8"
+    }
+  }
+}
