@@ -13,7 +13,7 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       includeAssets: [
-        "icon.svg", "icon-light.svg", "icon-dark.svg", "icon-maskable.svg", "favicon.ico",
+        "icon.svg", "icon-light.svg", "icon-dark.svg", "icon-round.svg", "icon-maskable.svg", "favicon.ico",
         "icon-192.png", "icon-512.png", "icon-1024.png",
         "icon-maskable-192.png", "icon-maskable-512.png", "icon-maskable-1024.png",
         "apple-touch-icon.png"
@@ -26,10 +26,10 @@ export default defineConfig({
         background_color: "#ffffff",
         display: "standalone",
         start_url: "/",
-        // Installed icons have no interoperable color-scheme override; use the light design.
+        // Use the light circular design for unmasked installed icons.
         icons: [
           {
-            src: "/icon-light.svg",
+            src: "/icon-round.svg",
             sizes: "any",
             type: "image/svg+xml",
             purpose: "any"
