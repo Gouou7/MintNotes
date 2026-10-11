@@ -2,6 +2,8 @@
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  /* 界面文字保留原生选择与复制，仅编辑输入表面显示插入光标。 */
+  caret-color: transparent;
   /* Sketch palette: edit these values to retune both themes. */
   --background-light: #e8e9e9;
   --background-dark: #181818;
@@ -145,6 +147,8 @@ body { color: var(--text); background: var(--surface); }
    顶部工具栏另行固定到视口，不能靠此背景遮挡系统层。 */
 .pwa-status-surface { position: fixed; top: 0; right: 0; left: 0; height: max(1px, var(--safe-area-top)); background: var(--surface); pointer-events: none; z-index: 6; }
 button, input, textarea, select { font: inherit; color: inherit; }
+:is(button, select, input:read-only, textarea:read-only, [contenteditable="false"]) { caret-color: transparent; }
+:is(input, textarea):read-write:focus { caret-color: auto; }
 /* Keep icon strokes at 1.5 CSS pixels even when the 24px viewBox is scaled. */
 :is(button svg.lucide, .tree-sort-action > svg.lucide, .tree-note-lock > svg.lucide, .history-protection > svg.lucide) > * { stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -158,9 +162,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .tree-collapsed > .tree-pane { transform: translateX(-100%); }
 .outline-collapsed > .outline-pane { transform: translateX(100%); }
 
-.tree-pane, .outline-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--sidebar); border-color: var(--border); z-index: 20; color: var(--text); caret-color: transparent; }
+.tree-pane, .outline-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--sidebar); border-color: var(--border); z-index: 20; color: var(--text); }
 .tree-pane, .outline-pane { transform: translateX(0); transition: transform var(--pane-motion-duration) var(--pane-motion-easing), visibility 0s; }
-.tree-pane :is(input,textarea):read-write:focus, .outline-pane :is(input,textarea):read-write:focus { caret-color: auto; }
 /* 侧栏保留完整宽度滑出视口，避免轨道收缩时挤压内容。 */
 .tree-pane { grid-column: 1; width: var(--tree-width, 297px); }
 .pane-resizer-left { grid-column: 2; }
@@ -252,10 +255,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 .note-toolbar { --toolbar-control-height: var(--workspace-button-size); height: var(--note-toolbar-height); flex: 0 0 var(--note-toolbar-height); display: flex; align-items: center; gap: 6px; padding: var(--safe-area-top) max(11px, var(--safe-area-right)) 0 max(16px, var(--safe-area-left)); border-bottom: var(--pane-divider-width) solid var(--border); background: transparent; z-index: 5; }
 .title-input, .empty-title-slot { min-width: 0; height: var(--toolbar-control-height); flex: 1; box-sizing: border-box; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-strong); font-size: 18px; font-weight: 600; }
-.title-input { caret-color: var(--text-strong); outline: 0; text-overflow: ellipsis; }
+.title-input { outline: 0; text-overflow: ellipsis; }
 .empty-title-slot { display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title-input:focus-visible { outline: 0; background: var(--surface-raised); box-shadow: 0 0 0 2px var(--accent); }
-.title-input:read-only { caret-color: transparent; }
 .mode-switch { display: flex; flex: 0 0 auto; gap: 6px; height: var(--toolbar-control-height); }
 .mode-switch button { display: grid; place-items: center; cursor: pointer; }
 .mode-switch button:disabled { cursor: default; opacity: .42; }
@@ -424,8 +426,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .modal > header { height: 58px; flex: 0 0 58px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: var(--pane-divider-width) solid var(--border); }
 .modal > header h2 { margin: 0; color: var(--text-strong); }
 .modal > header button { border: 0; background: transparent; font-size: 25px; cursor: pointer; }
-.settings-backdrop { background: rgb(0 0 0 / 30%); caret-color: transparent; }
-.settings-backdrop :is(input,textarea):read-write:focus { caret-color: auto; }
+.settings-backdrop { background: rgb(0 0 0 / 30%); }
 .settings-modal { --settings-header-height: var(--workspace-header-height); --settings-content-inset: calc(var(--settings-header-height) + 26px); --muted: var(--glass-muted); position: relative; width: min(798px, 100%); height: min(598px, calc(100dvh - 40px)); max-height: none; border-color: var(--border); border-radius: 20px; background: var(--settings-background); box-shadow: none; }
 .settings-layout { min-height: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr); height: 100%; }
 .settings-sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: var(--pane-divider-width) solid var(--border); background: var(--settings-sidebar-background); }

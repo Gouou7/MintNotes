@@ -13,7 +13,10 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['tablet', 834, 111
       const input = mode === 'live' ? live : page.locator('textarea.typora-web-source:not([hidden])');
       for (const text of ['', 'Short note']) {
         await page.evaluate(text => window.mintFixture.load(text), text);
-        if (mode === 'live') await expect(live.locator('p')).toHaveText(text);
+        if (mode === 'live') {
+          await expect(live.locator('p')).toHaveCount(1);
+          await expect(live.locator('p')).toHaveText(text);
+        }
         else await expect(input).toHaveValue(text);
         const geometry = await page.locator('.editor-area').evaluate(area => {
           const rect = area.getBoundingClientRect();
