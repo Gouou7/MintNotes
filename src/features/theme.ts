@@ -1,8 +1,19 @@
 import type { ThemePreference } from "../types";
 
 export function applyDocumentTheme(theme: "light" | "dark") {
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.style.colorScheme = theme;
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  root.style.colorScheme = theme;
+
+  const statusSurface = document.querySelector(".pwa-status-surface");
+  if (!statusSurface) return;
+  // Read a computed color so CSS color-mix() is resolved before reaching the native window.
+  const background = getComputedStyle(statusSurface).backgroundColor;
+  if (!background) return;
+  // Both system media queries use the selected app theme, including explicit preferences.
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+    meta.content = background;
+  }
 }
 
 export function watchDocumentTheme(preference: ThemePreference) {

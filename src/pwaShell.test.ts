@@ -6,6 +6,14 @@ const html = readFileSync(resolve("index.html"), "utf8");
 const styles = readFileSync(resolve("src/styles.css"), "utf8");
 
 describe("installed PWA shell", () => {
+  it("uses sidebar header backgrounds for the initial light and dark window colors", () => {
+    const shell = new DOMParser().parseFromString(html, "text/html");
+    const light = shell.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: light)"]');
+    const dark = shell.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]');
+    expect(light?.getAttribute("content")).toBe("#e8e9e9");
+    expect(dark?.getAttribute("content")).toBe("#151515");
+  });
+
   it("uses the transparent vector logo for browser tabs", () => {
     const document = new DOMParser().parseFromString(html, "text/html");
     const favicon = document.querySelector("#app-favicon");
@@ -22,7 +30,7 @@ describe("installed PWA shell", () => {
     expect(document.querySelector('meta[name="apple-mobile-web-app-capable"]')?.getAttribute("content")).toBe("yes");
     expect(document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute("content")).toBe("default");
     expect(document.querySelector("body > .pwa-status-surface")?.getAttribute("aria-hidden")).toBe("true");
-    expect(styles).toMatch(/\.pwa-status-surface\s*\{[^}]*position: fixed;[^}]*height: max\(1px, var\(--safe-area-top\)\);[^}]*background: var\(--surface\);/s);
+    expect(styles).toMatch(/\.pwa-status-surface\s*\{[^}]*position: fixed;[^}]*height: max\(1px, var\(--safe-area-top\)\);[^}]*background: var\(--chrome-background\);/s);
     expect(styles).toMatch(/@media \(display-mode: standalone\)\s*\{\s*html \{ height: 100dvh; \}/);
   });
 

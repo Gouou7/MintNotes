@@ -22,7 +22,7 @@ export default defineConfig({
         name: "Mint Notes",
         short_name: "Mint Notes",
         description: "Local-first encrypted Markdown notes",
-        theme_color: "#61D2A0",
+        theme_color: "#e8e9e9",
         background_color: "#ffffff",
         display: "standalone",
         start_url: "/",
