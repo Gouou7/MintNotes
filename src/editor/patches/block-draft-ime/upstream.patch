@@ -1,0 +1,168 @@
+--- a/src/block-draft.ts
++++ b/src/block-draft.ts
+@@ -26,6 +26,7 @@
+ import {
+   Plugin,
+   PluginKey,
++  TextSelection,
+   type EditorState,
+   type Transaction,
+ } from "prosemirror-state";
+@@ -60,6 +61,8 @@
++type LeaveLineDraftState = { decorations: DecorationSet; pending: number | null };
++
+ export type LeaveLineDraftHandle = {
+-  plugin: Plugin<DecorationSet>;
++  plugin: Plugin<LeaveLineDraftState>;
+   // Imperative commit — returns true if a commit was dispatched. Features
+   // can call this from their own event handlers (autocomplete, toolbar).
+   commit: (view: EditorView) => boolean;
+ };
+@@ -67,2 +70,23 @@
+ export function leaveLineDraft<M>(spec: LeaveLineDraftSpec<M>): LeaveLineDraftHandle {
+-  const key = new PluginKey<DecorationSet>("leaveLineDraft");
++  const key = new PluginKey<LeaveLineDraftState>("leaveLineDraft");
++  let currentView: EditorView | undefined, composing = false;
++  let timer: ReturnType<typeof setTimeout> | undefined;
++
++  function selectionInParagraph(state: EditorState, pos: number): boolean {
++    const sel = state.selection;
++    return sel instanceof TextSelection && sel.$from.depth > 0 &&
++      sel.$from.sameParent(sel.$to) && sel.$from.before() === pos;
++  }
++
++  function compositionTransaction(tr: Transaction): boolean {
++    return tr.getMeta("composition") !== undefined ||
++      (tr.getMeta("appendedTransaction") as Transaction | undefined)?.getMeta("composition") !== undefined;
++  }
++
++  function flushPending() {
++    timer = undefined;
++    const view = currentView;
++    if (!view || composing) return;
++    if (view.composing) { timer = setTimeout(flushPending, 20); return; }
++    if (key.getState(view.state)?.pending != null) view.dispatch(view.state.tr.setMeta(key, "compositionend"));
++  }
+@@ -70,8 +94,8 @@
+   function matchForCursorParagraph(
+     state: EditorState,
+   ): { paragraph: PMNode; paragraphPos: number; paragraphStart: number; data: M; prefixLen: number } | null {
+     const sel = state.selection;
+-    if (!sel.empty) return null;
++    if (!(sel instanceof TextSelection) || !sel.$from.depth || !sel.$from.sameParent(sel.$to)) return null;
+     const $from = sel.$from;
+     const paragraph = $from.parent;
+     if (paragraph.type.name !== "paragraph") return null;
+@@ -108,12 +132,36 @@
+-  const plugin = new Plugin<DecorationSet>({
++  const plugin = new Plugin<LeaveLineDraftState>({
+     key,
+     state: {
+-      init: (_, state) => buildDecos(state),
+-      apply: (_tr, _old, _oldState, newState) => buildDecos(newState),
++      init: (_, state) => ({ decorations: buildDecos(state), pending: null }),
++      apply: (tr, old, oldState, newState) => {
++        let pending = old.pending;
++        if (pending !== null) {
++          const mapped = tr.mapping.mapResult(pending, 1);
++          pending = mapped.deleted ? null : mapped.pos;
++        }
++        const draft = matchForCursorParagraph(oldState);
++        if (draft && (composing || currentView?.composing || compositionTransaction(tr))) {
++          const mapped = tr.mapping.mapResult(draft.paragraphPos, 1);
++          if (!mapped.deleted && !selectionInParagraph(newState, mapped.pos)) pending = mapped.pos;
++        }
++        if (pending !== null) {
++          const node = newState.doc.nodeAt(pending);
++          if (!node || node.type.name !== "paragraph" || !spec.match(node.textContent) || selectionInParagraph(newState, pending)) pending = null;
++        }
++        return { decorations: buildDecos(newState), pending };
++      },
++    },
++    view(view) {
++      currentView = view;
++      return { destroy() { currentView = undefined; composing = false; if (timer !== undefined) clearTimeout(timer); timer = undefined; } };
+     },
+     props: {
+       decorations(state) {
+-        return key.getState(state);
++        return key.getState(state)?.decorations;
++      },
++      handleDOMEvents: {
++        compositionstart: () => { composing = true; if (timer !== undefined) clearTimeout(timer); timer = undefined; return false; },
++        compositionend: () => { composing = false; if (timer !== undefined) clearTimeout(timer); timer = setTimeout(flushPending, 0); return false; },
+       },
+     },
+     appendTransaction(trs, oldState, newState) {
+@@ -121,15 +169,19 @@
+       // cursor is in a DIFFERENT paragraph (mapped-position compare).
+       // Typing inside the same paragraph — even edits that break the match
+       // — does not commit; only "leaving the line" does.
+-      const oldSel = oldState.selection;
+-      if (!oldSel.empty) return null;
+-      const oldPara = oldSel.$from.parent;
+-      if (oldPara.type.name !== "paragraph") return null;
+-      if (!spec.match(oldPara.textContent)) return null;
+-
+-      const oldParaPos = oldSel.$from.before();
+-      let mapped = oldParaPos;
+-      for (const tr of trs) mapped = tr.mapping.map(mapped);
+-
+-      const newSel = newState.selection;
+-      if (newSel.empty && newSel.$from.before() === mapped) return null;
++      // IME ranges may be non-empty while remaining inside this paragraph.
++      // Never replace its DOM during composition, even if a transient selection
++      // leaves it. Remember that departure and commit after native input settles.
++      if (composing || currentView?.composing || trs.some(compositionTransaction)) return null;
++      let mapped = key.getState(newState)?.pending ?? null;
++      if (mapped === null) {
++        const draft = matchForCursorParagraph(oldState);
++        if (!draft) return null;
++        mapped = draft.paragraphPos;
++        for (const tr of trs) {
++          const result = tr.mapping.mapResult(mapped, 1);
++          if (result.deleted) return null;
++          mapped = result.pos;
++        }
++      }
++      if (selectionInParagraph(newState, mapped)) return null;
+@@ -153,4 +205,5 @@
+   const commit = (view: EditorView): boolean => {
++    if (composing || view.composing) return false;
+     const hit = matchForCursorParagraph(view.state);
+     if (!hit) return false;
+     const tr = view.state.tr;
+--- a/tests/block-draft.test.ts
++++ b/tests/block-draft.test.ts
+@@ -53,7 +53,7 @@
+ describe("leaveLineDraft", () => {
+   test("match on cursor paragraph yields node + prefix decorations", () => {
+     const state = mkState(["!! hello", "world"], 0);
+-    const decos = bang.plugin.getState(state)!.find();
++    const decos = bang.plugin.getState(state)!.decorations.find();
+     expect(decos).toHaveLength(2);
+     // Decoration.node wraps the whole paragraph [0, nodeSize].
+     expect(decos[0]!.from).toBe(0);
+@@ -66,4 +66,4 @@
+   test("no match → no decorations", () => {
+     const state = mkState(["just text", "!! elsewhere"], 0);
+-    expect(bang.plugin.getState(state)!.find()).toHaveLength(0);
++    expect(bang.plugin.getState(state)!.decorations.find()).toHaveLength(0);
+   });
+@@ -71,5 +71,5 @@
+   test("cursor in non-matching paragraph next to a matching one → no decorations", () => {
+     // `!!` paragraph matches, but cursor is in the second one.
+     const state = mkState(["!! hello", "world"], 1);
+-    expect(bang.plugin.getState(state)!.find()).toHaveLength(0);
++    expect(bang.plugin.getState(state)!.decorations.find()).toHaveLength(0);
+   });
+--- a/src/features/heading.ts
++++ b/src/features/heading.ts
+@@ -34,6 +34,7 @@
+   return new Plugin({
+     props: {
+       handleKeyDown(view, e) {
++        if (view.composing || e.isComposing || e.keyCode === 229) return false;
+         if (e.key !== "ArrowDown") return false;
+         if (e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return false;
+         const { state } = view;

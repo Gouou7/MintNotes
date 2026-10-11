@@ -60,6 +60,33 @@ test('live composition commits native DOM input once after composition ends', as
   await live.evaluate(element => element.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '中文' })));
   await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('Alpha中文'); expect(await saved(page)).toBe(1);
 });
+test('heading IME ranges keep pinyin and Chinese on the draft line and save once', async ({ page }) => {
+  await load(page, '');
+  const live = page.locator('.markdown-editor-host .ProseMirror').first(); await live.click();
+  await page.keyboard.press('Enter'); await page.keyboard.press('ArrowUp'); await page.keyboard.type('## ');
+  const before = await saved(page);
+  await live.evaluate(root => root.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })));
+  async function update(text: string, range: boolean) {
+    await live.evaluate((root, { text, range }) => {
+      const paragraph = root.querySelector(':scope > p')!; paragraph.textContent = '## ' + text;
+      const node = paragraph.firstChild!, selection = root.ownerDocument.getSelection()!;
+      selection.setBaseAndExtent(node, range ? 3 : 3 + text.length, node, 3 + text.length);
+      root.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertCompositionText', data: text, isComposing: true }));
+    }, { text, range });
+    await expect(live.locator(':scope > p').first()).toHaveText('## ' + text);
+    await expect(live.locator(':scope > h2')).toHaveCount(0);
+  }
+  await update('c', false); await update('ce', true); await update('ce shi', false);
+  expect(await saved(page)).toBe(before);
+  await update('测试', false);
+  await live.evaluate(root => root.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '测试' })));
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('\\## 测试');
+  expect(await saved(page)).toBe(before + 1);
+  await expect(live.locator(':scope > p').nth(1)).toHaveText('');
+  await live.locator(':scope > p').nth(1).click();
+  await expect(live.locator(':scope > h2')).toHaveText('测试');
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('## 测试');
+});
 test('code language controls remain editable after returning from readonly mode', async ({ page }) => {
   await load(page, '```ts\nconst value = 1;\n```');
   await expect(page.locator('.mint-code-language-label')).toHaveText('ts');

@@ -8,6 +8,14 @@ function setup(markdown: string, readOnly = false) {
   return { host, editor, changed };
 }
 describe("Mint upstream controller", () => {
+  it("saves a draft converted by an appended transaction when the selection leaves its line", () => {
+    const text = "\\## 测试\n\nAfter", { editor, host, changed } = setup(text);
+    editor.setSelectionOffset(4); expect(changed).not.toHaveBeenCalled();
+    editor.setSelectionOffset(text.length);
+    expect(host.querySelector("h2")?.textContent).toBe("测试");
+    expect(editor.getMarkdown()).toBe("## 测试\n\nAfter");
+    expect(changed).toHaveBeenCalledOnce(); expect(changed).toHaveBeenCalledWith("## 测试\n\nAfter", "a");
+  });
   it("keeps loaded source without saving during selection, mode or display changes", () => {
     const text = "__bold__\n\n[unused]: https://example.com/unused\n\n- item\n";
     const { editor, changed } = setup(text);

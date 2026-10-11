@@ -272,6 +272,24 @@
         "05-math",
         "12-product-controls"
       ]
+    },
+    {
+      "id": "18-block-draft-ime",
+      "reason": "同段落选区不提交标题、分隔线与代码围栏草稿；组合期间推迟结构转换并映射延期位置，结束后安全提交",
+      "patch": "block-draft-ime/upstream.patch",
+      "additions": {},
+      "tests": [
+        "src/editor/tests/block-draft.test.ts",
+        "src/editor/tests/engine.test.ts",
+        ".generated/typora-web/tests/block-draft.test.ts",
+        ".generated/typora-web/tests/features/heading.test.ts",
+        ".generated/typora-web/tests/features/hr.test.ts",
+        ".generated/typora-web/tests/features/fenced-code.test.ts",
+        "tests/editor/browser/editor.spec.ts"
+      ],
+      "requires": [
+        "01-integration"
+      ]
     }
   ]
 }

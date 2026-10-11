@@ -75,7 +75,8 @@ export function createMintEditor(host: HTMLElement, options: EditorOptions = {},
       bookmark.valid = !from.deletedAcross && !to.deletedAcross; bookmark.from = from.pos; bookmark.to = Math.max(from.pos, to.pos);
     }
     view.updateState(result.state);
-    if (!suppress && !context.readOnly && tr.docChanged && !previous.eq(result.state.doc) && !composing && !view.composing) {
+    // A selection-only dispatch can still convert a block draft in an appended transaction.
+    if (!suppress && !context.readOnly && result.transactions.some(transaction => transaction.docChanged) && !previous.eq(result.state.doc) && !composing && !view.composing) {
       const next = serialize(result.state.doc);
       // Empty body placeholders may change the model without editing Markdown.
       if (!tr.getMeta("mint-presentation-only") || next !== serialize(previous)) emit(next);
