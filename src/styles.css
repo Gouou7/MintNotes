@@ -146,6 +146,16 @@ body { color: var(--text); background: var(--surface); }
 /* 为系统状态栏背景取色提供实色顶边；安全区为零时仍保留 1px，不占布局空间。
    顶部工具栏另行固定到视口，不能靠此背景遮挡系统层。 */
 .pwa-status-surface { position: fixed; top: 0; right: 0; left: 0; height: max(1px, var(--safe-area-top)); background: var(--chrome-background); pointer-events: none; z-index: 6; }
+/* 独立窗口顶部背景超过 WebKit 的 10px 取色阈值；空元素裁切到文字区，
+   参与状态栏背景识别但不绘制遮挡，不增加工具栏或正文的顶部留白。 */
+@media (display-mode: standalone) {
+  .pwa-status-surface {
+    height: max(11px, var(--safe-area-top));
+    -webkit-background-clip: text;
+    background-clip: text;
+    z-index: 1000;
+  }
+}
 button, input, textarea, select { font: inherit; color: inherit; }
 :is(button, select, input:read-only, textarea:read-only, [contenteditable="false"]) { caret-color: transparent; }
 :is(input, textarea):read-write:focus { caret-color: auto; }
