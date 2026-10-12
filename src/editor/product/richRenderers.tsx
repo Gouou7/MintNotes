@@ -4,17 +4,10 @@ import "katex/dist/katex.min.css";
 const MAX_MERMAID_SOURCE_LENGTH = 100_000;
 let mermaidSequence = 0;
 let mermaidModule: Promise<typeof import("mermaid")["default"]> | null = null;
+let mermaidRenderQueue = Promise.resolve();
 
 function loadMermaid() {
-  mermaidModule ??= import("mermaid").then(({ default: mermaid }) => {
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      flowchart: { htmlLabels: false },
-      suppressErrorRendering: true
-    });
-    return mermaid;
-  });
+  mermaidModule ??= import("mermaid").then(({ default: mermaid }) => mermaid);
   return mermaidModule;
 }
 
@@ -54,35 +47,70 @@ export function renderMathInto(container: HTMLElement, source: string, displayMo
 
 export function renderMermaidInto(container: HTMLElement, source: string, labels: { rendering: string; failed: string; alt: string }): () => void {
   let cancelled = false;
+  let revision = 0;
   let objectUrl: string | null = null;
+  const root = document.documentElement;
+  const readTheme = (): "dark" | "default" => root.dataset.theme === "dark" ? "dark" : "default";
+  let theme = readTheme();
   container.classList.add("is-rendering");
   container.textContent = labels.rendering;
 
-  void (async () => {
-    try {
-      if (source.length > MAX_MERMAID_SOURCE_LENGTH) throw new Error("Mermaid source is too large");
-      const mermaid = await loadMermaid();
-      const { svg } = await mermaid.render(`mint-mermaid-${++mermaidSequence}`, source);
-      if (cancelled) return;
-      const safeSvg = sanitizeMermaidSvg(svg);
-      objectUrl = URL.createObjectURL(new Blob([safeSvg], { type: "image/svg+xml" }));
-      const image = document.createElement("img");
-      image.src = objectUrl;
-      image.alt = labels.alt;
-      image.draggable = false;
-      container.replaceChildren(image);
-      container.classList.remove("is-rendering", "has-error");
-    } catch {
-      if (cancelled) return;
-      container.textContent = labels.failed;
-      container.classList.remove("is-rendering");
-      container.classList.add("has-error");
-    }
-  })();
+  const releaseImage = () => {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = null;
+  };
+  const redraw = () => {
+    const requestedTheme = theme, requestedRevision = ++revision;
+    const stale = () => cancelled || requestedRevision !== revision || requestedTheme !== readTheme();
+    // initialize() changes shared config; keep it with its render in one serial task.
+    mermaidRenderQueue = mermaidRenderQueue.then(async () => {
+      try {
+        if (stale()) return;
+        if (source.length > MAX_MERMAID_SOURCE_LENGTH) throw new Error("Mermaid source is too large");
+        const mermaid = await loadMermaid();
+        if (stale()) return;
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: requestedTheme,
+          darkMode: requestedTheme === "dark",
+          htmlLabels: false,
+          suppressErrorRendering: true
+        });
+        const { svg } = await mermaid.render(`mint-mermaid-${++mermaidSequence}`, source);
+        if (stale()) return;
+        const safeSvg = sanitizeMermaidSvg(svg);
+        const nextUrl = URL.createObjectURL(new Blob([safeSvg], { type: "image/svg+xml" }));
+        const image = document.createElement("img");
+        image.src = nextUrl;
+        image.alt = labels.alt;
+        image.draggable = false;
+        container.replaceChildren(image);
+        releaseImage();
+        objectUrl = nextUrl;
+        container.classList.remove("is-rendering", "has-error");
+      } catch {
+        if (stale()) return;
+        container.textContent = labels.failed;
+        releaseImage();
+        container.classList.remove("is-rendering");
+        container.classList.add("has-error");
+      }
+    });
+  };
+  const observer = new MutationObserver(() => {
+    const nextTheme = readTheme();
+    if (nextTheme === theme) return;
+    theme = nextTheme;
+    redraw();
+  });
+  observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  redraw();
 
   return () => {
     cancelled = true;
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    observer.disconnect();
+    releaseImage();
     container.replaceChildren();
   };
 }
