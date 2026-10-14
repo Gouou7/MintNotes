@@ -384,32 +384,64 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .history-preview-banner button:disabled { cursor: not-allowed; opacity: .45; }
 .drawer-scrim { display: none; }
 
-.auth-shell, .loading-shell { height: 100%; min-height: 0; display: grid; place-items: center; padding: calc(24px + var(--safe-area-top)) max(24px, var(--safe-area-right)) calc(24px + var(--safe-area-bottom)) max(24px, var(--safe-area-left)); overflow: auto; background: radial-gradient(circle at 50% 0, var(--accent-soft) 0, var(--surface) 52%, var(--sidebar) 100%); }
-.auth-card { width: min(430px, 100%); padding: 34px; border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 22px 65px rgba(0,0,0,.16); }
-.auth-language { display: flex; justify-content: flex-end; margin: -12px -12px 8px 0; }
-.auth-language select { width: auto; min-width: 132px; padding: 7px 30px 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 12px; cursor: pointer; }
-.auth-card h1 { margin: 0; text-align: center; font-size: 25px; color: var(--text-strong); }
+.auth-shell, .loading-shell { height: 100%; min-height: 0; display: grid; place-items: center; padding: calc(24px + var(--safe-area-top)) max(24px, var(--safe-area-right)) calc(24px + var(--safe-area-bottom)) max(24px, var(--safe-area-left)); overflow: auto; color-scheme: light; background: var(--background-light); }
+:root[data-theme="dark"] :is(.auth-shell, .loading-shell) { color-scheme: dark; background: var(--background-dark); }
+/* 仅在认证卡片内调整中性色，继续复用下方的共享磨砂与实色回退规则。 */
+.auth-card {
+  --border: #d5d5d5;
+  --surface: #f5f5f5;
+  --surface-raised: #ffffff;
+  --glass-muted: #626262;
+  --auth-control-background: #f1f1f1;
+  --auth-secondary-text: #626262;
+  --auth-focus-ring: #555555;
+  --auth-focus-shadow: rgb(0 0 0 / 7%);
+  --auth-card-shadow: rgb(0 0 0 / 8%);
+  --auth-logout-text: var(--danger);
+  width: min(430px, 100%); padding: 30px 34px 32px; border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 22px 60px var(--auth-card-shadow), inset 0 1px 0 rgb(255 255 255 / 2%);
+}
+:root[data-theme="dark"] .auth-card {
+  --border: #383838;
+  --surface: #1b1b1b;
+  --surface-raised: #282828;
+  --glass-muted: #a6a6a6;
+  --auth-control-background: #202020;
+  --auth-secondary-text: #bcbcbc;
+  --auth-focus-ring: #b5b5b5;
+  --auth-focus-shadow: rgb(255 255 255 / 7%);
+  --auth-card-shadow: rgb(0 0 0 / 20%);
+  --auth-logout-text: #d89999;
+}
+.auth-language { display: flex; justify-content: flex-end; margin: -10px -12px 10px 0; }
+.auth-language select { width: auto; min-width: 132px; height: 32px; padding: 7px 30px 7px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--auth-control-background); color: var(--auth-secondary-text); font-size: 12px; cursor: pointer; }
+.auth-card h1 { margin: 0; text-align: center; font-size: 25px; font-weight: 650; line-height: 1.3; letter-spacing: -.35px; color: var(--text-strong); }
 .recovery-card > p { color: var(--muted); text-align: center; line-height: 1.5; }
 .auth-guidance { margin: 18px 0 0; padding: 9px 11px; border-radius: 8px; color: var(--muted); background: var(--surface-input); font-size: 13px; line-height: 1.5; text-align: center; }
 .auth-guidance.warning { color: var(--warning-text); background: var(--warning-bg); }
 .auth-card form, .settings-section form { display: grid; gap: 14px; margin-top: 24px; }
+.auth-card form { gap: 16px; margin-top: 28px; }
 .auth-card label, .settings-section label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
+.auth-card label { gap: 8px; font-weight: 550; line-height: 1.5; }
 .auth-card input, .auth-card textarea, .settings-section input, .settings-section select { width: 100%; padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); outline: 0; font-weight: 400; }
+.auth-card input, .auth-card textarea { font-size: 16px; line-height: 18px; }
 .settings-section input { border-color: var(--settings-control-border); }
 .auth-card input:focus, .auth-card textarea:focus, .settings-section input:focus, .settings-section select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.auth-card input:focus, .auth-card textarea:focus { border-color: var(--auth-focus-ring); box-shadow: 0 0 0 2px var(--auth-focus-shadow); }
+.auth-card :is(button, input, textarea, select):focus-visible { outline-color: var(--auth-focus-ring); }
 .settings-section input:focus { border-color: var(--settings-focus-ring); }
 .settings-section select:focus { border-color: var(--border); box-shadow: none; }
 .settings-section select:focus-visible { outline: 2px solid var(--settings-focus-ring); outline-offset: 2px; }
 .settings-modal :is(button, summary):focus-visible { outline-color: var(--settings-focus-ring); }
 .settings-section input::placeholder { color: var(--muted); opacity: 1; }
 .settings-section :is(input, select):disabled { color: var(--muted); border-color: var(--border); background: var(--surface-input); cursor: not-allowed; }
-.auth-card label.remember-device { display: flex; align-items: center; gap: 9px; width: fit-content; color: var(--muted); cursor: pointer; }
+.auth-card label.remember-device { display: flex; align-items: center; gap: 9px; width: fit-content; color: var(--muted); font-weight: 400; cursor: pointer; }
 .auth-card label.remember-device input { width: 16px; height: 16px; padding: 0; accent-color: var(--accent); }
-.auth-card button { min-height: 40px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); cursor: pointer; }
+.auth-card button { min-height: 42px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); cursor: pointer; }
 button.primary, .auth-card button.primary { border-color: var(--accent); background: var(--accent); color: var(--accent-on); font-weight: 700; }
+.auth-card button.primary { font-size: 15px; font-weight: 650; }
 .auth-card button:disabled, button:disabled { opacity: .6; cursor: not-allowed; }
-.auth-actions { display: flex; justify-content: center; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
-.auth-actions button { border: 0; background: transparent; color: var(--accent-text); font-size: 13px; }
+.auth-actions { display: flex; justify-content: center; gap: 22px; margin-top: 21px; flex-wrap: wrap; }
+.auth-actions button { min-height: 28px; padding: 5px 0; border: 0; background: transparent; color: var(--auth-secondary-text); font-size: 13px; }
 .auth-config-error { margin: 14px 0 0; color: var(--danger); font-size: 12px; line-height: 1.5; text-align: center; }
 .error, .notice { margin: 0; padding: 9px; border-radius: 7px; font-size: 13px; }
 .error { color: var(--danger); background: var(--danger-soft); }
@@ -421,11 +453,13 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .auth-card label.recovery-confirm input { width: 17px; height: 17px; margin: 1px 0 0; padding: 0; accent-color: var(--accent); }
 .recovery-feedback { text-align: left !important; }
 .recovery-card .primary:disabled { cursor: not-allowed; }
-.lock-card { display: grid; gap: 14px; }
+.lock-card { display: grid; gap: 0; padding-top: 36px; }
+.lock-card .brand-mark { margin-bottom: 18px; }
 .lock-user-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lock-status { display: flex; align-items: center; justify-content: center; gap: 7px; margin: -4px 0 0; color: var(--muted); text-align: center; }
-.lock-card form { margin-top: 4px; }
-.auth-card button.danger-text { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; color: var(--danger); background: transparent; }
+.lock-status { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 11px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; text-align: center; }
+.lock-card form { margin-top: 30px; }
+.lock-card form button:not(.primary) { min-height: 38px; color: var(--auth-secondary-text); background: transparent; font-size: 13px; }
+.auth-card button.danger-text { min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin-top: 21px; border: 0; color: var(--auth-logout-text); background: transparent; font-size: 13px; }
 .recovery-card textarea { font-family: ui-monospace, monospace; word-break: break-all; resize: none; }
 .spinner { width: 34px; height: 34px; border: 3px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 .loading-shell { align-content: center; gap: 12px; color: var(--muted); }
