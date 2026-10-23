@@ -1,6 +1,10 @@
-import { StorageUsage } from "./storageUsage";
-import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ChevronDown, ChevronRight, ChevronsUp, Check, Copy, Download, Ellipsis, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, RotateCcw, Search, Settings, Settings2, Shield, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
+import type { StorageStatus } from "./storage/useStorageStatus";
+import { HistoryStorageSection } from "./storage/HistoryStorageSection";
+import { TrashStorageSection } from "./storage/TrashStorageSection";
+import { MigrationStorageSection } from "./storage/MigrationStorageSection";
+import { StorageUsage, PendingStorage } from "./storageUsage";
+import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Notebook, ChevronDown, ChevronRight, ChevronsUp, Check, Copy, Download, Ellipsis, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, Search, Settings, Palette, UserRoundCog, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
@@ -17,11 +21,10 @@ import { prepareProfileAvatar } from "./profileAvatar";
 import { formatHistoryBytes } from "./history";
 import { downloadRecoveryKey } from "./recoveryKey";
 import { APP_VERSION } from "../version";
-import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE } from "./appearance";
-import { createTrashView, type TrashKindFilter, type TrashSortMode } from "./trashView";
+import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE, normalizeFontSize } from "./appearance";
 import { ApplicationConnectionsSection } from "./applications/ApplicationConnectionsSection";
 
-type Tab = "general" | "history" | "trash" | "security" | "data" | "about" | "users";
+type Tab = "general" | "storage" | "security" | "about" | "users";
 type PinDialogMode = "save" | "remove";
 type AccountCredentialDialogMode = "password" | "recovery";
 
@@ -34,6 +37,7 @@ interface PendingUsernameRecoveryReset {
 }
 
 interface Props {
+  storageStatus: StorageStatus;
   user: User;
   endpoint: AuthEndpoint;
   credential: DeviceUnlockCredential | null;
@@ -61,42 +65,7 @@ interface Props {
   onNotify: (text: string, tone: ToastTone) => void;
 }
 
-const TRASH_PAGE_SIZE = 30;
-
-function TrashBranch({ item, childrenByParent, descendantCounts, expandedIds, automaticallyExpandedIds, root, restoring, purging, onToggle, onRestore, onPurge }: {
-  item: OpenDocument;
-  childrenByParent: Map<string, OpenDocument[]>;
-  descendantCounts: Map<string, number>;
-  expandedIds: Set<string>;
-  automaticallyExpandedIds: Set<string>;
-  root: boolean;
-  restoring: string;
-  purging: boolean;
-  onToggle: (objectId: string) => void;
-  onRestore: (item: OpenDocument) => void;
-  onPurge: (objectId: string) => void;
-}): ReactNode {
-  const { formatDateTime, t } = useI18n();
-  const children = childrenByParent.get(item.objectId) ?? [];
-  const descendantCount = descendantCounts.get(item.objectId) ?? 0;
-  const forceExpanded = automaticallyExpandedIds.has(item.objectId);
-  const expanded = children.length > 0 && (forceExpanded || expandedIds.has(item.objectId));
-  const title = item.title || t("settings.untitled");
-  return <div className="trash-node" role="treeitem" aria-expanded={children.length ? expanded : undefined}>
-    <div className="trash-row">
-      {children.length ? (forceExpanded
-        ? <span className="trash-disclosure forced" aria-hidden="true"><AppIcon icon={ChevronDown} size={15} /></span>
-        : <button className="trash-disclosure" onClick={() => onToggle(item.objectId)} title={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })} aria-label={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })}><AppIcon icon={expanded ? ChevronDown : ChevronRight} size={15} /></button>)
-        : <span className="trash-disclosure-spacer" />}
-      <span className="trash-item-icon"><AppIcon icon={item.kind === "folder" ? Folder : FileText} size={18} /></span>
-      <span className="trash-details"><strong>{title}</strong><small>{item.kind === "folder" ? t("settings.folder") : t("settings.note")}{item.kind === "folder" && descendantCount > 0 ? ` · ${t("settings.containsItems", { count: descendantCount })}` : ""} · {t("settings.deletedAt", { date: formatDateTime(item.serverTrashedAt ?? item.updatedAt) })}</small></span>
-      {root && <span className="trash-actions"><button disabled={restoring === item.objectId || purging} onClick={() => onRestore(item)} title={t("settings.restore")} aria-label={t("settings.restoreItem", { title })}><AppIcon icon={RotateCcw} size={16} /></button><details className="trash-more"><summary title={t("settings.moreActions")} aria-label={t("settings.moreActionsFor", { title })}><AppIcon icon={Ellipsis} size={17} /></summary><div><button className="danger" disabled={purging} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); onPurge(item.objectId); }}><AppIcon icon={Trash2} size={15} />{t("settings.permanentDelete")}</button></div></details></span>}
-    </div>
-    {expanded && <div className="trash-children" role="group">{children.map((child) => <TrashBranch key={child.objectId} item={child} childrenByParent={childrenByParent} descendantCounts={descendantCounts} expandedIds={expandedIds} automaticallyExpandedIds={automaticallyExpandedIds} root={false} restoring={restoring} purging={purging} onToggle={onToggle} onRestore={onRestore} onPurge={onPurge} />)}</div>}
-  </div>;
-}
-
-export function SettingsPanel({ user, endpoint, credential, serverSessionVerified, onCredentialChange, preferences, onPreferences, onClose, onLogout, onImport, onExport, onDisplayName, onUsername, avatarUrl, onAvatarChange, trashItems, purging, onRestoreTrash, onPurgeTrash, onClearHistory, onClearTrash, historySettings, onHistorySettings, onRefreshHistorySettings, onNotify }: Props) {
+export function SettingsPanel({ storageStatus, user, endpoint, credential, serverSessionVerified, onCredentialChange, preferences, onPreferences, onClose, onLogout, onImport, onExport, onDisplayName, onUsername, avatarUrl, onAvatarChange, trashItems, purging, onRestoreTrash, onPurgeTrash, onClearHistory, onClearTrash, historySettings, onHistorySettings, onRefreshHistorySettings, onNotify }: Props) {
   const { formatDateTime, setLanguagePreference, t } = useI18n();
   const [tab, setTab] = useState<Tab>("general");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -119,34 +88,12 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
   const [newPin, setNewPin] = useState("");
   const [pinDialogMode, setPinDialogMode] = useState<PinDialogMode | null>(null);
   const [autoLock, setAutoLock] = useState(credential?.autoLockMinutes ?? 0);
-  const [restoringTrashId, setRestoringTrashId] = useState("");
-  const [trashQuery, setTrashQuery] = useState("");
-  const [trashKindFilter, setTrashKindFilter] = useState<TrashKindFilter>("all");
-  const [trashSortMode, setTrashSortMode] = useState<TrashSortMode>("deleted-desc");
-  const [expandedTrashIds, setExpandedTrashIds] = useState<Set<string>>(() => new Set());
-  const [visibleTrashRootCount, setVisibleTrashRootCount] = useState(TRASH_PAGE_SIZE);
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [newRecoveryKey, setNewRecoveryKey] = useState("");
   const [newRecoveryConfirmed, setNewRecoveryConfirmed] = useState(false);
   const [accountCredentialDialogMode, setAccountCredentialDialogMode] = useState<AccountCredentialDialogMode | null>(null);
   const [logoutConfirming, setLogoutConfirming] = useState(false);
-  const [fontSizeInput, setFontSizeInput] = useState(String(preferences.fontSize));
-  const fileInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
-  useEffect(() => setFontSizeInput(String(preferences.fontSize)), [preferences.fontSize]);
-
-  const updateFontSizeInput = (value: string) => {
-    setFontSizeInput(value);
-    const fontSize = Number(value);
-    if (Number.isInteger(fontSize) && fontSize >= MIN_FONT_SIZE && fontSize <= MAX_FONT_SIZE) {
-      onPreferences({ ...preferences, fontSize });
-    }
-  };
-
-  const restoreDefaultFontSize = () => {
-    setFontSizeInput(String(DEFAULT_FONT_SIZE));
-    onPreferences({ ...preferences, fontSize: DEFAULT_FONT_SIZE });
-  };
   const requireServerSession = () => {
     if (serverSessionVerified) return true;
     onNotify(t("notice.onlineSessionRequired"), "warning");
@@ -163,7 +110,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
 
   useEffect(() => { if (tab === "security" && serverSessionVerified) void loadDeviceSessions(); }, [serverSessionVerified, tab]);
   useEffect(() => {
-    if (tab !== "history" || !serverSessionVerified) return;
+    if (tab !== "storage" || !serverSessionVerified) return;
     void onRefreshHistorySettings().catch((value) => {
       onNotify(translateError(value, t, "notice.historySettingsLoadFailed"), "warning");
     });
@@ -192,7 +139,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
     } finally { setBusy(false); }
   };
 
-  const updateHistorySettings = async (patch: Partial<Pick<HistorySettings, "enabled" | "intervalMinutes" | "retentionDays">>) => {
+  const updateHistorySettings = async (patch: Partial<Pick<HistorySettings, "enabled" | "intervalMinutes" | "retentionDays" | "quotaBytes">>) => {
     if (!requireServerSession()) return;
     setBusy(true);
     try {
@@ -523,41 +470,12 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
     finally { await cryptoClient.discardPendingLogin().catch(() => undefined); setBusy(false); }
   };
 
-  const importSelected = async (files: FileList | null) => {
-    if (!files?.length) return;
-    setBusy(true);
-    try { await onImport(Array.from(files)); } finally { setBusy(false); }
+  const contentRef = useRef<HTMLDivElement>(null);
+  const changeTab = (next: Tab) => {
+    setTab(next);
+    if (contentRef.current) contentRef.current.scrollTop = 0;
   };
-
-  const restoreTrashItem = async (item: OpenDocument) => {
-    setRestoringTrashId(item.objectId);
-    try {
-      await onRestoreTrash(item.objectId);
-      onNotify(t("notice.itemRestored", { title: item.title }), "info");
-    } catch (value) {
-      onNotify(value instanceof Error ? translateError(value, t, "notice.itemRestoreFailed") : t("notice.itemRestoreFailed", { title: item.title }), "warning");
-    }
-    finally { setRestoringTrashId(""); }
-  };
-
-  const trashView = useMemo(
-    () => createTrashView(trashItems, trashQuery, trashKindFilter, trashSortMode),
-    [trashItems, trashQuery, trashKindFilter, trashSortMode]
-  );
-  const visibleTrashRoots = trashView.roots.slice(0, visibleTrashRootCount);
-  useEffect(() => setVisibleTrashRootCount(TRASH_PAGE_SIZE), [trashQuery, trashKindFilter, trashSortMode]);
-  useEffect(() => setExpandedTrashIds((current) => {
-    const validIds = new Set(trashItems.map((item) => item.objectId));
-    if ([...current].every((objectId) => validIds.has(objectId))) return current;
-    return new Set([...current].filter((objectId) => validIds.has(objectId)));
-  }), [trashItems]);
-  const toggleTrashFolder = (objectId: string) => setExpandedTrashIds((current) => {
-    const next = new Set(current);
-    if (next.has(objectId)) next.delete(objectId);
-    else next.add(objectId);
-    return next;
-  });
-  const changeTab = (next: Tab) => setTab(next);
+  const pageTitle = t(({ general: "settings.general", security: "settings.security", storage: "storage.title", about: "settings.about", users: "settings.admin" } as const)[tab]);
 
   return <div
     className="modal-backdrop settings-backdrop"
@@ -568,40 +486,33 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
       if (event.target === event.currentTarget && !newRecoveryKey) onClose();
     }}
   >
-    <section className="modal settings-modal">
+    <section className="modal settings-modal" style={{ "--settings-font-size": `${normalizeFontSize(preferences.fontSize)}px` } as CSSProperties}>
       <div className="settings-layout">
         <aside className="settings-sidebar">
           <h2 className="settings-title"><AppIcon icon={Settings} size={16} />{t("settings.title")}</h2>
-          <nav className="settings-tabs">
-            <button className={tab === "general" ? "active" : ""} onClick={() => changeTab("general")}><AppIcon icon={Settings2} size={16} />{t("settings.general")}</button>
-            <button className={tab === "security" ? "active" : ""} onClick={() => changeTab("security")}><AppIcon icon={Shield} size={16} />{t("settings.security")}</button>
-            <button className={tab === "history" ? "active" : ""} onClick={() => changeTab("history")}><AppIcon icon={HistoryIcon} size={16} />{t("settings.history")}</button>
-            <button className={tab === "trash" ? "active" : ""} onClick={() => changeTab("trash")}><AppIcon icon={Trash2} size={16} />{t("settings.trash")}</button>
-            <button className={tab === "data" ? "active" : ""} onClick={() => changeTab("data")}><AppIcon icon={ArrowLeftRight} size={16} />{t("settings.data")}</button>
-            <button className={tab === "about" ? "active" : ""} onClick={() => changeTab("about")}><AppIcon icon={Info} size={16} />{t("settings.about")}</button>
-            {user.role === "admin" && serverSessionVerified && <button className={`admin-tab ${tab === "users" ? "active" : ""}`} onClick={() => changeTab("users")}><AppIcon icon={ShieldCheck} size={16} />{t("settings.admin")}</button>}
+          <nav className="settings-tabs" aria-label={t("settings.title")}>
+            <button className={tab === "general" ? "active" : ""} aria-current={tab === "general" ? "page" : undefined} onClick={() => changeTab("general")}><AppIcon icon={Palette} size={16} />{t("settings.general")}</button>
+            <button className={tab === "security" ? "active" : ""} aria-current={tab === "security" ? "page" : undefined} onClick={() => changeTab("security")}><AppIcon icon={UserRoundCog} size={16} />{t("settings.security")}</button>
+            <button className={tab === "storage" ? "active" : ""} aria-current={tab === "storage" ? "page" : undefined} onClick={() => changeTab("storage")}><AppIcon icon={Notebook} size={16} />{t("storage.title")}</button>
+            {user.role === "admin" && serverSessionVerified && <button className={`admin-tab ${tab === "users" ? "active" : ""}`} aria-current={tab === "users" ? "page" : undefined} onClick={() => changeTab("users")}><AppIcon icon={ShieldCheck} size={16} />{t("settings.admin")}</button>}
+            <button className={tab === "about" ? "active" : ""} aria-current={tab === "about" ? "page" : undefined} onClick={() => changeTab("about")}><AppIcon icon={Info} size={16} />{t("settings.about")}</button>
           </nav>
         </aside>
         <div className="settings-main">
           <header className="settings-header"><button disabled={Boolean(newRecoveryKey)} onClick={onClose} aria-label={t("settings.close")}><AppIcon icon={X} size={16} /></button></header>
-          <div className="settings-content">
+          <div className="settings-content" ref={contentRef}>
+            <h2 className="settings-page-title">{pageTitle}</h2>
             {!serverSessionVerified && <p className="auth-guidance warning">{t("settings.localOnly")}</p>}
-            {tab === "general" && <div className="settings-section">
-              <div className="profile-summary"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={30} />}</span><span className="profile-identity"><strong>{user.displayName}</strong><small>@{user.username}</small></span><SettingsButton className="primary" disabled={busy || !serverSessionVerified} onClick={openProfileDialog}><AppIcon icon={Pencil} size={15} />{t("settings.editProfile")}</SettingsButton></div>
-              <h3>{t("settings.appearance")}</h3>
+            {tab === "general" && <div className="settings-page general-settings">
+              <section className="settings-section settings-card"><h3>{t("settings.appearance")}</h3>
               <label className="settings-control-row"><span>{t("language.label")}</span><LanguageSelect value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} /></label>
               <label className="settings-control-row"><span>{t("settings.theme")}</span><select value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select></label>
-              <div className="settings-control-row font-size-setting">
-                <span>{t("settings.fontSize")}</span>
-                <div className="font-size-controls">
-                  <label className="font-size-input">
-                    <input type="number" min={MIN_FONT_SIZE} max={MAX_FONT_SIZE} step="1" inputMode="numeric" aria-label={t("settings.fontSizePixels")} value={fontSizeInput} onChange={(event) => updateFontSizeInput(event.target.value)} onBlur={() => setFontSizeInput(String(preferences.fontSize))} />
-                    <span aria-hidden="true">px</span>
-                  </label>
-                  <SettingsButton type="button" className="font-size-reset" disabled={preferences.fontSize === DEFAULT_FONT_SIZE} onClick={restoreDefaultFontSize}><AppIcon icon={RotateCcw} size={15} />{t("settings.restoreDefaultFontSize")}</SettingsButton>
-                </div>
-              </div>
-              <h3>{t("settings.editor")}</h3>
+              <label className="settings-control-row font-size-setting"><span>{t("settings.fontSize")}</span>
+                <select value={normalizeFontSize(preferences.fontSize)} onChange={(event) => onPreferences({ ...preferences, fontSize: normalizeFontSize(Number(event.target.value)) })}>
+                  {Array.from({ length: MAX_FONT_SIZE - MIN_FONT_SIZE + 1 }, (_, index) => MIN_FONT_SIZE + index).map(size => <option key={size} value={size}>{size === MIN_FONT_SIZE ? t("settings.fontSizeSmall", { size }) : size === DEFAULT_FONT_SIZE ? t("settings.fontSizeDefault", { size }) : size === MAX_FONT_SIZE ? t("settings.fontSizeLarge", { size }) : size}</option>)}
+                </select>
+              </label>
+              </section><section className="settings-section settings-card"><h3>{t("settings.editor")}</h3>
               <label className="settings-control-row">
                 <span>{t("settings.wrapCodeBlocks")}</span>
                 <span className="settings-switch">
@@ -615,81 +526,50 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
                   <span className="settings-switch-track" aria-hidden="true" />
                 </span>
               </label>
+              </section>
             </div>}
 
-            {tab === "trash" && <div className="settings-section trash-settings">
-              <h3>{t("settings.trash")}</h3><p className="settings-help">{t("settings.trashHelp")}</p>
-              <label className="settings-control-row"><span>{t("settings.autoDelete")}</span><select disabled={busy || !serverSessionVerified} value={trashRetentionDays === null ? "never" : String(trashRetentionDays)} onChange={(event) => void updateTrashRetention(event.target.value === "never" ? null : Number(event.target.value))}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 30 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></select></label>
-              <div className="trash-heading"><span><h3>{t("settings.deletedItems")}</h3>{trashItems.length > 0 && <small>{trashView.filtering ? t("settings.trashFilterSummary", { count: trashView.matchCount }) : t("settings.trashSummary", { roots: trashView.roots.length, total: trashItems.length })}</small>}</span>{trashItems.length > 0 && <span className="trash-heading-actions">{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton className="trash-collapse-all" onClick={() => setExpandedTrashIds(new Set())}><AppIcon icon={ChevronsUp} size={15} />{t("settings.collapseAll")}</SettingsButton>}<SettingsButton className="trash-clear danger" disabled={purging} onClick={onClearTrash}><AppIcon icon={Trash2} size={15} />{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></span>}</div>
-              {trashItems.length > 0 && <div className="trash-toolbar">
-                <label className="trash-search"><AppIcon icon={Search} size={16} /><input type="search" value={trashQuery} onChange={(event) => setTrashQuery(event.target.value)} placeholder={t("settings.searchTrash")} aria-label={t("settings.searchTrash")} /></label>
-                <select value={trashKindFilter} onChange={(event) => setTrashKindFilter(event.target.value as TrashKindFilter)} aria-label={t("settings.trashTypeFilter")}><option value="all">{t("settings.allTypes")}</option><option value="folder">{t("settings.foldersOnly")}</option><option value="note">{t("settings.notesOnly")}</option></select>
-                <select value={trashSortMode} onChange={(event) => setTrashSortMode(event.target.value as TrashSortMode)} aria-label={t("settings.trashSort")}><option value="deleted-desc">{t("settings.deletedNewest")}</option><option value="deleted-asc">{t("settings.deletedOldest")}</option><option value="name">{t("settings.sortByName")}</option></select>
-              </div>}
-              {visibleTrashRoots.length ? <><div className="trash-list" role="tree">{visibleTrashRoots.map((item) => <TrashBranch key={item.objectId} item={item} childrenByParent={trashView.childrenByParent} descendantCounts={trashView.descendantCounts} expandedIds={expandedTrashIds} automaticallyExpandedIds={trashView.automaticallyExpandedIds} root restoring={restoringTrashId} purging={purging} onToggle={toggleTrashFolder} onRestore={(entry) => void restoreTrashItem(entry)} onPurge={onPurgeTrash} />)}</div>{visibleTrashRootCount < trashView.roots.length && <SettingsButton icon={ChevronDown} className="trash-load-more" onClick={() => setVisibleTrashRootCount((count) => count + TRASH_PAGE_SIZE)}>{t("settings.showMore", { count: Math.min(TRASH_PAGE_SIZE, trashView.roots.length - visibleTrashRootCount) })}</SettingsButton>}</> : <p className="trash-empty">{trashItems.length ? t("settings.noTrashMatches") : t("settings.trashEmpty")}</p>}
-            </div>}
-
-            {tab === "history" && <div className="settings-section history-settings">
-              <h3>{t("settings.history")}</h3>
-              <p className="settings-help">{t("settings.historyHelp")}</p>
-              <label className="settings-control-row">
-                <span>{t("settings.historyAutomatic")}</span>
-                <span className="settings-switch">
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    aria-label={t("settings.historyAutomatic")}
-                    disabled={busy || !serverSessionVerified}
-                    checked={historySettings.enabled}
-                    onChange={(event) => void updateHistorySettings({ enabled: event.target.checked })}
-                  />
-                  <span className="settings-switch-track" aria-hidden="true" />
-                </span>
-              </label>
-              <label className="settings-control-row"><span>{t("settings.historyFrequency")}</span><select disabled={busy || !serverSessionVerified || !historySettings.enabled} value={historySettings.intervalMinutes} onChange={(event) => void updateHistorySettings({ intervalMinutes: Number(event.target.value) as HistorySettings["intervalMinutes"] })}>{[5, 10, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t("settings.minutes", { count: minutes })}</option>)}</select></label>
-              <label className="settings-control-row"><span>{t("settings.historyRetention")}</span><select disabled={busy || !serverSessionVerified} value={historySettings.retentionDays === null ? "never" : historySettings.retentionDays} onChange={(event) => void updateHistorySettings({ retentionDays: event.target.value === "never" ? null : Number(event.target.value) as HistorySettings["retentionDays"] })}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 90 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></select></label>
-              <p className="settings-help">{t("settings.historyTiered")}</p>
-              <div className="history-usage">
-                <span><strong>{t("settings.historyStorage")}</strong><small>{t("settings.historyVersionCount", { count: historySettings.count })}</small></span>
-                <span>{formatHistoryBytes(historySettings.usedBytes)} / {formatHistoryBytes(historySettings.quotaBytes)}</span>
-                <progress max={historySettings.quotaBytes} value={Math.min(historySettings.usedBytes, historySettings.quotaBytes)} />
-              </div>
-              <div className="settings-actions"><SettingsButton className="danger" disabled={busy || !serverSessionVerified || historySettings.count === 0} onClick={() => void onClearHistory()}><AppIcon icon={Trash2} size={15} />{t("settings.historyClearAll")}</SettingsButton></div>
-            </div>}
-
-            {tab === "security" && <div className="settings-section">
-              <h3>{t("settings.devicePin")}</h3><p className="settings-help">{t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}</p>
+            {tab === "security" && <div className="settings-page security-settings">
+              <div className="profile-summary settings-section settings-card"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={30} />}</span><span className="profile-identity"><strong>{user.displayName}</strong><small>@{user.username}</small></span><SettingsButton className="primary" disabled={busy || !serverSessionVerified} onClick={openProfileDialog}><AppIcon icon={Pencil} size={15} />{t("settings.editProfile")}</SettingsButton></div>
+              <section className="settings-section settings-card"><h3>{t("settings.devicePin")}</h3><p className="settings-help">{t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}</p>
               <div className="settings-actions"><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</div>
-              <h3>{t("settings.autoLock")}</h3><p className="settings-help">{t("settings.autoLockHelp")}</p>
+              </section><section className="settings-section settings-card"><h3>{t("settings.autoLock")}</h3><p className="settings-help">{t("settings.autoLockHelp")}</p>
               <label className="settings-control-row"><span>{t("settings.autoLockAfter")}</span><select disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select></label>
-              <h3>{t("settings.loginDevices")}</h3><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
+              </section><section className="settings-section settings-card"><h3>{t("settings.loginDevices")}</h3><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
               {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
               {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && device.active) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row ${device.current ? "current" : ""}`} key={device.id}><span className="session-device-icon"><AppIcon icon={Laptop} /></span><span className="session-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && (device.active ? <SettingsButton className="session-revoke danger" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={LogOut} size={15} />{t("settings.signOut")}</SettingsButton> : <SettingsButton className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}><AppIcon icon={Trash2} size={15} />{t("common.remove")}</SettingsButton>)}</article>)}</div></>}
-              <ApplicationConnectionsSection userId={user.id} online={serverSessionVerified} onNotify={onNotify} />
-              <h3>{t("settings.accountCredentials")}</h3><p className="settings-help">{t("settings.accountCredentialsHelp")}</p>
+              </section><ApplicationConnectionsSection userId={user.id} online={serverSessionVerified} onNotify={onNotify} />
+              <section className="settings-section settings-card"><h3>{t("settings.accountCredentials")}</h3><p className="settings-help">{t("settings.accountCredentialsHelp")}</p>
               <div className="settings-actions"><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</SettingsButton><SettingsButton type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecovery")}</SettingsButton></div>
+              </section>
             </div>}
 
-            {tab === "data" && <div className="settings-section"><StorageUsage online={serverSessionVerified} /><h3>{t("settings.data")}</h3><p className="settings-help">{t("settings.portableHelp")}</p><input ref={fileInput} type="file" accept=".md,.markdown,.txt,.zip" multiple hidden onChange={(event) => { void importSelected(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><SettingsButton icon={Upload} disabled={busy} onClick={() => fileInput.current?.click()}>{t("settings.import")}</SettingsButton><SettingsButton icon={Download} disabled={busy} onClick={() => void onExport()}>{t("settings.export")}</SettingsButton></div></div>}
-            {tab === "about" && <div className="settings-section about-settings">
-              <div className="about-product">
+            {tab === "storage" && <div className="settings-page note-storage-settings">
+              <StorageUsage status={storageStatus} />
+              <HistoryStorageSection historySettings={historySettings} busy={busy} serverSessionVerified={serverSessionVerified} updateHistorySettings={updateHistorySettings} onClearHistory={onClearHistory} />
+              <TrashStorageSection trashItems={trashItems} busy={busy} purging={purging} serverSessionVerified={serverSessionVerified} trashRetentionDays={trashRetentionDays} updateTrashRetention={updateTrashRetention} onRestoreTrash={onRestoreTrash} onPurgeTrash={onPurgeTrash} onClearTrash={onClearTrash} onNotify={onNotify} />
+              <MigrationStorageSection onImport={onImport} onExport={onExport} onNotify={onNotify} />
+            </div>}
+
+            {tab === "about" && <div className="settings-page about-settings">
+              <section className="settings-section settings-card about-overview"><div className="about-product">
                 <h3>Mint Notes</h3>
                 <p>{t("settings.version")} {APP_VERSION}</p>
               </div>
               <div className="about-introduction">
                 <p>{t("settings.aboutDescription")}</p>
               </div>
-              <h3>{t("settings.acknowledgements")}</h3>
+              </section><section className="settings-section settings-card"><h3>{t("settings.acknowledgements")}</h3>
               <p className="settings-help">{t("settings.aboutHelp")}</p>
               <ul className="about-credits">
                 <li><a href="https://github.com/Yuyz0112/typora-web" target="_blank" rel="noreferrer">typora-web</a><span>{t("settings.editorCoreOrigin")}</span></li>
                 <li><a href="https://katex.org/" target="_blank" rel="noreferrer">KaTeX</a><span>{t("settings.mathFormulaRendering")}</span></li>
                 <li><a href="https://mermaid.js.org/" target="_blank" rel="noreferrer">Mermaid</a><span>{t("settings.diagramRendering")}</span></li>
                 <li><a href="https://lucide.dev" target="_blank" rel="noreferrer">Lucide React</a><span>{t("settings.iconLibrary")}</span></li>
-              </ul>
+              </ul></section>
             </div>}
             {tab === "users" && user.role === "admin" && serverSessionVerified && <div className="admin-settings"><AdminPanel currentUser={user} onNotify={onNotify} /></div>}
-            {tab === "general" && <div className="settings-logout-section">
+            {tab === "security" && <div className="settings-logout-section">
               <SettingsButton type="button" className="settings-logout danger" onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} size={16} />{t("app.logout")}</SettingsButton>
             </div>}
           </div>
@@ -723,7 +603,7 @@ export function SettingsPanel({ user, endpoint, credential, serverSessionVerifie
         <header><h3>{t(accountCredentialDialogMode === "password" ? "settings.changePassword" : "settings.resetRecovery")}</h3>{!newRecoveryKey && <button type="button" onClick={closeAccountCredentialDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button>}</header>
         {accountCredentialDialogMode === "password" ? <><p>{t("settings.changePasswordHelp")}</p><form className="compact-form" onSubmit={changePassword}><label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" autoFocus required /></label><label>{t("auth.newMasterPassword")}<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" required /></label><label>{t("auth.confirmNewPassword")}<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" required /></label><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closeAccountCredentialDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" className="primary" disabled={busy}>{t("settings.changePassword")}</SettingsButton></div></form></> : !newRecoveryKey ? <><p>{t("settings.recoveryHelp")}</p><form className="compact-form" onSubmit={resetRecoveryKey}><label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={recoveryPassword} onChange={(event) => setRecoveryPassword(event.target.value)} autoFocus required /></label><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closeAccountCredentialDialog}>{t("common.cancel")}</SettingsButton><SettingsButton type="submit" className="primary" disabled={busy}><AppIcon icon={KeyRound} size={15} />{t("settings.resetRecovery")}</SettingsButton></div></form></> : <><p>{t("settings.recoveryHelp")}</p><div className="recovery-result"><strong>{t("settings.recoveryShownOnce")}</strong><textarea readOnly rows={3} value={newRecoveryKey} /><div className="settings-actions"><SettingsButton icon={Copy} type="button" onClick={() => void navigator.clipboard.writeText(newRecoveryKey)}>{t("common.copy")}</SettingsButton><SettingsButton type="button" onClick={() => downloadRecoveryKey(user.username, newRecoveryKey)}><AppIcon icon={Download} size={15} />{t("common.download")}</SettingsButton></div><label className="recovery-confirm"><input type="checkbox" checked={newRecoveryConfirmed} onChange={(event) => setNewRecoveryConfirmed(event.target.checked)} /><span>{t("auth.recovery.confirm")}</span></label><div className="settings-actions"><SettingsButton icon={Check} type="button" className="primary" disabled={!newRecoveryConfirmed} onClick={closeAccountCredentialDialog}>{t("settings.savedRecovery")}</SettingsButton></div></div></>}
       </div>}
-      {logoutConfirming && <div className="danger-confirm logout-confirm settings-section" role="dialog" aria-modal="true" aria-label={t("settings.logoutTitle")}><header><h3>{t("settings.logoutTitle")}</h3><button type="button" onClick={() => setLogoutConfirming(false)} aria-label={t("common.close")}><AppIcon icon={X} /></button></header><p>{t("settings.logoutWarning")}</p><div className="settings-actions"><SettingsButton icon={X} type="button" onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</SettingsButton><SettingsButton type="button" className="danger" onClick={() => void onLogout()}><AppIcon icon={LogOut} size={15} />{t("app.logout")}</SettingsButton></div></div>}
+      {logoutConfirming && <div className="danger-confirm logout-confirm settings-section" role="dialog" aria-modal="true" aria-label={t("settings.logoutTitle")}><header><h3>{t("settings.logoutTitle")}</h3><button type="button" onClick={() => setLogoutConfirming(false)} aria-label={t("common.close")}><AppIcon icon={X} /></button></header><p>{t("settings.logoutWarning")}</p><PendingStorage status={storageStatus} /><div className="settings-actions"><SettingsButton icon={X} type="button" onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</SettingsButton><SettingsButton type="button" icon={Download} onClick={() => void onExport()}>{t("storage.exportAll")}</SettingsButton><SettingsButton type="button" className="danger" onClick={() => void onLogout()}><AppIcon icon={LogOut} size={15} />{t("app.logout")}</SettingsButton></div></div>}
     </section>
   </div>;
 }

@@ -1,6 +1,10 @@
-import { PhysicalStorage, type PhysicalStorageUsage } from "./storageUsage";
+import { DatabaseStorageSection } from "./storage/DatabaseStorageSection";
+import { AdminQuotaEditor, type StorageQuotaUser } from "./storage/AdminQuotaEditor";
+import { QuotaFields, quotaDraft, quotaPayload } from "./storage/QuotaFields";
+import { formatHistoryBytes } from "./history";
+import { capacityLevel } from "../storage/storageStatus";
 import { type FormEvent, useEffect, useState } from "react";
-import { Copy, KeyRound, ShieldCheck, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { Copy, KeyRound, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
@@ -9,7 +13,7 @@ import { cryptoClient } from "../crypto/client";
 import { translateError, useI18n } from "../i18n";
 import type { KdfParams, User } from "../types";
 
-interface ManagedUser {
+interface ManagedUser extends StorageQuotaUser {
   id: string;
   username: string;
   displayName: string;
@@ -26,14 +30,11 @@ interface AccountSetup {
   expiresAt: string;
 }
 
-function bytes(value: number): string {
-  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KiB`;
-  return `${(value / 1024 / 1024).toFixed(1)} MiB`;
-}
-
 export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNotify: (text: string, tone: ToastTone) => void }) {
   const { formatDateTime, t } = useI18n();
-  const [physical, setPhysical] = useState<PhysicalStorageUsage | null>(null);
+  const [defaultQuotaBytes, setDefaultQuotaBytes] = useState(2 * 1024 * 1024 * 1024);
+  const [newQuota, setNewQuota] = useState(() => quotaDraft("inherit", null));
+  const [quotaTarget, setQuotaTarget] = useState<ManagedUser | null>(null);
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [setups, setSetups] = useState<AccountSetup[]>([]);
   const [username, setUsername] = useState("");
@@ -44,8 +45,8 @@ export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNot
   const [confirmationUsername, setConfirmationUsername] = useState("");
   const [administratorPassword, setAdministratorPassword] = useState("");
 
-  const load = () => api<{ users: ManagedUser[]; setups: AccountSetup[]; physical?: PhysicalStorageUsage }>("/api/admin/users")
-    .then((data) => { setUsers(data.users); setSetups(data.setups); setPhysical(data.physical ?? null); })
+  const load = () => api<{ users: ManagedUser[]; setups: AccountSetup[]; defaultQuotaBytes?: number }>("/api/admin/users")
+    .then((data) => { setUsers(data.users); setSetups(data.setups); setDefaultQuotaBytes(data.defaultQuotaBytes ?? 2 * 1024 * 1024 * 1024); })
     .catch((value) => onNotify(translateError(value, t, "admin.loadFailed"), "warning"));
   useEffect(() => { void load(); }, []);
 
@@ -53,8 +54,8 @@ export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNot
     event.preventDefault();
     setBusy(true);
     try {
-      const result = await api<{ activationCode: string }>("/api/admin/account-setups", { method: "POST", body: JSON.stringify({ username, displayName, expiresInHours: 72 }) });
-      setActivation(result.activationCode); setUsername(""); setDisplayName("");
+      const result = await api<{ activationCode: string }>("/api/admin/account-setups", { method: "POST", body: JSON.stringify({ username, displayName, expiresInHours: 72, storageQuota: quotaPayload(newQuota) }) });
+      setActivation(result.activationCode); setUsername(""); setDisplayName(""); setNewQuota(quotaDraft("inherit", null));
       onNotify(t("admin.codeCreated"), "info");
       await load();
     } catch (value) { onNotify(translateError(value, t, "admin.createFailed"), "warning"); }
@@ -104,21 +105,21 @@ export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNot
     setConfirmationUsername(""); setAdministratorPassword(""); setDeleteTarget(entry);
   };
 
-  return <div className="settings-section admin-panel">
-    <div className="admin-heading"><span><AppIcon icon={ShieldCheck} size={22} /></span><div><h3>{t("settings.admin")}</h3><p>{t("admin.description")}</p></div></div>
-    {physical && <PhysicalStorage usage={physical} />}
-    <section className="admin-user-management">
+  return <div className="settings-page admin-panel">
+    <section className="settings-section settings-card admin-user-management">
       <h3>{t("admin.userManagement")}</h3>
       <div className="admin-subsection">
         <h4>{t("admin.createPending")}</h4><p className="settings-help">{t("admin.createPendingHelp")}</p>
-        <form className="admin-create" onSubmit={create}><label>{t("auth.username")}<input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" required /></label><label>{t("auth.displayName")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label><SettingsButton icon={KeyRound} className="primary compact" disabled={busy}>{t("admin.createCode")}</SettingsButton></form>
+        <form className="admin-create" onSubmit={create}><label>{t("auth.username")}<input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" required /></label><label>{t("auth.displayName")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label><QuotaFields label={t("storage.totalQuota")} defaultBytes={defaultQuotaBytes} value={newQuota} onChange={setNewQuota} disabled={busy} /><SettingsButton icon={KeyRound} className="primary compact" disabled={busy}>{t("admin.createCode")}</SettingsButton></form>
         {activation && <div className="activation-result"><strong>{t("admin.codeShownOnce")}</strong><code>{activation}</code><SettingsButton icon={Copy} onClick={() => navigator.clipboard.writeText(activation)}>{t("common.copy")}</SettingsButton></div>}
         {!!setups.length && <><h4>{t("admin.pending")}</h4><div className="user-list">{setups.map((entry) => <div className="user-row" key={entry.id}><span><strong>{entry.displayName}</strong><small>@{entry.username} · {t("admin.expires", { date: formatDateTime(entry.expiresAt) })}</small></span><SettingsButton icon={X} disabled={busy} onClick={() => void cancel(entry)}>{t("common.cancel")}</SettingsButton></div>)}</div></>}
       </div>
       <div className="admin-subsection">
-        <h4>{t("admin.existingUsers")}</h4><div className="user-list">{users.map((entry) => <div className="user-row" key={entry.id}><span><strong>{entry.displayName}{entry.id === currentUser.id && <em>{t("admin.currentAccount")}</em>}</strong><small>@{entry.username} · {entry.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")} · {t("admin.objectCount", { count: entry.objectCount })} · {bytes(entry.encryptedBytes)}</small></span><div className="user-actions"><SettingsButton disabled={busy || entry.id === currentUser.id} onClick={() => void toggle(entry)}><AppIcon icon={entry.disabled ? UserRoundCheck : UserRoundX} size={15} />{entry.disabled ? t("admin.enable") : t("admin.disable")}</SettingsButton>{entry.id !== currentUser.id && <SettingsButton className="danger" disabled={busy} onClick={() => beginDelete(entry)}><AppIcon icon={Trash2} size={15} />{t("admin.delete")}</SettingsButton>}</div></div>)}</div>
+        <h4>{t("admin.existingUsers")}</h4><div className="user-list">{users.map((entry) => <div className="user-row" key={entry.id}><span><strong>{entry.displayName}{entry.id === currentUser.id && <em>{t("admin.currentAccount")}</em>}</strong><small>@{entry.username} · {entry.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")}</small><small className="user-storage">{formatHistoryBytes(entry.totalBytes ?? entry.encryptedBytes)} / {entry.quotaBytes === null ? t("storage.unlimited") : formatHistoryBytes(entry.quotaBytes ?? defaultQuotaBytes)} · {t(`storage.level.${capacityLevel(entry.totalBytes ?? entry.encryptedBytes, entry.quotaBytes ?? (entry.quotaMode === "unlimited" ? null : defaultQuotaBytes))}`)}</small></span><div className="user-actions"><SettingsButton disabled={busy} onClick={() => setQuotaTarget(entry)}>{t("storage.editQuota")}</SettingsButton><SettingsButton disabled={busy || entry.id === currentUser.id} onClick={() => void toggle(entry)}><AppIcon icon={entry.disabled ? UserRoundCheck : UserRoundX} size={15} />{entry.disabled ? t("admin.enable") : t("admin.disable")}</SettingsButton>{entry.id !== currentUser.id && <SettingsButton className="danger" disabled={busy} onClick={() => beginDelete(entry)}><AppIcon icon={Trash2} size={15} />{t("admin.delete")}</SettingsButton>}</div></div>)}</div>
       </div>
     </section>
+    <DatabaseStorageSection />
+    {quotaTarget && <AdminQuotaEditor user={quotaTarget} defaultBytes={defaultQuotaBytes} onSaved={load} onClose={() => setQuotaTarget(null)} onNotify={onNotify} />}
     {deleteTarget && <div className="danger-confirm" role="dialog" aria-modal="true" aria-label={t("admin.deleteUser")}><header><h3>{t("admin.deleteUserTitle", { username: deleteTarget.username })}</h3><button type="button" onClick={() => setDeleteTarget(null)} aria-label={t("common.close")}><AppIcon icon={X} /></button></header><p>{t("admin.deleteWarning")}</p><form onSubmit={deleteUser}><label>{t("admin.confirmUsername")}<input value={confirmationUsername} onChange={(event) => setConfirmationUsername(event.target.value)} placeholder={deleteTarget.username} required /></label><label>{t("admin.yourPassword")}<input type="password" autoComplete="current-password" value={administratorPassword} onChange={(event) => setAdministratorPassword(event.target.value)} required /></label><div className="settings-actions"><SettingsButton icon={X} type="button" onClick={() => setDeleteTarget(null)}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Trash2} className="danger" disabled={busy || confirmationUsername !== deleteTarget.username}>{t("admin.deleteUser")}</SettingsButton></div></form></div>}
   </div>;
 }

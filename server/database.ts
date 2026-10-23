@@ -8,7 +8,7 @@ import { migrateStorage } from "./storageMigration.js";
 export type AppDatabase = Database.Database;
 export type RegistrationRole = "admin" | "user";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export function runRegistrationTransaction<T>(
   db: AppDatabase,
@@ -36,7 +36,7 @@ export function openDatabase(dataDirectory: string): AppDatabase {
 
   const version = Number(db.pragma("user_version", { simple: true }));
   const hasLegacyTables = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get());
-  if (version !== 0 && version !== 2 && version !== SCHEMA_VERSION) {
+  if (version !== 0 && version !== 2 && version !== 3 && version !== SCHEMA_VERSION) {
     db.close();
     throw new Error(`Unsupported database schema ${version}; Mint Notes requires a fresh schema v${SCHEMA_VERSION} volume`);
   }

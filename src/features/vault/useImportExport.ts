@@ -20,6 +20,7 @@ interface Options {
   publish: (document: OpenDocument, attachments: OpenAttachment[]) => void;
   onImported: (objectId: string) => void | Promise<void>;
   onResult: () => void;
+  beforeExport?: () => Promise<void>;
   notify: (text: string, tone?: ToastTone) => void;
   t: Translate;
 }
@@ -93,6 +94,9 @@ export function useImportExport(options: Options) {
   };
   const exportSelection = (ids: string[] | null) => run(async (isActive, signal) => {
     const { t, notify } = current.current;
+    try { await current.current.beforeExport?.(); }
+    catch { if (isActive()) notify(t("transfer.exportFailed"), "critical"); return; }
+    if (!isActive()) return;
     const documents = current.current.getDocuments();
     const roots = ids ? selectionRoots(documents, ids) : [];
     if (ids && !roots.length) return;

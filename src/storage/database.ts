@@ -330,6 +330,7 @@ export async function deleteLocalUserData(userId: string): Promise<void> {
         historySettingsKey(userId)
         ,`sync-state:${userId}`, `sync-lease:${userId}`, `attachment-gc:${userId}`
       ]);
+      await localDb.meta.where("key").startsWith(`storage-status:${userId}:`).delete();
       await localDb.meta.where("key").startsWith(`history-invalid:${userId}:`).delete();
       await localDb.meta.where("key").startsWith(`history-verified:${userId}:`).delete();
       await localDb.deviceCredentials.delete(userId);

@@ -10,7 +10,8 @@ import {
 
 describe("normalizeFontSize", () => {
   it("keeps supported pixel sizes and clamps out-of-range values", () => {
-    expect(normalizeFontSize(18)).toBe(18);
+    for (const size of [11, 12, 13, 14, 15, 16, 17]) expect(normalizeFontSize(size)).toBe(size);
+    expect(normalizeFontSize(24)).toBe(17);
     expect(normalizeFontSize(MIN_FONT_SIZE - 1)).toBe(MIN_FONT_SIZE);
     expect(normalizeFontSize(MAX_FONT_SIZE + 1)).toBe(MAX_FONT_SIZE);
   });

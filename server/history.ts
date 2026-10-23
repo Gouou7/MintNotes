@@ -95,14 +95,14 @@ export function cleanupAllHistory(db: AppDatabase, now = new Date().toISOString(
 }
 
 /** Reclaim only automatic, unprotected versions belonging to live notes. */
-export function reclaimHistorySpace(db: AppDatabase, userId: string, incoming: number, quota: number): boolean {
+export function reclaimHistorySpace(db: AppDatabase, userId: string, incoming: number, quota: number, excludeHistoryId?: string): boolean {
   return db.transaction(() => {
     let used = historyUsage(db, userId).usedBytes;
     if (used + incoming <= quota) return true;
     const rows = db.prepare(`SELECT h.note_id, h.history_id, h.byte_size FROM note_history h
       JOIN objects o ON o.user_id = h.user_id AND o.object_id = h.note_id
-      WHERE h.user_id = ? AND h.is_protected = 0 AND h.capture_kind != 'manual' AND o.deleted = 0
-      ORDER BY COALESCE(h.retention_at, h.captured_at), h.history_id`).all(userId) as Array<{ note_id: string; history_id: string; byte_size: number }>;
+      WHERE h.user_id = ? AND h.is_protected = 0 AND h.capture_kind != 'manual' AND o.deleted = 0 AND h.history_id != ?
+      ORDER BY COALESCE(h.retention_at, h.captured_at), h.history_id`).all(userId, excludeHistoryId ?? "") as Array<{ note_id: string; history_id: string; byte_size: number }>;
     // Do not destroy old history when even all eligible versions cannot fit the new one.
     if (used + incoming - rows.reduce((sum, r) => sum + r.byte_size, 0) > quota) return false;
     for (const row of rows) {

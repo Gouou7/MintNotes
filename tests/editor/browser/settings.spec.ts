@@ -1,161 +1,188 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 
-test.use({
-  deviceScaleFactor: 2,
-  // Chromium rounds borders using its native scale, independently of emulated DPR.
-  launchOptions: async ({ browserName, launchOptions }, use) => use(browserName === "chromium" ? { ...launchOptions, args: [...(launchOptions.args ?? []), "--force-device-scale-factor=2"] } : launchOptions),
+const tabs = ["Appearance", "Account and security", "Notes and storage", "Administrator settings", "About"];
+const database = { databaseBytes: 83886080, walBytes: 4194304, shmBytes: 32768, backupsBytes: 167772160,
+  reusableBytes: 1048576, logicalBytes: 52428800, userCount: 1, sqliteVersion: "3.50.0", schemaVersion: 4,
+  journalMode: "wal", checkedAt: "2026-10-23T10:30:00Z", available: true };
+
+async function expectInlineQuota(fields: Locator) {
+  const select = fields.locator("select");
+  await select.selectOption("custom");
+  const input = fields.locator("input[type=number]");
+  await input.fill("200");
+  await expect(select).toHaveValue("custom");
+  const [choice, capacity] = await Promise.all([select.boundingBox(), input.boundingBox()]);
+  expect(Math.abs(choice!.y - capacity!.y)).toBeLessThanOrEqual(2);
+  expect(capacity!.x).toBeGreaterThanOrEqual(choice!.x + choice!.width);
+  expect(await fields.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/**", route => route.fulfill({ json: route.request().url().endsWith("/admin/storage") ? database : {
+    days: 30, endpoints: [], connections: [], inactiveRetentionDays: 30, canRevokeOthers: true,
+    users: [{ id: "fixture-user", username: "mint", displayName: "Mint Notes", role: "admin", disabled: false,
+      totalBytes: 389021696, encryptedBytes: 389021696, quotaMode: "inherit", quotaBytes: 2147483648 }], setups: [],
+  } }));
 });
 
-for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 1112], ["mobile", 320, 568]] as const) {
-  test(`${name} settings text buttons follow the Sketch colors and typography`, async ({ page }, testInfo) => {
+for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 1112], ["mobile", 320, 568]] as const) {
+  test(`${name} all settings pages share readable sections and reachable actions in both themes`, async ({ page }, info) => {
     await page.setViewportSize({ width, height });
-    await page.route("**/api/**", route => route.fulfill({ json: { days: 30 } }));
     await page.goto("/settings.html");
-    for (const theme of ["dark", "light"]) {
-      await page.getByRole("combobox", { name: "Theme", exact: true }).selectOption(theme);
-      const primary = page.getByRole("button", { name: "Edit profile", exact: true });
-      const danger = page.getByRole("button", { name: "Log out", exact: true });
-      for (const button of [primary, danger]) {
-        await expect(button).toHaveCSS("height", "30px");
-        await expect(button).toHaveCSS("border-radius", "8px");
-        await expect(button).toHaveCSS("border-top-width", "0px");
-        await expect(button).toHaveCSS("font-weight", "600");
-        await expect(button.locator("svg")).toHaveCSS("width", "16px");
-      }
-      await expect(primary).toHaveCSS("background-color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
-      await expect(primary).toHaveCSS("color", "rgba(0, 0, 0, 0.9)");
-      await expect(danger).toHaveCSS("color", "rgba(255, 93, 93, 0.9)");
-      await expect(danger).toHaveCSS("background-color", theme === "dark" ? "rgba(255, 93, 93, 0.1)" : "rgba(255, 93, 93, 0.2)");
-      await danger.hover();
-      await expect(danger).toHaveCSS("background-color", theme === "dark" ? "rgba(255, 93, 93, 0.2)" : "rgba(255, 93, 93, 0.3)");
-      await page.mouse.down();
-      await expect(danger).toHaveCSS("background-color", theme === "dark" ? "rgba(255, 93, 93, 0.3)" : "rgba(255, 93, 93, 0.4)");
-      const chrome = (await page.locator(".settings-header").boundingBox())!;
-      await page.mouse.move(chrome.x + 10, chrome.y + chrome.height / 2); await page.mouse.up(); await danger.blur();
-      await expect(danger).toHaveCSS("background-color", theme === "dark" ? "rgba(255, 93, 93, 0.1)" : "rgba(255, 93, 93, 0.2)");
-      await page.locator(".settings-content").evaluate(element => { element.scrollTop = 0; });
-      await page.screenshot({ path: testInfo.outputPath(`settings-buttons-${name}-${theme}.png`) });
-
-      await primary.click();
-      const profile = page.getByRole("dialog", { name: "Edit profile", exact: true });
-      const normal = profile.getByRole("button", { name: "Upload avatar", exact: true });
-      await expect(normal).toHaveCSS("height", "30px");
-      await expect(normal).toHaveCSS("border-top-width", "0px");
-      await expect(normal).toHaveCSS("border-radius", "8px");
-      await expect(normal).toHaveCSS("font-weight", "600");
-      await expect(normal).toHaveCSS("color", theme === "dark" ? "rgba(255, 255, 255, 0.9)" : "rgba(0, 0, 0, 0.9)");
-      await expect(normal).toHaveCSS("background-color", theme === "dark" ? "color(srgb 1 1 1 / 0.1)" : "color(srgb 0 0 0 / 0.1)");
-      await expect(profile.getByRole("button", { name: "Change name", exact: true })).toBeDisabled();
-      await expect(profile.getByRole("button", { name: "Change name", exact: true })).toHaveCSS("opacity", "0.45");
-      await page.screenshot({ path: testInfo.outputPath(`settings-profile-buttons-${name}-${theme}.png`) });
-      await profile.getByRole("button", { name: "Close", exact: true }).first().click();
-      await expect(profile).toHaveCount(0);
-    }
-  });
-
-  test(`${name} first settings load uses the themed window and remains dismissible`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width, height });
+    const content = page.locator(".settings-content"), header = page.locator(".settings-header");
+    await expect(page.locator(".settings-tabs button")).toHaveText(tabs);
     for (const theme of ["light", "dark"]) {
-      await page.goto(`/settings.html?loading&offline&theme=${theme}`);
-      const modal = page.locator(".settings-modal"), header = page.locator(".settings-header");
-      await expect(page.locator(".settings-loading-content")).toHaveAttribute("aria-busy", "true");
-      await expect(modal).toHaveCSS("background-color", theme === "light" ? "rgb(255, 255, 255)" : "rgb(24, 24, 24)");
-      await expect(header).toHaveCSS("border-bottom-color", theme === "light" ? "rgb(226, 226, 226)" : "rgb(51, 51, 51)");
-      await expect(header).toHaveCSS("border-bottom-width", "0.5px");
-      await expect(header).toHaveCSS("backdrop-filter", "blur(25px)");
-      await expect(header).toHaveCSS("background-color", theme === "light" ? "color(srgb 0 0 0 / 0.05)" : "color(srgb 0 0 0 / 0.3)");
-      await expect(page.locator(".settings-backdrop")).toHaveCSS("backdrop-filter", "blur(5px)");
-      const bounds = (await modal.boundingBox())!, headerBounds = (await header.boundingBox())!;
-      if (name !== "mobile") {
-        expect(bounds.width).toBe(Math.min(798, width - 40)); expect(bounds.height).toBe(598);
-        await expect(modal).toHaveCSS("border-radius", "20px");
-        if (theme === "light") await expect(page.locator(".settings-sidebar")).toHaveCSS("background-color", "rgb(246, 246, 246)");
-      } else {
-        expect(bounds).toEqual({ x: 0, y: 0, width, height });
+      await page.getByRole("button", { name: "Appearance", exact: true }).click();
+      await page.getByRole("combobox", { name: "Theme", exact: true }).selectOption(theme);
+      const fontSize = page.getByRole("combobox", { name: "Font size", exact: true });
+      await expect(fontSize.locator("option")).toHaveText(["11 (Small)", "12", "13", "14 (Default)", "15", "16", "17 (Large)"]);
+      for (const size of ["11", "17", "14"]) {
+        await fontSize.selectOption(size); await expect(fontSize).toHaveValue(size);
+        await expect(fontSize).toHaveCSS("font-size", `${size}px`);
+        await expect(content.locator(".settings-control-row > span").first()).toHaveCSS("font-size", `${size}px`);
+        await expect(page.locator(".settings-tabs button").first()).toHaveCSS("font-size", `${size}px`);
+        await expect(page.locator(".settings-tabs button").first()).toHaveCSS("font-weight", "700");
+        await expect(content.locator("h3").first()).toHaveCSS("font-size", `${Number(size) + 2}px`);
+        await expect(content.locator(".settings-page-title")).toHaveCSS("font-size", `${Number(size) + 10}px`);
       }
-      const spinnerBounds = (await page.locator(".settings-loading-content .spinner").boundingBox())!;
-      expect(spinnerBounds.y).toBeGreaterThan(headerBounds.y + headerBounds.height);
-      expect(spinnerBounds.y + spinnerBounds.height).toBeLessThan(bounds.y + bounds.height);
-      await page.screenshot({ path: testInfo.outputPath(`settings-loading-${name}-${theme}.png`) });
-      await page.evaluate(() => window.mintSettingsFixture.finishLoading());
-      await expect(page.locator(".settings-loading-content")).toHaveCount(0);
-      await expect(page.getByRole("combobox", { name: "Theme", exact: true })).toBeVisible();
-      expect(await modal.boundingBox()).toEqual(bounds);
-      expect(await header.boundingBox()).toEqual(headerBounds);
+      for (const title of tabs) {
+        const nav = page.locator(".settings-tabs").getByRole("button", { name: title, exact: true });
+        await nav.click();
+        await expect(nav).toHaveAttribute("aria-current", "page");
+        await expect(nav).toHaveCSS("font-weight", "700");
+        for (const inactive of await page.locator(".settings-tabs button:not(.active)").all()) {
+          await expect(inactive).toHaveCSS("font-weight", "400");
+        }
+        expect(await nav.evaluate(element => {
+          const sample = document.createElement("span"); sample.style.color = "var(--accent-text)"; element.append(sample);
+          const expected = getComputedStyle(sample).color; sample.remove(); return getComputedStyle(element).color === expected;
+        })).toBe(true);
+        if (title === "Appearance") await expect(content.locator(".profile-summary")).toHaveCount(0);
+        if (title === "Account and security") await expect(content.locator(".security-settings > .profile-summary").first()).toContainText("Mint Notes");
+        await expect(content.locator(".settings-page-title")).toHaveText(title);
+        // Resolve the shared neutral color through CSS rather than comparing color syntax.
+        expect(await nav.evaluate(element => {
+          const sample = document.createElement("span"); sample.style.background = "var(--button-hover)"; element.append(sample);
+          const expected = getComputedStyle(sample).backgroundColor; sample.remove();
+          return getComputedStyle(element).backgroundColor === expected;
+        })).toBe(true);
+        if (name === "mobile") {
+          const padding = await page.locator(".settings-tabs").evaluate(element => { const style = getComputedStyle(element); return [style.paddingTop, style.paddingBottom]; });
+          expect(padding[0]).toBe(padding[1]);
+          expect(parseFloat(padding[0])).toBeGreaterThan(0);
+          await expect(page.locator(".settings-sidebar")).toHaveCSS("backdrop-filter", "blur(25px)");
+        } else await expect(header).toHaveCSS("backdrop-filter", "blur(25px)");
+        expect(await content.evaluate(element => element.scrollTop)).toBe(0);
+        await expect(content.locator(".settings-card").first()).toBeVisible();
+        if (title === "Administrator settings") await expect(page.locator(".database-storage")).toContainText("Database available");
+        expect(await content.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+        // Individual cards must stay within the scroll surface, including forms and counts.
+        expect(await content.locator(".settings-card").evaluateAll(cards => cards.every(card => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
+        if (title === "Notes and storage") {
+          const counts = content.locator(".storage-pending-item");
+          await expect(counts).toHaveCount(3);
+          expect(await counts.evaluateAll(items => items.every((item, i) => !i || item.getBoundingClientRect().left - items[i - 1].getBoundingClientRect().right >= 15))).toBe(true);
+          await expect(counts.locator("strong")).toHaveText(["12", "3", "24"]);
+          await expect(counts.first().locator("span")).toHaveCSS("font-size", "14px");
+          const historyQuota = content.locator(".history-budget .quota-fields");
+          await expect(historyQuota.locator("option")).toHaveText(["Unlimited", "100MiB", "200MiB", "500MiB", "Custom"]);
+          await expectInlineQuota(historyQuota);
+          const saveQuota = content.locator(".history-budget").getByRole("button", { name: "Save quota", exact: true });
+          const [controls, save] = await Promise.all([historyQuota.locator(".quota-controls").boundingBox(), saveQuota.boundingBox()]);
+          expect(save!.x).toBeGreaterThanOrEqual(controls!.x + controls!.width);
+          expect(Math.abs(save!.y + save!.height / 2 - controls!.y - controls!.height / 2)).toBeLessThanOrEqual(2);
+          await expect(saveQuota).toHaveText(width <= 720 ? "Save" : "Save quota", { useInnerText: true });
+          await expect(saveQuota).toHaveCSS("font-size", "14px");
+          await expect(saveQuota).toHaveCSS("font-weight", "700");
+          await expect(saveQuota).not.toHaveClass(/primary/);
+          expect(save!.width).toBeLessThan(controls!.width);
+          await page.screenshot({ path: info.outputPath(`${name}-${theme}-history-custom.png`) });
+          await content.evaluate(element => { element.scrollTop = 0; });
+        }
+        if (title === "Administrator settings") {
+          const newQuota = content.locator(".admin-create .quota-fields");
+          await expect(newQuota.locator("option")).toHaveText(["Unlimited", "100MiB", "200MiB", "500MiB", "1GiB", "2GiB", "Custom"]);
+          await page.getByRole("button", { name: "Edit quota", exact: true }).first().click();
+          const dialog = page.locator(".quota-dialog");
+          await expectInlineQuota(dialog.locator(".quota-fields"));
+          await page.screenshot({ path: info.outputPath(`${name}-${theme}-quota-custom.png`) });
+          await dialog.getByRole("button", { name: "Close", exact: true }).click();
+          await content.evaluate(element => { element.scrollTop = 0; });
+        }
+        await page.screenshot({ path: info.outputPath(`${name}-${theme}-${title.replaceAll(" ", "-")}.png`) });
+        const chrome = await header.boundingBox(), titleBefore = (await content.locator(".settings-page-title").boundingBox())!;
+        await content.evaluate(element => { element.scrollTop = element.scrollHeight; });
+        expect(await header.boundingBox()).toEqual(chrome);
+        const scrolled = await content.evaluate(element => element.scrollTop);
+        expect((await content.locator(".settings-page-title").boundingBox())!.y).toBeCloseTo(titleBefore.y - scrolled, 0);
+        const last = content.locator("button:not(:disabled)").last();
+        if (await last.count()) {
+          await last.focus();
+          const action = (await last.boundingBox())!, modal = (await page.locator(".settings-modal").boundingBox())!;
+          expect(action.y + action.height).toBeLessThanOrEqual(modal.y + modal.height);
+          expect(action.y).toBeGreaterThanOrEqual(chrome!.y + chrome!.height);
+        }
+      }
     }
-    await page.goto("/settings.html?loading&offline&theme=light");
-    await expect(page.locator(".settings-loading-content")).toBeVisible();
+    await page.getByRole("button", { name: "Appearance", exact: true }).click();
+    await page.getByRole("combobox", { name: "Font size", exact: true }).selectOption("17");
+    for (const title of tabs) {
+      await page.locator(".settings-tabs").getByRole("button", { name: title, exact: true }).click();
+      if (title === "Administrator settings") await expect(page.locator(".database-storage")).toContainText("Database available");
+      expect(await content.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+      expect(await content.locator(".settings-card").evaluateAll(cards => cards.every(card => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
+      for (const button of await content.locator(".settings-action-button").all()) {
+        await expect(button).toHaveCSS("font-size", "17px");
+        await expect(button).toHaveCSS("font-weight", "700");
+      }
+      if (title === "Notes and storage") {
+        const labels = content.locator(".storage-pending-item > span");
+        expect(await labels.evaluateAll(items => items.every(label => label.getBoundingClientRect().right <= label.parentElement!.getBoundingClientRect().right + 1))).toBe(true);
+        await expectInlineQuota(content.locator(".history-budget .quota-fields"));
+      }
+      await page.screenshot({ path: info.outputPath(`${name}-large-${title.replaceAll(" ", "-")}.png`) });
+    }
+    await page.getByRole("button", { name: "Appearance", exact: true }).click();
+    await page.getByRole("combobox", { name: "Font size", exact: true }).selectOption("14");
+    await page.getByRole("button", { name: "Account and security", exact: true }).click();
+    await page.getByRole("button", { name: "Edit profile", exact: true }).click();
+    const profile = page.getByRole("dialog", { name: "Edit profile", exact: true });
+    await expect(profile.getByRole("button", { name: "Upload avatar", exact: true })).toBeVisible();
+    await profile.getByRole("button", { name: "Close", exact: true }).first().click();
+    await page.getByRole("button", { name: "Log out", exact: true }).click();
+    const logout = page.getByRole("dialog", { name: "Log out of this device?", exact: true });
+    await expect(logout.locator(".storage-pending-item strong")).toHaveText(["12", "3", "24"]);
+    await logout.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.getByRole("button", { name: "Close settings", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Settings", exact: true })).toHaveCount(0);
-    await page.evaluate(() => window.mintSettingsFixture.finishLoading());
     await expect(page.locator(".settings-modal")).toHaveCount(0);
   });
 
-  test(`${name} settings retain theme outlines, fixed glass chrome and reachable controls`, async ({ page }, testInfo) => {
+  test(`${name} loading keeps the window stable and can be dismissed`, async ({ page }) => {
     await page.setViewportSize({ width, height });
-    await page.route("**/api/**", route => route.fulfill({ json: { days: 30, endpoints: [], inactiveRetentionDays: 30, canRevokeOthers: true, users: [], setups: [] } }));
-    await page.goto("/settings.html");
-    const modal = page.locator(".settings-modal"), header = page.locator(".settings-header"), tabs = page.locator(".settings-tabs"), content = page.locator(".settings-content");
-    const themeSelect = page.getByRole("combobox", { name: "Theme", exact: true });
-    for (const theme of ["light", "dark", "light"]) {
-      await page.getByRole("button", { name: "General", exact: true }).click();
-      await themeSelect.selectOption(theme);
-      const outline = theme === "light" ? "rgb(226, 226, 226)" : "rgb(51, 51, 51)";
-      await expect(modal).toHaveCSS("background-color", theme === "light" ? "rgb(255, 255, 255)" : "rgb(24, 24, 24)");
-      await expect(header).toHaveCSS("border-bottom-color", outline);
-      await expect(header).toHaveCSS("border-bottom-width", "0.5px");
-      await expect(header).toHaveCSS("backdrop-filter", "blur(25px)");
-      await expect(header).toHaveCSS("background-color", theme === "light" ? "color(srgb 0 0 0 / 0.05)" : "color(srgb 0 0 0 / 0.3)");
-      await expect(page.locator(".note-pane-top")).toHaveCSS("backdrop-filter", "blur(12px)");
-      await expect(page.locator(".settings-backdrop")).toHaveCSS("backdrop-filter", "blur(5px)");
-      const bounds = (await modal.boundingBox())!;
-      expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
-      expect(bounds.y).toBeGreaterThanOrEqual(0); expect(bounds.y + bounds.height).toBeLessThanOrEqual(height);
-      if (name === "mobile") {
-        await expect(modal).toHaveCSS("border-top-width", "0px");
-        await expect(tabs).toHaveCSS("border-bottom-color", outline);
-        await expect(tabs).toHaveCSS("border-bottom-width", "0.5px");
-        expect(await tabs.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
-        await expect(tabs).toHaveCSS("backdrop-filter", "blur(25px)");
-      } else {
-        expect(bounds.width).toBe(Math.min(798, width - 40)); expect(bounds.height).toBe(598);
-        await expect(modal).toHaveCSS("border-top-color", outline);
-        await expect(modal).toHaveCSS("border-radius", "20px");
-        await expect(page.locator(".settings-sidebar")).toHaveCSS("border-right-color", outline);
-        await expect(page.locator(".settings-sidebar")).toHaveCSS("border-right-width", "0.5px");
-        if (theme === "light") await expect(page.locator(".settings-sidebar")).toHaveCSS("background-color", "rgb(246, 246, 246)");
-        expect((await page.locator(".settings-sidebar").boundingBox())!.width).toBe(200);
-      }
-      await page.screenshot({ path: testInfo.outputPath(`settings-${name}-${theme}.png`) });
-      await page.getByRole("button", { name: "Security", exact: true }).click();
-      await expect(content.getByText(/Signed-out and expired device records/)).toBeVisible();
-      const chromeBounds = await header.boundingBox(), tabBounds = await tabs.boundingBox();
-      await content.evaluate(element => { element.scrollTop = element.scrollHeight; });
-      expect(await content.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
-      expect(await header.boundingBox()).toEqual(chromeBounds); expect(await tabs.boundingBox()).toEqual(tabBounds);
-      const lastControl = content.getByRole("button", { name: "Reset recovery key", exact: true });
-      await lastControl.focus();
-      const controlBounds = (await lastControl.boundingBox())!;
-      expect(controlBounds.y).toBeGreaterThanOrEqual(name === "mobile" ? tabBounds!.y + tabBounds!.height : chromeBounds!.y + chromeBounds!.height);
-      expect(controlBounds.y + controlBounds.height).toBeLessThanOrEqual(bounds.y + bounds.height);
-    }
+    await page.goto("/settings.html?loading&offline&theme=light");
+    const modal = page.locator(".settings-modal");
+    await expect(page.locator(".settings-loading-content")).toHaveAttribute("aria-busy", "true");
+    const bounds = await modal.boundingBox();
+    await page.evaluate(() => window.mintSettingsFixture.finishLoading());
+    await expect(page.getByRole("combobox", { name: "Theme", exact: true })).toBeVisible();
+    expect(await modal.boundingBox()).toEqual(bounds);
     await page.getByRole("button", { name: "Close settings", exact: true }).click();
+    await expect(modal).toHaveCount(0);
+    await page.goto("/settings.html?loading&offline");
+    await page.getByRole("button", { name: "Close settings", exact: true }).click();
+    await page.evaluate(() => window.mintSettingsFixture.finishLoading());
     await expect(modal).toHaveCount(0);
   });
 }
 
-test("offline settings keep the notice below the chrome and honor reduced transparency", async ({ page }) => {
+test("offline settings retain a visible notice and respect forced colors", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/settings.html?offline");
-  const notice = page.locator(".settings-content > .auth-guidance"), tabs = page.locator(".settings-tabs");
+  const notice = page.locator(".settings-content > .auth-guidance");
   await expect(notice).toBeVisible();
-  expect((await notice.boundingBox())!.y).toBeGreaterThan((await tabs.boundingBox())!.y + (await tabs.boundingBox())!.height);
+  expect((await notice.boundingBox())!.y).toBeGreaterThan((await page.locator(".settings-header").boundingBox())!.y);
   await page.emulateMedia({ forcedColors: "active" });
-  for (const selector of [".settings-header", ".settings-tabs", ".settings-backdrop"]) {
-    await expect(page.locator(selector)).toHaveCSS("backdrop-filter", "none");
-  }
-  await page.getByRole("button", { name: "Close settings", exact: true }).click();
-  await expect(page.locator(".settings-modal")).toHaveCount(0);
+  for (const selector of [".settings-header", ".settings-sidebar", ".settings-backdrop"]) await expect(page.locator(selector)).toHaveCSS("backdrop-filter", "none");
 });
 
 test("settings controls distinguish switch states and keep theme borders and keyboard focus visible", async ({ page, browserName }) => {
@@ -211,8 +238,9 @@ test("settings controls distinguish switch states and keep theme borders and key
     await expect(track).toHaveCSS("background-color", theme === "light" ? "rgb(215, 215, 215)" : "rgb(54, 54, 54)");
   }
   await themeSelect.selectOption("light");
+  await page.getByRole("button", { name: "Account and security", exact: true }).click();
   const logout = page.getByRole("button", { name: "Log out", exact: true });
-  await toggle.focus(); await page.keyboard.press(tabKey);
+  await logout.focus(); await page.keyboard.press(backTabKey); await page.keyboard.press(tabKey);
   await expect(logout).toBeFocused(); await expect(logout).toHaveCSS("outline-width", "2px");
   await expect(logout).toHaveCSS("outline-color", "rgb(21, 21, 21)");
 });

@@ -204,7 +204,8 @@ export function useVaultHistory(options: Options) {
     if (!options.force && latestSignature === signature) return null;
 
     const localPendingBytes = (await localDb.historyOutbox.where("userId").equals(userId).toArray()).reduce((sum, item) => sum + item.byteSize, 0);
-    if (localPendingBytes >= historySettingsRef.current.quotaBytes) {
+    const pendingBudget = Math.min(historySettingsRef.current.quotaBytes ?? Infinity, historySettingsRef.current.totalQuotaBytes ?? Infinity);
+    if (localPendingBytes >= pendingBudget) {
       if (captureKind === "manual" || captureKind === "restore-safety") throw new Error(t("notice.historyQuotaReached"));
       historyQuotaPaused.current = true;
       showMessage(t("notice.historyQuotaReached"), "warning");
@@ -213,7 +214,7 @@ export function useVaultHistory(options: Options) {
     const created = await historyController.createSnapshot(
       { ...document, attachmentIds: payload.attachmentIds },
       captureKind,
-      { capturedAt, name: options.name, protected: options.protected, quotaBytes: historySettingsRef.current.quotaBytes }
+      { capturedAt, name: options.name, protected: options.protected, quotaBytes: Number.isFinite(pendingBudget) ? pendingBudget : null }
     ).catch((error: unknown) => {
       if (error instanceof Error && error.message === "HISTORY_LOCAL_BUDGET_EXCEEDED" && captureKind !== "manual" && captureKind !== "restore-safety") {
         historyQuotaPaused.current = true; showMessage(t("notice.historyQuotaReached"), "warning"); return null;

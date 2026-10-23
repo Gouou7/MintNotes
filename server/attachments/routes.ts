@@ -1,5 +1,5 @@
+import { assertStorageGrowth, StorageQuotaError } from "../storageQuota.js";
 import { registerAttachmentLifecycle } from "./lifecycle.js";
-import { storageUsage } from "../storageUsage.js";
 import { operationKeySchema, requireLiveOperation } from "../sync/lifecycle.js";
 import { validSyncLease } from "../sync/protocol.js";
 import type { FastifyInstance } from "fastify";
@@ -88,14 +88,9 @@ export function registerAttachmentRoutes(
       "SELECT 1 FROM attachment_chunks WHERE user_id = ? AND attachment_id = ? AND chunk_index = ?"
     ).get(scope.userId, params.data.attachmentId, params.data.index);
     if (existing) return reply.code(409).send({ error: "Attachment chunk already exists" });
-    const used = storageUsage(db, scope.userId).contentBytes;
-    if (used + body.byteLength + Buffer.byteLength(headers.data["x-webmd-nonce"]) > config.userStorageQuotaBytes) {
-      logEvent(request.log, "warn", "storage.quota_rejected", {
-        actorRef: logRefs.create("user", scope.userId),
-        resource: "attachments"
-      });
-      return reply.code(413).send({ error: "User storage quota exceeded" });
-    }
+  try {
+    db.transaction(() => {
+    assertStorageGrowth(db, scope.userId, body.byteLength + Buffer.byteLength(headers.data["x-webmd-nonce"]), config.userStorageQuotaBytes);
     db.prepare("INSERT OR IGNORE INTO attachment_owners(user_id, attachment_id, note_id) VALUES (?, ?, ?)").run(scope.userId, params.data.attachmentId, headers.data["x-webmd-owner-note"]);
     db.prepare(`
       INSERT INTO attachment_chunks (
@@ -113,6 +108,11 @@ export function registerAttachmentRoutes(
       headers.data["x-webmd-idempotency-key"],
       new Date().toISOString()
     );
+    }).immediate();
+  } catch (error) {
+    if (error instanceof StorageQuotaError) return reply.code(413).send({ error: error.message, code: error.code });
+    throw error;
+  }
     return { ok: true };
   });
 

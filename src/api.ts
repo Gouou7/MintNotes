@@ -28,6 +28,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (response.status === 401 && typeof window !== "undefined" && !expectedCredentialFailure) {
     window.dispatchEvent(new CustomEvent("webmd:session-invalid"));
   }
+  if (typeof window !== "undefined" && (response.status === 413 || (response.ok && init.method && init.method !== "GET"
+    && /objects|attachments|history|avatar|storage-quota/.test(path)))) window.dispatchEvent(new CustomEvent("webmd:storage-refresh"));
   if (!response.ok) throw new ApiError(String(data.error ?? `Request failed (${response.status})`), response.status, data);
   return data as T;
 }
@@ -40,6 +42,7 @@ export async function uploadAttachmentChunk(path: string, ciphertext: ArrayBuffe
     body: ciphertext,
     signal: AbortSignal.timeout(30_000)
   });
+  if (typeof window !== "undefined" && (response.ok || response.status === 413)) window.dispatchEvent(new CustomEvent("webmd:storage-refresh"));
   if (!response.ok) {
     const data = await response.json().catch(() => ({})) as { error?: string };
     throw new ApiError(data.error ?? `Attachment upload failed (${response.status})`, response.status, data);

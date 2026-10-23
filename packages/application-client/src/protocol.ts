@@ -46,7 +46,8 @@ export interface ApplicationConnectionBootstrap {
   connection: ApplicationConnection;
   vaultEnvelope: VaultEnvelope;
   historyEnabled: boolean;
-  historyQuotaBytes?: number;
+  historyQuotaBytes?: number | null;
+  quotaBytes?: number | null;
   serverTime: string;
 }
 

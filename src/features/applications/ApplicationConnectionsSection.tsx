@@ -44,7 +44,7 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
     try { await navigator.clipboard.writeText(value); onNotify(t("applications.copied"), "info"); }
     catch { onNotify(t("applications.copyFailed"), "warning"); }
   };
-  return <section className="application-connections" aria-label={t("applications.title")}>
+  return <section className="settings-section settings-card application-connections" aria-label={t("applications.title")}>
     <h3>{t("applications.title")}</h3>
     <p className="settings-help">{t("applications.help")}</p>
     {!online && <p className="session-gate">{t("notice.onlineSessionRequired")}</p>}

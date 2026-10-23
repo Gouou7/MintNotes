@@ -193,6 +193,7 @@ export interface ServerLogEventFields {
   "account.endpoint_changed": { actorRef: LogReference; endpointRef: LogReference; action: "removed" | "signed_out" };
   "admin.account_setup_created": { actorRef: LogReference; setupRef: LogReference; expiresInHours: number };
   "admin.account_setup_deleted": { actorRef: LogReference; setupRef: LogReference };
+  "admin.storage_quota_changed": { actorRef: LogReference; targetRef: LogReference; mode: string; quotaBytes: number | null };
   "admin.account_status_changed": { actorRef: LogReference; targetRef: LogReference; disabled: boolean };
   "admin.account_deleted": { actorRef: LogReference; targetRef: LogReference };
   "sync.object_conflict": { actorRef: LogReference; objectRef: LogReference; reason: "revision" | "objectType" | "idempotency" };
@@ -224,6 +225,7 @@ const EVENT_MESSAGES: Record<keyof ServerLogEventFields, string> = {
   "account.endpoint_changed": "trusted endpoint changed",
   "admin.account_setup_created": "account setup created",
   "admin.account_setup_deleted": "account setup deleted",
+  "admin.storage_quota_changed": "account storage quota changed",
   "admin.account_status_changed": "account status changed",
   "admin.account_deleted": "account deleted",
   "sync.object_conflict": "object synchronization conflict",

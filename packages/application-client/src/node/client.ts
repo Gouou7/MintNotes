@@ -345,7 +345,7 @@ export class ApplicationClient {
     if (original && this.bootstrap!.historyEnabled) {
       const history = await this.historyWrite(original);
       const pendingBytes = this.store.pending().reduce((sum, operation) => sum + (operation.body?.history?.ciphertext.length ?? 0) + (operation.body?.history?.metadataCiphertext.length ?? 0) + (operation.body?.history?.nonce.length ?? 0) + (operation.body?.history?.metadataNonce.length ?? 0), 0);
-      if (pendingBytes + history.ciphertext.length + history.metadataCiphertext.length + history.nonce.length + history.metadataNonce.length <= (this.bootstrap!.historyQuotaBytes ?? 256 * 1024 * 1024)) body.history = history;
+      if (pendingBytes + history.ciphertext.length + history.metadataCiphertext.length + history.nonce.length + history.metadataNonce.length <= Math.min(this.bootstrap!.historyQuotaBytes === null ? Infinity : this.bootstrap!.historyQuotaBytes ?? 256 * 1024 * 1024, this.bootstrap!.quotaBytes ?? Infinity)) body.history = history;
       else this.store.set("historyPaused", true);
     }
     if (this.activeSignal?.aborted) throw new ApplicationError("CANCELLED", "Request cancelled");

@@ -31,6 +31,7 @@ function SettingsFixture() {
     <aside className="tree-pane"><div className="side-header">Mint Notes</div><button onClick={() => setOpen(true)}>Open settings</button></aside>
     <main className="note-pane"><div className="note-pane-top"><div className="note-toolbar">Note title</div></div></main>
     {open && <Suspense fallback={<SettingsPanelLoading onClose={() => setOpen(false)} />}><SettingsPanel
+      storageStatus={{ localReady: true, usage: { totalBytes: 389021696, contentBytes: 262144000, noteBytes: 12582912, attachmentBytes: 249561088, historyBytes: 125829120, profileBytes: 1048576, trashBytes: 15728640, quotaBytes: 2147483648, historyQuotaBytes: 268435456, checkedAt: "2026-10-23T10:30:00Z" }, local: { bytes: 73400320, objects: 12, attachments: 3, history: 24 }, lastSync: "2026-10-23T10:30:00Z", unsaved: 2, estimate: null, persistence: "unsupported", failed: false, refreshing: false, stale: false, refresh: done, requestPersistence: done }}
       user={{ id: "fixture-user", username: "mint", displayName: "Mint Notes", role: "admin" }}
       endpoint={{ id: "fixture-endpoint", remembered: false }} credential={null} serverSessionVerified={!new URLSearchParams(location.search).has("offline")}
       onCredentialChange={noop} preferences={preferences} onPreferences={setPreferences} onClose={() => setOpen(false)} onLogout={done}

@@ -1,7 +1,7 @@
 export const DEFAULT_FONT_SIZE = 14;
 export const DEFAULT_WRAP_CODE_BLOCKS = true;
-export const MIN_FONT_SIZE = 12;
-export const MAX_FONT_SIZE = 24;
+export const MIN_FONT_SIZE = 11;
+export const MAX_FONT_SIZE = 17;
 
 const LEGACY_FONT_SIZES: Record<string, number> = {
   small: 13,

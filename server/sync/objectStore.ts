@@ -1,8 +1,9 @@
+import { StorageQuotaError, assertStorageGrowth } from "../storageQuota.js";
 import { z } from "zod";
 import type { AppDatabase } from "../database.js";
 import type { ObjectScope } from "../types.js";
 import { createHash } from "node:crypto";
-import { storageUsage, metadataUsage } from "../storageUsage.js";
+import { metadataUsage } from "../storageUsage.js";
 import { operationKeySchema, recordChange, requireLiveOperation } from "./lifecycle.js";
 
 const envelopeField = z.string().min(16).max(2_000_000);
@@ -46,11 +47,7 @@ class ObjectOwnershipError extends Error {
   readonly statusCode = 409;
   readonly code = "ATTACHMENT_OWNERSHIP_CONFLICT";
 }
-export class StorageQuotaError extends Error {
-  constructor(message = "User storage quota exceeded", public code = "CONTENT_QUOTA_EXCEEDED") {
-    super(message);
-  }
-}
+export { StorageQuotaError } from "../storageQuota.js";
 
 export function writeObject(
   db: AppDatabase,
@@ -83,7 +80,7 @@ export function writeObject(
     if (body.ownerNoteId && db.prepare("SELECT 1 FROM objects WHERE user_id = ? AND object_id = ? AND object_type != 'note'").get(userId, body.ownerNoteId)) throw new ObjectOwnershipError("ATTACHMENT_OWNER_INVALID");
     const growth = Buffer.byteLength(body.ciphertext) + Buffer.byteLength(body.nonce) - (current?.bytes ?? 0);
     // Tombstones and non-growing replacements must remain possible above quota.
-    if (growth > 0 && !(current && body.deleted && growth <= 1024) && storageUsage(db, userId).contentBytes + growth > quotaBytes) throw new StorageQuotaError();
+    if (!(current && !current.deleted && body.deleted && growth <= 1024)) assertStorageGrowth(db, userId, growth, quotaBytes);
     // Every live object reserves two metadata slots for its eventual purge and receipt.
     const metadata = metadataUsage(db, userId);
     if (!(current && !current.deleted && body.deleted) && metadata.metadataUsedSlots + (current ? 1 : 4) > metadata.metadataLimit) throw new StorageQuotaError("Synchronization metadata quota exceeded", "METADATA_QUOTA_EXCEEDED");
@@ -121,5 +118,5 @@ export function writeObject(
       .run(userId, body.idempotencyKey, objectId, digest, revision + 1, now);
     const sequence = recordChange(db, userId, objectId, revision + 1, "upsert", now);
     return { objectId, status: "accepted", revision: revision + 1, sequence };
-  })();
+  }).immediate();
 }

@@ -1,4 +1,6 @@
-import { physicalStorageUsage, storageUsage } from "../storageUsage.js";
+import { quotaSetting, userQuotas, quotaState } from "../storageQuota.js";
+import type { ServerConfig } from "../config.js";
+import { physicalStorageUsage, storageUsage, databaseStorageStatus } from "../storageUsage.js";
 import { revokeUserCredentials } from "../auth/credentialRevocation.js";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -16,44 +18,62 @@ export function registerAdminRoutes(
   app: FastifyInstance,
   dependencies: {
     db: AppDatabase;
+    config: ServerConfig;
     syncEvents: SyncEventHub;
     requireAdmin: AuthGuard;
     logRefs: LogReferenceFactory;
   }
 ) {
-  const { db, syncEvents, requireAdmin, logRefs } = dependencies;
+  const { db, config, syncEvents, requireAdmin, logRefs } = dependencies;
 
   app.get("/api/admin/users", { preHandler: requireAdmin }, async () => {
     const users = db.prepare("SELECT id, username, display_name, role, disabled, created_at FROM users ORDER BY created_at").all() as any[];
     const setups = db.prepare(
-      "SELECT id, username, display_name, created_at, expires_at FROM account_setups ORDER BY created_at ASC"
+      "SELECT id, username, display_name, created_at, expires_at, storage_quota_mode, storage_quota_bytes FROM account_setups ORDER BY created_at ASC"
     ).all() as any[];
     return {
+      defaultQuotaBytes: config.userStorageQuotaBytes,
       physical: physicalStorageUsage(db),
-      users: users.map((row) => ({
+      users: users.map((row) => {
+        const usage = storageUsage(db, row.id), quotas = userQuotas(db, row.id, config);
+        return ({
         id: row.id,
         username: row.username,
         displayName: row.display_name,
         role: row.role,
         disabled: Boolean(row.disabled),
         createdAt: row.created_at,
-        ...storageUsage(db, row.id)
-      })),
+        ...usage, ...quotas, state: quotaState(usage.totalBytes, quotas.quotaBytes)
+      }); }),
       setups: setups.map((row) => ({
         id: row.id,
         username: row.username,
         displayName: row.display_name,
         createdAt: row.created_at,
-        expiresAt: row.expires_at
+        expiresAt: row.expires_at, quotaMode: row.storage_quota_mode, quotaBytes: row.storage_quota_mode === "inherit" ? config.userStorageQuotaBytes : row.storage_quota_bytes
       }))
     };
+  });
+
+  app.get("/api/admin/storage", { preHandler: requireAdmin }, async () => databaseStorageStatus(db));
+  app.patch("/api/admin/users/:userId/storage-quota", { preHandler: requireAdmin }, async (request, reply) => {
+    const id = z.string().uuid().safeParse((request.params as { userId: string }).userId);
+    const setting = quotaSetting.safeParse(request.body);
+    if (!id.success || !setting.success) return reply.code(400).send({ error: "Invalid storage quota" });
+    const value = setting.data;
+    if (!db.prepare("UPDATE users SET storage_quota_mode = ?, storage_quota_bytes = ? WHERE id = ?")
+      .run(value.mode, value.mode === "limited" ? value.bytes : null, id.data).changes) return reply.code(404).send({ error: "User not found" });
+    const usage = storageUsage(db, id.data), quotas = userQuotas(db, id.data, config);
+    logEvent(request.log, "info", "admin.storage_quota_changed", { actorRef: logRefs.create("user", request.sessionUser!.id), targetRef: logRefs.create("user", id.data), mode: value.mode, quotaBytes: quotas.quotaBytes });
+    return { ...usage, ...quotas, state: quotaState(usage.totalBytes, quotas.quotaBytes) };
   });
 
   app.post("/api/admin/account-setups", { preHandler: requireAdmin }, async (request, reply) => {
     const parsed = z.object({
       username: usernameField,
       displayName: z.string().trim().min(1).max(80),
-      expiresInHours: z.number().int().min(1).max(720).default(72)
+      expiresInHours: z.number().int().min(1).max(720).default(72),
+      storageQuota: quotaSetting.optional()
     }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid user setup" });
     db.prepare("DELETE FROM account_setups WHERE expires_at <= ?").run(new Date().toISOString());
@@ -69,8 +89,8 @@ export function registerAdminRoutes(
     const expires = new Date(now.getTime() + parsed.data.expiresInHours * 60 * 60 * 1000);
     db.prepare(`
       INSERT INTO account_setups (
-        id, username, display_name, code_hash, created_by, created_at, expires_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        id, username, display_name, code_hash, created_by, created_at, expires_at, storage_quota_mode, storage_quota_bytes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       parsed.data.username,
@@ -78,7 +98,7 @@ export function registerAdminRoutes(
       hashToken(code),
       request.sessionUser?.id,
       now.toISOString(),
-      expires.toISOString()
+      expires.toISOString(), parsed.data.storageQuota?.mode ?? "inherit", parsed.data.storageQuota?.mode === "limited" ? parsed.data.storageQuota.bytes : null
     );
     logEvent(request.log, "info", "admin.account_setup_created", {
       actorRef: logRefs.create("user", request.sessionUser!.id),

@@ -6,6 +6,7 @@ export function migrateStorage(db: AppDatabase, previousVersion: number, directo
   if (previousVersion === 2) {
     migrationBackup(db, join(directory, "backups", "pre-schema3.sqlite"));
   }
+  if (previousVersion === 3) migrationBackup(db, join(directory, "backups", "pre-schema4.sqlite"));
   db.transaction(() => {
     if (previousVersion === 2) {
       const mismatch = db.prepare(`SELECT 1 FROM objects o LEFT JOIN object_revisions r
@@ -50,7 +51,7 @@ export function migrateStorage(db: AppDatabase, previousVersion: number, directo
         history_version INTEGER NOT NULL, ownership_version INTEGER NOT NULL, proposed_at TEXT NOT NULL,
         PRIMARY KEY(user_id, attachment_id));`);
     db.exec("UPDATE sync_state SET lease_secret = lower(hex(randomblob(32))) WHERE lease_secret = ''");
-    if (previousVersion !== 3) {
+    if (previousVersion === 0 || previousVersion === 2) {
       db.exec(`INSERT OR IGNORE INTO sync_state (user_id, epoch, head)
         SELECT u.id, lower(hex(randomblob(16))), COALESCE(MAX(c.sequence), 0) FROM users u LEFT JOIN changes c ON c.user_id = u.id GROUP BY u.id;
         INSERT OR IGNORE INTO ownership_state (user_id, complete) SELECT id, ${previousVersion === 2 ? 0 : 1} FROM users;
@@ -74,6 +75,14 @@ export function migrateStorage(db: AppDatabase, previousVersion: number, directo
         CREATE INDEX note_history_user_time ON note_history(user_id, captured_at DESC);`);
       for (const r of refs) db.prepare("INSERT INTO protected_history_attachments VALUES (?, ?, ?, ?)").run(r.user_id, r.note_id, r.history_id, r.attachment_id);
     }
-    db.exec("PRAGMA user_version = 3");
+    for (const table of ["users", "account_setups"]) {
+      if (!columns(table).has("storage_quota_mode")) db.exec(`ALTER TABLE ${table} ADD COLUMN storage_quota_mode TEXT NOT NULL DEFAULT 'inherit' CHECK(storage_quota_mode IN ('inherit','limited','unlimited'));
+        ALTER TABLE ${table} ADD COLUMN storage_quota_bytes INTEGER CHECK(storage_quota_bytes IS NULL OR storage_quota_bytes > 0);`);
+    }
+    if (!columns("users").has("history_quota_mode")) db.exec(`ALTER TABLE users ADD COLUMN history_quota_mode TEXT NOT NULL DEFAULT 'inherit' CHECK(history_quota_mode IN ('inherit','limited','unlimited'));
+      ALTER TABLE users ADD COLUMN history_quota_bytes INTEGER CHECK(history_quota_bytes IS NULL OR history_quota_bytes > 0);`);
+    if (previousVersion !== 4) db.exec(`UPDATE note_history SET byte_size = LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB))
+      + COALESCE(LENGTH(CAST(metadata_ciphertext AS BLOB)), 0) + COALESCE(LENGTH(CAST(metadata_nonce AS BLOB)), 0)`);
+    db.exec("PRAGMA user_version = 4");
   })();
 }

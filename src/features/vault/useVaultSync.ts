@@ -1,3 +1,4 @@
+import { recordCompleteSync } from "../../storage/storageStatus";
 import { prepareVaultSynchronization } from "./syncReconciliation";
 import { VaultHistoryController } from "./historyController";
 import { operationExpired } from "@mint-notes/application-client";
@@ -30,6 +31,8 @@ import type { useVaultModel } from "./useVaultModel";
 import type { useWorkspaceSelection } from "./useWorkspaceSelection";
 
 interface Options {
+  endpointId?: string;
+  hasUnsavedChanges?: () => boolean;
   model: ReturnType<typeof useVaultModel>;
   selection: ReturnType<typeof useWorkspaceSelection>;
   userId: string;
@@ -338,6 +341,10 @@ export function useVaultSync(options: Options) {
           await objectPersistence.persistObject(attachment); requestPush("structural");
         } });
       if (result.failedObjectIds.size) showMessage(t("notice.remoteIntegrity", { count: result.failedObjectIds.size }), "critical");
+      if (options.endpointId) await recordCompleteSync(userId, options.endpointId,
+        intent.pull && !result.failedObjectIds.size && !result.pending && !documentSaveQueue.pendingIds().length
+        && !options.hasUnsavedChanges?.() && await countPendingSyncEntries(userId) === 0);
+      window.dispatchEvent(new CustomEvent("webmd:storage-refresh"));
       setSaveState(documentSaveQueue.pendingIds().length ? "saving" : result.pending ? "local" : "synced");
     } catch (error) {
       if (logoutStarted.current) return;

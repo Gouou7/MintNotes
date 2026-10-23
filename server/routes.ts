@@ -1,3 +1,4 @@
+import { registerProfileAssetRoutes } from "./account/profileAssets.js";
 import { acquireStorageLock } from "./storageLock.js";
 import { registerProtocolGate } from "./sync/protocol.js";
 import cookie from "@fastify/cookie";
@@ -186,14 +187,16 @@ app.post(
     const body = parsed.data;
     if (!hasValidEnvelopeBinding(body)) return reply.code(400).send({ error: "Invalid account activation" });
     const setup = db.prepare(`
-      SELECT id, username, display_name FROM account_setups
+      SELECT id, username, display_name, storage_quota_mode, storage_quota_bytes FROM account_setups
       WHERE username = ? COLLATE NOCASE AND code_hash = ? AND expires_at > ?
-    `).get(body.username, hashToken(body.activationCode), new Date().toISOString()) as { id: string; username: string; display_name: string } | undefined;
+    `).get(body.username, hashToken(body.activationCode), new Date().toISOString()) as { id: string; username: string; display_name: string; storage_quota_mode: string; storage_quota_bytes: number | null } | undefined;
     if (!setup) return reply.code(403).send({ error: "Activation code is invalid or expired" });
     let id = "";
     try {
       db.transaction(() => {
         id = insertUser({ ...body, username: setup.username, displayName: setup.display_name }, "user").id;
+        db.prepare("UPDATE users SET storage_quota_mode = ?, storage_quota_bytes = ? WHERE id = ?")
+          .run(setup.storage_quota_mode, setup.storage_quota_bytes, id);
         db.prepare("DELETE FROM account_setups WHERE id = ?").run(setup.id);
       })();
     } catch (error) {
@@ -501,48 +504,7 @@ app.patch("/api/account/profile", { preHandler: authenticate }, async (request, 
   return { user: { ...user, displayName: parsed.data.displayName } };
 });
 
-const avatarEnvelopeSchema = z.object({
-  ciphertext: z.string().min(16).max(1_000_000),
-  nonce: z.string().min(16).max(200),
-  encryptionVersion: z.literal(1)
-});
-
-app.get("/api/account/avatar", { preHandler: authenticate }, async (request) => {
-  const user = request.sessionUser as SessionUser;
-  const row = db.prepare(`
-    SELECT ciphertext, nonce, encryption_version, updated_at
-    FROM profile_assets WHERE user_id = ?
-  `).get(user.id) as { ciphertext: string; nonce: string; encryption_version: number; updated_at: string } | undefined;
-  return {
-    avatar: row ? {
-      ciphertext: row.ciphertext,
-      nonce: row.nonce,
-      encryptionVersion: row.encryption_version,
-      updatedAt: row.updated_at
-    } : null
-  };
-});
-
-app.put("/api/account/avatar", { preHandler: authenticate }, async (request, reply) => {
-  const parsed = avatarEnvelopeSchema.safeParse(request.body);
-  if (!parsed.success) return reply.code(400).send({ error: "Invalid encrypted avatar" });
-  const user = request.sessionUser as SessionUser;
-  const updatedAt = new Date().toISOString();
-  db.prepare(`
-    INSERT INTO profile_assets (user_id, ciphertext, nonce, encryption_version, updated_at)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET ciphertext = excluded.ciphertext,
-      nonce = excluded.nonce, encryption_version = excluded.encryption_version,
-      updated_at = excluded.updated_at
-  `).run(user.id, parsed.data.ciphertext, parsed.data.nonce, parsed.data.encryptionVersion, updatedAt);
-  return { avatar: { ...parsed.data, updatedAt } };
-});
-
-app.delete("/api/account/avatar", { preHandler: authenticate }, async (request) => {
-  const user = request.sessionUser as SessionUser;
-  db.prepare("DELETE FROM profile_assets WHERE user_id = ?").run(user.id);
-  return { ok: true };
-});
+registerProfileAssetRoutes(app, { db, config, authenticate });
 
 app.get("/api/account/trash-retention", { preHandler: authenticate }, async (request) => {
   const user = request.sessionUser as SessionUser;
@@ -562,7 +524,7 @@ registerApplicationRoutes(app, { db, syncEvents, authenticate, config, logRefs }
 registerEndpointRoutes(app, { db, syncEvents, authenticate, logRefs });
 registerSyncRoutes(app, { db, syncEvents, authenticate, config, logRefs });
 registerAttachmentRoutes(app, { db, config, authenticate, logRefs });
-registerAdminRoutes(app, { db, syncEvents, requireAdmin, logRefs });
+registerAdminRoutes(app, { db, config, syncEvents, requireAdmin, logRefs });
 registerHistoryRoutes(app, { db, config, authenticate, logRefs });
 
 await registerWebRoutes(app);

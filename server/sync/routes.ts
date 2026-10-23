@@ -1,3 +1,4 @@
+import { userQuotas, quotaState } from "../storageQuota.js";
 import { syncState } from "./lifecycle.js";
 import { issueSyncLease, validSyncLease } from "./protocol.js";
 import { storageUsage } from "../storageUsage.js";
@@ -120,9 +121,11 @@ export function registerSyncRoutes(
         ...(r.category === "history" ? { historyVersion: r.change_revision } : {}), purged: r.change_type === "purge" })),
       cursor: rows.length === limit ? rows.at(-1).sequence : state.head, hasMore: rows.length === limit };
   });
-  if (!applicationOnly) app.get(`${apiPrefix}/account/storage`, { preHandler: authenticate }, async (request) => ({
-    ...storageUsage(db, getScope(request).userId), quotaBytes: config.userStorageQuotaBytes, historyQuotaBytes: config.userHistoryQuotaBytes
-  }));
+  if (!applicationOnly) app.get(`${apiPrefix}/account/storage`, { preHandler: authenticate }, async (request) => {
+    const userId = getScope(request).userId;
+    const usage = storageUsage(db, userId), quotas = userQuotas(db, userId, config);
+    return { ...usage, ...quotas, state: quotaState(usage.totalBytes, quotas.quotaBytes), checkedAt: new Date().toISOString() };
+  });
 
   app.get(`${apiPrefix}/objects/:objectId`, { preHandler: authenticate }, async (request, reply) => {
     const id = z.string().uuid().safeParse((request.params as { objectId: string }).objectId);

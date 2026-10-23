@@ -180,7 +180,7 @@ export class VaultHistoryController {
   async createSnapshot(
     document: OpenDocument,
     captureKind: HistoryCaptureKind,
-    options: { name?: string | null; protected?: boolean; capturedAt?: string; quotaBytes?: number } = {}
+    options: { name?: string | null; protected?: boolean; capturedAt?: string; quotaBytes?: number | null } = {}
   ): Promise<CreatedHistorySnapshot | null> {
     if (!this.isActive() || document.kind !== "note" || document.deleted) return null;
     const capturedAt = options.capturedAt ?? new Date().toISOString();
@@ -229,7 +229,7 @@ export class VaultHistoryController {
     };
     await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, async () => {
       if (!this.isActive()) return;
-      if (options.quotaBytes !== undefined) {
+      if (options.quotaBytes !== undefined && options.quotaBytes !== null) {
         const pending = await localDb.historyOutbox.where("userId").equals(this.userId).toArray();
         if (pending.reduce((sum, item) => sum + item.byteSize, 0) + snapshot.byteSize > options.quotaBytes) throw new Error("HISTORY_LOCAL_BUDGET_EXCEEDED");
       }
@@ -295,8 +295,8 @@ export class VaultHistoryController {
     const nextProtected = change.protected ?? snapshot?.protected ?? item.protected;
     const currentMutation = await localDb.historyMetadataOutbox.get(key);
     const byteSize = snapshot
-      ? snapshot.ciphertext.length + encrypted.ciphertext.length
-      : item.byteSize - (item.metadataCiphertext?.length ?? 0) + encrypted.ciphertext.length;
+      ? snapshot.ciphertext.length + snapshot.nonce.length + encrypted.ciphertext.length + encrypted.nonce.length
+      : item.byteSize - (item.metadataCiphertext?.length ?? 0) - (item.metadataNonce?.length ?? 0) + encrypted.ciphertext.length + encrypted.nonce.length;
     const nextSnapshot: LocalHistorySnapshot | null = snapshot ? {
       ...snapshot,
       metadataCiphertext: encrypted.ciphertext,

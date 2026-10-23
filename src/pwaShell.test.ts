@@ -41,7 +41,9 @@ describe("installed PWA shell", () => {
     expect(styles).toMatch(/\.side-header\s*\{[^}]*var\(--safe-area-top\)/s);
     expect(styles).toMatch(/\.side-footer\s*\{[^}]*var\(--safe-area-bottom\)/s);
     expect(styles).toMatch(/\.status-bar\s*\{[^}]*var\(--safe-area-bottom\)/s);
-    expect(styles).toMatch(/\.settings-header\s*\{[^}]*var\(--safe-area-top\)/s);
+    // The mobile title owns the top inset; the close action stays inside it.
+    expect(styles).toMatch(/\.settings-title\s*\{[^}]*var\(--safe-area-top\)/s);
+    expect(styles).toMatch(/\.settings-header > button\s*\{[^}]*var\(--safe-area-top\)[^}]*var\(--safe-area-right\)/s);
     expect(styles).toMatch(/\.auth-shell, \.loading-shell\s*\{[^}]*height: 100%;[^}]*overflow: auto/s);
   });
 

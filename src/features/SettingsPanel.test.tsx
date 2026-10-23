@@ -43,6 +43,8 @@ const preferences: UiPreferences = {
   outlineWidth: 236,
   rightPanelTab: "outline"
 };
+const storageStatus = { localReady: true, usage: null, local: { bytes: 0, objects: 2, attachments: 1, history: 3 }, lastSync: null, unsaved: 1,
+ estimate: null, persistence: "unsupported" as const, failed: false, refreshing: false, stale: false, refresh: vi.fn(), requestPersistence: vi.fn() };
 const historySettings: HistorySettings = { enabled: true, intervalMinutes: 10, retentionDays: 90, count: 3, usedBytes: 4096, quotaBytes: 256 * 1024 * 1024, clearedBefore: null };
 const admin: User = { id: "admin-id", username: "admin", displayName: "Administrator", role: "admin" };
 const deletedAt = "2026-07-20T12:00:00.000Z";
@@ -85,7 +87,7 @@ async function renderSettings(user: User = admin, onNotify = vi.fn(), onPreferen
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container); roots.push(root);
-  await act(async () => root.render(<I18nProvider><SettingsPanel user={user} endpoint={{ id: "endpoint", remembered: false }} credential={credential} serverSessionVerified onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={onClose} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={onDisplayName} onUsername={onUsername} avatarUrl={avatarUrl} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
+  await act(async () => root.render(<I18nProvider><SettingsPanel storageStatus={storageStatus} user={user} endpoint={{ id: "endpoint", remembered: false }} credential={credential} serverSessionVerified onCredentialChange={vi.fn()} preferences={preferences} onPreferences={onPreferences} onClose={onClose} onLogout={onLogout} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={onDisplayName} onUsername={onUsername} avatarUrl={avatarUrl} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={onNotify} /></I18nProvider>));
   await act(async () => { await Promise.resolve(); });
   return container;
 }
@@ -103,12 +105,19 @@ afterEach(async () => {
 });
 
 describe("SettingsPanel", () => {
-  it("uses compact profile controls and removes duplicate appearance settings", async () => {
+  it("keeps appearance controls separate from the account profile", async () => {
     const container = await renderSettings();
-    expect(container.querySelector(".profile-summary")?.textContent).toContain("Administrator@admin");
+    expect(container.querySelector(".profile-summary")).toBeNull();
     expect(container.querySelector(".settings-section > h3")?.textContent).toBe("外观");
+    expect(container.textContent).toContain("字体大小");
+    expect(container.textContent).toContain("编辑器代码块自动换行");
+    expect(container.textContent).toContain("语言");
+    expect(container.textContent).not.toContain("文件排序");
+    expect(container.textContent).not.toContain("恢复两侧栏");
+    await act(async () => button(container, "用户和安全").click());
+    expect(container.querySelector(".security-settings")?.firstElementChild?.classList.contains("profile-summary")).toBe(true);
+    expect(container.querySelector(".profile-summary")?.textContent).toContain("Administrator@admin");
     expect(container.textContent).not.toContain("上传头像");
-    expect(container.querySelectorAll(".settings-content input:not([type='file'])")).toHaveLength(2);
     await act(async () => button(container, "编辑资料").click());
     expect(container.querySelectorAll(".profile-edit-dialog form input")).toHaveLength(2);
     expect(container.querySelectorAll(".profile-edit-dialog > .compact-form")).toHaveLength(2);
@@ -119,11 +128,6 @@ describe("SettingsPanel", () => {
     expect(button(container, "修改用户名").classList).toContain("profile-action-button");
     expect((button(container, "修改用户名") as HTMLButtonElement).disabled).toBe(true);
     expect(button(container, "关闭").classList).toContain("profile-action-button");
-    expect(container.textContent).toContain("字体大小");
-    expect(container.textContent).toContain("编辑器代码块自动换行");
-    expect(container.textContent).toContain("语言");
-    expect(container.textContent).not.toContain("文件排序");
-    expect(container.textContent).not.toContain("恢复两侧栏");
   });
 
   it("enables code block wrapping by default and saves explicit changes", async () => {
@@ -137,29 +141,22 @@ describe("SettingsPanel", () => {
     expect(onPreferences).toHaveBeenCalledWith(expect.objectContaining({ wrapCodeBlocks: false }));
   });
 
-  it("accepts a pixel font size and restores the current default", async () => {
+  it("offers seven font sizes with localized small, default and large labels", async () => {
     const onPreferences = vi.fn();
     const container = await renderSettings(admin, vi.fn(), onPreferences);
-    const input = container.querySelector("input[aria-label='字体大小（像素）']") as HTMLInputElement;
-    expect(input.closest(".font-size-controls")?.querySelector(".font-size-reset")).not.toBeNull();
-    expect(input.value).toBe("14");
-    expect((button(container, "恢复默认大小") as HTMLButtonElement).disabled).toBe(true);
-
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "18");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    expect(onPreferences).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 18 }));
-
-    const customPreferences = vi.mocked(onPreferences).mock.calls.at(-1)![0];
-    const customContainer = await renderSettings(admin, vi.fn(), onPreferences);
-    await act(async () => roots.at(-1)!.render(<I18nProvider><SettingsPanel user={admin} endpoint={{ id: "endpoint", remembered: false }} credential={null} serverSessionVerified onCredentialChange={vi.fn()} preferences={customPreferences} onPreferences={onPreferences} onClose={vi.fn()} onLogout={vi.fn()} onImport={vi.fn()} onExport={vi.fn()} onDisplayName={vi.fn()} onUsername={vi.fn()} avatarUrl={null} onAvatarChange={vi.fn()} trashItems={trashItems} purging={false} onRestoreTrash={vi.fn()} onPurgeTrash={vi.fn()} onClearTrash={vi.fn()} historySettings={historySettings} onHistorySettings={vi.fn()} onRefreshHistorySettings={vi.fn().mockResolvedValue(historySettings)} onClearHistory={vi.fn()} onNotify={vi.fn()} /></I18nProvider>));
-    await act(async () => button(customContainer, "恢复默认大小").click());
-    expect(onPreferences).toHaveBeenLastCalledWith(expect.objectContaining({ fontSize: 14 }));
+    const select = container.querySelector(".font-size-setting select") as HTMLSelectElement;
+    expect([...select.options].map(option => option.textContent)).toEqual(["11（小）", "12", "13", "14（默认）", "15", "16", "17（大）"]);
+    expect(select.value).toBe("14");
+    expect(container.querySelector(".font-size-reset")).toBeNull();
+    for (const size of [11, 17, 14]) {
+      await act(async () => { select.value = String(size); select.dispatchEvent(new Event("change", { bubbles: true })); });
+      expect(onPreferences).toHaveBeenLastCalledWith(expect.objectContaining({ fontSize: size }));
+    }
   });
 
   it("keeps explicit avatar actions inside the profile editor", async () => {
     const container = await renderSettings(admin, vi.fn(), vi.fn(), vi.fn(), vi.fn(), null, vi.fn(), "blob:avatar");
+    await act(async () => button(container, "用户和安全").click());
     expect(container.textContent).not.toContain("更换头像");
     expect(container.textContent).not.toContain("移除头像");
     await act(async () => button(container, "编辑资料").click());
@@ -176,7 +173,7 @@ describe("SettingsPanel", () => {
       language.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(onPreferences).toHaveBeenCalledWith(expect.objectContaining({ language: "zh-TW" }));
-    expect(container.textContent).toContain("編輯資料");
+    expect(container.textContent).toContain("使用者與安全");
     expect(localStorage.getItem("webmd-notes-language")).toBe("zh-TW");
   });
 
@@ -184,6 +181,7 @@ describe("SettingsPanel", () => {
     const onDisplayName = vi.fn();
     const onNotify = vi.fn();
     const container = await renderSettings(admin, onNotify, vi.fn(), vi.fn(), vi.fn(), null, onDisplayName);
+    await act(async () => button(container, "用户和安全").click());
     vi.mocked(api).mockImplementation(async (path, init) => {
       if (path === "/api/account/profile") return { user: { ...admin, displayName: JSON.parse(String(init?.body)).displayName } } as never;
       return {} as never;
@@ -205,6 +203,7 @@ describe("SettingsPanel", () => {
     const onUsername = vi.fn();
     const onNotify = vi.fn();
     const container = await renderSettings(admin, onNotify, vi.fn(), vi.fn(), onUsername);
+    await act(async () => button(container, "用户和安全").click());
     vi.mocked(api).mockImplementation(async (path) => {
       if (String(path).startsWith("/api/auth/parameters/")) return {
         kdfSalt: "salt",
@@ -256,6 +255,7 @@ describe("SettingsPanel", () => {
     const onUsername = vi.fn();
     const onNotify = vi.fn();
     const container = await renderSettings(admin, onNotify, vi.fn(), vi.fn(), onUsername);
+    await act(async () => button(container, "用户和安全").click());
     vi.mocked(api).mockImplementation(async (path) => {
       if (String(path).startsWith("/api/auth/parameters/")) return {
         kdfSalt: "salt",
@@ -305,7 +305,7 @@ describe("SettingsPanel", () => {
 
   it("keeps deleted folders collapsed, reveals matching paths, and auto-saves retention", async () => {
     const container = await renderSettings();
-    await act(async () => button(container, "回收站").click());
+    await act(async () => button(container, "笔记和存储").click());
     expect(container.textContent).toContain("回收站内容将在保留期满后永久删除。");
     expect(container.textContent).toContain("1 个删除项目 · 共 2 项");
     expect(container.textContent).toContain("包含 1 项");
@@ -326,18 +326,25 @@ describe("SettingsPanel", () => {
     expect((container.querySelector("select[aria-label='排序已删除项目']") as HTMLSelectElement).value).toBe("deleted-desc");
     expect(container.querySelectorAll("button[aria-label^='恢复']")).toHaveLength(1);
     expect(button(container, "永久删除")).toBeTruthy();
-    const select = container.querySelector(".settings-control-row select") as HTMLSelectElement;
+    const select = container.querySelector(".trash-settings .settings-control-row select") as HTMLSelectElement;
     await act(async () => { select.value = "90"; select.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(vi.mocked(api)).toHaveBeenCalledWith("/api/account/trash-retention", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ days: 90 }) }));
+  });
+
+  it("keeps About last and hides administration for ordinary users", async () => {
+    const container = await renderSettings({ ...admin, role: "user" });
+    expect([...container.querySelectorAll(".settings-tabs button")].map(entry => entry.textContent?.trim()))
+      .toEqual(["外观", "用户和安全", "笔记和存储", "关于"]);
+    expect(container.querySelector(".admin-tab")).toBeNull();
   });
 
   it("orders icon tabs and exposes PIN setup independently from automatic locking", async () => {
     const onNotify = vi.fn();
     const container = await renderSettings(admin, onNotify);
     const tabs = [...container.querySelectorAll(".settings-tabs button")];
-    expect(tabs.slice(0, 6).map((entry) => entry.textContent?.trim())).toEqual(["常规", "安全", "笔记历史", "回收站", "数据迁移", "关于"]);
+    expect(tabs.map((entry) => entry.textContent?.trim())).toEqual(["外观", "用户和安全", "笔记和存储", "管理员设置", "关于"]);
     expect(tabs.slice(0, 6).every((entry) => Boolean(entry.querySelector("svg")))).toBe(true);
-    await act(async () => button(container, "安全").click());
+    await act(async () => button(container, "用户和安全").click());
     expect(container.textContent).toContain("管理登录设备并移除失效记录。");
     expect(container.textContent).toContain("已登出和已过期的设备记录将在 30 天后自动移除");
     const headings = [...container.querySelectorAll(".settings-section h3")].map((entry) => entry.textContent?.trim());
@@ -388,7 +395,7 @@ describe("SettingsPanel", () => {
     vi.mocked(getDeviceUnlock).mockResolvedValue(undefined);
 
     const unconfigured = await renderSettings();
-    await act(async () => button(unconfigured, "安全").click());
+    await act(async () => button(unconfigured, "用户和安全").click());
     await act(async () => button(unconfigured, "设置 PIN").click());
     let dialog = unconfigured.querySelector(".pin-change-dialog")!;
     let inputs = [...dialog.querySelectorAll("input")] as HTMLInputElement[];
@@ -399,7 +406,7 @@ describe("SettingsPanel", () => {
     expect(unconfigured.querySelector(".pin-change-dialog")).toBeNull();
 
     const configured = await renderSettings(admin, vi.fn(), vi.fn(), vi.fn(), vi.fn(), { version: 3, protection: "pin", autoLockMinutes: 5 } as never);
-    await act(async () => button(configured, "安全").click());
+    await act(async () => button(configured, "用户和安全").click());
     expect(configured.querySelector("input[placeholder='至少 4 个字符']")).toBeNull();
     await act(async () => button(configured, "更改 PIN").click());
     dialog = configured.querySelector(".pin-change-dialog")!;
@@ -449,7 +456,7 @@ describe("SettingsPanel", () => {
       recoveryCode: "new-recovery-code"
     });
 
-    await act(async () => button(container, "安全").click());
+    await act(async () => button(container, "用户和安全").click());
     expect(container.querySelector(".account-credential-dialog")).toBeNull();
     expect(container.querySelector("input[type='password']")).toBeNull();
 
@@ -485,11 +492,21 @@ describe("SettingsPanel", () => {
 
   it("uses an accessible sliding switch for automatic note history", async () => {
     const container = await renderSettings();
-    await act(async () => button(container, "笔记历史").click());
+    await act(async () => button(container, "笔记和存储").click());
     const toggle = container.querySelector("[role='switch'][aria-label='自动保存历史']") as HTMLInputElement;
     expect(toggle).toBeTruthy();
     expect(toggle.checked).toBe(true);
     expect(toggle.nextElementSibling?.classList.contains("settings-switch-track")).toBe(true);
+  });
+
+  it("lets the user remove only the separate history budget", async () => {
+    const container = await renderSettings();
+    await act(async () => button(container, "笔记和存储").click());
+    const mode = container.querySelector(".history-budget select") as HTMLSelectElement;
+    await act(async () => { mode.value = "unlimited"; mode.dispatchEvent(new Event("change", { bubbles: true })); });
+    await act(async () => container.querySelector(".history-budget")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(api).toHaveBeenCalledWith("/api/account/note-history-settings", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ quotaBytes: null }) }));
+    expect(container.textContent).toContain("历史计入总配额");
   });
 
   it("separates administrator settings and removes the encrypted snapshot", async () => {
@@ -513,8 +530,9 @@ describe("SettingsPanel", () => {
     expect(container.textContent).not.toContain("创建待激活用户");
     expect(button(container, "禁用").querySelector(".lucide-user-round-x")).toBeTruthy();
     expect(button(container, "删除").querySelector(".lucide-trash-2")).toBeTruthy();
-    await act(async () => button(container, "数据迁移").click());
-    expect(container.querySelector(".settings-content > .settings-section > h3")?.textContent).toBe("数据迁移");
+    await act(async () => button(container, "笔记和存储").click());
+    expect(container.querySelector(".note-storage-settings > .storage-migration > h3")?.textContent).toBe("笔记迁移");
+    expect([...container.querySelectorAll(".note-storage-settings h3")].map((node) => node.textContent).filter((text) => ["存储用量", "笔记历史", "回收站", "笔记迁移"].includes(text ?? ""))).toEqual(["存储用量", "笔记历史", "回收站", "笔记迁移"]);
     expect(container.textContent).not.toContain("可移植数据");
     expect(container.textContent).not.toContain("密文快照");
     const userContainer = await renderSettings({ ...admin, role: "user" });
@@ -543,19 +561,23 @@ describe("SettingsPanel", () => {
     expect(container.querySelector("a[href='https://lucide.dev']")).toBeTruthy();
   });
 
-  it("shows logout only at the bottom of General and requires confirmation", async () => {
+  it("shows logout only at the bottom of Account and security and requires confirmation", async () => {
     const onLogout = vi.fn();
     const container = await renderSettings(admin, vi.fn(), vi.fn(), onLogout);
+    expect(container.querySelector(".settings-logout-section")).toBeNull();
+    await act(async () => button(container, "用户和安全").click());
     const logoutSection = container.querySelector(".settings-logout-section");
     expect(logoutSection).toBeTruthy();
     expect(logoutSection?.parentElement).toBe(container.querySelector(".settings-content"));
-    await act(async () => button(container, "安全").click());
+    await act(async () => button(container, "外观").click());
     expect(container.querySelector(".settings-logout-section")).toBeNull();
-    await act(async () => button(container, "常规").click());
+    await act(async () => button(container, "用户和安全").click());
     await act(async () => (container.querySelector(".settings-logout-section button") as HTMLButtonElement).click());
     expect(onLogout).not.toHaveBeenCalled();
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("确认从当前设备登出？");
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
+    expect([...container.querySelectorAll(".logout-confirm .storage-pending-item")].map((item) => item.textContent)).toEqual(["对象 2", "附件 1", "笔记历史 3"]);
+    expect(container.querySelector(".logout-confirm")?.textContent).toContain("本地待保存1篇");
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("已同步至服务器的数据不受影响");
     await act(async () => (container.querySelector(".logout-confirm .settings-action-button.danger") as HTMLButtonElement).click());
     expect(onLogout).toHaveBeenCalledOnce();
@@ -576,7 +598,7 @@ describe("SettingsPanel", () => {
     const onNotify = vi.fn();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const container = await renderSettings(admin, onNotify);
-    await act(async () => button(container, "安全").click());
+    await act(async () => button(container, "用户和安全").click());
     await act(async () => { await Promise.resolve(); });
     const signOutButton = button(container, "登出");
     expect(signOutButton.classList).toContain("session-revoke");
@@ -612,7 +634,7 @@ describe("SettingsPanel", () => {
       } as never;
       return {} as never;
     });
-    await act(async () => button(container, "安全").click());
+    await act(async () => button(container, "用户和安全").click());
     await act(async () => { await Promise.resolve(); });
     expect(container.textContent).not.toContain("可在 2026");
     const removeButton = button(container, "移除");

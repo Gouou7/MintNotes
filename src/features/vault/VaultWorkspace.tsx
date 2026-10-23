@@ -1,3 +1,4 @@
+import { useStorageStatus } from "../storage/useStorageStatus";
 import {
   Copy,
   Ellipsis,
@@ -318,6 +319,8 @@ export function VaultWorkspace({
   });
 
   const sync = useVaultSync({
+    endpointId: endpoint.id,
+    hasUnsavedChanges: () => syncStatus.failedLocalObjectIds.size > 0 || Boolean(selection.activeIdRef.current && documentIndexRef.current.get(selection.activeIdRef.current)?.title !== titleDraft),
     model,
     selection,
     userId: user.id,
@@ -352,6 +355,11 @@ export function VaultWorkspace({
   function requestPush(kind: "editor" | "structural" = "editor") {
     sync.requestPush(kind);
   }
+
+  const storageStatus = useStorageStatus({ userId: user.id, endpointId: endpoint.id,
+    online: serverSessionVerified, detailed: settingsOpen, enabled: workspaceLoaded && !logoutStarted.current, notify: showMessage,
+    getUnsavedCount: () => new Set([...documentSaveQueue.pendingIds(), ...[...syncStatus.failedLocalObjectIds].filter((id) => documentIndexRef.current.get(id)?.kind === "note"),
+      ...(selection.activeIdRef.current && documentIndexRef.current.get(selection.activeIdRef.current)?.title !== titleDraft ? [selection.activeIdRef.current] : [])]).size });
 
   const { loading, loadFailure } = useVaultLoad({
     model,
@@ -528,6 +536,7 @@ export function VaultWorkspace({
   const importExport = useImportExport({
     userId: user.id, getDocuments: () => documentsRef.current, getAttachments: () => attachmentsRef.current,
     reservations: nameReservations.current, isActive: () => !logoutStarted.current,
+    beforeExport: async () => { if (selection.activeIdRef.current) { if (documentIndexRef.current.get(selection.activeIdRef.current)?.title !== titleDraft && !await commitDocumentTitle(selection.activeIdRef.current, titleDraft)) throw new Error("Export title is not saved"); await flushDocument(selection.activeIdRef.current); } await documentSaveQueue.flushAll(); await objectPersistence.drainAll(); },
     readAttachment: (attachment, isActive, signal) => decryptAttachmentBlob(user.id, attachment, isActive, serverSessionVerifiedRef.current, signal),
     publish: (document, importedAttachments) => {
       for (const attachment of importedAttachments) upsertAttachment(attachment);
@@ -732,7 +741,7 @@ export function VaultWorkspace({
       {(treeOpen || outlineOpen) && <button className="drawer-scrim" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} aria-label={t("app.closeSidebars")} />}
       {importExport.result && <ImportResultPanel result={importExport.result} onClose={importExport.dismiss} />}
       {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onToggleLock={toggleNoteLock} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
-      {settingsOpen && <Suspense fallback={<SettingsPanelLoading onClose={() => setSettingsOpen(false)} />}><SettingsPanel user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} /></Suspense>}
+      {settingsOpen && <Suspense fallback={<SettingsPanelLoading onClose={() => setSettingsOpen(false)} />}><SettingsPanel storageStatus={storageStatus} user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} /></Suspense>}
       <ToastStack notices={notices} onDismiss={dismissMessage} />
     </div>
   );

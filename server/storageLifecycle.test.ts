@@ -134,7 +134,7 @@ describe("storage lifecycle v3", () => {
     const before = db.prepare("SELECT * FROM objects").all();
     db.exec("PRAGMA user_version = 2"); db.close();
     const migrated = openDatabase(directory); resources.find((r) => r.directory === directory)!.db = migrated;
-    expect(migrated.pragma("user_version", { simple: true })).toBe(3);
+    expect(migrated.pragma("user_version", { simple: true })).toBe(4);
     expect(migrated.prepare("SELECT * FROM objects").all()).toEqual(before);
     expect(migrated.prepare("SELECT COUNT(*) AS count FROM object_revisions").get()).toEqual({ count: 0 });
     expect(migrated.prepare("SELECT is_protected FROM note_history").get()).toEqual({ is_protected: 1 });

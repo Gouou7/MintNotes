@@ -125,6 +125,7 @@ export interface HistorySettings {
   retentionDays: 7 | 30 | 90 | 180 | 365 | null;
   count: number;
   usedBytes: number;
-  quotaBytes: number;
+  quotaBytes: number | null;
+  totalQuotaBytes?: number | null;
   clearedBefore: string | null;
 }

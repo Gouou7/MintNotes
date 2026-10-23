@@ -1,3 +1,4 @@
+import { userQuotas, capacityBytes, admitHistoryGrowth, StorageQuotaError } from "../storageQuota.js";
 import { metadataUsage } from "../storageUsage.js";
 import { historyChanged, operationKeySchema, requireLiveOperation } from "../sync/lifecycle.js";
 import { createHash } from "node:crypto";
@@ -83,6 +84,7 @@ export function registerHistoryRoutes(
   const applicationOnly = dependencies.applicationOnly ?? false;
 
   const historySettingsSchema = z.object({
+    quotaBytes: capacityBytes.nullable().optional(),
     enabled: z.boolean().optional(),
     intervalMinutes: z.union([z.literal(5), z.literal(10), z.literal(30), z.literal(60)]).optional(),
     retentionDays: z.union([
@@ -108,7 +110,7 @@ export function registerHistoryRoutes(
       retentionDays: row.history_retention_days,
       clearedBefore: row.history_cleared_before,
       ...historyUsage(db, userId),
-      quotaBytes: config.userHistoryQuotaBytes
+      quotaBytes: userQuotas(db, userId, config).historyQuotaBytes, totalQuotaBytes: userQuotas(db, userId, config).quotaBytes
     };
   };
 
@@ -157,6 +159,8 @@ export function registerHistoryRoutes(
       parsed.data.retentionDays === undefined ? current.history_retention_days : parsed.data.retentionDays,
       userId
     );
+    if (parsed.data.quotaBytes !== undefined) db.prepare("UPDATE users SET history_quota_mode = ?, history_quota_bytes = ? WHERE id = ?")
+      .run(parsed.data.quotaBytes === null ? "unlimited" : "limited", parsed.data.quotaBytes, userId);
     return accountHistorySettings(userId);
   });
 
@@ -282,18 +286,12 @@ export function registerHistoryRoutes(
     }
     const byteSize = Buffer.byteLength(parsed.data.ciphertext, "utf8")
       + Buffer.byteLength(parsed.data.metadataCiphertext ?? "", "utf8") + Buffer.byteLength(parsed.data.nonce) + Buffer.byteLength(parsed.data.metadataNonce ?? "");
-    if (!reclaimHistorySpace(db, userId, byteSize, config.userHistoryQuotaBytes)) {
-      logEvent(request.log, "warn", "storage.quota_rejected", {
-        actorRef: logRefs.create("user", userId),
-        resource: "history"
-      });
-      return reply.code(413).send({ error: "Note history quota exceeded" });
-    }
     const pause = db.prepare(`SELECT COALESCE(SUM(MAX(0, julianday(restored_at) - MAX(julianday(entered_at), julianday(?)))), 0) AS days
       FROM note_trash_periods WHERE user_id = ? AND note_id = ? AND restored_at IS NOT NULL`).get(parsed.data.capturedAt, userId, params.data.noteId) as { days: number };
     const retentionAt = new Date(Date.parse(parsed.data.capturedAt) + pause.days * 86_400_000).toISOString();
     try {
       db.transaction(() => {
+        admitHistoryGrowth(db, userId, byteSize, config);
         db.prepare("INSERT INTO sync_receipts (user_id, operation_id, object_id, digest, revision, created_at) VALUES (?, ?, ?, ?, 0, ?)")
           .run(userId, parsed.data.idempotencyKey, params.data.noteId, digest, new Date().toISOString());
         historyChanged(db, userId, params.data.noteId);
@@ -319,8 +317,9 @@ export function registerHistoryRoutes(
             insertRef.run(userId, params.data.noteId, params.data.historyId, attachmentId);
           }
         }
-      })();
+      }).immediate();
     } catch (error) {
+      if (error instanceof StorageQuotaError) return reply.code(413).send({ error: error.message, code: error.code });
       if (error instanceof Error && error.message.includes("UNIQUE constraint failed")) {
         return reply.code(409).send({ error: "History snapshot already exists" });
       }
@@ -364,14 +363,9 @@ export function registerHistoryRoutes(
     }
     const byteSize = Buffer.byteLength(row.ciphertext, "utf8") + Buffer.byteLength(metadataCiphertext ?? "", "utf8") + Buffer.byteLength(row.nonce) + Buffer.byteLength(metadataNonce ?? "");
     const growth = Math.max(0, byteSize - row.byte_size);
-    if (growth > 0 && !reclaimHistorySpace(db, userId, growth, config.userHistoryQuotaBytes)) {
-      logEvent(request.log, "warn", "storage.quota_rejected", {
-        actorRef: logRefs.create("user", userId),
-        resource: "history"
-      });
-      return reply.code(413).send({ error: "Note history quota exceeded" });
-    }
+    try {
     db.transaction(() => {
+      admitHistoryGrowth(db, userId, growth, config, params.data.historyId);
       historyChanged(db, userId, params.data.noteId);
       db.prepare(`
         UPDATE note_history SET metadata_ciphertext = ?, metadata_nonce = ?,
@@ -396,7 +390,11 @@ export function registerHistoryRoutes(
           }
         }
       }
-    })();
+    }).immediate();
+    } catch (error) {
+      if (error instanceof StorageQuotaError) return reply.code(413).send({ error: error.message, code: error.code });
+      throw error;
+    }
     return { ok: true, protected: nextProtected, byteSize };
   });
 

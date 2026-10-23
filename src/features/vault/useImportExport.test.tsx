@@ -10,14 +10,14 @@ vi.mock("./importPersistence",()=>({persistImportedDocument:vi.fn()}));
 (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
 let root:Root;
 afterEach(async()=>{if(root) await act(async()=>root.unmount());document.body.replaceChildren();vi.restoreAllMocks();vi.clearAllMocks();});
-async function harness(readAttachment: Parameters<typeof useImportExport>[0]['readAttachment'] = async()=>new Blob()) {
+async function harness(readAttachment: Parameters<typeof useImportExport>[0]['readAttachment'] = async()=>new Blob(), beforeExport?: () => Promise<void>) {
   const documents:OpenDocument[]=[];
   const attachments: import('../../types').OpenAttachment[] = [];
   const publish=vi.fn((document:OpenDocument)=>{documents.push(document);});
   const onImported=vi.fn();const notify=vi.fn();const onResult=vi.fn();
   let controller!:ReturnType<typeof useImportExport>;
   const container=document.createElement('div');document.body.append(container);root=createRoot(container);
-  function Harness(){controller=useImportExport({userId:'user',getDocuments:()=>documents,getAttachments:()=>attachments,reservations:new NameReservations(),isActive:()=>true,readAttachment,publish,onImported,onResult,notify,t:(key)=>key});return null;}
+  function Harness(){controller=useImportExport({userId:'user',getDocuments:()=>documents,getAttachments:()=>attachments,reservations:new NameReservations(),isActive:()=>true,readAttachment,publish,onImported,onResult,notify,beforeExport,t:(key)=>key});return null;}
   await act(async()=>root.render(<Harness/>));
   return {get controller(){return controller;},documents,attachments,publish,onImported,notify,onResult};
 }
@@ -79,4 +79,14 @@ it('aborts an in-flight export download when locking and suppresses late failure
   await act(async () => { await state.controller.cancel(); await exporting; });
   expect(signal.aborted).toBe(true);
   expect(state.notify).not.toHaveBeenCalled();
+});
+
+it('finishes local persistence before confirming export and stops on failure', async () => {
+  const beforeExport = vi.fn().mockRejectedValue(new Error('local save failed'));
+  const state = await harness(undefined, beforeExport);
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  await act(async () => state.controller.exportRoot());
+  expect(beforeExport).toHaveBeenCalledOnce();
+  expect(confirm).not.toHaveBeenCalled();
+  expect(state.notify).toHaveBeenCalledWith('transfer.exportFailed', 'critical');
 });

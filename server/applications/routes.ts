@@ -1,3 +1,4 @@
+import { userQuotas } from "../storageQuota.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AppDatabase } from "../database.js";
@@ -118,7 +119,7 @@ export function registerApplicationRoutes(app: FastifyInstance, dependencies: {
     native.get("/api/apps/v2/connection", { preHandler: authenticateApplication }, async (request, reply) => {
       reply.header("Cache-Control", "no-store");
       const row = db.prepare("SELECT * FROM application_connections WHERE connection_id = ?").get(request.applicationPrincipal!.connectionId) as ApplicationRow;
-      return applicationBootstrap(db, row, dependencies.config.userHistoryQuotaBytes);
+      return { ...applicationBootstrap(db, row), ...userQuotas(db, row.user_id, dependencies.config) };
     });
     const dataDependencies = { ...dependencies, authenticate: authenticateApplication, apiPrefix: "/api/apps/v2", scope: applicationObjectScope, applicationOnly: true };
     registerSyncRoutes(native, dataDependencies);
