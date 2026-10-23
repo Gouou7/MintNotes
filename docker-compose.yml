@@ -4,6 +4,11 @@ services:
     image: gouou7/mint-notes:latest
     build: .
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # Match these numeric IDs to the owner of the host-side data directory.
     # This keeps the application non-root while permitting SQLite writes on Linux.
     user: "${PUID:-1000}:${PGID:-1000}"

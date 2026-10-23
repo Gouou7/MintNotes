@@ -5,12 +5,13 @@ import type { OpenAttachment } from "../types";
 const mocks = vi.hoisted(() => ({ stored: vi.fn(), download: vi.fn(), bulkPut: vi.fn() }));
 vi.mock("../api", () => ({ downloadAttachmentChunk: mocks.download }));
 vi.mock("../crypto/client", () => ({ cryptoClient: {} }));
+vi.mock("../storage/cache", () => ({ pinCache: () => () => {}, evictDownloadableCaches: vi.fn(), persistWithCacheRecovery: (_user: string, operation: () => Promise<unknown>) => operation() }));
 vi.mock("../storage/database", () => ({
   chunkKey: (userId: string, attachmentId: string, index: number) => `${userId}:${attachmentId}:${index}`,
   localKey: (userId: string, objectId: string) => `${userId}:${objectId}`,
   localDb: {
     attachmentChunks: {
-      where: () => ({ equals: () => ({ toArray: mocks.stored }) }),
+      where: () => ({ equals: () => ({ toArray: mocks.stored, modify: vi.fn().mockResolvedValue(0) }) }),
       bulkPut: mocks.bulkPut
     }
   }

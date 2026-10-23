@@ -12,6 +12,7 @@ const INACTIVE_ENDPOINT_RETENTION_MS = INACTIVE_ENDPOINT_RETENTION_DAYS * 24 * 6
 export function cleanupInactiveEndpoints(db: AppDatabase, now = new Date()): number {
   const nowIso = now.toISOString();
   const cutoff = new Date(now.getTime() - INACTIVE_ENDPOINT_RETENTION_MS).toISOString();
+  db.prepare("DELETE FROM sessions WHERE (revoked_at IS NOT NULL AND revoked_at <= ?) OR expires_at <= ?").run(cutoff, cutoff);
   return db.prepare(`
     DELETE FROM trusted_endpoints
     WHERE endpoint_id IN (

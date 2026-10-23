@@ -1,4 +1,5 @@
 import { api } from "../../api";
+import { operationExpired, operationId } from "@mint-notes/application-client";
 import { cryptoClient } from "../../crypto/client";
 import { cursorKey, localDb, localKey, type LocalEncryptedObject, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
 import type { OpenAttachment, OpenDocument, SyncChange, VaultObject } from "../../types";
@@ -19,6 +20,14 @@ export interface PullControllerDependencies {
   coordinate?: <T>(objectId: string, operation: () => Promise<T>) => Promise<T>;
   acknowledge?: (entry: ObjectUploadAttempt, revision: number) => Promise<void>;
   onPage?: (result: PullControllerResult) => void;
+  onServerTrashTime?: (objectId: string, deleted: boolean, time: string | null) => void;
+  recoverAuxiliary?: (objectId: string, onlyExpired?: boolean) => Promise<boolean>;
+  forceConflictIds?: ReadonlySet<string>;
+  fetchPage?: (cursor: number) => Promise<{ changes: SyncChange[]; cursor: number; hasMore: boolean; reset?: boolean }>;
+  initialCursor?: number;
+  commitCursor?: boolean;
+  reconcileSnapshot?: boolean;
+  recoverLocalTimeline?: boolean;
 }
 
 export interface PullControllerResult {
@@ -31,13 +40,15 @@ export interface PullControllerResult {
   activeConflictId: string | null;
   deferredActive: { objectId: string; document: OpenDocument | null; deleted: boolean } | null;
   purgeDeferred: boolean;
+  complete: boolean;
+  cursor: number;
 }
 
 function emptyResult(): PullControllerResult {
   return {
     failedObjectIds: new Set(), documentUpserts: new Map(), attachmentUpserts: new Map(),
     removedDocumentIds: new Set(), removedAttachmentIds: new Set(), conflicts: new Map(),
-    activeConflictId: null, deferredActive: null, purgeDeferred: false
+    activeConflictId: null, deferredActive: null, purgeDeferred: false, complete: true, cursor: 0
   };
 }
 
@@ -54,6 +65,7 @@ interface Candidate {
   decrypted?: VaultObject;
   conflict?: OpenDocument;
   committed?: boolean;
+  recoverySource?: OutboxEntry;
 }
 
 /** Crypto and attachment copies run outside write lanes; only the guarded page commit holds them. */
@@ -62,18 +74,24 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
   const { userId, isActive } = dependencies;
   const coordinate = dependencies.coordinate ?? (async <T,>(_id: string, operation: () => Promise<T>) => operation());
   if (!isActive()) return total;
-  let cursor = Number((await localDb.meta.get(cursorKey(userId)))?.value ?? 0);
+  let cursor = dependencies.initialCursor ?? Number((await localDb.meta.get(cursorKey(userId)))?.value ?? 0);
   let hasMore = true;
   while (hasMore && isActive()) {
-    const page = await api<{ changes: SyncChange[]; cursor: number; hasMore: boolean; reset?: boolean }>(
+    const page = await (dependencies.fetchPage?.(cursor) ?? api<{ changes: SyncChange[]; cursor: number; hasMore: boolean; reset?: boolean }>(
       `/api/sync?since=${cursor}&limit=500&compact=1`
-    );
-    if (!isActive()) return total;
+    ));
+    if (!isActive()) return { ...total, complete: false };
+    if (page.reset) throw new Error("SYNC_RECONCILE_REQUIRED");
     const result = emptyResult();
     const candidates: Candidate[] = [];
     const blocked = new Set<string>();
     for (const change of page.changes) {
       if (!isActive()) return total;
+      if (change.historyVersion !== undefined) {
+        await localDb.meta.put({ key: `history-invalid:${userId}:${change.objectId}`, value: String(change.historyVersion) });
+        continue;
+      }
+      if (change.purged) await dependencies.recoverAuxiliary?.(change.objectId);
       const key = localKey(userId, change.objectId);
       if (change.purged && dependencies.hasPendingSave(change.objectId)) await dependencies.flushDocument(change.objectId);
       if (dependencies.hasPendingSave(change.objectId)) {
@@ -83,6 +101,10 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
       let [stored, pending] = await localDb.transaction("r", localDb.objects, localDb.outbox, () => (
         Promise.all([localDb.objects.get(key), localDb.outbox.get(key)])
       ));
+      if (change.serverTrashedAt !== undefined) {
+        if (stored?.deleted === change.deleted) await localDb.objects.update(key, { serverTrashedAt: change.serverTrashedAt });
+        dependencies.onServerTrashTime?.(change.objectId, change.deleted, change.serverTrashedAt);
+      }
       const echo = pending && [pending.upload, pending].find((entry) => entry && isAcknowledgedLocalEcho(entry, change));
       if (echo) {
         await coordinate(change.objectId, async () => {
@@ -128,11 +150,15 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
           continue;
         }
       } else {
-        if (pending && change.revision <= pending.baseRevision) continue;
-        if (!pending && stored && stored.revision > change.revision) continue;
+        if (pending && change.revision <= pending.baseRevision && !(dependencies.reconcileSnapshot && change.revision < pending.baseRevision) && !dependencies.forceConflictIds?.has(change.objectId)
+          && !operationExpired(pending.idempotencyKey) && !(pending.upload && operationExpired(pending.upload.idempotencyKey))) continue;
+        if (!pending && stored && (stored.revision > change.revision || dependencies.recoverLocalTimeline)) {
+          if (!dependencies.reconcileSnapshot) continue;
+          candidate.recoverySource = { ...stored, operation: "upsert", baseRevision: Math.max(0, stored.revision - 1), idempotencyKey: operationId(), generation: Date.now() * 1000 };
+        }
       }
-      if (pending?.operation === "upsert") {
-        const conflict = await dependencies.preserveConflict(pending);
+      if (pending?.operation === "upsert" || candidate.recoverySource) {
+        const conflict = await dependencies.preserveConflict(candidate.recoverySource ?? pending!);
         if (!conflict) {
           blocked.add(change.objectId);
           if (change.purged) result.purgeDeferred = true;
@@ -164,6 +190,7 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
               result.purgeDeferred = true;
               continue;
             }
+            await localDb.meta.bulkDelete([`history-invalid:${userId}:${change.objectId}`, `history-verified:${userId}:${change.objectId}`]);
             await localDb.objects.delete(key);
             await localDb.outbox.delete(key);
             await localDb.attachmentChunks.where("[userId+attachmentId]").equals([userId, change.objectId]).delete();
@@ -176,13 +203,14 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
             await localDb.objects.put({
               key, userId, objectId: change.objectId, objectType: change.objectType,
               ciphertext: change.ciphertext, nonce: change.nonce, encryptionVersion: change.encryptionVersion,
-              revision: change.revision, deleted: change.deleted, updatedAt: change.serverUpdatedAt
+              revision: change.revision, deleted: change.deleted, updatedAt: change.serverUpdatedAt, serverTrashedAt: change.serverTrashedAt,
+              ...(candidate.decrypted?.kind === "attachment" ? { ownerNoteId: candidate.decrypted.ownerNoteId } : {})
             });
             if (pending) await localDb.outbox.delete(key);
           }
           candidate.committed = true;
         }
-        if (isActive() && !blocked.size) {
+        if (isActive() && !blocked.size && dependencies.commitCursor !== false) {
           await localDb.meta.put({ key: cursorKey(userId), value: String(page.cursor) });
         }
       });
@@ -201,7 +229,7 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
             result.deferredActive = { objectId: change.objectId, document: null, deleted: true };
           }
         } else if (decrypted) {
-          const open = { ...decrypted, objectId: change.objectId, serverRevision: change.revision, dirty: false };
+          const open = { ...decrypted, objectId: change.objectId, serverRevision: change.revision, serverTrashedAt: change.serverTrashedAt, dirty: false };
           if (open.kind === "attachment") result.attachmentUpserts.set(change.objectId, open);
           else if (dependencies.activeObjectId() === change.objectId && !conflict) {
             result.deferredActive = { objectId: change.objectId, document: open, deleted: open.deleted };
@@ -226,8 +254,9 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
     total.activeConflictId = result.activeConflictId ?? total.activeConflictId;
     total.deferredActive = result.deferredActive ?? total.deferredActive;
     total.purgeDeferred ||= result.purgeDeferred;
-    if (blocked.size) break;
+    if (blocked.size) { total.complete = false; break; }
     cursor = page.cursor;
+    total.cursor = cursor;
     hasMore = page.hasMore;
     await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
   }

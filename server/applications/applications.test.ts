@@ -1,9 +1,10 @@
+import { operationId as newOperationId } from "@mint-notes/application-client";
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createApp } from "../app";
+import { createApp } from "../testSupport";
 import { loadServerConfig } from "../config";
 import { openDatabase } from "../database";
 import { revokeUserCredentials } from "../auth/credentialRevocation";
@@ -52,7 +53,7 @@ beforeEach(async () => {
   userId = response.json().user.id;
   credential = (await registerGrant()).value;
   bearer = `Bearer ${credential.connectionId}.${credential.authSecret}`;
-  const connection = await app.inject({ method: "GET", url: "/api/apps/v1/connection", headers: { authorization: bearer } });
+  const connection = await app.inject({ method: "GET", url: "/api/apps/v2/connection", headers: { authorization: bearer } });
   expect(connection.statusCode).toBe(200);
   bootstrap = connection.json();
   cipher = await VaultCipher.unlock(credential.applicationKey, bootstrap);
@@ -76,8 +77,8 @@ afterEach(async () => {
 async function putNote(title: string, markdown = "body", locked = false) {
   const note = makeDocument([], "note", title, null, markdown); note.locked = locked;
   const sealed = await cipher.encryptObject(note.objectId, "note", 1, note);
-  const result = await app.inject({ method: "PUT", url: `/api/apps/v1/objects/${note.objectId}`, headers: { authorization: bearer },
-    payload: { ...sealed, objectType: "note", baseRevision: 0, deleted: false, idempotencyKey: crypto.randomUUID() } });
+  const result = await app.inject({ method: "PUT", url: `/api/apps/v2/objects/${note.objectId}`, headers: { authorization: bearer },
+    payload: { ...sealed, objectType: "note", baseRevision: 0, deleted: false, idempotencyKey: newOperationId() } });
   expect(result.statusCode).toBe(200); return note;
 }
 
@@ -89,9 +90,9 @@ describe("application grants and encrypted adapters", () => {
       .run(hashToken(authSecret), credential.connectionId);
     const authorization = `Bearer ${credential.connectionId}.${wrongSecret}`;
     for (const request of [
-      { method: "GET" as const, url: "/api/apps/v1/connection" },
-      { method: "GET" as const, url: "/api/apps/v1/sync" },
-      { method: "PUT" as const, url: `/api/apps/v1/objects/${crypto.randomUUID()}`, payload: {} }
+      { method: "GET" as const, url: "/api/apps/v2/connection" },
+      { method: "GET" as const, url: "/api/apps/v2/sync" },
+      { method: "PUT" as const, url: `/api/apps/v2/objects/${crypto.randomUUID()}`, payload: {} }
     ]) {
       const response = await app.inject({ ...request, headers: { authorization } });
       expect(response.statusCode).toBe(401);
@@ -102,7 +103,7 @@ describe("application grants and encrypted adapters", () => {
         access: "read-write", idleTimeoutDays: 30, expiresAt: null, authSecret: wrongSecret,
         vaultEnvelope: credential.vaultEnvelope } });
     expect(retry.statusCode).toBe(409);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v1/connection",
+    expect((await app.inject({ method: "GET", url: "/api/apps/v2/connection",
       headers: { authorization: `Bearer ${credential.connectionId}.${authSecret}` } })).statusCode).toBe(200);
     expect(db.prepare("SELECT last_used_at FROM application_connections WHERE connection_id = ?")
       .get(credential.connectionId)).toEqual({ last_used_at: null });
@@ -114,10 +115,10 @@ describe("application grants and encrypted adapters", () => {
     expect(JSON.stringify(listed.json())).not.toContain(credential.authSecret);
     expect(JSON.stringify(listed.json())).not.toContain("vaultEnvelope");
     expect((await app.inject({ method: "GET", url: "/api/auth/me", headers: { authorization: bearer } })).statusCode).toBe(401);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v1/connection", headers: { cookie } })).statusCode).toBe(401);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v1/connection", headers: { authorization: bearer, origin: "https://evil.test" } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "GET", url: "/api/apps/v2/connection", headers: { cookie } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/apps/v2/connection", headers: { authorization: bearer, origin: "https://evil.test" } })).statusCode).toBe(403);
     const read = await registerGrant("read");
-    expect((await app.inject({ method: "PUT", url: `/api/apps/v1/objects/${note.objectId}`, headers: { authorization: `Bearer ${read.value.connectionId}.${read.value.authSecret}` }, payload: {} })).statusCode).toBe(403);
+    expect((await app.inject({ method: "PUT", url: `/api/apps/v2/objects/${note.objectId}`, headers: { authorization: `Bearer ${read.value.connectionId}.${read.value.authSecret}` }, payload: {} })).statusCode).toBe(403);
     const other = await app.inject({ method: "POST", url: "/api/auth/register", headers: { origin }, payload: registration("beta") });
     const otherCookie = (other.headers["set-cookie"] as string[]).map((value) => value.split(";", 1)[0]).join("; ");
     expect((await app.inject({ method: "DELETE", url: `/api/account/application-connections/${credential.connectionId}`, headers: { origin, cookie: otherCookie } })).statusCode).toBe(404);
@@ -128,11 +129,11 @@ describe("application grants and encrypted adapters", () => {
       name: "other", access: "read", idleTimeoutDays: 30, expiresAt: null
     } })).statusCode).toBe(201);
     const otherBearer = `Bearer ${otherGrant.connectionId}.${otherGrant.authSecret}`;
-    expect((await app.inject({ method: "GET", url: `/api/apps/v1/objects/${note.objectId}`, headers: { authorization: otherBearer } })).statusCode).toBe(404);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v1/sync", headers: { authorization: otherBearer } })).json().changes).toEqual([]);
+    expect((await app.inject({ method: "GET", url: `/api/apps/v2/objects/${note.objectId}`, headers: { authorization: otherBearer } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: "/api/apps/v2/sync", headers: { authorization: otherBearer } })).json().changes).toEqual([]);
     expect((await app.inject({ method: "PATCH", url: `/api/admin/users/${other.json().user.id}`, headers: browser(), payload: { disabled: true } })).statusCode).toBe(200);
     expect((await app.inject({ method: "PATCH", url: `/api/admin/users/${other.json().user.id}`, headers: browser(), payload: { disabled: false } })).statusCode).toBe(200);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v1/connection", headers: { authorization: otherBearer } })).json().code).toBe("APPLICATION_REVOKED");
+    expect((await app.inject({ method: "GET", url: "/api/apps/v2/connection", headers: { authorization: otherBearer } })).json().code).toBe("APPLICATION_REVOKED");
     const row = db.prepare("SELECT * FROM application_connections WHERE connection_id = ?").get(credential.connectionId) as Record<string, unknown>;
     expect(JSON.stringify(row)).not.toContain(credential.applicationKey);
     expect(row.auth_hash).not.toBe(credential.authSecret);
@@ -147,7 +148,7 @@ describe("application grants and encrypted adapters", () => {
     await client.execute("mint_notes_status");
     expect(db.prepare("SELECT last_used_at FROM application_connections WHERE connection_id = ?").get(credential.connectionId)).toEqual({ last_used_at: null });
     db.prepare("UPDATE application_connections SET created_at = ? WHERE connection_id = ?").run("2000-01-01T00:00:00.000Z", credential.connectionId);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v1/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_EXPIRED");
+    expect((await app.inject({ method: "GET", url: "/api/apps/v2/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_EXPIRED");
     expect((await app.inject({ method: "PATCH", url: `/api/account/application-connections/${credential.connectionId}`, headers: browser(), payload: { name: "new", idleTimeoutDays: null, expiresAt: null } })).statusCode).toBe(409);
   });
 
@@ -176,9 +177,9 @@ describe("application grants and encrypted adapters", () => {
 
   it("persists an interrupted append, retries once after restart, and keeps SQLite free of plaintext", async () => {
     const note = await putNote("note", "original");
-    const operationId = crypto.randomUUID();
+    const operationId = newOperationId();
     const args = { noteId: note.objectId, expectedRevision: 1, markdown: "CONFIDENTIAL_APPEND_9472", operationId };
-    beforeFetch = async (path, init) => { if (path === `/api/apps/v1/objects/${note.objectId}` && init.method === "PUT") throw new TypeError("lost network"); };
+    beforeFetch = async (path, init) => { if (path === `/api/apps/v2/objects/${note.objectId}` && init.method === "PUT") throw new TypeError("lost network"); };
     expect(await client.execute("mint_notes_append", args)).toMatchObject({ status: "pending", operationId });
     await client.close();
     const files = (await import("node:fs")).readdirSync(join(directory, "mint-notes"));
@@ -191,17 +192,63 @@ describe("application grants and encrypted adapters", () => {
     await expect(client.execute("mint_notes_append", { ...args, markdown: "different" })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
   });
 
+  it("reconciles after ninety days without replaying an append and requires explicit recovery into a new note", async () => {
+    db.prepare("UPDATE application_connections SET idle_timeout_days = NULL, expires_at = NULL WHERE connection_id = ?").run(credential.connectionId);
+    const note = await putNote("expiring", "original");
+    const operationId = newOperationId();
+    const args = { noteId: note.objectId, expectedRevision: 1, markdown: " unique proposal", operationId };
+    beforeFetch = async (path, init) => { if (path === `/api/apps/v2/objects/${note.objectId}` && init.method === "PUT") throw new TypeError("interrupted"); };
+    expect(await client.execute("mint_notes_append", args)).toMatchObject({ status: "pending" });
+    const writes: string[] = [];
+    beforeFetch = async (path, init) => { if (init.method === "PUT") writes.push(path); };
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 91 * 86_400_000);
+    try {
+      expect(await client.execute("mint_notes_get", { noteId: note.objectId })).toMatchObject({ markdown: "original unique proposal", pending: true });
+      expect(writes).toEqual([]);
+      await expect(client.execute("mint_notes_append", args)).rejects.toMatchObject({ code: "OPERATION_EXPIRED" });
+      const recovered = await client.execute("mint_notes_recover", { operationId }) as { conflictNoteId: string; status: string };
+      expect(recovered.status).toBe("conflict"); expect(recovered.conflictNoteId).not.toBe(note.objectId);
+      expect(await client.execute("mint_notes_get", { noteId: recovered.conflictNoteId })).toMatchObject({ markdown: "original unique proposal" });
+      expect(await client.execute("mint_notes_get", { noteId: note.objectId })).toMatchObject({ markdown: "original", revision: 1 });
+      expect(writes).not.toContain(`/api/apps/v2/objects/${note.objectId}`);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("saves the note while automatic history is full and retries the retained snapshots independently", async () => {
+    const note = await putNote("quota", "original");
+    db.prepare(`INSERT INTO note_history(user_id,note_id,history_id,captured_at,capture_kind,ciphertext,nonce,encryption_version,is_protected,byte_size,idempotency_key,created_at)
+      VALUES (?,?,?,?,'manual','encrypted','nonce',1,1,?,?,?)`).run(userId, note.objectId, crypto.randomUUID(), new Date().toISOString(), 256 * 1024 * 1024, newOperationId(), new Date().toISOString());
+    expect(await client.execute("mint_notes_update", { noteId: note.objectId, expectedRevision: 1, markdown: "changed" })).toMatchObject({ status: "pending", revision: 2, errorCode: "HISTORY_QUOTA_EXCEEDED" });
+    expect(await client.execute("mint_notes_append", { noteId: note.objectId, expectedRevision: 2, markdown: " again" })).toMatchObject({ status: "pending", revision: 3 });
+    db.prepare("DELETE FROM note_history WHERE is_protected = 1").run();
+    expect(await client.execute("mint_notes_get", { noteId: note.objectId })).toMatchObject({ markdown: "changed again", revision: 3, pending: false });
+  });
+  it("fences a fresh pending append when a restored server reuses the same revision counter", async () => {
+    const note = await putNote("restored", "original");
+    beforeFetch = async (path, init) => { if (path === `/api/apps/v2/objects/${note.objectId}` && init.method === "PUT") throw new TypeError("interrupted"); };
+    expect(await client.execute("mint_notes_append", { noteId: note.objectId, expectedRevision: 1, markdown: " proposal" })).toMatchObject({ status: "pending" });
+    beforeFetch = null;
+    const sealed = await cipher.encryptObject(note.objectId, "note", 1, { ...note, markdown: "restored branch" });
+    db.prepare("UPDATE objects SET ciphertext = ?, nonce = ? WHERE object_id = ?").run(sealed.ciphertext, sealed.nonce, note.objectId);
+    db.prepare("UPDATE sync_state SET epoch = ?, lease_secret = ? WHERE user_id = ?").run(crypto.randomUUID(), crypto.randomUUID(), userId);
+    await client.execute("mint_notes_list");
+    expect(await client.execute("mint_notes_get", { noteId: note.objectId })).toMatchObject({ markdown: "restored branch", revision: 1 });
+    const listed = await client.execute("mint_notes_list") as { items: Array<{ objectId: string }> };
+    const copy = listed.items.find((r) => r.objectId !== note.objectId)!;
+    expect(await client.execute("mint_notes_get", { noteId: copy.objectId })).toMatchObject({ markdown: "original proposal" });
+  });
+
   it("preserves the server version and creates one durable conflict copy", async () => {
     const note = await putNote("racing", "original");
     let raced = false;
     beforeFetch = async (path, init) => {
-      if (!raced && path === `/api/apps/v1/objects/${note.objectId}` && init.method === "PUT") {
+      if (!raced && path === `/api/apps/v2/objects/${note.objectId}` && init.method === "PUT") {
         raced = true;
         const sealed = await cipher.encryptObject(note.objectId, "note", 2, { ...note, markdown: "server winner" });
-        expect((await app.inject({ method: "PUT", url: path, headers: { authorization: bearer }, payload: { ...sealed, objectType: "note", baseRevision: 1, deleted: false, idempotencyKey: crypto.randomUUID() } })).statusCode).toBe(200);
+        expect((await app.inject({ method: "PUT", url: path, headers: { authorization: bearer }, payload: { ...sealed, objectType: "note", baseRevision: 1, deleted: false, idempotencyKey: newOperationId() } })).statusCode).toBe(200);
       }
     };
-    const args = { noteId: note.objectId, expectedRevision: 1, markdown: "plugin proposal", operationId: crypto.randomUUID() };
+    const args = { noteId: note.objectId, expectedRevision: 1, markdown: "plugin proposal", operationId: newOperationId() };
     const result = await client.execute("mint_notes_update", args) as { conflictNoteId: string };
     expect(result).toMatchObject({ status: "conflict" });
     expect(await client.execute("mint_notes_get", { noteId: note.objectId })).toMatchObject({ markdown: "server winner", revision: 2 });
@@ -216,25 +263,25 @@ describe("application grants and encrypted adapters", () => {
     const image = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]).buffer;
     const attachment = await encryptAttachmentBytes({ userId, attachmentId, ownerNoteId: note.objectId, originalName: "secret.png", mime: "image/png", data: image, chunkSize: 1024 * 1024 });
     for (const chunk of attachment.chunks) {
-      expect((await app.inject({ method: "PUT", url: `/api/apps/v1/attachments/${attachmentId}/chunks/${chunk.chunkIndex}`,
+      expect((await app.inject({ method: "PUT", url: `/api/apps/v2/attachments/${attachmentId}/chunks/${chunk.chunkIndex}`,
         headers: { authorization: bearer, "content-type": "application/octet-stream", "x-webmd-nonce": chunk.nonce,
-          "x-webmd-total-chunks": String(chunk.totalChunks), "x-webmd-encryption-version": "1", "x-webmd-idempotency-key": crypto.randomUUID() },
+          "x-webmd-total-chunks": String(chunk.totalChunks), "x-webmd-owner-note": note.objectId, "x-webmd-encryption-version": "1", "x-webmd-idempotency-key": newOperationId() },
         payload: Buffer.from(chunk.ciphertext) })).statusCode).toBe(200);
     }
     const sealedAttachment = await cipher.encryptObject(attachmentId, "attachment", 1, attachment.metadata);
-    expect((await app.inject({ method: "PUT", url: `/api/apps/v1/objects/${attachmentId}`, headers: { authorization: bearer }, payload: { ...sealedAttachment, objectType: "attachment", baseRevision: 0, deleted: false, idempotencyKey: crypto.randomUUID() } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "PUT", url: `/api/apps/v2/objects/${attachmentId}`, headers: { authorization: bearer }, payload: { ...sealedAttachment, objectType: "attachment", ownerNoteId: note.objectId, baseRevision: 0, deleted: false, idempotencyKey: newOperationId() } })).statusCode).toBe(200);
     note.markdown = `![image](WEBMD-ATTACHMENT:${attachmentId.toUpperCase()})`; note.attachmentIds = [attachmentId];
     const sealed = await cipher.encryptObject(note.objectId, "note", 1, note);
-    await app.inject({ method: "PUT", url: `/api/apps/v1/objects/${note.objectId}`, headers: { authorization: bearer }, payload: { ...sealed, objectType: "note", baseRevision: 0, deleted: false, idempotencyKey: crypto.randomUUID() } });
+    await app.inject({ method: "PUT", url: `/api/apps/v2/objects/${note.objectId}`, headers: { authorization: bearer }, payload: { ...sealed, objectType: "note", baseRevision: 0, deleted: false, idempotencyKey: newOperationId() } });
     let raced = false;
     beforeFetch = async (path, init) => {
-      if (!raced && path === `/api/apps/v1/objects/${note.objectId}` && init.method === "PUT") {
+      if (!raced && path === `/api/apps/v2/objects/${note.objectId}` && init.method === "PUT") {
         raced = true;
         const server = await cipher.encryptObject(note.objectId, "note", 2, { ...note, markdown: note.markdown + "server" });
-        await app.inject({ method: "PUT", url: path, headers: { authorization: bearer }, payload: { ...server, objectType: "note", baseRevision: 1, deleted: false, idempotencyKey: crypto.randomUUID() } });
+        await app.inject({ method: "PUT", url: path, headers: { authorization: bearer }, payload: { ...server, objectType: "note", baseRevision: 1, deleted: false, idempotencyKey: newOperationId() } });
       }
     };
-    const result = await client.execute("mint_notes_append", { noteId: note.objectId, expectedRevision: 1, markdown: "proposed", operationId: crypto.randomUUID() }) as { status: string; conflictNoteId: string };
+    const result = await client.execute("mint_notes_append", { noteId: note.objectId, expectedRevision: 1, markdown: "proposed", operationId: newOperationId() }) as { status: string; conflictNoteId: string };
     expect(result.status).toBe("conflict");
     const copy = await client.execute("mint_notes_get", { noteId: result.conflictNoteId }) as { attachmentIds: string[]; markdown: string };
     expect(copy.attachmentIds).toHaveLength(1); expect(copy.attachmentIds[0]).not.toBe(attachmentId);
@@ -251,7 +298,7 @@ describe("application grants and encrypted adapters", () => {
     const note = await putNote("cancelled");
     const controller = new AbortController();
     beforeFetch = async (path, init) => { if (path.endsWith(note.objectId) && init.method === "PUT") controller.abort(); };
-    expect(await client.execute("mint_notes_append", { noteId: note.objectId, expectedRevision: 1, markdown: "retained", operationId: crypto.randomUUID() }, controller.signal)).toMatchObject({ status: "pending", errorCode: "CANCELLED" });
+    expect(await client.execute("mint_notes_append", { noteId: note.objectId, expectedRevision: 1, markdown: "retained", operationId: newOperationId() }, controller.signal)).toMatchObject({ status: "pending", errorCode: "CANCELLED" });
     beforeFetch = null;
     expect(await client.execute("mint_notes_get", { noteId: note.objectId })).toMatchObject({ markdown: "bodyretained", revision: 2 });
     beforeFetch = async (path, init) => { if (path.endsWith(note.objectId) && init.method === "PUT") db.prepare("UPDATE application_connections SET revoked_at = ? WHERE connection_id = ?").run(new Date().toISOString(), credential.connectionId); };
@@ -262,13 +309,13 @@ describe("application grants and encrypted adapters", () => {
 
   it.each(["purged", "history-cleared"])("retries a pending edit after its original is %s", async (action) => {
     const note = await putNote("pending original");
-    const args = { noteId: note.objectId, expectedRevision: 1, markdown: "retained proposal", operationId: crypto.randomUUID() };
+    const args = { noteId: note.objectId, expectedRevision: 1, markdown: "retained proposal", operationId: newOperationId() };
     beforeFetch = async (path, init) => { if (path.endsWith(note.objectId) && init.method === "PUT") throw new TypeError("offline"); };
     expect(await client.execute("mint_notes_append", args)).toMatchObject({ status: "pending" });
     beforeFetch = null;
     if (action === "purged") {
       const deleted = await cipher.encryptObject(note.objectId, "note", 2, { ...note, deleted: true });
-      expect((await app.inject({ method: "PUT", url: `/api/objects/${note.objectId}`, headers: browser(), payload: { ...deleted, objectType: "note", baseRevision: 1, deleted: true, idempotencyKey: crypto.randomUUID() } })).statusCode).toBe(200);
+      expect((await app.inject({ method: "PUT", url: `/api/objects/${note.objectId}`, headers: browser(), payload: { ...deleted, objectType: "note", baseRevision: 1, deleted: true, idempotencyKey: newOperationId() } })).statusCode).toBe(200);
       expect((await app.inject({ method: "POST", url: "/api/objects/purge", headers: browser(), payload: { objects: [{ objectId: note.objectId, baseRevision: 2 }] } })).statusCode).toBe(200);
     } else {
       expect((await app.inject({ method: "DELETE", url: `/api/notes/${note.objectId}/history`, headers: browser() })).statusCode).toBe(200);
@@ -285,7 +332,7 @@ describe("application grants and encrypted adapters", () => {
       newWrappedVaultKey: "z".repeat(32), newWrappedVaultNonce: "y".repeat(24),
       ...(action === "password" ? { currentAuthSecret: account.authSecret } : { username: account.username, recoveryAuthSecret: account.recoveryAuthSecret }) };
     expect((await app.inject({ method: "POST", url: `/api/auth/${action}`, headers: browser(), payload })).statusCode).toBe(200);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v1/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_REVOKED");
+    expect((await app.inject({ method: "GET", url: "/api/apps/v2/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_REVOKED");
   });
 
   it("keeps application authorization independent of recovery-key rotation and browser logout", async () => {
@@ -294,11 +341,11 @@ describe("application grants and encrypted adapters", () => {
       currentAuthSecret: account.authSecret, recoveryAuthSecret: "rotated-recovery-secret-000001", recoveryWrappedVaultKey: "z".repeat(32), recoveryWrappedVaultNonce: "y".repeat(24)
     } })).statusCode).toBe(200);
     expect((await app.inject({ method: "POST", url: "/api/auth/logout", headers: browser() })).statusCode).toBe(200);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v1/connection", headers: { authorization: bearer } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/api/apps/v2/connection", headers: { authorization: bearer } })).statusCode).toBe(200);
   });
 
   it("revokes application grants together with account credential invalidation", async () => {
     db.transaction(() => revokeUserCredentials(db, userId))();
-    expect((await app.inject({ method: "GET", url: "/api/apps/v1/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_REVOKED");
+    expect((await app.inject({ method: "GET", url: "/api/apps/v2/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_REVOKED");
   });
 });

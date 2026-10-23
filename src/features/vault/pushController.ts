@@ -20,8 +20,8 @@ type WriteResult =
   | { objectId: string; status: "conflict"; currentRevision: number; reason: string };
 
 function payload(entry: ObjectUploadAttempt) {
-  const { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted } = entry;
-  return { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted };
+  const { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted, ownerNoteId } = entry;
+  return { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted, ...(ownerNoteId ? { ownerNoteId } : {}) };
 }
 
 /** Snapshot dependency graphs together; retain exact requests through response loss and later edits. */
@@ -54,6 +54,7 @@ export async function pushVaultPending(dependencies: PushControllerDependencies)
       "X-WebMD-Total-Chunks": String(entry.totalChunks),
       "X-WebMD-Encryption-Version": String(entry.encryptionVersion),
       "X-WebMD-Idempotency-Key": entry.idempotencyKey,
+      "X-WebMD-Owner-Note": entry.ownerNoteId ?? snapshot.entries.find((object) => object.objectId === entry.attachmentId)?.ownerNoteId ?? "",
       "X-WebMD-Sync-Client": dependencies.clientId
     });
     if (!isActive()) return;

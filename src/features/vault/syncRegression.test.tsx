@@ -1,3 +1,4 @@
+import { operationId } from "@mint-notes/application-client";
 import "fake-indexeddb/auto";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -43,7 +44,7 @@ function entry(markdown: string, baseRevision = 3): OutboxEntry {
   return {
     key, userId, objectId: noteId, objectType: "note", ...envelope(plain(document(markdown))),
     revision: baseRevision + 1, deleted: false, updatedAt: "2026-01-01T00:00:00.000Z",
-    operation: "upsert", baseRevision, idempotencyKey: crypto.randomUUID(), generation: ++generation
+    operation: "upsert", baseRevision, idempotencyKey: operationId(), generation: ++generation
   };
 }
 function attachmentEntry(): OutboxEntry {
@@ -306,7 +307,7 @@ describe("synchronization race regressions", () => {
     const oldChunk: AttachmentOutboxEntry = {
       key: "old-chunk", userId, attachmentId: "old-attachment", chunkIndex: 0, totalChunks: 1,
       ciphertext: new ArrayBuffer(1), nonce: "old-nonce", encryptionVersion: 1,
-      updatedAt: "2026-01-01T00:00:00.000Z", generation: 1, idempotencyKey: crypto.randomUUID()
+      updatedAt: "2026-01-01T00:00:00.000Z", generation: 1, idempotencyKey: operationId()
     };
     await localDb.attachmentOutbox.put(oldChunk);
     const gate = deferred<void>(); mocks.uploadChunk.mockReturnValueOnce(gate.promise);
@@ -315,7 +316,7 @@ describe("synchronization race regressions", () => {
     const manifest = attachmentEntry();
     const note = entry("image reference"); note.ciphertext = JSON.stringify({ ...plain(document("image reference")), attachmentIds: [attachmentId] });
     await seed(manifest); await seed(note);
-    const newChunk = { ...oldChunk, key: "new-chunk", attachmentId, idempotencyKey: crypto.randomUUID() };
+    const newChunk = { ...oldChunk, key: "new-chunk", attachmentId, idempotencyKey: operationId() };
     await localDb.attachmentOutbox.put(newChunk);
     gate.resolve(); await pushing;
     expect(mocks.api).not.toHaveBeenCalled();

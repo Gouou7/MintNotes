@@ -31,7 +31,8 @@ function kindLabel(kind: HistoryCaptureKind, t: ReturnType<typeof useI18n>["t"])
     interval: t("history.kindInterval"),
     idle: t("history.kindIdle"),
     manual: t("history.kindManual"),
-    "restore-safety": t("history.kindRestoreSafety")
+    "restore-safety": t("history.kindRestoreSafety"),
+    "application-edit": t("history.kindApplicationEdit")
   })[kind];
 }
 
@@ -101,7 +102,7 @@ export function HistoryPanel({
             {renaming
               ? <TreeRenameInput className="history-rename-input" initialValue={name} label={t("history.rename")} onCommit={(name) => onRename(item, name)} onCancel={onRenameCancel} />
               : <strong>{name}</strong>}
-            <small>{timeFormatter.format(new Date(item.capturedAt))} · {kindLabel(item.captureKind, t)}{item.pending ? ` · ${t("history.pending")}` : ""}</small>
+            <small>{timeFormatter.format(new Date(item.capturedAt))} · {kindLabel(item.captureKind, t)}{item.pending ? ` · ${t("history.pending")}` : ` · ${t(item.offlineAvailable ? "history.offlineAvailable" : "history.downloadRequired")}`}</small>
           </span>;
           return <div className={`history-row ${selectedId === item.historyId ? "active" : ""}`} data-history-id={item.historyId} key={item.historyId} onContextMenu={(event) => {
             if (renamingId === item.historyId) return;

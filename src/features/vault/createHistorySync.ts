@@ -1,3 +1,4 @@
+import { operationId } from "@mint-notes/application-client";
 import type { RefObject } from "react";
 import { api, ApiError } from "../../api";
 import { cryptoClient } from "../../crypto/client";
@@ -66,7 +67,7 @@ export function createHistorySync(options: Options) {
         pushed = true;
         historyQuotaPaused.current = false;
       } catch (error) {
-        if (error instanceof ApiError && error.status === 409) {
+        if (error instanceof ApiError && error.status === 409 && error.data.code === "HISTORY_CLEARED" && !entry.protected) {
           await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, async () => {
             await localDb.historySnapshots.delete(entry.key);
             await localDb.historyIndex.delete(entry.key);
@@ -136,17 +137,6 @@ export function createHistorySync(options: Options) {
         }
         pushed = true;
       } catch (error) {
-        if (error instanceof ApiError && error.status === 404 && record.protected && snapshot) {
-          const nextGeneration = Date.now() * 1000 + ++generation.current;
-          await localDb.historyOutbox.put({
-            ...snapshot,
-            pending: true,
-            idempotencyKey: crypto.randomUUID(),
-            generation: nextGeneration
-          });
-          requestPush("editor");
-          break;
-        }
         if (error instanceof ApiError && error.status === 404 && record.protected) break;
         if (error instanceof ApiError && error.status === 404) {
           await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyMetadataOutbox, async () => {

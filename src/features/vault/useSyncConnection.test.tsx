@@ -76,7 +76,7 @@ describe("sync connection lifecycle", () => {
     const app = await mount();
     expect(app.synchronize).toHaveBeenCalledOnce();
     const source = MockEventSource.instances[0];
-    expect(source.url).toBe("/api/sync/events?since=42&clientId=client");
+    expect(source.url).toBe("/api/sync/events?protocol=2&since=42&clientId=client");
     source.dispatchEvent(new Event("changed"));
     expect(app.requestPull).toHaveBeenCalledWith(250);
     await act(async () => vi.advanceTimersByTimeAsync(5 * 60_000));

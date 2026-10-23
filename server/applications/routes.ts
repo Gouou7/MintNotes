@@ -109,18 +109,18 @@ export function registerApplicationRoutes(app: FastifyInstance, dependencies: {
     native.addHook("onRoute", (route) => { route.config = { ...route.config, applicationAuth: true }; });
     native.addHook("onRequest", authenticateApplication);
     native.addHook("onSend", async (request, reply, payload) => {
-      if (reply.statusCode < 400 && request.applicationPrincipal && request.routeOptions.url !== "/api/apps/v1/connection") {
+      if (reply.statusCode < 400 && request.applicationPrincipal && request.routeOptions.url !== "/api/apps/v2/connection") {
         db.prepare("UPDATE application_connections SET last_used_at = ? WHERE connection_id = ? AND revoked_at IS NULL")
           .run(new Date().toISOString(), request.applicationPrincipal.connectionId);
       }
       return payload;
     });
-    native.get("/api/apps/v1/connection", { preHandler: authenticateApplication }, async (request, reply) => {
+    native.get("/api/apps/v2/connection", { preHandler: authenticateApplication }, async (request, reply) => {
       reply.header("Cache-Control", "no-store");
       const row = db.prepare("SELECT * FROM application_connections WHERE connection_id = ?").get(request.applicationPrincipal!.connectionId) as ApplicationRow;
-      return applicationBootstrap(db, row);
+      return applicationBootstrap(db, row, dependencies.config.userHistoryQuotaBytes);
     });
-    const dataDependencies = { ...dependencies, authenticate: authenticateApplication, apiPrefix: "/api/apps/v1", scope: applicationObjectScope, applicationOnly: true };
+    const dataDependencies = { ...dependencies, authenticate: authenticateApplication, apiPrefix: "/api/apps/v2", scope: applicationObjectScope, applicationOnly: true };
     registerSyncRoutes(native, dataDependencies);
     registerAttachmentRoutes(native, dataDependencies);
     registerHistoryRoutes(native, dataDependencies);

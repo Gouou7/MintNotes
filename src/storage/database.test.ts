@@ -27,7 +27,6 @@ describe("deleteLocalUserData", () => {
       [localDb.outbox, deleteOutbox],
       [localDb.attachmentChunks, deleteChunks],
       [localDb.attachmentOutbox, deleteChunkOutbox],
-      [localDb.pendingEndpointRevocations, deleteRevocations],
       [localDb.historySnapshots, deleteHistory],
       [localDb.historyIndex, deleteHistoryIndex],
       [localDb.historyOutbox, deleteHistoryOutbox],
@@ -40,6 +39,7 @@ describe("deleteLocalUserData", () => {
       equalsSpies.push(equals);
       vi.spyOn(table, "where").mockReturnValue({ equals } as never);
     }
+    vi.spyOn(localDb.meta, "where").mockReturnValue({ startsWith: vi.fn().mockReturnValue({ delete: vi.fn().mockResolvedValue(undefined) }) } as never);
     const deleteMeta = vi.spyOn(localDb.meta, "bulkDelete").mockResolvedValue(undefined);
     const deleteCredential = vi.spyOn(localDb.deviceCredentials, "delete").mockResolvedValue(undefined);
     vi.spyOn(localDb, "transaction").mockImplementation((...arguments_: unknown[]) => {
@@ -59,7 +59,7 @@ describe("deleteLocalUserData", () => {
       cursorKey(userId),
       preferencesKey(userId),
       ignoredDecryptFailuresKey(userId),
-      historySettingsKey(userId)
+      historySettingsKey(userId), `sync-state:${userId}`, `sync-lease:${userId}`, `attachment-gc:${userId}`
     ]);
     expect(deleteCredential).toHaveBeenCalledWith(userId);
   });

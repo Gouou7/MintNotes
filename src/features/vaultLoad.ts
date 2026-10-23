@@ -36,7 +36,7 @@ export async function decryptAvailableLocalObjects(
     try {
       const decrypted = normalizeVaultObject(await decrypt(object));
       const pending = pendingByKey.get(object.key);
-      const open = { ...decrypted, objectId: object.objectId, serverRevision: pending?.baseRevision ?? object.revision, dirty: Boolean(pending) };
+      const open = { ...decrypted, objectId: object.objectId, serverRevision: pending?.baseRevision ?? object.revision, dirty: Boolean(pending), serverTrashedAt: object.serverTrashedAt };
       if (decrypted.kind === "attachment") attachments.push(open as OpenAttachment);
       else documents.push(open as OpenDocument);
     } catch {

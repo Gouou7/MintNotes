@@ -17,12 +17,14 @@ export interface CloneAttachmentGraphInput {
   sourceMarkdown: string;
   sourceAttachmentIds: readonly string[];
   targetNoteId: string;
+  allowMissing?: boolean;
 }
 
 export interface CloneAttachmentGraphResult {
   markdown: string;
   attachmentIds: string[];
   attachments: OpenAttachment[];
+  missingAttachmentIds: string[];
 }
 
 /**
@@ -38,17 +40,17 @@ export class AttachmentCloneService {
       ...input.sourceAttachmentIds,
       ...attachmentIdsIn(input.sourceMarkdown)
     ])];
+    const missingAttachmentIds: string[] = [];
     const sources: Array<{ attachment: OpenAttachment; plaintext: Blob }> = [];
 
     for (const attachmentId of sourceIds) {
       const attachment = this.dependencies.resolveAttachment(attachmentId);
-      if (!attachment || attachment.deleted) {
+      if (!attachment || (attachment.deleted && !input.allowMissing)) {
+        if (input.allowMissing) { missingAttachmentIds.push(attachmentId); continue; }
         throw new Error(`Attachment ${attachmentId} is unavailable`);
       }
-      sources.push({
-        attachment,
-        plaintext: await this.dependencies.readAttachment(attachment)
-      });
+      try { sources.push({ attachment, plaintext: await this.dependencies.readAttachment(attachment) }); }
+      catch (error) { if (!input.allowMissing) throw error; missingAttachmentIds.push(attachmentId); }
     }
 
     const created: OpenAttachment[] = [];
@@ -70,7 +72,7 @@ export class AttachmentCloneService {
       return {
         markdown,
         attachmentIds: created.map((attachment) => attachment.objectId),
-        attachments: created
+        attachments: created, missingAttachmentIds
       };
     } catch (error) {
       await Promise.allSettled(created.map((attachment) => (

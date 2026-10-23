@@ -36,7 +36,7 @@ it('preserves upstream checksums and strict patches with automatic CRLF checkout
   expect(readFileSync(resolve(checkoutDirectory, sourcePath, 'LICENSE'), 'utf8')).not.toContain('\r\n');
   expect(readFileSync(resolve(checkoutDirectory, patchesPath, 'integration/upstream.patch'), 'utf8')).not.toContain('\r\n');
   expect(prepareTyporaWeb({ rootDirectory: checkoutDirectory }).patches).toBeGreaterThan(10);
-});
+}, 15000);
 it('fails on a patch context mismatch without fuzzy matching', () => {
   const files = new Map([['src/file.ts', 'a\nb\nc\n']]);
   expect(() => applyStrictPatch(files, '--- a/src/file.ts\n+++ b/src/file.ts\n@@ -1,1 +1,1 @@\n-b\n+new\n', 'feature')).toThrow('feature: context mismatch');

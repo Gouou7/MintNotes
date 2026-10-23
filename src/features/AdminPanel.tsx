@@ -1,3 +1,4 @@
+import { PhysicalStorage, type PhysicalStorageUsage } from "./storageUsage";
 import { type FormEvent, useEffect, useState } from "react";
 import { Copy, KeyRound, ShieldCheck, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { api } from "../api";
@@ -32,6 +33,7 @@ function bytes(value: number): string {
 
 export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNotify: (text: string, tone: ToastTone) => void }) {
   const { formatDateTime, t } = useI18n();
+  const [physical, setPhysical] = useState<PhysicalStorageUsage | null>(null);
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [setups, setSetups] = useState<AccountSetup[]>([]);
   const [username, setUsername] = useState("");
@@ -42,8 +44,8 @@ export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNot
   const [confirmationUsername, setConfirmationUsername] = useState("");
   const [administratorPassword, setAdministratorPassword] = useState("");
 
-  const load = () => api<{ users: ManagedUser[]; setups: AccountSetup[] }>("/api/admin/users")
-    .then((data) => { setUsers(data.users); setSetups(data.setups); })
+  const load = () => api<{ users: ManagedUser[]; setups: AccountSetup[]; physical?: PhysicalStorageUsage }>("/api/admin/users")
+    .then((data) => { setUsers(data.users); setSetups(data.setups); setPhysical(data.physical ?? null); })
     .catch((value) => onNotify(translateError(value, t, "admin.loadFailed"), "warning"));
   useEffect(() => { void load(); }, []);
 
@@ -104,6 +106,7 @@ export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNot
 
   return <div className="settings-section admin-panel">
     <div className="admin-heading"><span><AppIcon icon={ShieldCheck} size={22} /></span><div><h3>{t("settings.admin")}</h3><p>{t("admin.description")}</p></div></div>
+    {physical && <PhysicalStorage usage={physical} />}
     <section className="admin-user-management">
       <h3>{t("admin.userManagement")}</h3>
       <div className="admin-subsection">

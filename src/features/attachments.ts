@@ -1,3 +1,5 @@
+import { pinCache, evictDownloadableCaches, persistWithCacheRecovery } from "../storage/cache";
+import { operationId } from "@mint-notes/application-client";
 import { downloadAttachmentChunk } from "../api";
 import { cryptoClient } from "../crypto/client";
 import {
@@ -63,6 +65,7 @@ export async function prepareLocalAttachment(
     userId,
     objectId: attachmentId,
     objectType: "attachment",
+    ownerNoteId,
     ciphertext: encryptedManifest.ciphertext,
     nonce: encryptedManifest.nonce,
     encryptionVersion: encryptedManifest.encryptionVersion,
@@ -74,19 +77,19 @@ export async function prepareLocalAttachment(
     ...localObject,
     operation: "upsert",
     baseRevision: 0,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: operationId(),
     generation: Date.now() * 1000 + result.chunks.length
   };
   const chunks: LocalAttachmentChunk[] = [];
   const chunkOutbox: AttachmentOutboxEntry[] = [];
   for (const chunk of result.chunks) {
     const local: LocalAttachmentChunk = {
-      key: chunkKey(userId, attachmentId, chunk.chunkIndex), userId, attachmentId,
+      key: chunkKey(userId, attachmentId, chunk.chunkIndex), userId, attachmentId, ownerNoteId, touchedAt: Date.now(),
       chunkIndex: chunk.chunkIndex, totalChunks: chunk.totalChunks,
       ciphertext: chunk.ciphertext, nonce: chunk.nonce, encryptionVersion: chunk.encryptionVersion, updatedAt: now
     };
     chunks.push(local);
-    chunkOutbox.push({ ...local, idempotencyKey: crypto.randomUUID(), generation: Date.now() * 1000 + chunk.chunkIndex });
+    chunkOutbox.push({ ...local, idempotencyKey: operationId(), generation: Date.now() * 1000 + chunk.chunkIndex });
   }
   const attachment: OpenAttachment = { ...result.metadata, objectId: attachmentId, serverRevision: 0, dirty: true };
   return { attachment, localObject, objectOutbox, chunks, chunkOutbox };
@@ -157,6 +160,7 @@ export async function ensureAttachmentChunks(
         key: chunkKey(userId, attachment.objectId, index),
         userId,
         attachmentId: attachment.objectId,
+        ownerNoteId: attachment.ownerNoteId, touchedAt: Date.now(),
         chunkIndex: index,
         totalChunks: downloaded.totalChunks,
         ciphertext: downloaded.ciphertext,
@@ -170,9 +174,11 @@ export async function ensureAttachmentChunks(
   if (storedVersions.size > 1) throw new Error(`附件“${attachment.originalName}”的远端分块元数据不一致`);
   requireActiveOperation(continueOperation);
   if (downloadedChunks.length) {
-    await localDb.attachmentChunks.bulkPut(downloadedChunks);
+    const release = pinCache(userId, "attachment", [attachment.objectId]);
+    try { await persistWithCacheRecovery(userId, () => localDb.attachmentChunks.bulkPut(downloadedChunks)); await evictDownloadableCaches(userId); } finally { release(); }
     for (const chunk of downloadedChunks) byIndex.set(chunk.chunkIndex, chunk);
   }
+  await localDb.attachmentChunks.where("[userId+attachmentId]").equals([userId, attachment.objectId]).modify({ touchedAt: Date.now(), ownerNoteId: attachment.ownerNoteId });
   if (byIndex.size !== attachment.chunkCount) throw new Error(`附件“${attachment.originalName}”不完整`);
   return [...byIndex.values()].sort((a, b) => a.chunkIndex - b.chunkIndex).map((chunk) => ({
     attachmentId: chunk.attachmentId,

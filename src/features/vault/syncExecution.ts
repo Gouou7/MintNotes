@@ -3,6 +3,7 @@ import type { SyncIntent } from "../syncCoordinator";
 interface SyncExecutionDependencies {
   isActive: () => boolean;
   countPending: () => Promise<number>;
+  prepare?: () => Promise<boolean>;
   push: () => Promise<void>;
   pull: () => Promise<Set<string>>;
 }
@@ -11,6 +12,7 @@ interface SyncExecutionDependencies {
 export async function executeVaultSync(dependencies: SyncExecutionDependencies, intent: SyncIntent) {
   const failedObjectIds = new Set<string>();
   if (!dependencies.isActive()) return { failedObjectIds, pending: 0 };
+  if (dependencies.prepare && !await dependencies.prepare()) throw new Error("SYNC_RECONCILIATION_INCOMPLETE");
   if ((intent.push || intent.pull) && await dependencies.countPending()) await dependencies.push();
   if (dependencies.isActive() && intent.pull) {
     for (const id of await dependencies.pull()) failedObjectIds.add(id);

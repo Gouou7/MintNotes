@@ -15,9 +15,9 @@ export interface TrashView {
 function compareTrashItems(mode: TrashSortMode) {
   return (a: OpenDocument, b: OpenDocument): number => {
     const byName = a.title.localeCompare(b.title, "zh-CN", { numeric: true, sensitivity: "base" });
-    if (mode === "deleted-desc") return b.updatedAt.localeCompare(a.updatedAt) || byName;
-    if (mode === "deleted-asc") return a.updatedAt.localeCompare(b.updatedAt) || byName;
-    return byName || b.updatedAt.localeCompare(a.updatedAt);
+    if (mode === "deleted-desc") return (b.serverTrashedAt ?? b.updatedAt).localeCompare(a.serverTrashedAt ?? a.updatedAt) || byName;
+    if (mode === "deleted-asc") return (a.serverTrashedAt ?? a.updatedAt).localeCompare(b.serverTrashedAt ?? b.updatedAt) || byName;
+    return byName || (b.serverTrashedAt ?? b.updatedAt).localeCompare(a.serverTrashedAt ?? a.updatedAt);
   };
 }
 

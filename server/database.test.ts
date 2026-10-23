@@ -104,9 +104,9 @@ describe("database isolation", () => {
     expect(cleanupUserHistory(db, "user-a", "2026-07-24T12:00:00.000Z")).toBe(3);
     expect((db.prepare("SELECT history_id FROM note_history ORDER BY history_id").all() as Array<{ history_id: string }>).map((row) => row.history_id)).toEqual([
       "day-new",
+      "expired",
       "hour-new",
       "manual-a",
-      "manual-b",
       "protected-expired",
       "recent-a",
       "recent-b"
@@ -123,7 +123,7 @@ describe("database isolation", () => {
       INSERT INTO note_history (
         user_id, note_id, history_id, captured_at, capture_kind, ciphertext, nonce,
         encryption_version, is_protected, byte_size, idempotency_key, created_at
-      ) VALUES ('user-a', ?, 'shared-history', ?, 'manual', 'ciphertext', 'nonce', 1, ?, 10, ?, ?)
+      ) VALUES ('user-a', ?, 'shared-history', ?, 'interval', 'ciphertext', 'nonce', 1, ?, 10, ?, ?)
     `);
     insert.run("expired-note", "2025-01-01T00:00:00.000Z", 0, "idem-expired", "2025-01-01T00:00:00.000Z");
     insert.run("protected-note", "2025-01-01T00:00:00.000Z", 1, "idem-protected", "2025-01-01T00:00:00.000Z");
@@ -134,7 +134,7 @@ describe("database isolation", () => {
     db.close();
   });
 
-  it("blocks manual and automatic purge for protected notes and referenced attachments", () => {
+  it("cascades protected histories only after attachment ownership is verified", () => {
     const directory = mkdtempSync(join(tmpdir(), "webmd-protected-history-purge-test-"));
     temporaryDirectories.push(directory);
     const db = openDatabase(directory);
@@ -169,28 +169,14 @@ describe("database isolation", () => {
       VALUES ('user-a', 'protected-note', 'history-b', 'protected-attachment')
     `).run();
 
-    expect(() => purgeTargets(db, "user-a", [{ objectId: "protected-note", baseRevision: 1 }]))
-      .toThrow("PROTECTED_HISTORY");
-    expect(() => purgeTargets(db, "user-a", [
-      { objectId: "unprotected-note", baseRevision: 1 },
-      { objectId: "protected-note", baseRevision: 1 }
-    ])).toThrow("PROTECTED_HISTORY");
-    expect(db.prepare("SELECT 1 FROM objects WHERE object_id = 'unprotected-note'").get()).toBeTruthy();
-    expect(() => purgeTargets(db, "user-a", [{ objectId: "protected-attachment", baseRevision: 1 }]))
-      .toThrow("PROTECTED_HISTORY");
+    // Legacy ownership blocks all cascading purges until it is explicitly verified.
+    expect(() => purgeTargets(db, "user-a", [{ objectId: "protected-note", baseRevision: 1 }])).toThrow("OWNERSHIP_INCOMPLETE");
+    db.prepare("UPDATE objects SET owner_note_id = 'protected-note' WHERE object_id = 'protected-attachment'").run();
+    const changes = purgeTargets(db, "user-a", [{ objectId: "protected-note", baseRevision: 1 }]);
+    expect(changes).toHaveLength(2);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM note_history").get()).toEqual({ count: 0 });
+    expect(db.prepare("SELECT 1 FROM objects WHERE object_id = 'protected-attachment'").get()).toBeUndefined();
     expect(purgeExpiredTrash(db, "2026-02-01T00:00:00.000Z")).toBe(1);
-    expect(db.prepare("SELECT 1 FROM objects WHERE object_id = 'protected-note'").get()).toBeTruthy();
-    expect(db.prepare("SELECT 1 FROM objects WHERE object_id = 'protected-attachment'").get()).toBeTruthy();
-
-    db.prepare("UPDATE note_history SET is_protected = 0 WHERE history_id = 'history-a'").run();
-    db.prepare("DELETE FROM protected_history_attachments WHERE history_id = 'history-a'").run();
-    expect(() => purgeTargets(db, "user-a", [{ objectId: "protected-attachment", baseRevision: 1 }]))
-      .toThrow("PROTECTED_HISTORY");
-    expect(purgeExpiredTrash(db, "2026-02-01T00:00:00.000Z")).toBe(0);
-
-    db.prepare("UPDATE note_history SET is_protected = 0 WHERE history_id = 'history-b'").run();
-    db.prepare("DELETE FROM protected_history_attachments WHERE history_id = 'history-b'").run();
-    expect(purgeExpiredTrash(db, "2026-02-01T00:00:00.000Z")).toBe(2);
     db.close();
   });
 

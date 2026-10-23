@@ -1,8 +1,11 @@
+import { metadataUsage } from "../storageUsage.js";
+import { historyChanged, operationKeySchema, requireLiveOperation } from "../sync/lifecycle.js";
+import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ServerConfig } from "../config.js";
 import type { AppDatabase } from "../database.js";
-import { cleanupUserHistory, HISTORY_CAPTURE_KINDS, historyUsage } from "../history.js";
+import { cleanupUserHistory, HISTORY_CAPTURE_KINDS, historyUsage, reclaimHistorySpace } from "../history.js";
 import { authenticatedScope, type ScopeResolver, type AuthGuard } from "../types.js";
 import { LogReferenceFactory, logEvent } from "../logging.js";
 
@@ -121,15 +124,15 @@ export function registerHistoryRoutes(
       .filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
   };
 
-  const validProtectedAttachments = (userId: string, attachmentIds: readonly string[]): boolean => {
+  const validProtectedAttachments = (userId: string, noteId: string, attachmentIds: readonly string[]): boolean => {
     const ids = [...new Set(attachmentIds)];
     if (!ids.length) return true;
     const placeholders = ids.map(() => "?").join(", ");
     const rows = db.prepare(`
       SELECT object_id FROM objects
       WHERE user_id = ? AND object_type = 'attachment' AND deleted = 0
-        AND object_id IN (${placeholders})
-    `).all(userId, ...ids) as Array<{ object_id: string }>;
+        AND (owner_note_id IS NULL OR owner_note_id = ?) AND object_id IN (${placeholders})
+    `).all(userId, noteId, ...ids) as Array<{ object_id: string }>;
     return rows.length === ids.length;
   };
 
@@ -157,7 +160,7 @@ export function registerHistoryRoutes(
     return accountHistorySettings(userId);
   });
 
-  if (!applicationOnly) app.get(`${apiPrefix}/notes/:noteId/history`, { preHandler: authenticate }, async (request, reply) => {
+  app.get(`${apiPrefix}/notes/:noteId/history`, { preHandler: authenticate }, async (request, reply) => {
     const noteId = z.string().uuid().safeParse((request.params as { noteId: string }).noteId);
     const query = z.object({
       cursor: z.string().max(500).optional(),
@@ -201,6 +204,7 @@ export function registerHistoryRoutes(
         serverCreatedAt: row.created_at
       })),
       nextCursor: hasMore && last ? encodeHistoryCursor(last.captured_at, last.history_id) : null,
+      version: (db.prepare("SELECT version FROM history_versions WHERE user_id = ? AND note_id = ?").get(userId, noteId.data) as { version: number } | undefined)?.version ?? 0,
       clearedBefore: historyClearBoundary(userId, noteId.data)
     };
   });
@@ -214,7 +218,7 @@ export function registerHistoryRoutes(
     ...historyMetadataFields,
     protected: z.boolean().default(false),
     attachmentIds: z.array(z.string().uuid()).default([]),
-    idempotencyKey: z.string().uuid()
+    idempotencyKey: operationKeySchema
   }).refine(hasCompleteMetadata);
 
   app.post(`${apiPrefix}/notes/:noteId/history/:historyId`, { preHandler: authenticate }, async (request, reply) => {
@@ -222,6 +226,11 @@ export function registerHistoryRoutes(
     const parsed = historyEnvelopeSchema.safeParse(request.body);
     if (!params.success || !parsed.success) return reply.code(400).send({ error: "Invalid encrypted note history" });
     const { userId } = getScope(request);
+    requireLiveOperation(parsed.data.idempotencyKey);
+    const digest = createHash("sha256").update(JSON.stringify([params.data.noteId, params.data.historyId, parsed.data])).digest("hex");
+    const receipt = db.prepare("SELECT digest FROM sync_receipts WHERE user_id = ? AND operation_id = ?").get(userId, parsed.data.idempotencyKey) as { digest: string } | undefined;
+    if (receipt) return receipt.digest === digest ? { ok: true, idempotent: true, noteId: params.data.noteId, historyId: params.data.historyId }
+      : reply.code(409).send({ error: "Idempotency key payload mismatch" });
     cleanupUserHistory(db, userId);
     const prior = db.prepare(`
       SELECT note_id, history_id, captured_at, capture_kind, ciphertext, nonce,
@@ -261,37 +270,45 @@ export function registerHistoryRoutes(
       SELECT 1 FROM objects WHERE user_id = ? AND object_id = ? AND object_type = 'note'
     `).get(userId, params.data.noteId);
     if (!note) return reply.code(404).send({ error: "Note not found" });
-    if (parsed.data.protected && !validProtectedAttachments(userId, parsed.data.attachmentIds)) {
+    if (parsed.data.protected && !validProtectedAttachments(userId, params.data.noteId, parsed.data.attachmentIds)) {
       return reply.code(409).send({ error: "Protected history attachment is missing or invalid" });
     }
+    if (db.prepare("SELECT 1 FROM note_history WHERE user_id = ? AND note_id = ? AND history_id = ?").get(userId, params.data.noteId, params.data.historyId)) return reply.code(409).send({ error: "History snapshot already exists" });
+    const metadata = metadataUsage(db, userId);
+    if (metadata.metadataUsedSlots >= metadata.metadataLimit) return reply.code(413).send({ error: "Synchronization metadata quota exceeded", code: "METADATA_QUOTA_EXCEEDED" });
     const boundary = historyClearBoundary(userId, params.data.noteId);
     if (!parsed.data.protected && boundary && parsed.data.capturedAt <= boundary) {
       return reply.code(409).send({ error: "History snapshot was cleared", code: "HISTORY_CLEARED", clearedBefore: boundary });
     }
     const byteSize = Buffer.byteLength(parsed.data.ciphertext, "utf8")
-      + Buffer.byteLength(parsed.data.metadataCiphertext ?? "", "utf8");
-    const usage = historyUsage(db, userId);
-    if (usage.usedBytes + byteSize > config.userHistoryQuotaBytes) {
+      + Buffer.byteLength(parsed.data.metadataCiphertext ?? "", "utf8") + Buffer.byteLength(parsed.data.nonce) + Buffer.byteLength(parsed.data.metadataNonce ?? "");
+    if (!reclaimHistorySpace(db, userId, byteSize, config.userHistoryQuotaBytes)) {
       logEvent(request.log, "warn", "storage.quota_rejected", {
         actorRef: logRefs.create("user", userId),
         resource: "history"
       });
       return reply.code(413).send({ error: "Note history quota exceeded" });
     }
+    const pause = db.prepare(`SELECT COALESCE(SUM(MAX(0, julianday(restored_at) - MAX(julianday(entered_at), julianday(?)))), 0) AS days
+      FROM note_trash_periods WHERE user_id = ? AND note_id = ? AND restored_at IS NOT NULL`).get(parsed.data.capturedAt, userId, params.data.noteId) as { days: number };
+    const retentionAt = new Date(Date.parse(parsed.data.capturedAt) + pause.days * 86_400_000).toISOString();
     try {
       db.transaction(() => {
+        db.prepare("INSERT INTO sync_receipts (user_id, operation_id, object_id, digest, revision, created_at) VALUES (?, ?, ?, ?, 0, ?)")
+          .run(userId, parsed.data.idempotencyKey, params.data.noteId, digest, new Date().toISOString());
+        historyChanged(db, userId, params.data.noteId);
         db.prepare(`
           INSERT INTO note_history (
             user_id, note_id, history_id, captured_at, capture_kind, ciphertext, nonce,
             encryption_version, metadata_ciphertext, metadata_nonce, metadata_encryption_version,
-            is_protected, byte_size, idempotency_key, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            is_protected, byte_size, idempotency_key, created_at, retention_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           userId, params.data.noteId, params.data.historyId, parsed.data.capturedAt,
           parsed.data.captureKind, parsed.data.ciphertext, parsed.data.nonce,
           parsed.data.encryptionVersion, parsed.data.metadataCiphertext ?? null,
           parsed.data.metadataNonce ?? null, parsed.data.metadataEncryptionVersion ?? null,
-          parsed.data.protected ? 1 : 0, byteSize, parsed.data.idempotencyKey, new Date().toISOString()
+          parsed.data.protected ? 1 : 0, byteSize, parsed.data.idempotencyKey, new Date().toISOString(), retentionAt
         );
         if (parsed.data.protected) {
           const insertRef = db.prepare(`
@@ -342,12 +359,12 @@ export function registerHistoryRoutes(
     const metadataNonce = parsed.data.metadataNonce ?? row.metadata_nonce;
     const metadataVersion = parsed.data.metadataEncryptionVersion ?? row.metadata_encryption_version;
     const nextProtected = parsed.data.protected === undefined ? Boolean(row.is_protected) : parsed.data.protected;
-    if (parsed.data.protected === true && !validProtectedAttachments(userId, parsed.data.attachmentIds ?? [])) {
+    if (parsed.data.protected === true && !validProtectedAttachments(userId, params.data.noteId, parsed.data.attachmentIds ?? [])) {
       return reply.code(409).send({ error: "Protected history attachment is missing or invalid" });
     }
-    const byteSize = Buffer.byteLength(row.ciphertext, "utf8") + Buffer.byteLength(metadataCiphertext ?? "", "utf8");
+    const byteSize = Buffer.byteLength(row.ciphertext, "utf8") + Buffer.byteLength(metadataCiphertext ?? "", "utf8") + Buffer.byteLength(row.nonce) + Buffer.byteLength(metadataNonce ?? "");
     const growth = Math.max(0, byteSize - row.byte_size);
-    if (historyUsage(db, userId).usedBytes + growth > config.userHistoryQuotaBytes) {
+    if (growth > 0 && !reclaimHistorySpace(db, userId, growth, config.userHistoryQuotaBytes)) {
       logEvent(request.log, "warn", "storage.quota_rejected", {
         actorRef: logRefs.create("user", userId),
         resource: "history"
@@ -355,6 +372,7 @@ export function registerHistoryRoutes(
       return reply.code(413).send({ error: "Note history quota exceeded" });
     }
     db.transaction(() => {
+      historyChanged(db, userId, params.data.noteId);
       db.prepare(`
         UPDATE note_history SET metadata_ciphertext = ?, metadata_nonce = ?,
           metadata_encryption_version = ?, is_protected = ?, byte_size = ?
@@ -423,6 +441,7 @@ export function registerHistoryRoutes(
     }
     db.prepare("DELETE FROM note_history WHERE user_id = ? AND note_id = ? AND history_id = ?")
       .run(userId, params.data.noteId, params.data.historyId);
+    historyChanged(db, userId, params.data.noteId);
     return { ok: true };
   });
 
@@ -447,6 +466,7 @@ export function registerHistoryRoutes(
       const preserved = Number((db.prepare(`
         SELECT COUNT(*) AS count FROM note_history WHERE user_id = ? AND note_id = ? AND is_protected = 1
       `).get(userId, noteId.data) as { count: number }).count);
+      historyChanged(db, userId, noteId.data);
       return { deleted, preserved };
     })();
     return { ok: true, ...result, clearedBefore };
@@ -462,6 +482,7 @@ export function registerHistoryRoutes(
       const preserved = Number((db.prepare(`
         SELECT COUNT(*) AS count FROM note_history WHERE user_id = ? AND is_protected = 1
       `).get(userId) as { count: number }).count);
+      for (const row of db.prepare("SELECT object_id FROM objects WHERE user_id = ? AND object_type = 'note'").all(userId) as Array<{ object_id: string }>) historyChanged(db, userId, row.object_id);
       return { deleted, preserved };
     })();
     return { ok: true, ...result, clearedBefore };

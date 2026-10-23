@@ -1,3 +1,5 @@
+import { liveQuery } from "dexie";
+import { pinCache } from "../../storage/cache";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "../../api";
@@ -78,6 +80,21 @@ export function useVaultHistory(options: Options) {
 
   const [historyPreview, setHistoryPreview] = useState<{ item: HistoryListItem; payload: NoteHistoryPayload } | null>(null);
 
+  useEffect(() => pinCache(userId, "history", historyPreview ? [historyPreview.item.historyId] : []), [userId, historyPreview?.item.historyId]);
+
+  useEffect(() => {
+    const noteId = activeDocument?.objectId;
+    if (!noteId) return;
+    const subscription = liveQuery(() => localDb.historySnapshots.where("[userId+noteId]").equals([userId, noteId]).primaryKeys()).subscribe({
+      next: (keys) => {
+        if (logoutStarted.current) return;
+        const cached = new Set(keys);
+        setHistoryItems((items) => items.map((item) => ({ ...item, offlineAvailable: cached.has(`${userId}:${noteId}:${item.historyId}`) })));
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [userId, activeDocument?.objectId]);
+
   const [renamingHistoryId, setRenamingHistoryId] = useState<string | null>(null);
 
   const historyLastSignature = useRef(new Map<string, string>());
@@ -100,7 +117,7 @@ export function useVaultHistory(options: Options) {
 
   const applyHistorySettings = (settings: HistorySettings) => {
     historySettingsRef.current = settings;
-    historyQuotaPaused.current = settings.usedBytes >= settings.quotaBytes;
+    historyQuotaPaused.current = false;
     setHistorySettings(settings);
     void localDb.meta.put({ key: historySettingsKey(userId), value: JSON.stringify(settings) });
   };
@@ -159,7 +176,7 @@ export function useVaultHistory(options: Options) {
     const capturedAt = new Date().toISOString();
     const payload = makeHistoryPayload({
       ...document,
-      attachmentIds: [...new Set([...document.attachmentIds, ...attachmentIdsIn(document.markdown)])]
+      attachmentIds: attachmentIdsIn(document.markdown)
     }, capturedAt);
     const signature = historyContentSignature(payload);
     let latestSignature = historyLastSignature.current.get(document.objectId);
@@ -186,11 +203,23 @@ export function useVaultHistory(options: Options) {
     }
     if (!options.force && latestSignature === signature) return null;
 
+    const localPendingBytes = (await localDb.historyOutbox.where("userId").equals(userId).toArray()).reduce((sum, item) => sum + item.byteSize, 0);
+    if (localPendingBytes >= historySettingsRef.current.quotaBytes) {
+      if (captureKind === "manual" || captureKind === "restore-safety") throw new Error(t("notice.historyQuotaReached"));
+      historyQuotaPaused.current = true;
+      showMessage(t("notice.historyQuotaReached"), "warning");
+      return null;
+    }
     const created = await historyController.createSnapshot(
       { ...document, attachmentIds: payload.attachmentIds },
       captureKind,
-      { capturedAt, name: options.name, protected: options.protected }
-    );
+      { capturedAt, name: options.name, protected: options.protected, quotaBytes: historySettingsRef.current.quotaBytes }
+    ).catch((error: unknown) => {
+      if (error instanceof Error && error.message === "HISTORY_LOCAL_BUDGET_EXCEEDED" && captureKind !== "manual" && captureKind !== "restore-safety") {
+        historyQuotaPaused.current = true; showMessage(t("notice.historyQuotaReached"), "warning"); return null;
+      }
+      throw error;
+    });
     if (!created) return null;
     const { metadata, snapshot } = created;
     historyLastSignature.current.set(document.objectId, signature);
@@ -252,6 +281,8 @@ export function useVaultHistory(options: Options) {
       ));
       await historyController.cacheRemoteItems(response.items);
       const remoteItems = await remoteHistoryListItems(response.items);
+      const cachedBodies = new Set((await localHistoryForNote(noteId)).map((item) => item.historyId));
+      for (const item of remoteItems) item.offlineAvailable = cachedBodies.has(item.historyId);
       setHistoryItems((current) => append
         ? mergeHistoryItems(current, remoteItems, pending)
         : mergeHistoryItems(remoteItems, pending));

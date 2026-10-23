@@ -1,3 +1,4 @@
+import { physicalStorageUsage, storageUsage } from "../storageUsage.js";
 import { revokeUserCredentials } from "../auth/credentialRevocation.js";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -23,33 +24,12 @@ export function registerAdminRoutes(
   const { db, syncEvents, requireAdmin, logRefs } = dependencies;
 
   app.get("/api/admin/users", { preHandler: requireAdmin }, async () => {
-    const users = db.prepare(`
-      SELECT u.id, u.username, u.display_name, u.role, u.disabled, u.created_at,
-        COALESCE(ob.object_count, 0) AS object_count,
-        COALESCE(ob.object_bytes, 0) + COALESCE(ac.attachment_bytes, 0)
-          + COALESCE(nh.history_bytes, 0) + COALESCE(pa.avatar_bytes, 0) AS encrypted_bytes
-      FROM users u
-      LEFT JOIN (
-        SELECT user_id, COUNT(*) AS object_count, SUM(LENGTH(ciphertext)) AS object_bytes
-        FROM objects GROUP BY user_id
-      ) ob ON ob.user_id = u.id
-      LEFT JOIN (
-        SELECT user_id, SUM(LENGTH(ciphertext)) AS attachment_bytes
-        FROM attachment_chunks GROUP BY user_id
-      ) ac ON ac.user_id = u.id
-      LEFT JOIN (
-        SELECT user_id, SUM(byte_size) AS history_bytes
-        FROM note_history GROUP BY user_id
-      ) nh ON nh.user_id = u.id
-      LEFT JOIN (
-        SELECT user_id, LENGTH(ciphertext) AS avatar_bytes FROM profile_assets
-      ) pa ON pa.user_id = u.id
-      ORDER BY u.created_at ASC
-    `).all() as any[];
+    const users = db.prepare("SELECT id, username, display_name, role, disabled, created_at FROM users ORDER BY created_at").all() as any[];
     const setups = db.prepare(
       "SELECT id, username, display_name, created_at, expires_at FROM account_setups ORDER BY created_at ASC"
     ).all() as any[];
     return {
+      physical: physicalStorageUsage(db),
       users: users.map((row) => ({
         id: row.id,
         username: row.username,
@@ -57,8 +37,7 @@ export function registerAdminRoutes(
         role: row.role,
         disabled: Boolean(row.disabled),
         createdAt: row.created_at,
-        objectCount: row.object_count,
-        encryptedBytes: row.encrypted_bytes
+        ...storageUsage(db, row.id)
       })),
       setups: setups.map((row) => ({
         id: row.id,

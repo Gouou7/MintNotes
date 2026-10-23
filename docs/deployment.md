@@ -106,7 +106,7 @@ Docker 部署在 `.env` 中填写 Compose 已声明的变量；pnpm 部署通过
 
 服务会在启动时严格校验端口、容量、会话时长和布尔开关；无效值会直接阻止启动，避免悄悄退回不符合预期的配置。`APP_ORIGIN` 未设置或留空不会阻止生产启动；显式填写无效值仍会拒绝启动。浏览器端自动模式继续拒绝缺少 Origin、非 HTTPS 或跨源的状态更改请求，注册、登录、保存和同步不需要固定来源配置。
 
-原生应用凭据通过 `/api/apps/v1` 访问同一个 HTTPS 源，无需新增监听端口或服务环境变量，反向代理须转发 `Authorization` 与现有 `X-WebMD-*` 附件头。应用管理仍需浏览器 Cookie 与 Origin；原生 API 的认证边界见[系统设计](system-design.md#应用连接与委托访问)。服务器备份包含应用连接哈希与包装信封；恢复旧备份可能恢复已撤销连接，应在恢复后检查并撤销旧连接。
+原生应用凭据通过 `/api/apps/v2` 访问同一个 HTTPS 源，无需新增监听端口或服务环境变量，反向代理须转发 `Authorization` 与现有 `X-WebMD-*` 附件头。应用管理仍需浏览器 Cookie 与 Origin；原生 API 的认证边界见[系统设计](system-design.md#应用连接与委托访问)。服务器备份包含应用连接哈希与包装信封；恢复旧备份可能恢复已撤销连接，应在恢复后检查并撤销旧连接。
 
 `TRUST_PROXY` 决定是否信任代理转交的协议与客户端 IP，影响自动来源校验、登录限流和设备 IP 记录。标准部署默认开启，并要求代理覆盖转发头、后端端口仅供受控代理访问；不要将后端端口改为公网监听。直接本地开发保持关闭即可；旧部署若显式设置了 `false`，会保留该设置，改用自动来源校验时应与标准代理方案保持一致。
 
@@ -122,7 +122,7 @@ Docker 部署在 `.env` 中填写 Compose 已声明的变量；pnpm 部署通过
 docker compose logs --tail=100 notes
 ```
 
-pnpm 部署应由进程管理器收集和轮转 stdout／stderr。日志保留由 Docker、进程管理器或主机负责；允许记录的内容与运维责任见[系统设计](system-design.md#日志与运维责任)。
+pnpm 部署应由进程管理器收集和轮转 stdout／stderr。Compose默认每份10MiB、保留3份；pnpm部署的日志由进程管理器或主机轮转。允许记录的内容与运维责任见[系统设计](system-design.md#日志与运维责任)。
 
 首次打开站点创建管理员并保存恢复密钥。公开注册通常保持关闭；其他用户使用管理员生成的 72 小时一次性激活码。
 
@@ -143,19 +143,46 @@ pnpm 部署应从项目根目录、以应用服务账户运行：
 NODE_ENV=production pnpm backup
 ```
 
-pnpm 部署默认把备份写入 `/data/backups`；可通过 `BACKUP_DIR` 指定另一个由服务账户可写的目录。备份命令会输出文件路径和 SHA-256；复制后应再次核对摘要，并在应用数据目录之外保存至少一份加密副本。保留策略可先取每日 7 份、每周 4 份、每月 12 份，再按恢复目标调整。
+pnpm 部署默认把备份写入 `/data/backups`；可通过 `BACKUP_DIR` 指定另一个由服务账户可写的目录。备份命令会输出文件路径和 SHA-256；复制后应再次核对摘要，并在应用数据目录之外保存至少一份加密副本。备份通过完整性检查并生成摘要清单后，自动按每日7份、每周4份、每月12份保留各时间桶的最新备份。只清理带有效程序清单且摘要匹配的备份；升级前的无清单备份和`pre-*`迁移／维护备份不自动删除。轮转只管理配置的备份目录，异地副本由运维方管理。
+
+旧备份先预览，再明确纳管；无`--apply`时不写文件或删除备份：
+
+```bash
+pnpm storage:maintenance backup-retention --backup-dir /data/backups
+pnpm storage:maintenance backup-retention --backup-dir /data/backups --adopt
+pnpm storage:maintenance backup-retention --backup-dir /data/backups --adopt --apply
+```
+
 
 ## 恢复与升级
 
 先在隔离环境演练：停止服务，将已校验备份作为 `/data/notes.sqlite` 放入空数据目录，启动后验证健康检查、多个账户登录、恢复密钥重置、同步、附件、历史、管理员隔离与新备份。只打开数据库或通过健康检查不代表数据可恢复。
 
-替换生产数据前先做最后一次在线备份并停止服务；完成验证前保留旧数据。Docker 部署应停止 Compose 服务后替换挂载目录中的数据库；pnpm 部署应通过进程管理器停止服务后替换 `/data/notes.sqlite`。不要手工修改 `PRAGMA user_version`。
+替换生产数据前先做最后一次在线备份并停止服务；完成验证前保留旧数据。停机后使用恢复命令，先预览路径再执行：
+
+```bash
+pnpm storage:maintenance restore --data-dir /data --source /data/backups/mint-notes-YYYY-MM-DDTHH-MM-SS-sssZ.sqlite
+pnpm storage:maintenance restore --data-dir /data --source /data/backups/mint-notes-YYYY-MM-DDTHH-MM-SS-sssZ.sqlite --apply
+```
+
+工具校验备份，在暂存库中轮换同步epoch，再保留旧库并替换数据库。Docker部署可停止`notes`后通过`docker compose run --rm --no-deps notes node server-dist/storageCli.js restore ... --apply`运行同一工具。服务与维护命令共用数据目录锁，运行中拒绝停机维护。不要手工修改`PRAGMA user_version`，也不要删除仍有活动连接的WAL文件。若手动复制已停机的备份，启动服务前必须运行`rotate-epoch --data-dir /data --apply`。
 
 升级 Docker 部署时，先备份，再更新 `docker-compose.yml` 中固定的镜像版本或摘要，拉取镜像并重新启动。升级 pnpm 部署时，先备份并准备新的稳定标签，在独立目录完成 `pnpm --filter mint-notes... install --frozen-lockfile`、构建和 `pnpm prune --prod`，停止旧进程后切换工作目录并启动新版本；确认恢复正常前保留旧构建目录。
 
 iOS 上的主屏幕应用可能保留安装时的状态栏配置，刷新或更新 Service Worker 不一定能改变它。需要重新添加主屏幕应用时，先确认所有更改与附件已同步并导出备份，再从 Safari 打开更新后的站点执行操作；不要在有未同步内容时移除应用或清除站点数据。客户端在这部分的行为约束见[系统设计](system-design.md#布局滚动与焦点)。
 
-当前版本只支持服务器 schema v2 和浏览器数据库 `webmd-notes-v2`，不会迁移 v2 之前的数据。升级不兼容旧版本时，应从旧部署导出完整 Markdown ZIP、创建在线备份，再以全新 `/data` 启动并导入。启用应用连接后，不得回滚到忽略应用凭据撤销的版本；回退须恢复升级前的完整备份。启用历史保护或 v2 用户名信封后，不得回滚到不了解相应格式的版本；需要整体回退时恢复升级前备份。
+当前版本支持schema v2到v3的保留数据迁移，继续使用浏览器数据库`webmd-notes-v2`，内部版本增至7；通用应用缓存增至v2。启动迁移前使用SQLite在线快照创建独立备份并校验完整性与摘要，确认当前对象与最新旧修订一致后才清除冗余正文修订。任何校验失败会终止迁移、保留原库，不应跳过校验。迁移前备份固定为`backups/pre-schema3.sqlite`，失败后再次启动不会连续生成备份；排查并保全该备份后，将其移到独立位置再重试。v2之前的数据库仍需从旧部署导出后迁入，不自动删除旧库。
+
+同步协议升级至v2，旧浏览器和应用接口返回426升级提示。部署时同时更新网页及通用客户端；独立`MintNotesOpenClaw`适配器的v2升级是发布依赖，须先完成其接入验证。原应用密钥、对象加密版本、AAD与附件URL保持兼容，不要求重新加密。首次解锁后核对旧附件归属，完成前相关账户不能永久清除。原有回收项至少获得30天迁移宽限。
+
+清理释放逻辑用量后，SQLite通常复用空闲页而不立即缩小文件。需要收回磁盘时，停止服务并运行以下命令；会先创建维护前备份，再执行压缩和完整性检查：
+
+```bash
+pnpm storage:maintenance compact --data-dir /data
+pnpm storage:maintenance compact --data-dir /data --apply
+```
+
+不在每小时任务中执行全库`VACUUM`。回退到不了解schema v3、v2同步或应用撤销规则的版本，必须整体恢复升级前备份，不能只切换旧程序。
 
 ## 发布镜像
 
@@ -168,6 +195,7 @@ pnpm test
 APP_VERSION="$(node scripts/release-version.mjs "$(git describe --tags --exact-match)")" pnpm build
 pnpm test:crypto-worker
 pnpm test:smoke
+pnpm test:storage-browser
 docker compose config
 ```
 

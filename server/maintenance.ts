@@ -1,3 +1,4 @@
+import { cleanupOperationalRecords } from "./storageMaintenance.js";
 import type { FastifyBaseLogger } from "fastify";
 import type { AppDatabase } from "./database.js";
 import { cleanupAllHistory } from "./history.js";
@@ -21,7 +22,7 @@ export interface MaintenanceOperations {
 const DEFAULT_OPERATIONS: MaintenanceOperations = {
   purgeTrash: purgeExpiredTrash,
   cleanupHistory: cleanupAllHistory,
-  cleanupEndpoints: cleanupInactiveEndpoints,
+  cleanupEndpoints: (db, now) => cleanupInactiveEndpoints(db, now) + cleanupOperationalRecords(db, now?.getTime()),
   cleanupAttachments: cleanupOrphanAttachmentChunks
 };
 

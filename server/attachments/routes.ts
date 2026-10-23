@@ -1,3 +1,7 @@
+import { registerAttachmentLifecycle } from "./lifecycle.js";
+import { storageUsage } from "../storageUsage.js";
+import { operationKeySchema, requireLiveOperation } from "../sync/lifecycle.js";
+import { validSyncLease } from "../sync/protocol.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ServerConfig } from "../config.js";
@@ -18,6 +22,7 @@ export function registerAttachmentRoutes(
   }
 ) {
   const { db, config, authenticate, logRefs } = dependencies;
+  if (!dependencies.applicationOnly) registerAttachmentLifecycle(app, dependencies);
   const apiPrefix = dependencies.apiPrefix ?? "/api";
   const getScope = dependencies.scope ?? authenticatedScope;
   const applicationOnly = dependencies.applicationOnly ?? false;
@@ -26,7 +31,8 @@ export function registerAttachmentRoutes(
     "x-webmd-total-chunks": z.coerce.number().int().min(1)
       .max(Math.ceil(config.maxAttachmentBytes / (1024 * 1024))),
     "x-webmd-encryption-version": z.coerce.number().int().positive(),
-    "x-webmd-idempotency-key": z.string().uuid()
+    "x-webmd-idempotency-key": operationKeySchema,
+    "x-webmd-owner-note": z.string().uuid()
   });
 
   app.put(`${apiPrefix}/attachments/:attachmentId/chunks/:index`, { preHandler: authenticate }, async (request, reply) => {
@@ -46,6 +52,11 @@ export function registerAttachmentRoutes(
       return reply.code(400).send({ error: "Attachment chunk index exceeds declared total" });
     }
     const scope = getScope(request);
+    if (!validSyncLease(db, scope.userId, request.headers["x-webmd-sync-lease"])) return reply.code(409).send({ error: "Reconcile before uploading", code: "SYNC_RECONCILE_REQUIRED" });
+    requireLiveOperation(headers.data["x-webmd-idempotency-key"]);
+    const owner = db.prepare("SELECT note_id FROM attachment_owners WHERE user_id = ? AND attachment_id = ?").get(scope.userId, params.data.attachmentId) as { note_id: string } | undefined;
+    if (owner && owner.note_id !== headers.data["x-webmd-owner-note"]) return reply.code(409).send({ error: "Attachment owner cannot change" });
+    if (db.prepare("SELECT 1 FROM changes WHERE user_id = ? AND object_id IN (?, ?) AND change_type = 'purge'").get(scope.userId, params.data.attachmentId, headers.data["x-webmd-owner-note"])) return reply.code(409).send({ error: "Attachment or note was purged" });
     const prior = db.prepare(
       `SELECT attachment_id, chunk_index, total_chunks, ciphertext, nonce, encryption_version
        FROM attachment_chunks WHERE user_id = ? AND idempotency_key = ?`
@@ -77,19 +88,15 @@ export function registerAttachmentRoutes(
       "SELECT 1 FROM attachment_chunks WHERE user_id = ? AND attachment_id = ? AND chunk_index = ?"
     ).get(scope.userId, params.data.attachmentId, params.data.index);
     if (existing) return reply.code(409).send({ error: "Attachment chunk already exists" });
-    const used = Number((db.prepare(`
-      SELECT
-        COALESCE((SELECT SUM(LENGTH(ciphertext) + LENGTH(nonce)) FROM attachment_chunks WHERE user_id = ?), 0)
-        + COALESCE((SELECT SUM(LENGTH(ciphertext) + LENGTH(nonce)) FROM object_revisions WHERE user_id = ?), 0)
-        AS bytes
-    `).get(scope.userId, scope.userId) as { bytes: number }).bytes);
-    if (used + body.byteLength > config.userStorageQuotaBytes) {
+    const used = storageUsage(db, scope.userId).contentBytes;
+    if (used + body.byteLength + Buffer.byteLength(headers.data["x-webmd-nonce"]) > config.userStorageQuotaBytes) {
       logEvent(request.log, "warn", "storage.quota_rejected", {
         actorRef: logRefs.create("user", scope.userId),
         resource: "attachments"
       });
       return reply.code(413).send({ error: "User storage quota exceeded" });
     }
+    db.prepare("INSERT OR IGNORE INTO attachment_owners(user_id, attachment_id, note_id) VALUES (?, ?, ?)").run(scope.userId, params.data.attachmentId, headers.data["x-webmd-owner-note"]);
     db.prepare(`
       INSERT INTO attachment_chunks (
         user_id, attachment_id, chunk_index, total_chunks, ciphertext,

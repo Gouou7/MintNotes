@@ -182,20 +182,19 @@ export function useVaultHistoryActions(options: Options) {
     if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.clearNoteConfirm", { title: activeDocument.title }))) return;
     try {
-      await synchronize();
       const protectionPending = (await localDb.historyMetadataOutbox
         .where("[userId+noteId]").equals([userId, activeDocument.objectId]).toArray())
         .some((entry) => entry.protected !== undefined);
       if (protectionPending) return showMessage(t("notice.historyProtectionSyncRequired"));
-      await api(`/api/notes/${activeDocument.objectId}/history`, { method: "DELETE" });
+      const cleared = await api<{ deleted: number; preserved: number; clearedBefore: string }>(`/api/notes/${activeDocument.objectId}/history`, { method: "DELETE" });
       await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
         const [snapshots, indexes] = await Promise.all([
           localDb.historySnapshots.where("[userId+noteId]").equals([userId, activeDocument.objectId]).toArray(),
           localDb.historyIndex.where("[userId+noteId]").equals([userId, activeDocument.objectId]).toArray()
         ]);
         const removeKeys = [...new Set([
-          ...snapshots.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key),
-          ...indexes.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key)
+          ...snapshots.filter((snapshot) => !snapshot.protected && snapshot.capturedAt <= cleared.clearedBefore).map((snapshot) => snapshot.key),
+          ...indexes.filter((snapshot) => !snapshot.protected && snapshot.capturedAt <= cleared.clearedBefore).map((snapshot) => snapshot.key)
         ])];
         await localDb.historySnapshots.bulkDelete(removeKeys);
         await localDb.historyIndex.bulkDelete(removeKeys);
@@ -207,7 +206,7 @@ export function useVaultHistoryActions(options: Options) {
       setHistoryItems((items) => items.filter((item) => item.protected));
       setHistoryPreview((current) => current?.item.protected ? current : null);
       await refreshHistorySettings().catch(() => undefined);
-      showMessage(t("notice.historyCleared"), "info");
+      showMessage(t("notice.historyClearResult", { deleted: cleared.deleted, preserved: cleared.preserved }), "info");
     } catch (error) {
       showMessage(translateError(error, t, "notice.historyClearFailed"), "critical");
     }
@@ -217,19 +216,18 @@ export function useVaultHistoryActions(options: Options) {
     if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
     if (!window.confirm(t("history.clearAllConfirm"))) return;
     try {
-      await synchronize();
       const protectionPending = (await localDb.historyMetadataOutbox.where("userId").equals(userId).toArray())
         .some((entry) => entry.protected !== undefined);
       if (protectionPending) return showMessage(t("notice.historyProtectionSyncRequired"));
-      await api("/api/account/note-history", { method: "DELETE" });
+      const cleared = await api<{ deleted: number; preserved: number; clearedBefore: string }>("/api/account/note-history", { method: "DELETE" });
       await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
         const [snapshots, indexes] = await Promise.all([
           localDb.historySnapshots.where("userId").equals(userId).toArray(),
           localDb.historyIndex.where("userId").equals(userId).toArray()
         ]);
         const removeKeys = [...new Set([
-          ...snapshots.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key),
-          ...indexes.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key)
+          ...snapshots.filter((snapshot) => !snapshot.protected && snapshot.capturedAt <= cleared.clearedBefore).map((snapshot) => snapshot.key),
+          ...indexes.filter((snapshot) => !snapshot.protected && snapshot.capturedAt <= cleared.clearedBefore).map((snapshot) => snapshot.key)
         ])];
         await localDb.historySnapshots.bulkDelete(removeKeys);
         await localDb.historyIndex.bulkDelete(removeKeys);
@@ -241,7 +239,7 @@ export function useVaultHistoryActions(options: Options) {
       setHistoryItems((items) => items.filter((item) => item.protected));
       setHistoryPreview((current) => current?.item.protected ? current : null);
       await refreshHistorySettings();
-      showMessage(t("notice.historyAllCleared"), "info");
+      showMessage(t("notice.historyClearResult", { deleted: cleared.deleted, preserved: cleared.preserved }), "info");
     } catch (error) {
       showMessage(translateError(error, t, "notice.historyClearFailed"), "critical");
     }
@@ -260,7 +258,8 @@ export function useVaultHistoryActions(options: Options) {
       await flushDocument(activeDocument.objectId);
       const current = documentIndexRef.current.get(activeDocument.objectId);
       if (!current) return;
-      await saveHistorySnapshot(current, "restore-safety");
+      const checkpoint = await saveHistorySnapshot(current, "restore-safety", { force: true });
+      if (!checkpoint) throw new Error(t("notice.historySaveFailed"));
       const title = siblingTitleExists(nameDocuments(), historyPreview.payload.title, current.parentId, current.objectId)
         ? uniqueSiblingTitle(nameDocuments(), historyPreview.payload.title, current.parentId)
         : historyPreview.payload.title;
@@ -269,11 +268,7 @@ export function useVaultHistoryActions(options: Options) {
         title,
         markdown: historyPreview.payload.markdown,
         tags: [...historyPreview.payload.tags],
-        attachmentIds: [...new Set([
-          ...current.attachmentIds,
-          ...historyPreview.payload.attachmentIds,
-          ...attachmentIdsIn(historyPreview.payload.markdown)
-        ])],
+        attachmentIds: attachmentIdsIn(historyPreview.payload.markdown),
         dirty: true
       });
       setTitleDraft(restored.title);

@@ -1,3 +1,5 @@
+import { persistWithCacheRecovery } from "../../storage/cache";
+import { operationId } from "@mint-notes/application-client";
 import { useEffect, useRef } from "react";
 import { cryptoClient } from "../../crypto/client";
 import {
@@ -31,7 +33,7 @@ export interface ObjectPersistenceDependencies {
 }
 
 function plainObject(object: PersistableObject): VaultObject {
-  const { objectId: _objectId, serverRevision: _serverRevision, dirty: _dirty, ...plain } = object;
+  const { objectId: _objectId, serverRevision: _serverRevision, dirty: _dirty, serverTrashedAt: _trashedAt, ...plain } = object;
   return plain;
 }
 
@@ -71,29 +73,31 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
         userId: dependencies.userId,
         objectId: object.objectId,
         objectType: object.kind,
+        ...(object.kind === "attachment" ? { ownerNoteId: object.ownerNoteId } : {}),
         ciphertext: encrypted.ciphertext,
         nonce: encrypted.nonce,
         encryptionVersion: encrypted.encryptionVersion,
         revision: intendedRevision,
         deleted: next.deleted,
-        updatedAt: next.updatedAt
+        updatedAt: next.updatedAt,
+        serverTrashedAt: next.deleted ? next.serverTrashedAt : null
       };
       const outbox: OutboxEntry = {
         ...localObject,
         operation: "upsert",
         baseRevision,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: operationId(),
         generation: Date.now() * 1000 + ++dependencies.generation.current,
         ...(pending?.upload ? { upload: pending.upload } : {})
       };
-      await localDb.transaction("rw", localDb.objects, localDb.outbox, async () => {
+      await persistWithCacheRecovery(dependencies.userId, () => localDb.transaction("rw", localDb.objects, localDb.outbox, async () => {
         if (!dependencies.isActive()) return;
         const latest = await localDb.outbox.get(key);
         await localDb.objects.put(localObject);
         // Upload staging can happen while encryption runs. Carry that exact
         // request forward even when this save replaces its durable generation.
         await localDb.outbox.put({ ...outbox, ...(latest?.upload ? { upload: latest.upload } : {}) });
-      });
+      }));
       return dependencies.isActive() ? next : object;
     }).catch((error: unknown) => {
       if (dependencies.isActive()) dependencies.onPersistenceError(object.objectId, error);

@@ -456,7 +456,6 @@ export async function setAutoLockMinutes(userId: string, endpointId: string, aut
 
 export async function markEndpointRevocationPending(userId: string, endpointId: string): Promise<void> {
   await localDb.transaction("rw", localDb.pendingEndpointRevocations, async () => {
-    await localDb.pendingEndpointRevocations.clear();
     await localDb.pendingEndpointRevocations.put({ endpointId, userId, createdAt: new Date().toISOString() });
   });
 }
@@ -469,8 +468,9 @@ export async function flushPendingEndpointRevocations(): Promise<void> {
   const pending = await localDb.pendingEndpointRevocations.toArray();
   for (const entry of pending) {
     try {
-      const response = await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-      if (response.ok || response.status === 401) await localDb.pendingEndpointRevocations.delete(entry.endpointId);
+      const response = await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpointId: entry.endpointId }) });
+      const result = await response.json().catch(() => null) as { endpointId?: string } | null;
+      if (response.ok && result?.endpointId === entry.endpointId) await localDb.pendingEndpointRevocations.delete(entry.endpointId);
     } catch {
       // Offline attempts remain durable and are retried before the next session restore.
     }

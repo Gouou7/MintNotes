@@ -86,7 +86,7 @@ describe("HistoryPanel", () => {
     expect([...container.querySelectorAll(".history-day > h3")].map(heading => heading.textContent)).toEqual(["2026-08-09", "2026-08-08"]);
     expect([...container.querySelectorAll(".history-day")].map(day => day.querySelectorAll(".history-row").length)).toEqual([1, 2]);
     expect([...container.querySelectorAll(".history-select small")].map(details => details.textContent)).toEqual([
-      "00:05 · Saved manually", "23:55 · Saved manually", "14:12 · Saved manually · Pending sync"
+      "00:05 · Saved manually · Download required", "23:55 · Saved manually · Download required", "14:12 · Saved manually · Pending sync"
     ]);
   });
 

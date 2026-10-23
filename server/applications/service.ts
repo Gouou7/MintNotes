@@ -66,14 +66,14 @@ export function revokeApplicationConnections(db: AppDatabase, userId: string, no
   db.prepare("UPDATE application_connections SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL").run(now, userId);
 }
 
-export function applicationBootstrap(db: AppDatabase, row: ApplicationRow): ApplicationConnectionBootstrap {
+export function applicationBootstrap(db: AppDatabase, row: ApplicationRow, historyQuotaBytes = 256 * 1024 * 1024): ApplicationConnectionBootstrap {
   const user = db.prepare("SELECT history_enabled FROM users WHERE id = ?").get(row.user_id) as { history_enabled: number };
   return {
-    protocolVersion: 1, objectSchemaVersion: 2, encryptionVersion: 1,
+    protocolVersion: 2, objectSchemaVersion: 2, encryptionVersion: 1,
     userId: row.user_id,
     connection: applicationSummary(row),
     vaultEnvelope: { version: 1, ciphertext: row.envelope_ciphertext, nonce: row.envelope_nonce },
-    historyEnabled: Boolean(user.history_enabled),
+    historyEnabled: Boolean(user.history_enabled), historyQuotaBytes,
     serverTime: new Date().toISOString()
   };
 }

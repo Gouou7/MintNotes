@@ -9,6 +9,24 @@ export type TranslationValues = Record<string, string | number>;
 const LANGUAGE_STORAGE_KEY = "webmd-notes-language";
 
 const messages = {
+  "notice.metadataQuotaReached": { en: "Synchronization records reached their limit. New writes are paused; synced notes can still be cleared from the trash.", "zh-CN": "同步记录已达上限，暂时无法新增写入；仍可永久清除已同步的回收项。", "zh-TW": "同步記錄已達上限，暫時無法新增寫入；仍可永久清除已同步的回收項。" },
+  "notice.historyClearResult": { en: "Deleted {deleted} history versions; retained {preserved} protected versions.", "zh-CN": "已删除{deleted}个历史版本，保留{preserved}个保护版本。", "zh-TW": "已刪除{deleted}個歷史版本，保留{preserved}個保護版本。" },
+  "storage.logical": { en: "Storage usage", "zh-CN": "存储用量", "zh-TW": "儲存用量" },
+  "storage.content": { en: "Current notes and attachments", "zh-CN": "当前笔记与附件", "zh-TW": "目前筆記與附件" },
+  "storage.physical": { en: "Server disk usage", "zh-CN": "服务器磁盘占用", "zh-TW": "伺服器磁碟用量" },
+  "storage.physicalHelp": { en: "Shared disk files include reusable SQLite pages and backups. These figures differ from account quotas.", "zh-CN": "共享文件包含SQLite可复用空闲页和备份，其大小与账户配额用量不同。", "zh-TW": "共用檔案包含SQLite可重用空閒頁與備份，其大小與帳戶配額用量不同。" },
+  "storage.database": { en: "Database", "zh-CN": "数据库", "zh-TW": "資料庫" },
+  "storage.backups": { en: "Backups", "zh-CN": "备份", "zh-TW": "備份" },
+  "storage.unavailable": { en: "Connect to the server to refresh usage.", "zh-CN": "连接服务器后可刷新用量。", "zh-TW": "連線伺服器後可更新用量。" },
+  "storage.cacheHelp": { en: "Synced attachment and history caches use up to 128 MiB and 64 MiB. Older downloads may require a network connection. Pending data is retained.", "zh-CN": "已同步附件与历史正文缓存上限分别为128 MiB和64 MiB，较早下载的内容可能需要重新联网读取。待同步数据始终保留。", "zh-TW": "已同步附件與歷史正文快取上限分別為128 MiB與64 MiB，較早下載的內容可能需要重新連線讀取。待同步資料一律保留。" },
+  "notice.recoveredHistoryMetadata": { en: "Recovered history metadata: {name} ({date}). The original historical body is no longer available on the server.", "zh-CN": "已恢复历史元数据：{name}（{date}）。服务器上的原历史正文已不可用。", "zh-TW": "已復原歷史中繼資料：{name}（{date}）。伺服器上的原歷史正文已無法取得。" },
+  "history.kindApplicationEdit": { en: "Before application edit", "zh-CN": "应用编辑前", "zh-TW": "應用編輯前" },
+  "history.offlineAvailable": { en: "Available offline", "zh-CN": "可离线读取", "zh-TW": "可離線讀取" },
+  "history.downloadRequired": { en: "Download required", "zh-CN": "需联网下载", "zh-TW": "需連線下載" },
+  "notice.recoveryMissingAttachments": { en: "Recovery copy saved; {count} unavailable attachments could not be recovered. Their references remain in the text.", "zh-CN": "已保存恢复副本；{count}个不可用附件未能恢复，其引用保留在正文中。", "zh-TW": "已儲存復原副本；{count}個無法取得的附件未能復原，其引用保留在正文中。" },
+  "notice.syncUpgradeRequired": { en: "Update this client to resume synchronization. Local data is retained.", "zh-CN": "请更新客户端后继续同步，本地数据已保留。", "zh-TW": "請更新用戶端後繼續同步，本機資料已保留。" },
+  "notice.operationExpired": { en: "An operation expired. Its local data is retained; reconcile and recover the proposal before retrying.", "zh-CN": "操作已过期，本地数据已保留；请先校准并恢复本地副本。", "zh-TW": "操作已過期，本機資料已保留；請先校準並復原本機副本。" },
+  "notice.ownershipIncomplete": { en: "Unlock and finish attachment reconciliation before permanently clearing notes.", "zh-CN": "请先解锁并完成附件归属校准，再永久清除笔记。", "zh-TW": "請先解鎖並完成附件歸屬校準，再永久清除筆記。" },
   "applications.title": {"en": "Application connections", "zh-CN": "应用连接", "zh-TW": "應用連線"},
   "applications.help": {"en": "Use separate keys to connect trusted applications. Locked notes are read-only. Revocation cannot remove existing offline copies.", "zh-CN": "使用独立密钥连接可信应用。锁定笔记为只读。撤销连接无法删除已有离线副本。", "zh-TW": "使用獨立金鑰連線可信任的應用程式。鎖定筆記為唯讀。撤銷連線無法刪除既有離線副本。"},
   "applications.add": {"en": "Add application", "zh-CN": "添加应用", "zh-TW": "新增應用"},
@@ -653,7 +671,7 @@ const messages = {
   "notice.wikiLinkNotFound": { en: "WikiLink target not found: {target}", "zh-CN": "找不到 WikiLink 目标：{target}", "zh-TW": "找不到 WikiLink 目標：{target}" },
   "notice.purgeSingleLabel": { en: "“{title}” and its child items and attachments", "zh-CN": "“{title}”及其子项目和附件", "zh-TW": "「{title}」及其子項目和附件" },
   "notice.purgeMultipleLabel": { en: "the selected {count} items and their child items and attachments", "zh-CN": "选中的 {count} 个项目及其子项目和附件", "zh-TW": "選取的 {count} 個項目及其子項目和附件" },
-  "notice.purgeConfirm": { en: "Permanently delete {label}? Server revision history will also be deleted. This cannot be undone.", "zh-CN": "永久删除{label}？服务器历史版本也将删除。此操作无法撤销。", "zh-TW": "永久刪除{label}？伺服器歷史版本也將刪除。此操作無法復原。" },
+  "notice.purgeConfirm": { en: "Permanently delete {label}, all attachments and all history, including protected versions? This cannot be undone.", "zh-CN": "永久删除{label}、全部附件和全部历史（包括保护版本）？此操作无法撤销。", "zh-TW": "永久刪除{label}、全部附件與全部歷史（包括保護版本）？此操作無法復原。" },
   "notice.clearTrashConfirm": { en: "Permanently delete all trash contents? Server revision history and encrypted attachments will also be deleted. This cannot be undone.", "zh-CN": "永久删除回收站全部内容？服务器历史版本及附件密文也将删除。此操作无法撤销。", "zh-TW": "永久刪除垃圾桶全部內容？伺服器歷史版本及附件密文也將刪除。此操作無法復原。" },
   "notice.purgeOnlineOnly": { en: "Permanent deletion requires an online connection. Offline items remain in trash.", "zh-CN": "永久删除需联网。离线时内容仍保留在回收站。", "zh-TW": "永久刪除需連網。離線時內容仍保留在垃圾桶。" },
   "notice.purgeWaitSync": { en: "Wait for deletion status to synchronize before permanently deleting.", "zh-CN": "请等待删除状态同步完成后再永久删除。", "zh-TW": "請等待刪除狀態同步完成後再永久刪除。" },
@@ -742,7 +760,7 @@ const messages = {
   "settings.historyAutomatic": { en: "Automatic history", "zh-CN": "自动保存历史", "zh-TW": "自動儲存歷史" },
   "settings.historyFrequency": { en: "Active editing interval", "zh-CN": "持续编辑保存间隔", "zh-TW": "持續編輯儲存間隔" },
   "settings.historyRetention": { en: "Keep history for", "zh-CN": "历史保留时间", "zh-TW": "歷史保留時間" },
-  "settings.historyTiered": { en: "All automatic versions are kept for 24 hours. One per hour is kept through day 7, then one per day. Manual and pre-restore versions are not thinned.", "zh-CN": "自动版本在 24 小时内全部保留。第 2 至第 7 天每小时保留一份。此后每天保留一份。手动及恢复前版本不受此精简规则影响。", "zh-TW": "自動版本在 24 小時內全部保留。第 2 至第 7 天每小時保留一份。此後每天保留一份。手動及復原前版本不受此精簡規則影響。" },
+  "settings.historyTiered": { en: "Automatic versions rotate by time and capacity: all for 24 hours, then hourly through day 7 and daily afterwards. Manual and protected versions are retained; rotation pauses in the trash.", "zh-CN": "自动版本按时间和容量轮转：24小时内保留完整版本，第2至第7天每小时保留一份，此后每天一份。手动及保护版本保留，回收期间暂停轮转。", "zh-TW": "自動版本按時間與容量輪轉：24小時內保留完整版本，第2至第7天每小時保留一份，此後每天一份。手動及保護版本保留，回收期間暫停輪轉。" },
   "settings.historyStorage": { en: "Encrypted history storage", "zh-CN": "加密历史存储", "zh-TW": "加密歷史儲存空間" },
   "settings.historyVersionCount": { en: "{count} versions", "zh-CN": "{count} 个版本", "zh-TW": "{count} 個版本" },
   "settings.historyClearAll": { en: "Clear all note history", "zh-CN": "清空全部笔记历史", "zh-TW": "清空全部筆記歷史" },
@@ -909,6 +927,7 @@ export function translateCurrent(key: MessageKey, values?: TranslationValues): s
 }
 
 const errorMessages: Record<string, MessageKey> = {
+  "HISTORY_LOCAL_BUDGET_EXCEEDED": "notice.historyQuotaReached",
   "PIN 至少需要 4 个字符": "error.pinMin",
   "当前设备没有可用的本机解锁凭据": "error.deviceCredentialMissing",
   "不支持的自动锁定时间": "error.autoLockUnsupported",
@@ -981,6 +1000,11 @@ const errorMessages: Record<string, MessageKey> = {
 
 export function translateError(error: unknown, t: Translate, fallback: MessageKey): string {
   if (!(error instanceof Error)) return t(fallback);
+  const code = (error as Error & { data?: { code?: string } }).data?.code;
+  if (code === "PROTOCOL_UPGRADE_REQUIRED") return t("notice.syncUpgradeRequired");
+  if (code === "METADATA_QUOTA_EXCEEDED") return t("notice.metadataQuotaReached");
+  if (code === "OPERATION_EXPIRED") return t("notice.operationExpired");
+  if (code === "OWNERSHIP_INCOMPLETE") return t("notice.ownershipIncomplete");
   const key = errorMessages[error.message];
   if (key) return t(key);
   const offlineAttachment = /^附件“(.+)”尚未缓存，离线时无法读取$/.exec(error.message);

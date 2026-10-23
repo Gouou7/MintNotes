@@ -1,3 +1,4 @@
+import { pinCache } from "../../storage/cache";
 import { useEffect, useRef, useState } from "react";
 import type { OpenAttachment } from "../../types";
 import { decryptAttachmentBlob } from "../attachments";
@@ -41,6 +42,8 @@ export function useAttachmentUrls(options: {
   ].join("\u0000");
   const [resolvedKey, setResolvedKey] = useState<string | null>(null);
   const cache = useRef<Map<string, CachedAttachmentUrl>>(new Map());
+
+  useEffect(() => pinCache(options.userId, "attachment", options.attachmentIds), [options.userId, options.attachmentIds.join("|")]);
 
   useEffect(() => {
     let cancelled = false;

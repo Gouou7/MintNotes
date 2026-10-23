@@ -114,31 +114,39 @@ export function useVaultTrash(options: Options) {
     if (!serverSessionVerified) return showMessage(t("notice.purgeOnlineOnly"));
     setPurging(true);
     try {
-      await documentSaveQueue.flushAll();
-      await objectPersistence.drainAll();
-      await synchronize();
       const documentIds = objectIds === null
         ? new Set(documentsRef.current.filter((entry) => entry.deleted).map((entry) => entry.objectId))
         : new Set(selectionRoots(documentsRef.current, objectIds).flatMap((objectId) => [...descendantsOf(documentsRef.current, objectId)]));
       const noteIds = new Set([...documentIds].filter((id) => documentsRef.current.find((entry) => entry.objectId === id)?.kind === "note"));
       const targets = [
         ...documentsRef.current.filter((entry) => documentIds.has(entry.objectId) && entry.deleted),
-        ...attachmentsRef.current.filter((entry) => entry.deleted && (objectIds === null || noteIds.has(entry.ownerNoteId)))
+        ...attachmentsRef.current.filter((entry) => noteIds.has(entry.ownerNoteId) || (objectIds === null && entry.deleted))
       ];
       if (!targets.length) return;
       const targetIds = new Set(targets.map((entry) => entry.objectId));
-      if (
-        targets.some((entry) => entry.dirty || entry.serverRevision < 1)
-        || await hasPendingLocalObjectGraph(userId, targetIds)
-      ) {
-        return showMessage(t("notice.purgeWaitSync"));
-      }
-      await api("/api/objects/purge", {
-        method: "POST",
-        headers: { "X-WebMD-Sync-Client": syncClientId.current },
-        body: JSON.stringify({ objects: targets.map((entry) => ({ objectId: entry.objectId, baseRevision: entry.serverRevision })) })
-      });
-      for (const entry of targets) await removePurgedLocal(entry.objectId);
+      const perform = async () => {
+        const currentTargets = targets.map((target) => documentsRef.current.find((r) => r.objectId === target.objectId) ?? attachmentsRef.current.find((r) => r.objectId === target.objectId));
+        if (currentTargets.some((r, index) => !r || (!r.deleted && !(r.kind === "attachment" && noteIds.has(r.ownerNoteId))) || r.dirty || r.serverRevision !== targets[index].serverRevision)) throw new Error(t("notice.purgeWaitSync"));
+        if (
+          targets.some((entry) => entry.dirty || entry.serverRevision < 1 || documentSaveQueue.hasPending(entry.objectId))
+          || await hasPendingLocalObjectGraph(userId, targetIds)
+        ) {
+          throw new Error(t("notice.purgeWaitSync"));
+        }
+        const requests = targets.filter((entry) => entry.kind !== "attachment" || !noteIds.has(entry.ownerNoteId));
+        for (let offset = 0; offset < requests.length; offset += 1000) {
+          await api("/api/objects/purge", {
+            method: "POST",
+            headers: { "X-WebMD-Sync-Client": syncClientId.current },
+            body: JSON.stringify({ objects: requests.slice(offset, offset + 1000).map((entry) => ({ objectId: entry.objectId, baseRevision: entry.serverRevision })) })
+          });
+        }
+        for (const entry of targets) await removePurgedLocal(entry.objectId);
+      };
+      const ids = [...targetIds].sort();
+      const locked = (index: number): Promise<void> => index === ids.length ? perform()
+        : objectPersistence.coordinate(ids[index], () => locked(index + 1));
+      await locked(0);
       showMessage(t("notice.purgeComplete"), "info");
       requestPush("structural");
     } catch (error) {
@@ -148,5 +156,5 @@ export function useVaultTrash(options: Options) {
     }
   };
 
-  return { purging, setDeletedMany, requestPurgeDocuments, requestClearTrash };
+  return { purging, setDeletedMany, requestPurgeDocuments, requestClearTrash, purgeTrash };
 }

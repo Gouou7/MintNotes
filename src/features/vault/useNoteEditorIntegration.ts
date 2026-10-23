@@ -19,7 +19,7 @@ export function useNoteEditorIntegration(options: Options) {
     if (!documentKey && (!document || previewing || readOnly || document.locked)) return;
     const latest = findDocument(documentKey ?? document!.objectId);
     if (!latest || latest.deleted || latest.locked || latest.markdown === markdown) return;
-    patchDocument(latest.objectId, { markdown, attachmentIds: [...new Set([...latest.attachmentIds, ...attachmentIdsIn(markdown)])] });
+    patchDocument(latest.objectId, { markdown, attachmentIds: attachmentIdsIn(markdown) });
   }, []);
   const onImageInsert = useCallback(async (file: File) => {
     const { document, previewing, readOnly, saveImage } = current.current;

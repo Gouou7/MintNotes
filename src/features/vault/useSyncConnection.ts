@@ -63,7 +63,7 @@ export function useSyncConnection(options: SyncConnectionOptions) {
       const cursor = Number((await localDb.meta.get(cursorKey(options.userId)))?.value ?? 0);
       if (!current() || source.current) return;
       const events = new EventSource(
-        `/api/sync/events?since=${cursor}&clientId=${encodeURIComponent(options.clientId)}`,
+        `/api/sync/events?protocol=2&since=${cursor}&clientId=${encodeURIComponent(options.clientId)}`,
         { withCredentials: true }
       );
       source.current = events;

@@ -1,3 +1,5 @@
+import { acquireStorageLock } from "./storageLock.js";
+import { registerProtocolGate } from "./sync/protocol.js";
 import cookie from "@fastify/cookie";
 import compress from "@fastify/compress";
 import rateLimit from "@fastify/rate-limit";
@@ -54,7 +56,11 @@ const app = Fastify({
   trustProxy: config.trustProxy,
   bodyLimit: 2 * 1024 * 1024
 });
-const db = options.db ?? openDatabase(config.dataDirectory);
+const releaseStorageLock = options.db ? null : acquireStorageLock(config.dataDirectory);
+let db: AppDatabase;
+try { db = options.db ?? openDatabase(config.dataDirectory); }
+catch (error) { releaseStorageLock?.(); throw error; }
+app.addHook("onClose", async () => { releaseStorageLock?.(); });
 const syncEvents = options.syncEvents ?? new SyncEventHub();
 const logRefs = new LogReferenceFactory();
 const ownsDatabase = options.db === undefined;
@@ -77,6 +83,7 @@ app.decorateRequest("sessionUser", null);
 app.decorateRequest("sessionContext", null);
 app.decorateRequest("applicationPrincipal", null);
 
+registerProtocolGate(app);
 registerOriginProtection(app, config);
 
 const secretField = z.string().min(20).max(1024);
@@ -258,6 +265,8 @@ app.post(
 app.post("/api/auth/logout", { preHandler: authenticate }, async (request, reply) => {
   const user = request.sessionUser as SessionUser;
   const endpointId = request.sessionContext!.endpointId;
+  const expected = z.object({ endpointId: z.string().uuid() }).optional().safeParse(request.body);
+  if (!expected.success || (expected.data && expected.data.endpointId !== endpointId)) return reply.code(409).send({ error: "Logout endpoint mismatch" });
   const now = new Date().toISOString();
   db.transaction(() => {
     db.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND endpoint_id = ? AND revoked_at IS NULL").run(now, user.id, endpointId);
@@ -269,7 +278,7 @@ app.post("/api/auth/logout", { preHandler: authenticate }, async (request, reply
     actorRef: logRefs.create("user", user.id),
     endpointRef: logRefs.create("endpoint", endpointId)
   });
-  return { ok: true };
+  return { ok: true, endpointId };
 });
 
 app.get("/api/auth/me", { preHandler: authenticate }, async (request) => ({

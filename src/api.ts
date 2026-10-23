@@ -1,4 +1,7 @@
 const jsonHeaders = { "Content-Type": "application/json" };
+let syncLease = "";
+export function setSyncLease(value: string) { syncLease = value; }
+function protocolHeaders() { return { "X-WebMD-Protocol": "2", ...(syncLease ? { "X-WebMD-Sync-Lease": syncLease } : {}) }; }
 
 export class ApiError extends Error {
   constructor(
@@ -17,7 +20,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     credentials: "same-origin",
     ...init,
     signal,
-    headers: init.body ? { ...jsonHeaders, ...init.headers } : init.headers
+    headers: { ...protocolHeaders(), ...(init.body ? jsonHeaders : {}), ...init.headers }
   });
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   const expectedCredentialFailure = ["/api/auth/login", "/api/auth/reauth", "/api/auth/recover", "/api/auth/password", "/api/account/recovery-key"].includes(path)
@@ -33,7 +36,7 @@ export async function uploadAttachmentChunk(path: string, ciphertext: ArrayBuffe
   const response = await fetch(path, {
     method: "PUT",
     credentials: "same-origin",
-    headers: { "Content-Type": "application/octet-stream", ...headers },
+    headers: { "Content-Type": "application/octet-stream", ...protocolHeaders(), ...headers },
     body: ciphertext,
     signal: AbortSignal.timeout(30_000)
   });
@@ -45,7 +48,7 @@ export async function uploadAttachmentChunk(path: string, ciphertext: ArrayBuffe
 
 export async function downloadAttachmentChunk(path: string, signal?: AbortSignal): Promise<{ ciphertext: ArrayBuffer; nonce: string; totalChunks: number; encryptionVersion: number }> {
   const timeout = AbortSignal.timeout(30_000);
-  const response = await fetch(path, { credentials: "same-origin", cache: "no-store", signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+  const response = await fetch(path, { credentials: "same-origin", cache: "no-store", headers: protocolHeaders(), signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   if (!response.ok) {
     const data = await response.json().catch(() => ({})) as { error?: string };
     throw new ApiError(data.error ?? `Attachment download failed (${response.status})`, response.status, data);

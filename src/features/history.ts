@@ -1,3 +1,4 @@
+import { attachmentIdsIn } from "./attachmentFormat";
 import type {
   HistoryListItem,
   HistorySettings,
@@ -24,7 +25,7 @@ export function makeHistoryPayload(document: OpenDocument, capturedAt: string): 
     title: document.title,
     markdown: document.markdown,
     tags: [...document.tags],
-    attachmentIds: [...new Set(document.attachmentIds)],
+    attachmentIds: attachmentIdsIn(document.markdown),
     sourceUpdatedAt: document.updatedAt
   };
 }
@@ -84,7 +85,8 @@ export function localHistoryListItem(snapshot: LocalHistorySnapshot | LocalHisto
     protected: snapshot.protected,
     byteSize: snapshot.byteSize,
     pending: snapshot.pending,
-    serverCreatedAt: snapshot.serverCreatedAt
+    serverCreatedAt: snapshot.serverCreatedAt,
+    offlineAvailable: "ciphertext" in snapshot
   };
 }
 

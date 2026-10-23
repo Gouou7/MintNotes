@@ -56,7 +56,7 @@ export class VaultCipher {
 
   static async unlock(applicationKey: string, bootstrap: ApplicationConnectionBootstrap): Promise<VaultCipher> {
     const { seed, connectionId } = parseApplicationKey(applicationKey);
-    if (bootstrap.protocolVersion !== 1 || bootstrap.objectSchemaVersion !== 2 || bootstrap.encryptionVersion !== 1
+    if (![1, 2].includes(Number(bootstrap.protocolVersion)) || bootstrap.objectSchemaVersion !== 2 || bootstrap.encryptionVersion !== 1
       || bootstrap.connection.connectionId !== connectionId || bootstrap.vaultEnvelope.version !== 1) {
       seed.fill(0);
       throw new ApplicationError("PROTOCOL_UNSUPPORTED", "Application protocol is unsupported");
@@ -92,6 +92,11 @@ export class VaultCipher {
     this.requireActive();
     const bytes = new TextEncoder().encode(JSON.stringify(value));
     try { return await seal(bytes, this.#key, aad); } finally { bytes.fill(0); }
+  }
+  async decryptJson<T>(ciphertext: string, nonce: string, aad: string): Promise<T> {
+    this.requireActive();
+    const bytes = await open(ciphertext, nonce, this.#key, aad);
+    try { return JSON.parse(new TextDecoder().decode(bytes)) as T; } finally { bytes.fill(0); }
   }
 
   async fingerprint(value: unknown): Promise<string> {

@@ -1,3 +1,5 @@
+import { evictDownloadableCaches, pinCache, persistWithCacheRecovery } from "../../storage/cache";
+import { operationId } from "@mint-notes/application-client";
 import type { CryptoClient } from "../../crypto/client";
 import { cryptoClient } from "../../crypto/client";
 import {
@@ -178,7 +180,7 @@ export class VaultHistoryController {
   async createSnapshot(
     document: OpenDocument,
     captureKind: HistoryCaptureKind,
-    options: { name?: string | null; protected?: boolean; capturedAt?: string } = {}
+    options: { name?: string | null; protected?: boolean; capturedAt?: string; quotaBytes?: number } = {}
   ): Promise<CreatedHistorySnapshot | null> {
     if (!this.isActive() || document.kind !== "note" || document.deleted) return null;
     const capturedAt = options.capturedAt ?? new Date().toISOString();
@@ -216,16 +218,21 @@ export class VaultHistoryController {
       metadataNonce: encryptedMetadata.nonce,
       metadataEncryptionVersion: encryptedMetadata.encryptionVersion,
       protected: options.protected ?? false,
-      byteSize: encrypted.ciphertext.length + encryptedMetadata.ciphertext.length,
+      byteSize: encrypted.ciphertext.length + encryptedMetadata.ciphertext.length + encrypted.nonce.length + encryptedMetadata.nonce.length,
+      touchedAt: Date.now(),
       pending: true
     };
     const outbox: HistoryOutboxEntry = {
       ...snapshot,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: operationId(),
       generation: this.nextGeneration()
     };
     await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, async () => {
       if (!this.isActive()) return;
+      if (options.quotaBytes !== undefined) {
+        const pending = await localDb.historyOutbox.where("userId").equals(this.userId).toArray();
+        if (pending.reduce((sum, item) => sum + item.byteSize, 0) + snapshot.byteSize > options.quotaBytes) throw new Error("HISTORY_LOCAL_BUDGET_EXCEEDED");
+      }
       await localDb.historySnapshots.put(snapshot);
       await localDb.historyIndex.put(this.indexFor(snapshot));
       await localDb.historyOutbox.put(outbox);
@@ -239,6 +246,7 @@ export class VaultHistoryController {
   ): Promise<LocalHistorySnapshot> {
     const key = historyKey(this.userId, item.noteId, item.historyId);
     const cached = await localDb.historySnapshots.get(key);
+    if (cached) await localDb.historySnapshots.update(key, { touchedAt: Date.now() });
     if (cached) {
       const snapshot = {
         ...cached,
@@ -254,11 +262,15 @@ export class VaultHistoryController {
       return snapshot;
     }
     const remote = await fetchRemote();
-    const snapshot: LocalHistorySnapshot = { ...remote, key, userId: this.userId };
-    await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, async () => {
-      await localDb.historySnapshots.put(snapshot);
-      await localDb.historyIndex.put(this.indexFor(snapshot));
-    });
+    const snapshot: LocalHistorySnapshot = { ...remote, key, userId: this.userId, touchedAt: Date.now() };
+    const release = pinCache(this.userId, "history", [snapshot.historyId]);
+    try {
+      await persistWithCacheRecovery(this.userId, () => localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, async () => {
+        await localDb.historySnapshots.put(snapshot);
+        await localDb.historyIndex.put(this.indexFor(snapshot));
+      }));
+      await evictDownloadableCaches(this.userId);
+    } finally { release(); }
     return snapshot;
   }
 

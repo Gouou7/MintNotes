@@ -150,7 +150,7 @@ export function useVaultDocuments(options: Options) {
     document: OpenDocument,
     sourceMarkdown: string,
     sourceAttachmentIds: readonly string[],
-    options: { commitState?: boolean } = {}
+    options: { commitState?: boolean; allowMissing?: boolean } = {}
   ): Promise<OpenDocument> => {
     document = nameReservations.current.reserve(documentsRef.current, document);
     const attachmentCloner = new AttachmentCloneService({
@@ -179,8 +179,9 @@ export function useVaultDocuments(options: Options) {
       cloned = await attachmentCloner.clone({
         sourceMarkdown,
         sourceAttachmentIds,
-        targetNoteId: document.objectId
+        targetNoteId: document.objectId, allowMissing: options.allowMissing
       });
+      if (cloned.missingAttachmentIds.length) showMessage(t("notice.recoveryMissingAttachments", { count: cloned.missingAttachmentIds.length }), "critical");
       const persisted = await persistObject({
         ...document,
         markdown: cloned.markdown,

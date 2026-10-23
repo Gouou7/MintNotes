@@ -97,6 +97,6 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     maxWorkers: 1,
-    exclude: [...configDefaults.exclude, "server-dist/**", "src/editor/typora-web/**", "src/editor/patches/**", ".generated/**", "tests/editor/browser/**"]
+    exclude: [...configDefaults.exclude, "server-dist/**", "src/editor/typora-web/**", "src/editor/patches/**", ".generated/**", "tests/editor/browser/**", "tests/storage/browser/**"]
   }
 });

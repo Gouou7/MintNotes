@@ -95,7 +95,7 @@ const encrypted = await loginWorker.call("encryptObject", {
 });
 const applicationCredential = await loginWorker.call("createApplicationCredential", { userId });
 const applicationCipher = await VaultCipher.unlock(applicationCredential.applicationKey, {
-  protocolVersion: 1, objectSchemaVersion: 2, encryptionVersion: 1, userId, historyEnabled: true,
+  protocolVersion: 2, objectSchemaVersion: 2, encryptionVersion: 1, userId, historyEnabled: true,
   serverTime: new Date().toISOString(), vaultEnvelope: applicationCredential.vaultEnvelope,
   connection: { connectionId: applicationCredential.connectionId, name: "worker-test", access: "read-write",
     idleTimeoutDays: 30, expiresAt: null, createdAt: new Date().toISOString(), lastUsedAt: null,

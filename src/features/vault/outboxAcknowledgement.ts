@@ -1,3 +1,4 @@
+import { operationId } from "@mint-notes/application-client";
 import { cryptoClient } from "../../crypto/client";
 import { localDb, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
 import type { VaultObject } from "../../types";
@@ -48,10 +49,10 @@ export async function acknowledgeOutboxEntry(
           userId, current.objectId, current.objectType, acceptedRevision + 1, object
         );
         rebased = {
-          key: current.key, userId, objectId: current.objectId, objectType: current.objectType,
+          key: current.key, userId, objectId: current.objectId, objectType: current.objectType, ownerNoteId: current.ownerNoteId,
           ...encrypted, revision: acceptedRevision + 1, deleted: current.deleted, updatedAt: current.updatedAt,
           operation: "upsert", baseRevision: acceptedRevision,
-          idempotencyKey: globalThis.crypto.randomUUID(), generation: nextGeneration()
+          idempotencyKey: operationId(), generation: nextGeneration()
         };
       }
     }

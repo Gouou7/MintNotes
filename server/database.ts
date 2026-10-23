@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { initializeApplicationConnections } from "./applications/service.js";
+import { migrateStorage } from "./storageMigration.js";
 
 export type AppDatabase = Database.Database;
 export type RegistrationRole = "admin" | "user";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function runRegistrationTransaction<T>(
   db: AppDatabase,
@@ -35,7 +36,7 @@ export function openDatabase(dataDirectory: string): AppDatabase {
 
   const version = Number(db.pragma("user_version", { simple: true }));
   const hasLegacyTables = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get());
-  if (version !== 0 && version !== SCHEMA_VERSION) {
+  if (version !== 0 && version !== 2 && version !== SCHEMA_VERSION) {
     db.close();
     throw new Error(`Unsupported database schema ${version}; Mint Notes requires a fresh schema v${SCHEMA_VERSION} volume`);
   }
@@ -217,7 +218,6 @@ export function openDatabase(dataDirectory: string): AppDatabase {
       updated_at TEXT NOT NULL
     );
 
-    PRAGMA user_version = ${SCHEMA_VERSION};
   `);
 
   // Supported schema-v2 deployments receive new metadata-only tables
@@ -322,5 +322,7 @@ export function openDatabase(dataDirectory: string): AppDatabase {
       ON protected_history_attachments(user_id, attachment_id);
   `);
   initializeApplicationConnections(db);
+  try { migrateStorage(db, version, dataDirectory); }
+  catch (error) { db.close(); throw error; }
   return db;
 }

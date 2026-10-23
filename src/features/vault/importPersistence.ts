@@ -1,3 +1,4 @@
+import { operationId } from "@mint-notes/application-client";
 import { cryptoClient } from "../../crypto/client";
 import { localDb, localKey, type LocalEncryptedObject, type OutboxEntry } from "../../storage/database";
 import type { OpenDocument } from "../../types";
@@ -27,7 +28,7 @@ export async function persistImportedDocument(userId: string, document: OpenDocu
     key: localKey(userId, objectId), userId, objectId, objectType: next.kind,
     ...encrypted, revision: 1, deleted: false, updatedAt: next.updatedAt
   };
-  const outbox: OutboxEntry = { ...object, operation: "upsert", baseRevision: 0, idempotencyKey: crypto.randomUUID(), generation: Date.now() * 1000 };
+  const outbox: OutboxEntry = { ...object, operation: "upsert", baseRevision: 0, idempotencyKey: operationId(), generation: Date.now() * 1000 };
   // All IDs are new and unpublished, so no existing object's write lane can race this transaction.
   await localDb.transaction("rw", [localDb.objects, localDb.outbox, localDb.attachmentChunks, localDb.attachmentOutbox], async () => {
     check();

@@ -1,3 +1,6 @@
+import { syncState } from "./lifecycle.js";
+import { issueSyncLease, validSyncLease } from "./protocol.js";
+import { storageUsage } from "../storageUsage.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ServerConfig } from "../config.js";
@@ -53,9 +56,7 @@ export function registerSyncRoutes(
       clientId: parsed.data.clientId,
       response: reply.raw
     });
-    const latest = Number((db.prepare(
-      "SELECT COALESCE(MAX(sequence), 0) AS cursor FROM changes WHERE user_id = ?"
-    ).get(user.id) as { cursor: number }).cursor);
+    const latest = syncState(db, user.id).head;
     if (latest > parsed.data.since) {
       reply.raw.write(`event: changed\ndata: ${JSON.stringify({ cursor: latest })}\n\n`);
     }
@@ -83,63 +84,61 @@ export function registerSyncRoutes(
     return reply;
   });
 
-  app.get(`${apiPrefix}/sync`, { preHandler: authenticate }, async (request) => {
-    const scope = getScope(request);
-    const query = request.query as { since?: string; limit?: string; compact?: string };
-    const since = Math.max(0, Number(query.since ?? 0));
-    const limit = Math.min(500, Math.max(1, Number(query.limit ?? 200)));
-    const latestCursor = Number((db.prepare(
-      "SELECT COALESCE(MAX(sequence), 0) AS cursor FROM changes WHERE user_id = ?"
-    ).get(scope.userId) as { cursor: number }).cursor);
-    if (since > latestCursor) {
-      return { changes: [], cursor: 0, hasMore: true, reset: true };
-    }
-    const rows = db.prepare(`
-      SELECT c.sequence, c.object_id, c.change_type, c.created_at AS change_created_at,
-        r.object_type, r.ciphertext, r.nonce, r.encryption_version, r.revision, r.deleted
-      FROM changes c
-      LEFT JOIN object_revisions r
-        ON r.user_id = c.user_id AND r.object_id = c.object_id AND r.revision = c.revision
-      WHERE c.user_id = ? AND c.sequence > ?
-      ORDER BY c.sequence ASC
-      LIMIT ?
-    `).all(scope.userId, since, limit) as any[];
-    const responseRows = query.compact === "1"
-      ? [...new Map(rows.map((row) => [row.object_id, row])).values()]
-        .sort((left, right) => left.sequence - right.sequence)
-      : rows;
-    return {
-      changes: responseRows.map((row) => ({
-        sequence: row.sequence,
-        objectId: row.object_id,
-        objectType: row.object_type ?? "note",
-        ciphertext: row.ciphertext ?? "",
-        nonce: row.nonce ?? "",
-        encryptionVersion: row.encryption_version ?? 1,
-        revision: row.revision ?? 0,
-        deleted: Boolean(row.deleted),
-        purged: row.change_type === "purge",
-        serverUpdatedAt: row.change_created_at
-      })),
-      cursor: rows.length ? rows[rows.length - 1].sequence : since,
-      hasMore: rows.length === limit
-    };
+  app.get(`${apiPrefix}/sync/status`, { preHandler: authenticate }, async (request) => {
+    const { userId } = getScope(request);
+    const state = syncState(db, userId);
+    const query = request.query as { epoch?: string; since?: string };
+    const since = Number(query.since ?? 0);
+    return { ...state, protocolVersion: 2, serverTime: new Date().toISOString(),
+      reconcile: query.epoch !== state.epoch || !validSyncLease(db, userId, request.headers["x-webmd-sync-lease"])
+        || !Number.isSafeInteger(since) || since < state.floor || since > state.head,
+      lease: issueSyncLease(db, userId) };
   });
+  app.get(`${apiPrefix}/sync/snapshot`, { preHandler: authenticate }, async (request, reply) => {
+    const query = z.object({ after: z.string().uuid().optional(), limit: z.coerce.number().int().min(1).max(500).default(200), epoch: z.string() }).safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: "Invalid snapshot request" });
+    const { userId } = getScope(request);
+    const state = syncState(db, userId);
+    if (query.data.epoch !== state.epoch) return reply.code(409).send({ error: "Synchronization epoch changed", code: "SYNC_RECONCILE_REQUIRED" });
+    const rows = db.prepare(`SELECT * FROM objects WHERE user_id = ? AND object_id > ? ORDER BY object_id LIMIT ?`)
+      .all(userId, query.data.after ?? "", query.data.limit) as any[];
+    return { epoch: state.epoch, objects: rows.map((r) => objectResponse(r)), next: rows.length === query.data.limit ? rows.at(-1).object_id : null };
+  });
+  app.get(`${apiPrefix}/sync`, { preHandler: authenticate }, async (request, reply) => {
+    const scope = getScope(request);
+    const parsed = z.object({ since: z.coerce.number().int().nonnegative().default(0), limit: z.coerce.number().int().min(1).max(500).default(200), epoch: z.string().optional() }).safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid synchronization request" });
+    const { since, limit, epoch } = parsed.data;
+    const state = syncState(db, scope.userId);
+    if ((epoch && epoch !== state.epoch) || since < state.floor || since > state.head) return { changes: [], cursor: state.head, hasMore: false, reset: true, epoch: state.epoch };
+    const rows = db.prepare(`SELECT c.sequence, c.object_id, c.revision AS change_revision, c.category, c.change_type, c.created_at AS change_created_at,
+        o.object_type, o.ciphertext, o.nonce, o.encryption_version, o.revision, o.deleted, o.trashed_at
+      FROM changes c LEFT JOIN objects o ON o.user_id = c.user_id AND o.object_id = c.object_id
+      WHERE c.user_id = ? AND c.sequence > ? ORDER BY c.sequence LIMIT ?`).all(scope.userId, since, limit) as any[];
+    return { epoch: state.epoch, floor: state.floor,
+      changes: rows.map((r) => ({ ...objectResponse(r), sequence: r.sequence, serverUpdatedAt: r.change_created_at,
+        ...(r.category === "history" ? { historyVersion: r.change_revision } : {}), purged: r.change_type === "purge" })),
+      cursor: rows.length === limit ? rows.at(-1).sequence : state.head, hasMore: rows.length === limit };
+  });
+  if (!applicationOnly) app.get(`${apiPrefix}/account/storage`, { preHandler: authenticate }, async (request) => ({
+    ...storageUsage(db, getScope(request).userId), quotaBytes: config.userStorageQuotaBytes, historyQuotaBytes: config.userHistoryQuotaBytes
+  }));
 
   app.get(`${apiPrefix}/objects/:objectId`, { preHandler: authenticate }, async (request, reply) => {
     const id = z.string().uuid().safeParse((request.params as { objectId: string }).objectId);
     if (!id.success) return reply.code(400).send({ error: "Invalid object ID" });
-    const row = db.prepare(`SELECT object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted
+    const row = db.prepare(`SELECT object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted, trashed_at
       FROM objects WHERE user_id = ? AND object_id = ?`).get(getScope(request).userId, id.data) as {
-        object_id: string; object_type: string; ciphertext: string; nonce: string; encryption_version: number; revision: number; deleted: number;
+        object_id: string; object_type: string; ciphertext: string; nonce: string; encryption_version: number; revision: number; deleted: number; trashed_at: string | null;
       } | undefined;
     if (!row) return reply.code(404).send({ error: "Object not found" });
     return { objectId: row.object_id, objectType: row.object_type, ciphertext: row.ciphertext, nonce: row.nonce,
-      encryptionVersion: row.encryption_version, revision: row.revision, deleted: Boolean(row.deleted) };
+      encryptionVersion: row.encryption_version, revision: row.revision, deleted: Boolean(row.deleted), serverTrashedAt: row.trashed_at };
   });
 
   app.put(`${apiPrefix}/objects/:objectId`, { preHandler: authenticate }, async (request, reply) => {
     const scope = getScope(request);
+    if (!validSyncLease(db, scope.userId, request.headers["x-webmd-sync-lease"])) return reply.code(409).send({ error: "Reconcile before uploading", code: "SYNC_RECONCILE_REQUIRED" });
     const objectId = z.string().uuid().safeParse(
       (request.params as { objectId: string }).objectId
     );
@@ -156,7 +155,7 @@ export function registerSyncRoutes(
           actorRef: logRefs.create("user", scope.userId),
           resource: "objects"
         });
-        return reply.code(413).send({ error: error.message });
+        return reply.code(413).send({ error: error.message, code: error.code });
       }
       throw error;
     }
@@ -194,6 +193,7 @@ export function registerSyncRoutes(
       return reply.code(400).send({ error: "Invalid encrypted object batch" });
     }
     const scope = getScope(request);
+    if (!validSyncLease(db, scope.userId, request.headers["x-webmd-sync-lease"])) return reply.code(409).send({ error: "Reconcile before uploading", code: "SYNC_RECONCILE_REQUIRED" });
     let results;
     try {
       results = parsed.data.objects.map(({ objectId, ...body }) => (
@@ -205,7 +205,7 @@ export function registerSyncRoutes(
           actorRef: logRefs.create("user", scope.userId),
           resource: "objects"
         });
-        return reply.code(413).send({ error: error.message });
+        return reply.code(413).send({ error: error.message, code: error.code });
       }
       throw error;
     }
@@ -280,17 +280,23 @@ export function registerSyncRoutes(
           });
           return reply.code(409).send({ error: "Purge conflict" });
         }
-        if (error instanceof Error && error.message === "PROTECTED_HISTORY") {
+        if (error instanceof Error && error.message === "OWNERSHIP_INCOMPLETE") {
           logEvent(request.log, "warn", "sync.purge_blocked", {
             actorRef: logRefs.create("user", scope.userId),
             count: parsed.data.objects.length,
             reason: "protected_history"
           });
-          return reply.code(409).send({ error: "Protected history blocks purge", code: "PROTECTED_HISTORY" });
+          return reply.code(409).send({ error: "Attachment ownership reconciliation required", code: "OWNERSHIP_INCOMPLETE" });
         }
         throw error;
       }
       return { ok: true };
     }
   );
+}
+
+function objectResponse(row: any) {
+  return { objectId: row.object_id, objectType: row.object_type ?? "note", ciphertext: row.ciphertext ?? "", nonce: row.nonce ?? "",
+    encryptionVersion: row.encryption_version ?? 1, revision: row.revision ?? 0, deleted: Boolean(row.deleted), serverTrashedAt: row.trashed_at, serverUpdatedAt: row.updated_at ?? row.change_created_at,
+    ...(row.owner_note_id ? { ownerNoteId: row.owner_note_id } : {}) };
 }

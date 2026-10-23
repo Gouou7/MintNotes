@@ -1,8 +1,9 @@
+import { operationId as newOperationId } from "@mint-notes/application-client";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
+import { createApp } from "./testSupport";
 import { loadServerConfig } from "./config";
 import { openDatabase } from "./database";
 import { createLoggerOptions, LogReferenceFactory } from "./logging";
@@ -141,7 +142,7 @@ describe("HTTP and business logs", () => {
       nonce: "nonce-value-must-not-be-logged",
       encryptionVersion: 1,
       baseRevision,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: newOperationId(),
       deleted: false
     });
     expect((await app.inject({
@@ -160,7 +161,7 @@ describe("HTTP and business logs", () => {
       method: "PUT",
       url: `/api/objects/${objectId}`,
       headers,
-      payload: writePayload(1, "quota-ciphertext-must-not-be-logged")
+      payload: writePayload(1, "quota-ciphertext-must-not-be-logged".repeat(100))
     })).statusCode).toBe(413);
 
     expect((await app.inject({

@@ -34,7 +34,7 @@
 - 包装信封为 `{ version: 1, ciphertext, nonce }`，编码均为无填充 Base64URL；密文包含 GCM tag。
 - 原生认证头为 `Authorization: Bearer <connectionId>.<authSecret>`。完整应用密钥不得直接放入 HTTP 头、URL、日志或工具参数。
 
-bootstrap 声明 `protocolVersion: 1`、`objectSchemaVersion: 2`、`encryptionVersion: 1`。不兼容版本、账户或信封拒绝解密，不自动删除旧缓存。现有对象、历史及附件沿用 `webmd-*` AAD 和标头，准确格式以共享 `crypto.ts` 为准；不得用应用品牌重新命名协议。
+bootstrap 声明 `protocolVersion: 2`、`objectSchemaVersion: 2`、`encryptionVersion: 1`。不兼容版本、账户或信封拒绝解密，不自动删除旧缓存。现有对象、历史及附件沿用 `webmd-*` AAD 和标头，准确格式以共享 `crypto.ts` 为准；不得用应用品牌重新命名协议。
 
 ## 浏览器管理 API
 
@@ -52,22 +52,24 @@ bootstrap 声明 `protocolVersion: 1`、`objectSchemaVersion: 2`、`encryptionVe
 
 ## 原生密文 API
 
-统一前缀 `/api/apps/v1`，仅接受自己的 Bearer 凭据。HTTPS 地址只能是绝对源，如 `https://notes.example.com`；本地开发允许回环 HTTP。客户端禁止 URL 用户名、密码、路径、查询、片段和 HTTP 重定向，不携带浏览器 Cookie。
+统一前缀`/api/apps/v2`，使用`X-WebMD-Protocol: 2`，仅接受自己的 Bearer 凭据。HTTPS 地址只能是绝对源，如 `https://notes.example.com`；本地开发允许回环 HTTP。客户端禁止 URL 用户名、密码、路径、查询、片段和 HTTP 重定向，不携带浏览器 Cookie。
 
 | 方法与路径 | 用途 |
 | --- | --- |
-| `GET /connection` | 返回连接策略、服务器时间、账户 ID、包装信封、版本及 `historyEnabled`；不更新活动时间 |
-| `GET /sync?since=<cursor>&limit=200&compact=1` | 密文变更页 `{ changes, cursor, hasMore }`；服务器游标回退时返回 `{ changes: [], cursor: 0, hasMore: true, reset: true }` |
+| `GET /connection` | 返回连接策略、服务器时间、账户 ID、包装信封、版本及 `historyEnabled`、`historyQuotaBytes`；不更新活动时间 |
+| `GET /sync/status?since=<cursor>&epoch=<epoch>` | 返回epoch、head、floor、90天同步凭据lease与reconcile标志；上传前必查 |
+| `GET /sync/snapshot?epoch=<epoch>&after=<objectId>` | 当前对象分页，返回objects与next；校准从状态接口返回的水位H开始 |
+| `GET /sync?since=<cursor>&epoch=<epoch>&limit=200` | `{ changes, cursor, hasMore, epoch, floor }`；reset要求完整校准，不得清空待提交操作 |
 | `GET /objects/:id` | 当前用户的一个 `EncryptedObject`，不存在或跨账户均返回 404 |
-| `PUT /objects/:id` | 复用对象写协议：`objectType, ciphertext, nonce, encryptionVersion, baseRevision, deleted, idempotencyKey` |
+| `PUT /objects/:id` | 复用对象写协议：`objectType, ciphertext, nonce, encryptionVersion, baseRevision, deleted, idempotencyKey`，附件还须提供`ownerNoteId` |
 | `POST /objects/batch` | 复用批量对象协议，供其他适配器使用；插件逐项保存 |
 | `GET /attachments/:id/chunks/:index` | 附件密文二进制与已有 `X-WebMD-*` 标头 |
 | `PUT /attachments/:id/chunks/:index` | 写入密文分块，用于适配器内部冲突副本；只读连接拒绝 |
 | `POST /notes/:noteId/history/:historyId` | 保存编辑前的密文历史快照；沿用历史协议与幂等键 |
 
-对象及批量请求的准确校验与错误沿用 `server/sync/objectStore.ts`；附件沿用 `server/attachments/routes.ts`；历史沿用 `server/history/routes.ts`。这些接口不能收到明文负载。服务端使用认证所得 `user_id`，请求不允许指定所有者。Bearer 不适用于 `/api/auth`、`/api/account`、`/api/admin` 或普通浏览器数据接口。应用 API 未暴露 SSE、永久清除、历史读取／设置／删除和连接管理。
+对象及批量请求的准确校验与错误沿用 `server/sync/objectStore.ts`；附件沿用 `server/attachments/routes.ts`；历史沿用 `server/history/routes.ts`。这些接口不能收到明文负载。服务端使用认证所得 `user_id`，请求不允许指定所有者。Bearer 不适用于 `/api/auth`、`/api/account`、`/api/admin` 或普通浏览器数据接口。应用API不暴露SSE、笔记永久清除、附件候选回收、归属回填、历史设置／删除或连接管理；旧附件归属由浏览器首次解锁后核对，应用客户端新建冲突附件时须提交固定所属笔记UUID。对象与分块写入携带`X-WebMD-Sync-Lease`，附件分块还携带`X-WebMD-Owner-Note`。
 
-写入以服务器修订为依据：待提交内容加密绑定 `baseRevision + 1`，重试必须复用完整原请求和幂等键，不能为相同重试重加密。读取页中所有对象认证、解密与结构验证成功后，才原子落库并推进游标；失败保留原游标。插件使用 `compact=1` 读取每页最新对象，但不会越过未经验证的一页。
+写入以服务器修订为依据：待提交内容加密绑定 `baseRevision + 1`，重试必须复用完整原请求和幂等键，不能为相同重试重加密。同步只维护当前密文，历史单独保留。操作标识为`v2.<生成时间毫秒>.<UUID>`，90天后禁止重放。校准按H水位分页扫描当前对象并追赶之后变化，全部成功后替换服务器镜像，待提交操作独立保留。读取页中所有对象认证、解密与结构验证成功后，才原子落库并推进游标；失败保留原游标。插件使用 `compact=1` 读取每页最新对象，但不会越过未经验证的一页。
 
 ## 通用客户端调用
 
@@ -100,6 +102,7 @@ try {
 | `mint_notes_update` | `noteId, expectedRevision`；可选标题、正文、文件夹、标签、收藏及 `operationId` |
 | `mint_notes_append` | `noteId, expectedRevision, markdown`，可选 `operationId`；按原样追加，不自动添加换行 |
 | `mint_notes_trash` | `noteId, expectedRevision`，可选 `operationId`；只做软删除 |
+| `mint_notes_recover` | `operationId`；用户明确要求后把过期待提交提案恢复为新UUID的独立笔记，不再次追加到原笔记 |
 | `mint_notes_read_attachment` | `noteId, attachmentId`；原生客户端返回验证后的 `ArrayBuffer`，OpenClaw 转换为 image tool content |
 
 普通读取结果包含 `offline`、`lastSyncedAt`。写结果为 `{ operationId, objectId, status, revision?, conflictNoteId?, errorCode? }`：
@@ -108,7 +111,9 @@ try {
 - `pending`：请求已加密持久化，但尚未确认；不能告诉用户已经同步成功。下次在线业务调用串行重试，`status` 可查看操作。
 - `conflict`：原笔记保留服务器版本，返回独立冲突副本 ID；副本及其附件先持久化为同一个重试图，再按分块 → 附件清单 → 笔记上传。
 
-建议每次写入由调用方生成 UUID `operationId`；同一逻辑请求重试复用 ID 与完全相同参数，不同参数复用 ID 返回 `IDEMPOTENCY_CONFLICT`。未提供时客户端会生成 ID；如果调用方连响应都未收到，只能先查询状态或核对笔记，不能假设重新调用不会重复创建。追加尤其应预先记录操作 ID。
+建议每次写入由调用方使用共享`operationId()`生成`v2.<生成时间毫秒>.<UUID>`标识；同一逻辑请求重试复用 ID 与完全相同参数，不同参数复用 ID 返回 `IDEMPOTENCY_CONFLICT`。未提供时客户端会生成 ID；如果调用方连响应都未收到，只能先查询状态或核对笔记，不能假设重新调用不会重复创建。追加尤其应预先记录操作 ID。
+
+已完成操作回执保留90天；未完成操作与其附件不自动清理。过期操作返回`OPERATION_EXPIRED`并保留提案，不通过重新生成标识盲目追加；`mint_notes_recover`只创建独立副本，返回缺失附件ID时须明确告知用户。应用自动生成的编辑前快照使用`application-edit`类型。
 
 重试遵守用户清空历史的屏障，不重新创建已清除的旧快照；原笔记被永久清除时，待提交内容保留为新的冲突副本，不恢复原对象 ID。
 
@@ -116,7 +121,7 @@ try {
 
 ## 缓存、生命周期与错误
 
-SQLite 文件按 HTTPS 源的摘要和连接 UUID 分隔，使用 WAL；目录及文件在支持的系统上限制为 0700／0600。对象、附件分块、待写内容及冲突图保持密文；操作参数摘要使用保险库派生的 HMAC，避免缓存裸正文摘要。附件缓存按 128 MiB LRU 清理，尚未确认的操作所需原附件不清理；待写图可能暂时超过缓存目标。同步游标与本地授权元数据不是机密正文。
+SQLite 文件按 HTTPS 源的摘要和连接 UUID 分隔，使用 WAL；目录及文件在支持的系统上限制为 0700／0600。对象、附件分块、待写内容及冲突图保持密文；操作参数摘要使用保险库派生的 HMAC，避免缓存裸正文摘要。附件缓存按 128 MiB LRU 清理，尚未确认的操作所需原附件不清理；待写图可能暂时超过缓存目标。自动历史受本地待提交预算约束；历史配额不足不阻止正文提交，历史密文仍保留重试，`historyPaused`和操作错误说明暂停状态。同步游标与本地授权元数据不是机密正文。
 
 适配器须串行操作同一连接，取消时停止网络请求，关闭时等待队列并清空密钥、关闭 SQLite。OpenClaw 服务退出会给予 Worker 短暂清理时间，随后终止；下次启动仍能继续已落库的密文请求。配置改变或凭据 provider 失效应停用旧运行时，不能把已缓存凭据当作新的授权。
 
@@ -126,6 +131,8 @@ SQLite 文件按 HTTPS 源的摘要和连接 UUID 分隔，使用 WAL；目录�
 | `APPLICATION_READ_ONLY`／`NOTE_LOCKED` | 不重试写入，不尝试修改权限或锁定状态 |
 | `OFFLINE_WRITE_DISABLED`／`OFFLINE_CACHE_MISSING` | 联网再试；首次使用不能离线读取 |
 | `REVISION_CONFLICT` | 在新操作中重新读取、核对内容，不能悄悄提高 expectedRevision 覆盖服务器内容 |
+| `OPERATION_EXPIRED` | 保留并检查本地提案；用户要求恢复时调用`mint_notes_recover`，不能换标识重新追加 |
+| `PROTOCOL_UPGRADE_REQUIRED`／`SYNC_RECONCILE_REQUIRED` | 更新客户端或完成当前状态校准；不清除缓存或密钥 |
 | `IDEMPOTENCY_CONFLICT` | 换新的操作 ID 前先核对已有回执；不要修改旧重试请求 |
 | `NOTE_PENDING` | 先恢复网络并处理既有待提交操作 |
 | `ATTACHMENT_REFERENCE_CHANGE` | 保留原有引用，附件编辑回到 Mint 本体完成 |

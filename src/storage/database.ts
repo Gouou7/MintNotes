@@ -12,6 +12,8 @@ export interface LocalEncryptedObject {
   revision: number;
   deleted: boolean;
   updatedAt: string;
+  ownerNoteId?: string;
+  serverTrashedAt?: string | null;
 }
 
 export interface ObjectUploadAttempt extends LocalEncryptedObject {
@@ -36,6 +38,8 @@ export interface LocalAttachmentChunk {
   nonce: string;
   encryptionVersion: number;
   updatedAt: string;
+  touchedAt?: number;
+  ownerNoteId?: string;
 }
 
 export interface AttachmentOutboxEntry extends LocalAttachmentChunk {
@@ -118,6 +122,7 @@ export interface LocalHistorySnapshot {
   byteSize: number;
   pending: boolean;
   serverCreatedAt?: string;
+  touchedAt?: number;
 }
 
 export interface HistoryOutboxEntry extends LocalHistorySnapshot {
@@ -252,6 +257,19 @@ class NotesDatabase extends Dexie {
         })));
       }
     });
+    this.version(7).stores({
+      objects: "key, userId, [userId+objectId], updatedAt",
+      outbox: "key, userId, [userId+objectId], generation",
+      attachmentChunks: "key, userId, [userId+attachmentId], [userId+attachmentId+chunkIndex], touchedAt",
+      attachmentOutbox: "key, userId, [userId+attachmentId], generation",
+      meta: "key",
+      deviceCredentials: "userId, endpointId",
+      pendingEndpointRevocations: "endpointId, userId",
+      historySnapshots: "key, userId, [userId+noteId], [userId+noteId+capturedAt], historyId, touchedAt",
+      historyIndex: "key, userId, [userId+noteId], [userId+noteId+capturedAt], historyId",
+      historyOutbox: "key, userId, [userId+noteId], generation",
+      historyMetadataOutbox: "key, userId, [userId+noteId], generation"
+    });
   }
 }
 
@@ -295,7 +313,6 @@ export async function deleteLocalUserData(userId: string): Promise<void> {
       localDb.attachmentOutbox,
       localDb.meta,
       localDb.deviceCredentials,
-      localDb.pendingEndpointRevocations,
       localDb.historySnapshots,
       localDb.historyIndex,
       localDb.historyOutbox,
@@ -311,9 +328,11 @@ export async function deleteLocalUserData(userId: string): Promise<void> {
         preferencesKey(userId),
         ignoredDecryptFailuresKey(userId),
         historySettingsKey(userId)
+        ,`sync-state:${userId}`, `sync-lease:${userId}`, `attachment-gc:${userId}`
       ]);
+      await localDb.meta.where("key").startsWith(`history-invalid:${userId}:`).delete();
+      await localDb.meta.where("key").startsWith(`history-verified:${userId}:`).delete();
       await localDb.deviceCredentials.delete(userId);
-      await localDb.pendingEndpointRevocations.where("userId").equals(userId).delete();
       await localDb.historySnapshots.where("userId").equals(userId).delete();
       await localDb.historyIndex.where("userId").equals(userId).delete();
       await localDb.historyOutbox.where("userId").equals(userId).delete();

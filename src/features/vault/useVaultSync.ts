@@ -1,6 +1,10 @@
+import { prepareVaultSynchronization } from "./syncReconciliation";
+import { VaultHistoryController } from "./historyController";
+import { operationExpired } from "@mint-notes/application-client";
+import { maintainVaultStorage } from "./storageMaintenance";
 import type { RefObject } from "react";
 import { useEffect, useRef } from "react";
-import { ApiError } from "../../api";
+import { api, ApiError } from "../../api";
 import { cryptoClient } from "../../crypto/client";
 import { translateError, type Translate } from "../../i18n";
 import { cursorKey, localDb, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
@@ -31,7 +35,7 @@ interface Options {
   userId: string;
   showMessage: ReturnType<typeof useToastNotifications>["showMessage"];
   t: Translate;
-  persistDocumentCopy: (document: OpenDocument, sourceMarkdown: string, sourceAttachmentIds: readonly string[], options?: { commitState?: boolean; }) => Promise<OpenDocument>;
+  persistDocumentCopy: (document: OpenDocument, sourceMarkdown: string, sourceAttachmentIds: readonly string[], options?: { commitState?: boolean; allowMissing?: boolean; }) => Promise<OpenDocument>;
   generation: RefObject<number>;
   logoutStarted: RefObject<boolean>;
   documentSaveQueue: ReturnType<typeof useDocumentSaveQueue>;
@@ -115,16 +119,20 @@ export function useVaultSync(options: Options) {
     if (entry.objectId === WORKSPACE_OBJECT_ID) return null;
     const local = await cryptoClient.decryptObject(userId, entry.objectId, entry.objectType, entry.revision, entry.ciphertext, entry.nonce);
     if (local.kind === "attachment") {
-      showMessage(t("notice.attachmentConflict"), "critical");
-      return null;
+      const text = `![${local.originalName}](webmd-attachment:${entry.objectId})`;
+      const recovery = makeDocument(documentsRef.current, "note", `${local.originalName} (${t("app.conflictSuffix")})`, null, text);
+      const copy = await persistDocumentCopy(recovery, text, [entry.objectId], { commitState, allowMissing: true });
+      requestPush("structural");
+      return copy;
     }
-    const conflict = makeDocument(documentsRef.current, local.kind, `${local.title} (${t("app.conflictSuffix")})`, local.parentId, local.markdown);
+    const parentId = documentsRef.current.some((r) => r.objectId === local.parentId && r.kind === "folder" && !r.deleted) ? local.parentId : null;
+    const conflict = makeDocument(documentsRef.current, local.kind, `${local.title} (${t("app.conflictSuffix")})`, parentId, local.markdown);
     conflict.tags = local.tags;
     conflict.favorite = local.favorite;
     conflict.locked = derivedNoteLockState(local, "conflict-copy");
     let persisted: OpenDocument;
     try {
-      persisted = await persistDocumentCopy(conflict, local.markdown, local.attachmentIds, { commitState });
+      persisted = await persistDocumentCopy(conflict, local.markdown, local.attachmentIds, { commitState, allowMissing: true });
     } catch (error) {
       showMessage(translateError(error, t, "notice.attachmentConflict"), "critical");
       throw error;
@@ -210,25 +218,86 @@ export function useVaultSync(options: Options) {
     if (result.purgeDeferred) showMessage(t("notice.purgeWaitSync"), "critical");
   };
 
-  const pullChanges = async () => {
-    const result = await pullVaultChanges({
-      userId,
-      isActive: () => !logoutStarted.current,
-      activeObjectId: () => activeIdRef.current,
-      hasPendingSave: documentSaveQueue.hasPending,
-      flushDocument,
-      coordinate: objectPersistence.coordinate,
-      acknowledge: acknowledgeAcceptedUpload,
-      preserveConflict: (entry) => preserveConflict(entry, false, false),
-      discardConflict: async (copy) => {
-        for (const id of copy.attachmentIds) await removePurgedLocal(id);
-        await removePurgedLocal(copy.objectId, false);
-        nameReservations.current.release(copy.objectId);
-      },
-      onPage: publishPullResult
-    });
-    return result.failedObjectIds;
+  const recoverAuxiliary = async (objectId: string, onlyExpired = false): Promise<boolean> => {
+    const histories = await localDb.historyOutbox.where("[userId+noteId]").equals([userId, objectId]).toArray();
+    const controller = new VaultHistoryController({ userId, isActive: () => !logoutStarted.current,
+      nextGeneration: () => Date.now() * 1000 + ++generation.current });
+    for (const snapshot of histories.filter((entry) => !onlyExpired || operationExpired(entry.idempotencyKey))) {
+      const payload = await cryptoClient.decryptHistory(userId, objectId, snapshot.historyId, snapshot.capturedAt, snapshot.captureKind, snapshot.ciphertext, snapshot.nonce);
+      const recovery = makeDocument(documentsRef.current, "note", `${payload.title} (${t("app.conflictSuffix")})`, null, payload.markdown);
+      recovery.tags = payload.tags;
+      const copy = await persistDocumentCopy(recovery, payload.markdown, payload.attachmentIds, { allowMissing: true });
+      if (logoutStarted.current) return false;
+      const saved = await controller.createSnapshot(copy, "manual", { protected: snapshot.protected, capturedAt: snapshot.capturedAt });
+      if (!saved) return false;
+      await localDb.transaction("rw", localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
+        if ((await localDb.historyOutbox.get(snapshot.key))?.generation !== snapshot.generation) return;
+        await localDb.historyOutbox.delete(snapshot.key);
+        await localDb.historyMetadataOutbox.delete(snapshot.key);
+      });
+    }
+    // Metadata-only pending versions need their original body to remain recoverable.
+    const metadata = await localDb.historyMetadataOutbox.where("[userId+noteId]").equals([userId, objectId]).toArray();
+    if (!onlyExpired) for (const item of metadata) {
+      const payload = await cryptoClient.decryptHistoryMetadata(userId, item.noteId, item.historyId, item.capturedAt, item.metadataCiphertext, item.metadataNonce);
+      const text = t("notice.recoveredHistoryMetadata", { name: payload.name ?? "", date: item.capturedAt });
+      const recovery = makeDocument(documentsRef.current, "note", t("app.conflictSuffix"), null, text);
+      await persistDocumentCopy(recovery, text, [], { allowMissing: true });
+      await localDb.transaction("rw", localDb.historyMetadataOutbox, async () => {
+        if ((await localDb.historyMetadataOutbox.get(item.key))?.generation === item.generation) await localDb.historyMetadataOutbox.delete(item.key);
+      });
+    }
+    if (onlyExpired) return true;
+    const object = await localDb.objects.get(`${userId}:${objectId}`);
+    if (object?.objectType !== "attachment") {
+      const children = (await localDb.outbox.where("userId").equals(userId).toArray()).filter((r) => r.ownerNoteId === objectId);
+      for (const child of children) if (!await recoverAuxiliary(child.objectId)) return false;
+    }
+    if (object?.objectType === "attachment") {
+      const pending = await localDb.outbox.get(object.key);
+      const chunks = await localDb.attachmentOutbox.where("[userId+attachmentId]").equals([userId, objectId]).toArray();
+      if (pending || chunks.length) {
+        if (!attachmentIndexRef.current.has(objectId)) {
+          const decoded = await cryptoClient.decryptObject(userId, objectId, "attachment", object.revision, object.ciphertext, object.nonce);
+          if (decoded.kind !== "attachment") return false;
+          upsertAttachment({ ...decoded, objectId, serverRevision: pending?.baseRevision ?? object.revision, dirty: Boolean(pending) });
+        }
+        const text = `![${t("app.conflictSuffix") }](webmd-attachment:${objectId})`;
+        const recovery = makeDocument(documentsRef.current, "note", t("app.conflictSuffix"), null, text);
+        await persistDocumentCopy(recovery, text, [objectId], { allowMissing: true });
+        if (logoutStarted.current) return false;
+        await localDb.transaction("rw", localDb.outbox, localDb.attachmentOutbox, async () => {
+          if ((await localDb.outbox.get(object.key))?.idempotencyKey === pending?.idempotencyKey) await localDb.outbox.delete(object.key);
+          for (const chunk of chunks) if ((await localDb.attachmentOutbox.get(chunk.key))?.idempotencyKey === chunk.idempotencyKey) await localDb.attachmentOutbox.delete(chunk.key);
+        });
+      }
+    }
+    return true;
   };
+  const pullDependencies = () => ({
+    userId,
+    isActive: () => !logoutStarted.current,
+    activeObjectId: () => activeIdRef.current,
+    hasPendingSave: documentSaveQueue.hasPending,
+    flushDocument,
+    coordinate: objectPersistence.coordinate,
+    acknowledge: acknowledgeAcceptedUpload,
+    preserveConflict: (entry: OutboxEntry) => preserveConflict(entry, false, false),
+    recoverAuxiliary,
+    discardConflict: async (copy: OpenDocument) => {
+      for (const id of copy.attachmentIds) await removePurgedLocal(id);
+      await removePurgedLocal(copy.objectId, false);
+      nameReservations.current.release(copy.objectId);
+    },
+    onPage: publishPullResult,
+    onServerTrashTime: (objectId: string, deleted: boolean, serverTrashedAt: string | null) => {
+      const current = documentIndexRef.current.get(objectId) ?? attachmentIndexRef.current.get(objectId);
+      if (!current || current.deleted !== deleted) return;
+      if (current.kind === "attachment") upsertAttachment({ ...current, serverTrashedAt });
+      else upsertDocument({ ...current, serverTrashedAt });
+    }
+  });
+  const pullChanges = async () => (await pullVaultChanges(pullDependencies())).failedObjectIds;
 
   const pushPending = () => pushVaultPending({
     userId,
@@ -259,10 +328,15 @@ export function useVaultSync(options: Options) {
       const result = await executeVaultSync({
         isActive: () => !logoutStarted.current,
         countPending: () => countPendingSyncEntries(userId),
+        prepare: () => prepareVaultSynchronization(pullDependencies()),
         push: pushPending,
         pull: pullChanges
       }, intent);
       if (logoutStarted.current) return;
+      if (!result.failedObjectIds.size) await maintainVaultStorage({ userId, isActive: () => !logoutStarted.current,
+        documents: documentsRef.current, attachments: attachmentsRef.current, getDocument: (id) => documentIndexRef.current.get(id), hasPendingSave: documentSaveQueue.hasPending, trashOrphan: async (attachment) => {
+          await objectPersistence.persistObject(attachment); requestPush("structural");
+        } });
       if (result.failedObjectIds.size) showMessage(t("notice.remoteIntegrity", { count: result.failedObjectIds.size }), "critical");
       setSaveState(documentSaveQueue.pendingIds().length ? "saving" : result.pending ? "local" : "synced");
     } catch (error) {

@@ -35,12 +35,14 @@ export interface VaultAttachment {
 export type VaultObject = VaultDocument | VaultAttachment;
 
 export interface OpenDocument extends VaultDocument {
+  serverTrashedAt?: string | null;
   objectId: string;
   serverRevision: number;
   dirty: boolean;
 }
 
 export interface OpenAttachment extends VaultAttachment {
+  serverTrashedAt?: string | null;
   objectId: string;
   serverRevision: number;
   dirty: boolean;
@@ -55,9 +57,12 @@ export interface EncryptedObject {
   revision: number;
   deleted: boolean;
   purged?: boolean;
+  serverTrashedAt?: string | null;
+  ownerNoteId?: string;
 }
 
 export interface SyncChange extends EncryptedObject {
+  historyVersion?: number;
   sequence: number;
   serverUpdatedAt: string;
 }
@@ -71,7 +76,7 @@ export interface EncryptedAttachmentChunk {
   encryptionVersion: number;
 }
 
-export type HistoryCaptureKind = "baseline" | "interval" | "idle" | "manual" | "restore-safety";
+export type HistoryCaptureKind = "baseline" | "interval" | "idle" | "manual" | "restore-safety" | "application-edit";
 
 export interface NoteHistoryPayload {
   schemaVersion: 1;
@@ -105,6 +110,7 @@ export interface HistoryListItem extends Partial<EncryptedHistoryMetadata> {
   byteSize: number;
   pending: boolean;
   serverCreatedAt?: string;
+  offlineAvailable?: boolean;
 }
 
 export interface EncryptedHistorySnapshot extends Omit<HistoryListItem, "name">, Partial<EncryptedHistoryMetadata> {

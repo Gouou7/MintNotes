@@ -669,7 +669,7 @@ export function VaultWorkspace({
             event.target.value = "";
             if (file && noteId && !editorMode.readOnly && !historyPreview) void addAttachment(noteId, file).then((attachment) => {
               const latest = documentIndexRef.current.get(noteId);
-              if (latest && !latest.locked && !editorModeRef.current.readOnly && !editorModeRef.current.previewing) patchDocument(noteId, { markdown: latest.markdown + attachmentMarkdown(attachment.objectId, attachment.originalName) }, 0);
+              if (latest && !latest.deleted && !latest.locked && !editorModeRef.current.readOnly && !editorModeRef.current.previewing) patchDocument(noteId, { markdown: latest.markdown + attachmentMarkdown(attachment.objectId, attachment.originalName) }, 0);
             }).catch((error) => showMessage(translateError(error, t, "notice.attachmentSaveFailed"), "critical"));
           }} />
         </>}

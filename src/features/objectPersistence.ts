@@ -1,3 +1,4 @@
+import { attachmentIdsIn } from "./attachmentFormat";
 import type { OpenAttachment, OpenDocument } from "../types";
 
 type PersistableObject = OpenDocument | OpenAttachment;
@@ -100,6 +101,7 @@ export function prepareObjectForPersistence<T extends PersistableObject>(
 ): T {
   return {
     ...object,
+    ...(object.kind === "note" ? { attachmentIds: attachmentIdsIn(object.markdown) } : {}),
     updatedAt: options.preserveUpdatedAt ? object.updatedAt : options.now ?? new Date().toISOString(),
     serverRevision: baseRevision,
     dirty: true

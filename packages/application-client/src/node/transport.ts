@@ -10,9 +10,10 @@ export function normalizeApplicationUrl(value: string): string {
   return url.origin;
 }
 
-const remoteErrorCodes = new Set(["APPLICATION_INVALID", "APPLICATION_REVOKED", "APPLICATION_EXPIRED", "APPLICATION_READ_ONLY", "HISTORY_CLEARED"]);
+const remoteErrorCodes = new Set(["APPLICATION_INVALID", "APPLICATION_REVOKED", "APPLICATION_EXPIRED", "APPLICATION_READ_ONLY", "HISTORY_CLEARED", "OPERATION_EXPIRED", "SYNC_RECONCILE_REQUIRED", "PROTOCOL_UPGRADE_REQUIRED"]);
 
 export class ApplicationTransport {
+  syncLease = "";
   constructor(private origin: string, private bearer: string, private lifetime: AbortSignal) {}
 
   async request(path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<Response> {
@@ -20,8 +21,8 @@ export class ApplicationTransport {
     if (signal) signals.push(signal);
     let response: Response;
     try {
-      response = await fetch(`${this.origin}/api/apps/v1${path}`, { ...init, credentials: "omit", redirect: "error", cache: "no-store",
-        signal: AbortSignal.any(signals), headers: { ...init.headers, Authorization: `Bearer ${this.bearer}` } });
+      response = await fetch(`${this.origin}/api/apps/v2${path}`, { ...init, credentials: "omit", redirect: "error", cache: "no-store",
+        signal: AbortSignal.any(signals), headers: { "X-WebMD-Protocol": "2", ...(this.syncLease ? { "X-WebMD-Sync-Lease": this.syncLease } : {}), ...init.headers, Authorization: `Bearer ${this.bearer}` } });
     } catch {
       if (this.lifetime.aborted || signal?.aborted) throw new ApplicationError("CANCELLED", "Request cancelled");
       throw new ApplicationError("NETWORK_UNAVAILABLE", "The notes server is unavailable");

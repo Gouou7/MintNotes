@@ -13,7 +13,7 @@ export interface ObjectWrite extends EncryptedObject {
 export interface HistoryWrite {
   historyId: string;
   capturedAt: string;
-  captureKind: "manual";
+  captureKind: "application-edit" | "manual";
   ciphertext: string;
   nonce: string;
   encryptionVersion: 1;
@@ -26,7 +26,9 @@ export interface HistoryWrite {
 }
 export interface ConflictDraft {
   note: ObjectWrite;
+  history?: HistoryWrite;
   attachments: ObjectWrite[];
+  missingAttachmentIds?: string[];
   chunks: Array<Omit<EncryptedAttachmentChunk, "ciphertext"> & { ciphertext: string; idempotencyKey: string }>;
 }
 export interface PendingWrite {
@@ -34,6 +36,9 @@ export interface PendingWrite {
   history?: HistoryWrite;
   sourceAttachments: EncryptedObject[];
   conflict?: ConflictDraft;
+  recoveryConfirmed?: boolean;
+  forceConflict?: boolean;
+  noteCommitted?: boolean;
 }
 export interface MutationResult {
   operationId: string;
@@ -42,6 +47,7 @@ export interface MutationResult {
   status: "committed" | "pending" | "conflict";
   conflictNoteId?: string;
   errorCode?: string;
+  missingAttachmentIds?: string[];
 }
 export interface Operation {
   operationId: string;
@@ -59,7 +65,7 @@ export class ApplicationStore {
     const path = join(directory, `${originHash}-${connectionId}.sqlite`);
     this.db = new DatabaseSync(path);
     const version = Number(this.db.prepare("PRAGMA user_version").get()?.user_version);
-    if (version > 1) { this.db.close(); throw new ApplicationError("CACHE_VERSION_UNSUPPORTED", "Unsupported cache version"); }
+    if (version > 2) { this.db.close(); throw new ApplicationError("CACHE_VERSION_UNSUPPORTED", "Unsupported cache version"); }
     chmodSync(path, 0o600);
     this.db.exec(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
       CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -67,9 +73,10 @@ export class ApplicationStore {
       CREATE TABLE IF NOT EXISTS chunks (attachment_id TEXT NOT NULL, chunk_index INTEGER NOT NULL,
         data BLOB NOT NULL, nonce TEXT NOT NULL, total_chunks INTEGER NOT NULL, encryption_version INTEGER NOT NULL,
         touched_at INTEGER NOT NULL, PRIMARY KEY (attachment_id, chunk_index));
+      CREATE TABLE IF NOT EXISTS reconciliation_objects (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, request_hash TEXT NOT NULL,
         body TEXT, result TEXT NOT NULL, created_at INTEGER NOT NULL);
-      PRAGMA user_version = 1;`);
+      PRAGMA user_version = 2;`);
   }
 
   transaction<T>(operation: () => T): T {
@@ -92,7 +99,7 @@ export class ApplicationStore {
   }
   removeObject(id: string): void { this.db.prepare("DELETE FROM objects WHERE id = ?").run(id); }
   putObject(object: EncryptedObject): void {
-    this.db.prepare("INSERT INTO objects (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data")
+    this.db.prepare("INSERT INTO objects (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data WHERE json_extract(excluded.data, '$.revision') >= json_extract(objects.data, '$.revision')")
       .run(object.objectId, JSON.stringify(object));
   }
   applyPage(objects: EncryptedObject[], cursor: number, reset = false): void {
@@ -105,6 +112,25 @@ export class ApplicationStore {
       this.set("cursor", cursor);
     });
   }
+  stageReconciliation(objects: EncryptedObject[], reset = false): void {
+    this.transaction(() => {
+      if (reset) this.db.exec("DELETE FROM reconciliation_objects");
+      for (const object of objects) {
+        if (object.purged) this.db.prepare("DELETE FROM reconciliation_objects WHERE id = ?").run(object.objectId);
+        else this.db.prepare("INSERT INTO reconciliation_objects VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data")
+          .run(object.objectId, JSON.stringify(object));
+      }
+    });
+  }
+  completeReconciliation(cursor: number, epoch: string, epochChanged = false): void {
+    this.transaction(() => {
+      this.db.exec("DELETE FROM objects; INSERT INTO objects SELECT * FROM reconciliation_objects; DELETE FROM reconciliation_objects");
+      if (epochChanged) for (const operation of this.pending()) {
+        operation.body!.forceConflict = true; this.saveOperation(operation);
+      }
+      this.set("cursor", cursor); this.set("epoch", epoch);
+    });
+  }
   *objects(): Generator<EncryptedObject> {
     for (const row of this.db.prepare("SELECT data FROM objects ORDER BY id").iterate()) yield JSON.parse(String(row.data)) as EncryptedObject;
   }
@@ -112,8 +138,9 @@ export class ApplicationStore {
     const objects = new Map([...this.objects()].map((object) => [object.objectId, object]));
     for (const operation of this.pending()) {
       if (!operation.body) continue;
+      for (const source of operation.body.sourceAttachments) if (!objects.has(source.objectId)) objects.set(source.objectId, source);
       const note = operation.body.conflict?.note ?? operation.body.note;
-      objects.set(note.objectId, note);
+      if (!operation.body.noteCommitted || operation.body.conflict) objects.set(note.objectId, note);
       for (const attachment of operation.body.conflict?.attachments ?? []) objects.set(attachment.objectId, attachment);
     }
     return [...objects.values()];
@@ -129,7 +156,8 @@ export class ApplicationStore {
       .map((row) => this.operation(String(row.id))!);
   }
   pendingForObject(id: string): Operation | undefined {
-    return this.pending().find((operation) => operation.body?.note.objectId === id || operation.body?.conflict?.note.objectId === id);
+    const entries = this.pending().filter((operation) => operation.body?.note.objectId === id || operation.body?.conflict?.note.objectId === id);
+    return entries.find((operation) => !operation.body?.noteCommitted) ?? entries[0];
   }
   stage(operation: Operation): void {
     this.transaction(() => {
@@ -173,6 +201,9 @@ export class ApplicationStore {
       this.db.prepare("DELETE FROM chunks WHERE attachment_id = ?").run(row.attachment_id);
       size -= Number(row.size);
     }
+  }
+  pruneOperations(now = Date.now()): number {
+    return Number(this.db.prepare("DELETE FROM operations WHERE body IS NULL AND created_at <= ?").run(now - 90 * 86_400_000).changes);
   }
   close(): void { this.db.close(); }
 }

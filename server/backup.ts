@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
-import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync } from "node:fs";
+import { verifyBackup } from "./backupStorage.js";
+import { backupRetention, markBackup } from "./backupRetention.js";
+import { existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const dataDirectory = resolve(process.env.NODE_ENV === "production" ? "/data" : "./data");
@@ -22,12 +23,7 @@ try {
   database.close();
 }
 
-const sha256 = await new Promise<string>((resolveHash, reject) => {
-  const hash = createHash("sha256");
-  const stream = createReadStream(destination);
-  stream.on("data", (chunk) => hash.update(chunk));
-  stream.on("error", reject);
-  stream.on("end", () => resolveHash(hash.digest("hex")));
-});
-
-console.log(JSON.stringify({ destination, sha256 }, null, 2));
+const sha256 = verifyBackup(destination);
+markBackup(destination, new Date().toISOString(), sha256);
+const retention = backupRetention(backupDirectory, { apply: true });
+console.log(JSON.stringify({ destination, sha256, retention }, null, 2));

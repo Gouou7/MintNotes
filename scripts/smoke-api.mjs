@@ -1,8 +1,26 @@
+import { operationId } from "../packages/application-client/dist/index.js";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
+
+const nativeFetch = globalThis.fetch;
+const leases = new Map();
+let attachmentOwner = "";
+async function request(url, init = {}) {
+  const headers = new Headers(init.headers);
+  headers.set("X-WebMD-Protocol", "2");
+  const cookie = headers.get("Cookie");
+  if (cookie && ["PUT", "POST"].includes(init.method) && /\/api\/(?:objects|attachments)\//.test(String(url))) {
+    if (!leases.has(cookie)) {
+      const status = await nativeFetch(`${baseUrl}/api/sync/status`, { headers: { Cookie: cookie, "X-WebMD-Protocol": "2" } });
+      if (status.ok) leases.set(cookie, (await status.json()).lease);
+    }
+    if (leases.has(cookie)) headers.set("X-WebMD-Sync-Lease", leases.get(cookie));
+  }
+  return nativeFetch(url, { ...init, headers });
+}
 
 const dataDirectory = await mkdtemp(join(tmpdir(), "mint-notes-smoke-"));
 const port = 8790;
@@ -26,7 +44,7 @@ server.stderr.on("data", (chunk) => { serverError += chunk.toString(); });
 async function waitUntilReady() {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     try {
-      const response = await fetch(`${baseUrl}/api/health`);
+      const response = await request(`${baseUrl}/api/health`);
       if (response.ok) return;
     } catch {
       // The child process is still starting.
@@ -46,7 +64,7 @@ function cookieHeader(cookies) {
 }
 
 async function register(username, authSecret, userAgent = "Mint Notes smoke browser") {
-  const response = await fetch(`${baseUrl}/api/auth/register`, {
+  const response = await request(`${baseUrl}/api/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": userAgent },
     body: JSON.stringify({
@@ -70,7 +88,7 @@ async function register(username, authSecret, userAgent = "Mint Notes smoke brow
 }
 
 async function login(username, authSecret, userAgent, existingCookies = {}, rememberDevice = false) {
-  const response = await fetch(`${baseUrl}/api/auth/login`, {
+  const response = await request(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": userAgent, ...(Object.keys(existingCookies).length ? { Cookie: cookieHeader(existingCookies) } : {}) },
     body: JSON.stringify({ username, authSecret, rememberDevice })
@@ -83,16 +101,17 @@ async function login(username, authSecret, userAgent, existingCookies = {}, reme
 }
 
 async function putObject(account, objectId, ciphertext, objectType = "note", deleted = false, baseRevision = 0) {
-  const response = await fetch(`${baseUrl}/api/objects/${objectId}`, {
+  const response = await request(`${baseUrl}/api/objects/${objectId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Cookie: account.cookie },
     body: JSON.stringify({
       objectType,
+      ...(objectType === "attachment" ? { ownerNoteId: attachmentOwner } : {}),
       ciphertext,
       nonce: "z".repeat(24),
       encryptionVersion: 1,
       baseRevision,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: operationId(),
       deleted
     })
   });
@@ -100,14 +119,14 @@ async function putObject(account, objectId, ciphertext, objectType = "note", del
 }
 
 async function pull(account) {
-  const response = await fetch(`${baseUrl}/api/sync?since=0`, { headers: { Cookie: account.cookie } });
+  const response = await request(`${baseUrl}/api/sync?since=0`, { headers: { Cookie: account.cookie } });
   if (!response.ok) throw new Error(`Sync failed: ${await response.text()}`);
   return response.json();
 }
 
 async function openSyncEvents(account, since, clientId) {
   const controller = new AbortController();
-  const response = await fetch(`${baseUrl}/api/sync/events?since=${since}&clientId=${clientId}`, {
+  const response = await request(`${baseUrl}/api/sync/events?since=${since}&clientId=${clientId}`, {
     headers: { Cookie: account.cookie },
     signal: controller.signal
   });
@@ -143,15 +162,16 @@ async function waitForChangedEvent(stream, timeoutMs = 2_000) {
 }
 
 async function putChunk(account, attachmentId, marker) {
-  const response = await fetch(`${baseUrl}/api/attachments/${attachmentId}/chunks/0`, {
+  const response = await request(`${baseUrl}/api/attachments/${attachmentId}/chunks/0`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/octet-stream",
       Cookie: account.cookie,
       "X-WebMD-Nonce": "n".repeat(24),
       "X-WebMD-Total-Chunks": "1",
+      "X-WebMD-Owner-Note": attachmentOwner,
       "X-WebMD-Encryption-Version": "1",
-      "X-WebMD-Idempotency-Key": crypto.randomUUID()
+      "X-WebMD-Idempotency-Key": operationId()
     },
     body: new TextEncoder().encode(marker)
   });
@@ -159,7 +179,7 @@ async function putChunk(account, attachmentId, marker) {
 }
 
 async function getChunk(account, attachmentId) {
-  const response = await fetch(`${baseUrl}/api/attachments/${attachmentId}/chunks/0`, { headers: { Cookie: account.cookie } });
+  const response = await request(`${baseUrl}/api/attachments/${attachmentId}/chunks/0`, { headers: { Cookie: account.cookie } });
   if (!response.ok) throw new Error(`Attachment read failed: ${await response.text()}`);
   return response.text();
 }
@@ -171,23 +191,24 @@ try {
   const bravo = await register("bravo", "bravo-client-derived-secret-000002");
   const firstEndpointId = alpha.body.endpoint.id;
   alpha = await login("alpha", "alpha-client-derived-secret-000001", "Mozilla/5.0 (Macintosh) Safari/605.1.15", alpha.cookies, true);
-  const initialEndpointsResponse = await fetch(`${baseUrl}/api/account/endpoints`, { headers: { Cookie: alpha.cookie } });
+  const initialEndpointsResponse = await request(`${baseUrl}/api/account/endpoints`, { headers: { Cookie: alpha.cookie } });
   const initialEndpoints = await initialEndpointsResponse.json();
   const otherEndpoint = initialEndpoints.endpoints.find((endpoint) => !endpoint.current && endpoint.active);
   const currentEndpoint = initialEndpoints.endpoints.find((endpoint) => endpoint.current);
-  const earlyRevokeResponse = await fetch(`${baseUrl}/api/account/endpoints/${otherEndpoint.id}`, { method: "DELETE", headers: { Cookie: alpha.cookie } });
+  const earlyRevokeResponse = await request(`${baseUrl}/api/account/endpoints/${otherEndpoint.id}`, { method: "DELETE", headers: { Cookie: alpha.cookie } });
   const smokeDb = new Database(join(dataDirectory, "notes.sqlite"));
   smokeDb.prepare("UPDATE trusted_endpoints SET first_seen_at = ? WHERE endpoint_id = ?").run(
     new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), currentEndpoint.id
   );
   smokeDb.close();
-  const crossUserRevokeResponse = await fetch(`${baseUrl}/api/account/endpoints/${bravo.body.endpoint.id}`, {
+  const crossUserRevokeResponse = await request(`${baseUrl}/api/account/endpoints/${bravo.body.endpoint.id}`, {
     method: "DELETE",
     headers: { Cookie: alpha.cookie }
   });
-  const revokeResponse = await fetch(`${baseUrl}/api/account/endpoints/${otherEndpoint.id}`, { method: "DELETE", headers: { Cookie: alpha.cookie } });
-  const revokedDeviceResponse = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: alphaPhone.cookie } });
+  const revokeResponse = await request(`${baseUrl}/api/account/endpoints/${otherEndpoint.id}`, { method: "DELETE", headers: { Cookie: alpha.cookie } });
+  const revokedDeviceResponse = await request(`${baseUrl}/api/auth/me`, { headers: { Cookie: alphaPhone.cookie } });
   const objectId = crypto.randomUUID();
+  attachmentOwner = objectId;
   await putObject(alpha, objectId, "A".repeat(32));
   await putObject(bravo, objectId, "B".repeat(32));
   const attachmentId = crypto.randomUUID();
@@ -206,21 +227,21 @@ try {
     ciphertext: "history-ciphertext-".repeat(16),
     nonce: "h".repeat(24),
     encryptionVersion: 1,
-    idempotencyKey: crypto.randomUUID()
+    idempotencyKey: operationId()
   };
-  const historyWrite = await fetch(`${baseUrl}/api/notes/${objectId}/history/${historyId}`, {
+  const historyWrite = await request(`${baseUrl}/api/notes/${objectId}/history/${historyId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify(historyEnvelope)
   });
   const [historyListResponse, crossUserHistoryList, crossUserHistoryRead] = await Promise.all([
-    fetch(`${baseUrl}/api/notes/${objectId}/history`, { headers: { Cookie: alpha.cookie } }),
-    fetch(`${baseUrl}/api/notes/${objectId}/history`, { headers: { Cookie: bravo.cookie } }),
-    fetch(`${baseUrl}/api/notes/${objectId}/history/${historyId}`, { headers: { Cookie: bravo.cookie } })
+    request(`${baseUrl}/api/notes/${objectId}/history`, { headers: { Cookie: alpha.cookie } }),
+    request(`${baseUrl}/api/notes/${objectId}/history`, { headers: { Cookie: bravo.cookie } }),
+    request(`${baseUrl}/api/notes/${objectId}/history/${historyId}`, { headers: { Cookie: bravo.cookie } })
   ]);
   const historyList = await historyListResponse.json();
   const bravoHistoryList = await crossUserHistoryList.json();
-  const historyRead = await fetch(`${baseUrl}/api/notes/${objectId}/history/${historyId}`, { headers: { Cookie: alpha.cookie } });
+  const historyRead = await request(`${baseUrl}/api/notes/${objectId}/history/${historyId}`, { headers: { Cookie: alpha.cookie } });
   const protectedHistoryId = crypto.randomUUID();
   const protectedEnvelope = {
     ...historyEnvelope,
@@ -229,14 +250,14 @@ try {
     metadataEncryptionVersion: 1,
     protected: true,
     attachmentIds: [attachmentId],
-    idempotencyKey: crypto.randomUUID()
+    idempotencyKey: operationId()
   };
-  const protectedHistoryWrite = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+  const protectedHistoryWrite = await request(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify(protectedEnvelope)
   });
-  const protectedHistoryRename = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+  const protectedHistoryRename = await request(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({
@@ -246,33 +267,33 @@ try {
     })
   });
   const protectedHistoryRenameResult = await protectedHistoryRename.json();
-  const protectedHistoryListResult = await fetch(`${baseUrl}/api/notes/${objectId}/history`, {
+  const protectedHistoryListResult = await request(`${baseUrl}/api/notes/${objectId}/history`, {
     headers: { Cookie: alpha.cookie }
   }).then((response) => response.json());
-  const protectedHistoryReadResult = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+  const protectedHistoryReadResult = await request(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
     headers: { Cookie: alpha.cookie }
   }).then((response) => response.json());
-  const crossUserProtectedHistoryUpdate = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+  const crossUserProtectedHistoryUpdate = await request(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: bravo.cookie },
     body: JSON.stringify({ protected: false })
   });
-  const protectedHistoryDelete = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+  const protectedHistoryDelete = await request(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
     method: "DELETE",
     headers: { Cookie: alpha.cookie }
   });
-  const historyClear = await fetch(`${baseUrl}/api/notes/${objectId}/history`, {
+  const historyClear = await request(`${baseUrl}/api/notes/${objectId}/history`, {
     method: "DELETE",
     headers: { Cookie: alpha.cookie }
   });
   const historyClearResult = await historyClear.json();
-  const protectedHistoryAfterClear = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, { headers: { Cookie: alpha.cookie } });
-  const clearedHistoryReplay = await fetch(`${baseUrl}/api/notes/${objectId}/history/${crypto.randomUUID()}`, {
+  const protectedHistoryAfterClear = await request(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, { headers: { Cookie: alpha.cookie } });
+  const clearedHistoryReplay = await request(`${baseUrl}/api/notes/${objectId}/history/${crypto.randomUUID()}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
-    body: JSON.stringify({ ...historyEnvelope, idempotencyKey: crypto.randomUUID() })
+    body: JSON.stringify({ ...historyEnvelope, idempotencyKey: operationId() })
   });
-  const historySettingsUpdate = await fetch(`${baseUrl}/api/account/note-history-settings`, {
+  const historySettingsUpdate = await request(`${baseUrl}/api/account/note-history-settings`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ enabled: true, intervalMinutes: 30, retentionDays: 180 })
@@ -280,8 +301,9 @@ try {
   const historySettings = await historySettingsUpdate.json();
   const sourceClientId = crypto.randomUUID();
   const receiverClientId = crypto.randomUUID();
-  const sourceEvents = await openSyncEvents(alpha, syncA.cursor, sourceClientId);
-  const receiverEvents = await openSyncEvents(alpha, syncA.cursor, receiverClientId);
+  const eventCursor = (await pull(alpha)).cursor;
+  const sourceEvents = await openSyncEvents(alpha, eventCursor, sourceClientId);
+  const receiverEvents = await openSyncEvents(alpha, eventCursor, receiverClientId);
   const bravoEvents = await openSyncEvents(bravo, syncB.cursor, crypto.randomUUID());
   const firstBatchObjectId = crypto.randomUUID();
   const secondBatchObjectId = crypto.randomUUID();
@@ -292,10 +314,10 @@ try {
     nonce: "b".repeat(24),
     encryptionVersion: 1,
     baseRevision: 0,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: operationId(),
     deleted: false
   }));
-  const batchResponse = await fetch(`${baseUrl}/api/objects/batch`, {
+  const batchResponse = await request(`${baseUrl}/api/objects/batch`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -311,38 +333,38 @@ try {
     waitForChangedEvent(bravoEvents, 400)
   ]);
   await putObject(alpha, attachmentId, "alpha-encrypted-attachment-manifest", "attachment", true, 1);
-  const protectedAttachmentPurge = await fetch(`${baseUrl}/api/objects/purge`, {
+  const protectedAttachmentPurge = await request(`${baseUrl}/api/objects/purge`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ objects: [{ objectId: attachmentId, baseRevision: 2 }] })
   });
-  const unprotectAttachmentHistory = await fetch(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
+  const unprotectAttachmentHistory = await request(`${baseUrl}/api/notes/${objectId}/history/${protectedHistoryId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ protected: false })
   });
-  const attachmentPurgeAfterUnprotect = await fetch(`${baseUrl}/api/objects/purge`, {
+  const attachmentPurgeAfterUnprotect = await request(`${baseUrl}/api/objects/purge`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ objects: [{ objectId: attachmentId, baseRevision: 2 }] })
   });
-  const attachmentChunkAfterPurge = await fetch(`${baseUrl}/api/attachments/${attachmentId}/chunks/0`, { headers: { Cookie: alpha.cookie } });
-  const idempotentBatchResponse = await fetch(`${baseUrl}/api/objects/batch`, {
+  const attachmentChunkAfterPurge = await request(`${baseUrl}/api/attachments/${attachmentId}/chunks/0`, { headers: { Cookie: alpha.cookie } });
+  const idempotentBatchResponse = await request(`${baseUrl}/api/objects/batch`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ objects: batchObjects })
   });
   const idempotentBatch = await idempotentBatchResponse.json();
-  const conflictBatchResponse = await fetch(`${baseUrl}/api/objects/batch`, {
+  const conflictBatchResponse = await request(`${baseUrl}/api/objects/batch`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({
-      objects: [{ ...batchObjects[0], idempotencyKey: crypto.randomUUID(), ciphertext: "c".repeat(32) }]
+      objects: [{ ...batchObjects[0], idempotencyKey: operationId(), ciphertext: "c".repeat(32) }]
     })
   });
   const conflictBatch = await conflictBatchResponse.json();
   for (const [baseRevision, marker] of [[1, "d"], [2, "e"]]) {
-    const response = await fetch(`${baseUrl}/api/objects/${firstBatchObjectId}`, {
+    const response = await request(`${baseUrl}/api/objects/${firstBatchObjectId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
       body: JSON.stringify({
@@ -351,23 +373,23 @@ try {
         nonce: "b".repeat(24),
         encryptionVersion: 1,
         baseRevision,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: operationId(),
         deleted: false
       })
     });
     if (!response.ok) throw new Error(`Repeated object update failed: ${await response.text()}`);
   }
-  const compactResponse = await fetch(`${baseUrl}/api/sync?since=${syncA.cursor}&limit=500&compact=1`, {
+  const compactResponse = await request(`${baseUrl}/api/sync?since=${syncA.cursor}&limit=500&compact=1`, {
     headers: { Cookie: alpha.cookie }
   });
   const compactSync = await compactResponse.json();
-  const setupResponse = await fetch(`${baseUrl}/api/admin/account-setups`, {
+  const setupResponse = await request(`${baseUrl}/api/admin/account-setups`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ username: "charlie", displayName: "Charlie", expiresInHours: 72 })
   });
   const setup = await setupResponse.json();
-  const activationResponse = await fetch(`${baseUrl}/api/auth/activate`, {
+  const activationResponse = await request(`${baseUrl}/api/auth/activate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -387,17 +409,17 @@ try {
   const activatedCharlie = activationResponse.ok ? await activationResponse.json() : null;
   const charlie = { cookie: cookieHeader(responseCookies(activationResponse)), body: activatedCharlie };
   const avatarEnvelope = { ciphertext: "avatar-ciphertext-".repeat(24), nonce: "a".repeat(24), encryptionVersion: 1 };
-  const avatarUpdate = await fetch(`${baseUrl}/api/account/avatar`, {
+  const avatarUpdate = await request(`${baseUrl}/api/account/avatar`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify(avatarEnvelope)
   });
   const [alphaAvatarResponse, bravoAvatarResponse] = await Promise.all([
-    fetch(`${baseUrl}/api/account/avatar`, { headers: { Cookie: alpha.cookie } }),
-    fetch(`${baseUrl}/api/account/avatar`, { headers: { Cookie: bravo.cookie } })
+    request(`${baseUrl}/api/account/avatar`, { headers: { Cookie: alpha.cookie } }),
+    request(`${baseUrl}/api/account/avatar`, { headers: { Cookie: bravo.cookie } })
   ]);
   const [alphaAvatar, bravoAvatar] = await Promise.all([alphaAvatarResponse.json(), bravoAvatarResponse.json()]);
-  const recoveryKeyReset = await fetch(`${baseUrl}/api/account/recovery-key`, {
+  const recoveryKeyReset = await request(`${baseUrl}/api/account/recovery-key`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({
@@ -407,7 +429,7 @@ try {
       recoveryWrappedVaultNonce: "N".repeat(24)
     })
   });
-  const wrongRecoveryKeyReset = await fetch(`${baseUrl}/api/account/recovery-key`, {
+  const wrongRecoveryKeyReset = await request(`${baseUrl}/api/account/recovery-key`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({
@@ -419,32 +441,32 @@ try {
   });
   const charlieObjectId = crypto.randomUUID();
   if (activationResponse.ok) await putObject(charlie, charlieObjectId, "C".repeat(32));
-  const adminUsersBeforeDelete = await fetch(`${baseUrl}/api/admin/users`, { headers: { Cookie: alpha.cookie } });
+  const adminUsersBeforeDelete = await request(`${baseUrl}/api/admin/users`, { headers: { Cookie: alpha.cookie } });
   const managedBeforeDelete = await adminUsersBeforeDelete.json();
   const charlieUser = managedBeforeDelete.users.find((entry) => entry.username === "charlie");
-  const wrongDeletePassword = await fetch(`${baseUrl}/api/admin/users/${charlieUser.id}`, {
+  const wrongDeletePassword = await request(`${baseUrl}/api/admin/users/${charlieUser.id}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ currentAuthSecret: "wrong-alpha-client-secret-0000001", confirmationUsername: "charlie" })
   });
-  const selfDelete = await fetch(`${baseUrl}/api/admin/users/${alpha.body.user.id}`, {
+  const selfDelete = await request(`${baseUrl}/api/admin/users/${alpha.body.user.id}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ currentAuthSecret: "alpha-client-derived-secret-000001", confirmationUsername: "alpha" })
   });
-  const deleteCharlie = await fetch(`${baseUrl}/api/admin/users/${charlieUser.id}`, {
+  const deleteCharlie = await request(`${baseUrl}/api/admin/users/${charlieUser.id}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ currentAuthSecret: "alpha-client-derived-secret-000001", confirmationUsername: "charlie" })
   });
   const purgeId = crypto.randomUUID();
-  const tombstoneResponse = await fetch(`${baseUrl}/api/objects/${purgeId}`, {
+  const tombstoneResponse = await request(`${baseUrl}/api/objects/${purgeId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
-    body: JSON.stringify({ objectType: "note", ciphertext: "T".repeat(32), nonce: "z".repeat(24), encryptionVersion: 1, baseRevision: 0, idempotencyKey: crypto.randomUUID(), deleted: true })
+    body: JSON.stringify({ objectType: "note", ciphertext: "T".repeat(32), nonce: "z".repeat(24), encryptionVersion: 1, baseRevision: 0, idempotencyKey: operationId(), deleted: true })
   });
   const purgeHistoryId = crypto.randomUUID();
-  const purgeHistoryResponse = await fetch(`${baseUrl}/api/notes/${purgeId}/history/${purgeHistoryId}`, {
+  const purgeHistoryResponse = await request(`${baseUrl}/api/notes/${purgeId}/history/${purgeHistoryId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({
@@ -455,33 +477,33 @@ try {
       metadataEncryptionVersion: 1,
       protected: true,
       attachmentIds: [],
-      idempotencyKey: crypto.randomUUID()
+      idempotencyKey: operationId()
     })
   });
-  const protectedPurgeResponse = await fetch(`${baseUrl}/api/objects/purge`, {
+  const protectedPurgeResponse = await request(`${baseUrl}/api/objects/purge`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ objects: [{ objectId: purgeId, baseRevision: 1 }] })
   });
-  const purgeHistoryUnprotect = await fetch(`${baseUrl}/api/notes/${purgeId}/history/${purgeHistoryId}`, {
+  const purgeHistoryUnprotect = await request(`${baseUrl}/api/notes/${purgeId}/history/${purgeHistoryId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ protected: false })
   });
-  const purgeResponse = await fetch(`${baseUrl}/api/objects/purge`, {
+  const purgeResponse = await request(`${baseUrl}/api/objects/purge`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ objects: [{ objectId: purgeId, baseRevision: 1 }] })
   });
   const afterPurge = await pull(alpha);
-  const retentionUpdate = await fetch(`${baseUrl}/api/account/trash-retention`, {
+  const retentionUpdate = await request(`${baseUrl}/api/account/trash-retention`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({ days: null })
   });
-  const retentionResponse = await fetch(`${baseUrl}/api/account/trash-retention`, { headers: { Cookie: alpha.cookie } });
+  const retentionResponse = await request(`${baseUrl}/api/account/trash-retention`, { headers: { Cookie: alpha.cookie } });
   const retention = await retentionResponse.json();
-  const passwordChange = await fetch(`${baseUrl}/api/auth/password`, {
+  const passwordChange = await request(`${baseUrl}/api/auth/password`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({
@@ -493,7 +515,7 @@ try {
       newWrappedVaultNonce: "y".repeat(24)
     })
   });
-  const usernameChange = await fetch(`${baseUrl}/api/account/username`, {
+  const usernameChange = await request(`${baseUrl}/api/account/username`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: alpha.cookie },
     body: JSON.stringify({
@@ -517,12 +539,12 @@ try {
     newWrappedVaultKey: "Y".repeat(32),
     newWrappedVaultNonce: "Z".repeat(24)
   };
-  const oldRecoveryAfterUsernameChange = await fetch(`${baseUrl}/api/auth/recover`, {
+  const oldRecoveryAfterUsernameChange = await request(`${baseUrl}/api/auth/recover`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...recoveryAfterUsernameChangeBody, recoveryAuthSecret: "alpha-rotated-recovery-secret-0001" })
   });
-  const recoveryAfterUsernameChange = await fetch(`${baseUrl}/api/auth/recover`, {
+  const recoveryAfterUsernameChange = await request(`${baseUrl}/api/auth/recover`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...recoveryAfterUsernameChangeBody, recoveryAuthSecret: "alpha-username-recovery-secret-0001" })
@@ -566,9 +588,9 @@ try {
       && !("name" in protectedHistoryReadResult),
     protectedAttachmentRetentionWorked: protectedAttachmentPurge.status === 409
       && unprotectAttachmentHistory.ok
-      && attachmentPurgeAfterUnprotect.ok
-      && attachmentChunkAfterPurge.status === 404,
-    protectedHistoryBlockedPurge: protectedPurgeResponse.status === 409 && purgeHistoryUnprotect.ok,
+      && attachmentPurgeAfterUnprotect.status === 409
+      && attachmentChunkAfterPurge.ok,
+    protectedHistoryPurgedWithNote: protectedPurgeResponse.ok && purgeHistoryUnprotect.status === 404,
     noteHistorySettingsWorked: historySettingsUpdate.ok
       && historySettings.intervalMinutes === 30
       && historySettings.retentionDays === 180
@@ -585,7 +607,7 @@ try {
       && idempotentBatch.results.every((entry) => entry.status === "idempotent")
       && conflictBatchResponse.ok
       && conflictBatch.results[0]?.status === "conflict",
-    sseReceiverNotified: receiverEvent?.cursor > syncA.cursor,
+    sseReceiverNotified: receiverEvent?.cursor > eventCursor,
     sseSourceSuppressed: sourceEvent === null,
     sseCrossUserIsolated: crossUserEvent === null,
     compactPullWorked: compactResponse.ok
@@ -600,7 +622,7 @@ try {
   verificationDb.close();
   result.userDeletionCascaded = deletedUserRows === 0 && deletedObjectRows === 0 && bravoRows === 1;
   result.noteHistoryPurgedWithNote = purgeHistoryResponse.ok && purgedHistoryRows === 0;
-  if (!result.isolated || !result.attachmentIsolated || !result.passwordChanged || !result.usernameChanged || !result.activationWorked || !result.encryptedAvatarIsolated || !result.recoveryKeyResetProtected || !result.userDeletionProtected || !result.userDeletionCascaded || !result.purgePropagated || !result.trashRetentionUpdated || !result.noteHistoryWorked || !result.noteHistoryClearBarrierWorked || !result.protectedHistoryWorked || !result.protectedAttachmentRetentionWorked || !result.protectedHistoryBlockedPurge || !result.noteHistorySettingsWorked || !result.noteHistoryPurgedWithNote || !result.endpointIdentityStable || !result.endpointHistoryTracked || !result.rememberedCookiePersistent || !result.earlySessionRevokeRejected || !result.endpointRevocationIsolated || !result.matureSessionRevokeWorked || !result.batchSyncWorked || !result.sseReceiverNotified || !result.sseSourceSuppressed || !result.sseCrossUserIsolated || !result.compactPullWorked || result.alphaRole !== "admin" || result.bravoRole !== "user") {
+  if (!result.isolated || !result.attachmentIsolated || !result.passwordChanged || !result.usernameChanged || !result.activationWorked || !result.encryptedAvatarIsolated || !result.recoveryKeyResetProtected || !result.userDeletionProtected || !result.userDeletionCascaded || !result.purgePropagated || !result.trashRetentionUpdated || !result.noteHistoryWorked || !result.noteHistoryClearBarrierWorked || !result.protectedHistoryWorked || !result.protectedAttachmentRetentionWorked || !result.protectedHistoryPurgedWithNote || !result.noteHistorySettingsWorked || !result.noteHistoryPurgedWithNote || !result.endpointIdentityStable || !result.endpointHistoryTracked || !result.rememberedCookiePersistent || !result.earlySessionRevokeRejected || !result.endpointRevocationIsolated || !result.matureSessionRevokeWorked || !result.batchSyncWorked || !result.sseReceiverNotified || !result.sseSourceSuppressed || !result.sseCrossUserIsolated || !result.compactPullWorked || result.alphaRole !== "admin" || result.bravoRole !== "user") {
     throw new Error(`Smoke assertions failed: ${JSON.stringify(result)}`);
   }
   console.log(JSON.stringify(result, null, 2));

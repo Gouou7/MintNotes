@@ -1,3 +1,4 @@
+import { operationId } from "@mint-notes/application-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type LocalEncryptedObject, type OutboxEntry } from "../../storage/database";
 import type { VaultObject } from "../../types";
@@ -44,7 +45,7 @@ function entry(generation: number, ciphertext: string): OutboxEntry {
     updatedAt: "2026-01-01T00:00:00.000Z",
     operation: "upsert",
     baseRevision: 0,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: operationId(),
     generation
   };
 }
