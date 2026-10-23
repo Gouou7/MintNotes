@@ -7,6 +7,7 @@ import { createApp } from "../app";
 import { loadServerConfig } from "../config";
 import { openDatabase } from "../database";
 import { revokeUserCredentials } from "../auth/credentialRevocation";
+import { hashToken } from "../security";
 import { createApplicationCredential, VaultCipher, randomBytes, encryptAttachmentBytes } from "@mint-notes/application-client/crypto";
 import { ApplicationClient } from "@mint-notes/application-client/node";
 import type { ApplicationConnectionBootstrap } from "@mint-notes/application-client";
@@ -81,6 +82,32 @@ async function putNote(title: string, markdown = "body", locked = false) {
 }
 
 describe("application grants and encrypted adapters", () => {
+  it("rejects a wrong secret for a known connection across native read and write routes", async () => {
+    const authSecret = "a".repeat(43);
+    const wrongSecret = "d".repeat(43);
+    db.prepare("UPDATE application_connections SET auth_hash = ? WHERE connection_id = ?")
+      .run(hashToken(authSecret), credential.connectionId);
+    const authorization = `Bearer ${credential.connectionId}.${wrongSecret}`;
+    for (const request of [
+      { method: "GET" as const, url: "/api/apps/v1/connection" },
+      { method: "GET" as const, url: "/api/apps/v1/sync" },
+      { method: "PUT" as const, url: `/api/apps/v1/objects/${crypto.randomUUID()}`, payload: {} }
+    ]) {
+      const response = await app.inject({ ...request, headers: { authorization } });
+      expect(response.statusCode).toBe(401);
+      expect(response.json().code).toBe("APPLICATION_INVALID");
+    }
+    const retry = await app.inject({ method: "POST", url: "/api/account/application-connections",
+      headers: browser(), payload: { connectionId: credential.connectionId, name: "OpenClaw",
+        access: "read-write", idleTimeoutDays: 30, expiresAt: null, authSecret: wrongSecret,
+        vaultEnvelope: credential.vaultEnvelope } });
+    expect(retry.statusCode).toBe(409);
+    expect((await app.inject({ method: "GET", url: "/api/apps/v1/connection",
+      headers: { authorization: `Bearer ${credential.connectionId}.${authSecret}` } })).statusCode).toBe(200);
+    expect(db.prepare("SELECT last_used_at FROM application_connections WHERE connection_id = ?")
+      .get(credential.connectionId)).toEqual({ last_used_at: null });
+  });
+
   it("separates credentials, Origin protection, read-only permission and account ownership", async () => {
     const note = await putNote("secret title");
     const listed = await app.inject({ method: "GET", url: "/api/account/application-connections", headers: browser() });

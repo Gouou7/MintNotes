@@ -1,168 +1,86 @@
-import { lazy, Suspense, type CSSProperties, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Copy,
   Ellipsis,
   History as HistoryIcon,
   Pin,
   RotateCcw,
-  Trash2,
+  Trash2
 } from "lucide-react";
-import { ApiError, api } from "../../api";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties
+} from "react";
 import { AppIcon } from "../../components/AppIcon";
-import { PaneResizer } from "../../components/PaneResizer";
 import { HistoryPanel } from "../../components/HistoryPanel";
-import { WorkspaceOutline } from "./WorkspaceOutline";
+import { PaneResizer } from "../../components/PaneResizer";
 import { ToastStack } from "../../components/Toast";
-import { useToastNotifications } from "./useToastNotifications";
-import { cryptoClient, type EncryptedProfileAvatar } from "../../crypto/client";
-import {
-  broadcastAccountLogout,
-  clearCurrentBrowserSessionGrant,
-  clearPendingEndpointRevocation,
-  clearPinRefreshGrant,
-  hasDevicePin,
-  markEndpointRevocationPending,
-} from "../../crypto/deviceUnlock";
-import { buildOutline, findOutlineHeading } from "../../editor/product/outline";
-import { ReadingEditor } from "../../editor/product/ReadingEditor";
-import { useNoteEditorIntegration } from "./useNoteEditorIntegration";
 import { MarkdownEditor } from "../../editor/product/MarkdownEditor";
-import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/product/wikiLinkResolver";
-import { attachmentIdsIn, attachmentMarkdown, createLocalAttachment, decryptAttachmentBlob } from "../attachments";
-import { AttachmentCloneService } from "../attachmentClone";
-import { documentPatchChanges } from "../documentPatch";
-import { useImportExport } from "./useImportExport";
-import { ImportResultPanel } from "../ImportResultPanel";
-import { SettingsPanelLoading } from "../SettingsPanelLoading";
-import { makeDocument } from "./documentFactory";
-import { NameReservations } from "../siblingNames";
-import { useSiblingNameRepair } from "./useSiblingNameRepair";
-import {
-  SyncCoordinator,
-  mergeByObjectId,
-  type SyncIntent
-} from "../syncCoordinator";
-import { decryptAvailableLocalObjects, decryptFailureFingerprint, shouldCreateWelcomeNote } from "../vaultLoad";
-import { canMoveDocument, compareDocuments, descendantsOf, folderRevealPath, isFolderDropZone, lockedNoteInSelection, nextManualOrder, reorderedSiblingBatch, reorderedSiblings, resolveManualDropBeforeId, selectionRoots, siblingTitleExists, treeSelectionRange, uniqueSiblingTitle } from "../tree";
-import { derivedNoteLockState, effectiveEditorMode, isLockedNote } from "../noteLock";
-import { formatNoteTime } from "../noteTime";
-import {
-  DEFAULT_HISTORY_SETTINGS,
-  canDeleteHistory,
-  historyContentChanged,
-  historyContentSignature,
-  localHistoryListItem,
-  manualHistorySnapshotOptions,
-  makeHistoryPayload,
-  mergeHistoryItems,
-  normalizeHistoryName,
-  shouldCaptureHistoryBaseline
-} from "../history";
+import { ReadingEditor } from "../../editor/product/ReadingEditor";
+import { translateError, useI18n } from "../../i18n";
+import { type DeviceUnlockCredential } from "../../storage/database";
+import type { AuthEndpoint, OpenDocument, OutlineItem, User } from "../../types";
+import { DEFAULT_FONT_SIZE } from "../appearance";
+import { attachmentIdsIn, attachmentMarkdown, decryptAttachmentBlob } from "../attachments";
 import { focusAndSelectName } from "../focusName";
+import { canDeleteHistory } from "../history";
+import { ImportResultPanel } from "../ImportResultPanel";
+import { isLockedNote } from "../noteLock";
+import { formatNoteTime } from "../noteTime";
+import { SettingsPanelLoading } from "../SettingsPanelLoading";
+import { NameReservations } from "../siblingNames";
+import { createHistorySync } from "./createHistorySync";
 import { focusEditorFromTitle } from "./editorFocus";
-import { isLanguagePreference, translateError, useI18n, type Translate } from "../../i18n";
-import {
-  DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
-  parseLegacyWorkspaceState,
-  resolveDeviceActiveNoteId,
-  resolveDeviceWorkspacePreferences,
-  shouldSynchronizeWorkspaceObject,
-  WORKSPACE_OBJECT_ID
-} from "../workspace";
-import {
-  chunkKey,
-  cursorKey,
-  deleteLocalUserData,
-  ignoredDecryptFailuresKey,
-  historyKey,
-  historySettingsKey,
-  localDb,
-  localKey,
-  preferencesKey,
-  type LocalEncryptedObject,
-  type LocalHistorySnapshot,
-  type OutboxEntry,
-  type ObjectUploadAttempt,
-  type DeviceUnlockCredential
-} from "../../storage/database";
-import type {
-  AuthEndpoint,
-  EncryptedHistorySnapshot,
-  HistoryCaptureKind,
-  HistoryListItem,
-  HistorySettings,
-  NoteHistoryPayload,
-  OpenAttachment,
-  OpenDocument,
-  OutlineItem,
-  UiPreferences,
-  User
-} from "../../types";
-import { ContextMenu, draggedDocumentIds, TreeNoteLock, TreeLevel, type TreeDropTarget } from "./VaultTree";
-import { EmptyEditor, NoteToolbar } from "./NoteToolbar";
 import { NotePaneLayout } from "./NotePaneLayout";
-import { WorkspacePanelHeader, WorkspaceSidebar } from "./WorkspaceChrome";
-import { useObjectPersistence } from "./useObjectPersistence";
+import { EmptyEditor, NoteToolbar } from "./NoteToolbar";
+import { attachmentGraphSignature, useAttachmentUrls } from "./useAttachmentUrls";
 import { useDocumentSaveQueue } from "./useDocumentSaveQueue";
-import { useWorkspaceEditorMode } from "./useWorkspaceEditorMode";
+import { useImportExport } from "./useImportExport";
+import { useNoteEditorIntegration } from "./useNoteEditorIntegration";
+import { useObjectPersistence } from "./useObjectPersistence";
+import { useSiblingNameRepair } from "./useSiblingNameRepair";
+import { syncStatusDetailText, useSyncStatus, visibleSyncStatusText } from "./useSyncStatus";
+import { useToastNotifications } from "./useToastNotifications";
 import { useVaultDerivedView } from "./useVaultDerivedView";
-import { useMobileDrawerGestures, useWorkspaceAutoLock } from "./useWorkspaceInteractions";
-import { useTheme } from "../useTheme";
+import { useVaultDocuments } from "./useVaultDocuments";
+import { useVaultHistory } from "./useVaultHistory";
+import { useVaultHistoryActions } from "./useVaultHistoryActions";
+import { useVaultLoad } from "./useVaultLoad";
+import { useVaultLock } from "./useVaultLock";
+import { useVaultModel } from "./useVaultModel";
+import { useVaultPreferences } from "./useVaultPreferences";
+import { useVaultProfile } from "./useVaultProfile";
+import { useVaultSync } from "./useVaultSync";
+import { useVaultTrash } from "./useVaultTrash";
+import { useVaultTree } from "./useVaultTree";
+import { useWorkspaceEditorMode } from "./useWorkspaceEditorMode";
+import { useMobileDrawerGestures } from "./useWorkspaceInteractions";
+import { useWorkspaceSelection } from "./useWorkspaceSelection";
+import { ContextMenu, draggedDocumentIds, TreeLevel, TreeNoteLock } from "./VaultTree";
+import { WorkspacePanelHeader, WorkspaceSidebar } from "./WorkspaceChrome";
+import { WorkspaceOutline } from "./WorkspaceOutline";
 
 const SettingsPanel = lazy(() => import("../SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
-import { hasPendingLocalObjectGraph, removePurgedLocalData } from "./localPurge";
-import { acknowledgeOutboxEntry } from "./outboxAcknowledgement";
-import { pullVaultChanges, type PullControllerResult } from "./pullController";
-import { pushVaultPending } from "./pushController";
-import { executeVaultSync } from "./syncExecution";
-import { applyVaultAcknowledgement } from "../syncChanges";
-import {
-  countPendingSyncEntries,
-  settledSyncPhase,
-  syncStatusDetailText,
-  useSyncStatus,
-  visibleSyncStatusText,
-  type SyncFailure
-} from "./useSyncStatus";
-import { useVaultModel } from "./useVaultModel";
-import { useSyncConnection } from "./useSyncConnection";
-import { useWorkspaceSelection } from "./useWorkspaceSelection";
-import { attachmentGraphSignature, useAttachmentUrls } from "./useAttachmentUrls";
-import { VaultHistoryController, type HistoryIndexEnvelope } from "./historyController";
-import {
-  DEFAULT_FONT_SIZE,
-  DEFAULT_WRAP_CODE_BLOCKS,
-  normalizeFontSize,
-  normalizeWrapCodeBlocks
-} from "../appearance";
-
-type CreateDocumentOptions = { focusName?: boolean; activate?: boolean };
-const DEFAULT_PREFERENCES: UiPreferences = {
-  ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
-  theme: "system",
-  fontSize: DEFAULT_FONT_SIZE,
-  wrapCodeBlocks: DEFAULT_WRAP_CODE_BLOCKS,
-  language: "system",
-  sortMode: "alphabetical",
-  treeCollapsed: false,
-  outlineCollapsed: false,
-  treeWidth: 297,
-  outlineWidth: 297,
-  rightPanelTab: "outline"
-};
 
 const TREE_WIDTH_MIN = 220;
 const TREE_WIDTH_MAX = 420;
 const OUTLINE_WIDTH_MIN = 200;
 const OUTLINE_WIDTH_MAX = 420;
 
-function synchronizationFailure(error: unknown, t: Translate): SyncFailure {
-  return error instanceof ApiError
-    ? { kind: "server", reason: translateError(error, t, "notice.syncFailed") }
-    : { kind: "unreachable" };
-}
-
-export function VaultWorkspace({ user, endpoint, credential, serverSessionVerified, onCredentialChange, onDisplayNameChange, onUsernameChange, onLocked }: {
+export function VaultWorkspace({
+  user,
+  endpoint,
+  credential,
+  serverSessionVerified,
+  onCredentialChange,
+  onDisplayNameChange,
+  onUsernameChange,
+  onLocked
+}: {
   user: User;
   endpoint: AuthEndpoint;
   credential: DeviceUnlockCredential | null;
@@ -173,9 +91,10 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
   onLocked: (logout: boolean) => void;
 }) {
   const { formatDateTime, languagePreference, setLanguagePreference, t } = useI18n();
+
   const [displayName, setDisplayName] = useState(user.displayName);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const avatarUrlRef = useRef<string | null>(null);
+
+  const model = useVaultModel();
   const {
     documents,
     documentsRef,
@@ -183,27 +102,47 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     attachments,
     attachmentsRef,
     attachmentIndexRef,
-    replaceDocuments,
-    replaceAttachments,
     upsertDocument,
     upsertAttachment
-  } = useVaultModel();
+  } = model;
+
   const nameReservations = useRef(new NameReservations());
+
   const nameDocuments = () => [...documentsRef.current, ...nameReservations.current.documents()];
+
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
-  const { activeId, activeIdRef, activateDocument, selectedIds, setSelectedIds, selectionAnchor } = useWorkspaceSelection();
+
+  const selection = useWorkspaceSelection();
+  const { activeId, selectedIds, setSelectedIds, selectionAnchor } = selection;
+
   const [editorSessionId, setEditorSessionId] = useState(0);
+
   const [titleDraft, setTitleDraft] = useState("");
+
   const [search, setSearch] = useState("");
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [treeDraggingIds, setTreeDraggingIds] = useState<Set<string>>(new Set());
-  const [treeDropTarget, setTreeDropTarget] = useState<TreeDropTarget | null>(null);
-  const [renamingDocumentId, setRenamingDocumentId] = useState<string | null>(null);
+
   const [treeOpen, setTreeOpen] = useState(false);
+
   const [outlineOpen, setOutlineOpen] = useState(false);
+
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [preferences, setPreferences] = useState<UiPreferences>(() => ({ ...DEFAULT_PREFERENCES, language: languagePreference }));
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+
+  const logoutStarted = useRef(false);
+
+  const generation = useRef(0);
+
+  const serverSessionVerifiedRef = useRef(serverSessionVerified);
+
+  const searchInput = useRef<HTMLInputElement>(null);
+
+  const titleInput = useRef<HTMLInputElement>(null);
+
+  const pendingTitleFocus = useRef<string | null>(null);
+
+  const attachmentInput = useRef<HTMLInputElement>(null);
+
   const {
     status: syncStatus,
     setPhase: setSaveState,
@@ -212,45 +151,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     markLocalFailure,
     markLocalSuccess
   } = useSyncStatus(serverSessionVerified);
+
   const { notices, showMessage, dismissMessage } = useToastNotifications();
-  const [loading, setLoading] = useState(true);
-  const [loadFailure, setLoadFailure] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ objectId: string; x: number; y: number } | null>(null);
-  const [purging, setPurging] = useState(false);
-  const [historySettings, setHistorySettings] = useState<HistorySettings>(DEFAULT_HISTORY_SETTINGS);
-  const historySettingsRef = useRef<HistorySettings>(DEFAULT_HISTORY_SETTINGS);
-  const [historyItems, setHistoryItems] = useState<HistoryListItem[]>([]);
-  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
-  const [historyHasMore, setHistoryHasMore] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyPreview, setHistoryPreview] = useState<{ item: HistoryListItem; payload: NoteHistoryPayload } | null>(null);
-  const [renamingHistoryId, setRenamingHistoryId] = useState<string | null>(null);
-  const historyLastSignature = useRef(new Map<string, string>());
-  const historyLastCapturedAt = useRef(new Map<string, number>());
-  const historyQuotaPaused = useRef(false);
-  const historyIdleTimer = useRef<number | null>(null);
-  const historyPeriodicTimer = useRef<number | null>(null);
-  const historySession = useRef<{ noteId: string; active: boolean } | null>(null);
-  const logoutStarted = useRef(false);
-  const generation = useRef(0);
-  const historyController = useMemo(() => new VaultHistoryController({
-    userId: user.id,
-    nextGeneration: () => Date.now() * 1000 + ++generation.current,
-    isActive: () => !logoutStarted.current
-  }), [user.id]);
-  const syncClientId = useRef(crypto.randomUUID());
-  const syncCoordinator = useRef<SyncCoordinator | null>(null);
-  const executeSyncRef = useRef<(intent: SyncIntent) => Promise<void>>(async () => undefined);
-  const syncStatusTimer = useRef<number | null>(null);
-  const serverSessionVerifiedRef = useRef(serverSessionVerified);
-  const deferredActiveRemote = useRef<OpenDocument | null>(null);
-  const deferredActiveRemoteId = useRef<string | null>(null);
-  const documentTree = useRef<HTMLDivElement>(null);
-  const searchInput = useRef<HTMLInputElement>(null);
-  const titleInput = useRef<HTMLInputElement>(null);
-  const pendingTitleFocus = useRef<string | null>(null);
-  const pendingTitleSave = useRef<Promise<boolean>>(Promise.resolve(true));
-  const attachmentInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     serverSessionVerifiedRef.current = serverSessionVerified;
@@ -263,236 +165,58 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     logoutStarted.current = false;
     return () => {
       logoutStarted.current = true;
-      if (historyIdleTimer.current !== null) window.clearTimeout(historyIdleTimer.current);
-      if (historyPeriodicTimer.current !== null) window.clearTimeout(historyPeriodicTimer.current);
-      historyIdleTimer.current = null;
-      historyPeriodicTimer.current = null;
+      clearHistorySessionTimers();
     };
   }, []);
 
-  const applyHistorySettings = (settings: HistorySettings) => {
-    historySettingsRef.current = settings;
-    historyQuotaPaused.current = settings.usedBytes >= settings.quotaBytes;
-    setHistorySettings(settings);
-    void localDb.meta.put({ key: historySettingsKey(user.id), value: JSON.stringify(settings) });
-  };
+  const { preferences, setPreferences, setPreferencesLoaded } = useVaultPreferences({
+    selection,
+    languagePreference,
+    logoutStarted,
+    userId: user.id,
+    setLanguagePreference,
+    workspaceLoaded
+  });
 
-  const refreshHistorySettings = async (): Promise<HistorySettings> => {
-    if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
-    const settings = await api<HistorySettings>("/api/account/note-history-settings");
-    applyHistorySettings(settings);
-    return settings;
-  };
+  const indexedActiveDocument = activeId ? documentIndexRef.current.get(activeId) : null;
 
-  useEffect(() => {
-    let cancelled = false;
-    void localDb.meta.get(historySettingsKey(user.id))
-      .then((stored) => {
-        if (!stored || cancelled) return;
-        const parsed = JSON.parse(stored.value) as Partial<HistorySettings>;
-        applyHistorySettings({ ...DEFAULT_HISTORY_SETTINGS, ...parsed });
-      })
-      .catch(() => undefined)
-      .then(() => serverSessionVerified ? refreshHistorySettings() : undefined)
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [serverSessionVerified, user.id]);
+  const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
 
-  useEffect(() => {
-    if (historySettings.enabled) return;
-    if (historyIdleTimer.current !== null) window.clearTimeout(historyIdleTimer.current);
-    if (historyPeriodicTimer.current !== null) window.clearTimeout(historyPeriodicTimer.current);
-    historyIdleTimer.current = null;
-    historyPeriodicTimer.current = null;
-    if (historySession.current) historySession.current.active = false;
-  }, [historySettings.enabled]);
+  const activeDocumentLocked = isLockedNote(activeDocument);
 
-  const localHistoryForNote = (noteId: string) => historyController.localForNote(noteId);
-  const localHistoryIndexesForNote = (noteId: string) => historyController.localIndexesForNote(noteId);
-  const metadataForSnapshot = (snapshot: LocalHistorySnapshot, payload?: NoteHistoryPayload) => (
-    historyController.metadataForSnapshot(snapshot, payload)
-  );
-  const localHistoryListItems = (
-    snapshots: LocalHistorySnapshot[],
-    indexes = [] as Awaited<ReturnType<typeof localHistoryIndexesForNote>>
-  ) => historyController.localListItems(snapshots, indexes);
-  const remoteHistoryListItems = (items: HistoryIndexEnvelope[]) => historyController.remoteListItems(items);
-  const saveHistorySnapshot = async (
-    document: OpenDocument,
-    captureKind: HistoryCaptureKind,
-    options: { force?: boolean; name?: string | null; protected?: boolean } = {}
-  ): Promise<LocalHistorySnapshot | null> => {
-    if (logoutStarted.current || document.kind !== "note" || document.deleted) return null;
-    const capturedAt = new Date().toISOString();
-    const payload = makeHistoryPayload({
-      ...document,
-      attachmentIds: [...new Set([...document.attachmentIds, ...attachmentIdsIn(document.markdown)])]
-    }, capturedAt);
-    const signature = historyContentSignature(payload);
-    let latestSignature = historyLastSignature.current.get(document.objectId);
-    if (latestSignature === undefined) {
-      const latest = (await localHistoryForNote(document.objectId))[0];
-      if (latest) {
-        try {
-          const decrypted = await cryptoClient.decryptHistory(
-            user.id,
-            latest.noteId,
-            latest.historyId,
-            latest.capturedAt,
-            latest.captureKind,
-            latest.ciphertext,
-            latest.nonce
-          );
-          latestSignature = historyContentSignature(decrypted);
-          historyLastSignature.current.set(document.objectId, latestSignature);
-          historyLastCapturedAt.current.set(document.objectId, new Date(latest.capturedAt).getTime());
-        } catch {
-          // A damaged cached snapshot must not block a new valid checkpoint.
-        }
-      }
-    }
-    if (!options.force && latestSignature === signature) return null;
-
-    const created = await historyController.createSnapshot(
-      { ...document, attachmentIds: payload.attachmentIds },
-      captureKind,
-      { capturedAt, name: options.name, protected: options.protected }
-    );
-    if (!created) return null;
-    const { metadata, snapshot } = created;
-    historyLastSignature.current.set(document.objectId, signature);
-    historyLastCapturedAt.current.set(document.objectId, new Date(capturedAt).getTime());
-    setHistorySettings((current) => {
-      const next = {
-        ...current,
-        count: current.count + 1,
-        usedBytes: current.usedBytes + snapshot.byteSize
-      };
-      historySettingsRef.current = next;
-      return next;
-    });
-    if (activeIdRef.current === document.objectId) {
-      setHistoryItems((current) => mergeHistoryItems([localHistoryListItem(snapshot, metadata.name ?? "")], current));
-    }
-    requestPush("editor");
-    return snapshot;
-  };
-
-  const loadHistory = async (noteId: string, cursor: string | null = null, append = false) => {
-    setHistoryLoading(true);
-    try {
-      const [local, localIndexes] = await Promise.all([
-        localHistoryForNote(noteId),
-        localHistoryIndexesForNote(noteId)
-      ]);
-      const localItems = await localHistoryListItems(local, localIndexes);
-      if (!serverSessionVerified) {
-        setHistoryItems((current) => append ? mergeHistoryItems(current, localItems) : localItems);
-        setHistoryCursor(null);
-        setHistoryHasMore(false);
-        return;
-      }
-      const query = new URLSearchParams({ limit: "50" });
-      if (cursor) query.set("cursor", cursor);
-      const response = await api<{
-        items: HistoryIndexEnvelope[];
-        nextCursor: string | null;
-        clearedBefore: string | null;
-      }>(`/api/notes/${noteId}/history?${query}`);
-      if (response.clearedBefore) {
-        const staleKeys = new Set([
-          ...local.filter((item) => !item.protected && item.capturedAt <= response.clearedBefore!).map((item) => item.key),
-          ...localIndexes.filter((item) => !item.protected && item.capturedAt <= response.clearedBefore!).map((item) => item.key)
-        ]);
-        if (staleKeys.size) {
-          await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
-            const keys = [...staleKeys];
-            await localDb.historySnapshots.bulkDelete(keys);
-            await localDb.historyIndex.bulkDelete(keys);
-            await localDb.historyOutbox.bulkDelete(keys);
-            await localDb.historyMetadataOutbox.bulkDelete(keys);
-          });
-        }
-      }
-      const pending = localItems.filter((item) => item.pending && (
-        item.protected || !response.clearedBefore || item.capturedAt > response.clearedBefore
-      ));
-      await historyController.cacheRemoteItems(response.items);
-      const remoteItems = await remoteHistoryListItems(response.items);
-      setHistoryItems((current) => append
-        ? mergeHistoryItems(current, remoteItems, pending)
-        : mergeHistoryItems(remoteItems, pending));
-      setHistoryCursor(response.nextCursor);
-      setHistoryHasMore(Boolean(response.nextCursor));
-      const newest = mergeHistoryItems(remoteItems, pending)[0];
-      if (newest) historyLastCapturedAt.current.set(noteId, new Date(newest.capturedAt).getTime());
-    } catch (error) {
-      const [local, localIndexes] = await Promise.all([
-        localHistoryForNote(noteId),
-        localHistoryIndexesForNote(noteId)
-      ]);
-      const localItems = await localHistoryListItems(local, localIndexes);
-      setHistoryItems((current) => append ? mergeHistoryItems(current, localItems) : localItems);
-      setHistoryCursor(null);
-      setHistoryHasMore(false);
-      if (!(error instanceof ApiError && error.status === 404)) {
-        showMessage(translateError(error, t, "notice.historyLoadFailed"));
-      }
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  const ensureHistorySnapshot = async (item: HistoryListItem): Promise<LocalHistorySnapshot> => {
-    return historyController.ensureSnapshot(item, async () => {
-      if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
-      return api<EncryptedHistorySnapshot>(`/api/notes/${item.noteId}/history/${item.historyId}`);
-    });
-  };
-
-  const selectHistorySnapshot = async (item: HistoryListItem) => {
-    try {
-      const snapshot = await ensureHistorySnapshot(item);
-      const payload = await cryptoClient.decryptHistory(
-        user.id,
-        snapshot.noteId,
-        snapshot.historyId,
-        snapshot.capturedAt,
-        snapshot.captureKind,
-        snapshot.ciphertext,
-        snapshot.nonce
-      );
-      if (payload.schemaVersion !== 1) throw new Error(t("history.unsupported"));
-      setHistoryPreview({ item, payload });
-      setOutlineOpen(false);
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.historyDecryptFailed"), "critical");
-    }
-  };
-
-  const updateAvatarUrl = (avatar: { mime: string; data: ArrayBuffer } | null) => {
-    if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current);
-    const next = avatar ? URL.createObjectURL(new Blob([avatar.data], { type: avatar.mime })) : null;
-    avatarUrlRef.current = next;
-    setAvatarUrl(next);
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!serverSessionVerified) {
-      updateAvatarUrl(null);
-      return () => { cancelled = true; };
-    }
-    void api<{ avatar: (EncryptedProfileAvatar & { updatedAt: string }) | null }>("/api/account/avatar")
-      .then(async ({ avatar }) => avatar ? cryptoClient.decryptProfileAvatar(user.id, avatar) : null)
-      .then((avatar) => { if (!cancelled) updateAvatarUrl(avatar); })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-      if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current);
-      avatarUrlRef.current = null;
-    };
-  }, [serverSessionVerified, user.id]);
+  const history = useVaultHistory({
+    model,
+    selection,
+    userId: user.id,
+    generation,
+    logoutStarted,
+    serverSessionVerified,
+    t,
+    requestPush,
+    showMessage,
+    setOutlineOpen,
+    flushDocument: (id) => flushDocument(id),
+    activeDocument,
+    preferences
+  });
+  const {
+    historySettings,
+    historyItems,
+    historyCursor,
+    historyHasMore,
+    historyLoading,
+    historyPreview,
+    setHistoryPreview,
+    renamingHistoryId,
+    setRenamingHistoryId,
+    applyHistorySettings,
+    refreshHistorySettings,
+    loadHistory,
+    selectHistorySnapshot,
+    finishHistorySession,
+    scheduleHistoryEdit,
+    clearHistorySessionTimers
+  } = history;
 
   const objectPersistence = useObjectPersistence({
     userId: user.id,
@@ -509,14 +233,6 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     upsertAttachment,
     getServerRevision: (objectId) => documentIndexRef.current.get(objectId)?.serverRevision ?? attachmentIndexRef.current.get(objectId)?.serverRevision
   });
-  const applyDeferredActiveRemote = (objectId: string) => {
-    if (deferredActiveRemoteId.current !== objectId) return;
-    const remote = deferredActiveRemote.current;
-    if (remote) replaceDocuments(mergeByObjectId(documentsRef.current, [remote]));
-    else replaceDocuments((current) => current.filter((entry) => entry.objectId !== objectId));
-    deferredActiveRemoteId.current = null;
-    deferredActiveRemote.current = null;
-  };
 
   const persistObject = objectPersistence.persistObject;
 
@@ -539,751 +255,176 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     documentSaveQueue.queue(document, delay, maxWait);
   };
 
-  const clearHistorySessionTimers = () => {
-    if (historyIdleTimer.current !== null) window.clearTimeout(historyIdleTimer.current);
-    if (historyPeriodicTimer.current !== null) window.clearTimeout(historyPeriodicTimer.current);
-    historyIdleTimer.current = null;
-    historyPeriodicTimer.current = null;
-  };
+  const editorMode = useWorkspaceEditorMode({ preferences, document: activeDocument, previewing: Boolean(historyPreview), onPreferences: setPreferences });
 
-  const captureHistoryAfterLocalSave = async (noteId: string, captureKind: HistoryCaptureKind) => {
-    await flushDocument(noteId);
-    const current = documentIndexRef.current.get(noteId);
-    if (current?.kind === "note" && !current.deleted) await saveHistorySnapshot(current, captureKind);
-  };
+  const { effectiveMode, navigation: documentNavigation } = editorMode;
 
-  const finishHistorySession = async (capture = true) => {
-    const session = historySession.current;
-    clearHistorySessionTimers();
-    if (!session?.active) return;
-    historySession.current = { ...session, active: false };
-    if (capture && historySettingsRef.current.enabled && !historyQuotaPaused.current) {
-      await captureHistoryAfterLocalSave(session.noteId, "idle");
-    }
-  };
+  const editorModeRef = useRef({ readOnly: editorMode.readOnly, previewing: Boolean(historyPreview) });
 
-  const scheduleHistoryEdit = (before: OpenDocument, after: OpenDocument) => {
-    if (
-      !historySettingsRef.current.enabled
-      || historyQuotaPaused.current
-      || before.kind !== "note"
-      || !historyContentChanged(before, after)
-    ) return;
-    const now = Date.now();
-    const intervalMs = historySettingsRef.current.intervalMinutes * 60_000;
-    if (!historySession.current?.active || historySession.current.noteId !== before.objectId) {
-      clearHistorySessionTimers();
-      historySession.current = { noteId: before.objectId, active: true };
-      const lastCapturedAt = historyLastCapturedAt.current.get(before.objectId) ?? 0;
-      if (shouldCaptureHistoryBaseline(lastCapturedAt || undefined, now, historySettingsRef.current.intervalMinutes)) {
-        void saveHistorySnapshot(before, "baseline").catch((error) => {
-          showMessage(translateError(error, t, "notice.historySaveFailed"));
-        });
-      }
-    }
-    if (historyIdleTimer.current !== null) window.clearTimeout(historyIdleTimer.current);
-    historyIdleTimer.current = window.setTimeout(() => {
-      historyIdleTimer.current = null;
-      void finishHistorySession(true).catch((error) => showMessage(translateError(error, t, "notice.historySaveFailed")));
-    }, 2 * 60_000);
+  editorModeRef.current = { readOnly: editorMode.readOnly, previewing: Boolean(historyPreview) };
 
-    const armPeriodic = () => {
-      historyPeriodicTimer.current = window.setTimeout(() => {
-        historyPeriodicTimer.current = null;
-        const session = historySession.current;
-        if (!session?.active || historyQuotaPaused.current) return;
-        void captureHistoryAfterLocalSave(session.noteId, "interval")
-          .catch((error) => showMessage(translateError(error, t, "notice.historySaveFailed")))
-          .finally(() => {
-            if (historySession.current?.active && !historyQuotaPaused.current) armPeriodic();
-          });
-      }, intervalMs);
-    };
-    if (historyPeriodicTimer.current === null) armPeriodic();
-  };
-
-  const patchDocument = (objectId: string, patch: Partial<OpenDocument>, delay = 500) => {
-    const current = documentIndexRef.current.get(objectId);
-    if (!current || isLockedNote(current) || !documentPatchChanges(current, patch)) return;
-    const next = { ...current, ...patch, updatedAt: new Date().toISOString(), dirty: true };
-    scheduleHistoryEdit(current, next);
-    queueDocument(next, delay);
-  };
-
-  const beginTreeRename = (objectId: string) => {
-    const target = documentIndexRef.current.get(objectId);
-    if (!target || target.deleted) return;
-    if (isLockedNote(target)) {
-      showMessage(t("notice.noteLockedEdit", { title: target.title }));
-      return;
-    }
-    const ancestors = new Set<string>();
-    let ancestorId = target.parentId;
-    while (ancestorId) {
-      ancestors.add(ancestorId);
-      ancestorId = documentIndexRef.current.get(ancestorId)?.parentId ?? null;
-    }
-    setSearch("");
-    setExpanded((current) => new Set([...current, ...ancestors]));
-    setSelectedIds(new Set([objectId]));
-    selectionAnchor.current = objectId;
-    setRenamingDocumentId(objectId);
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      documentTree.current
-        ?.querySelector<HTMLElement>(`[data-object-id="${objectId}"]`)
-        ?.scrollIntoView({ block: "nearest" });
-    }));
-  };
-
-  const createDocument = async (kind: "note" | "folder", title: string, parentId: string | null, markdown = "", options: CreateDocumentOptions = {}) => {
-    const defaultTitle = kind === "note" ? t("app.untitled") : t("app.newFolder");
-    const documentTitle = uniqueSiblingTitle(nameDocuments(), title.trim() || defaultTitle, parentId);
-    const document = makeDocument(documentsRef.current, kind, documentTitle, parentId, markdown);
-    const activate = options.activate !== false;
-    if (options.focusName) setSearch("");
-    upsertDocument(document);
-    if (activate) {
-      setSelectedIds(new Set([document.objectId]));
-      selectionAnchor.current = document.objectId;
-    }
-    if (kind === "folder") {
-      const foldersToExpand = new Set([document.objectId]);
-      let ancestorId = parentId;
-      while (ancestorId) {
-        foldersToExpand.add(ancestorId);
-        ancestorId = documentIndexRef.current.get(ancestorId)?.parentId ?? null;
-      }
-      setExpanded((current) => new Set([...current, ...foldersToExpand]));
-    }
-    await persistObject(document);
-    if (kind === "folder" && options.focusName) {
-      beginTreeRename(document.objectId);
-    }
-    if (kind === "note" && activate) {
-      const previousActiveId = activeIdRef.current;
-      if (previousActiveId && previousActiveId !== document.objectId) applyDeferredActiveRemote(previousActiveId);
-      if (options.focusName) pendingTitleFocus.current = document.objectId;
-      activateDocument(document.objectId);
-      setEditorSessionId((current) => current + 1);
-      if (options.focusName) setTreeOpen(false);
-    }
-    requestPush("structural");
-    return document.objectId;
-  };
-
-  const createNewDocument = (kind: "note" | "folder", parentId: string | null) => createDocument(
-    kind,
-    kind === "note" ? t("app.untitled") : t("app.newFolder"),
-    parentId,
-    "",
-    { focusName: true }
-  );
-
-  const preserveConflict = async (
-    entry: OutboxEntry,
-    commitState = true,
-    rebindActive = true
-  ): Promise<OpenDocument | null> => {
-    if (entry.objectId === WORKSPACE_OBJECT_ID) return null;
-    const local = await cryptoClient.decryptObject(user.id, entry.objectId, entry.objectType, entry.revision, entry.ciphertext, entry.nonce);
-    if (local.kind === "attachment") {
-      showMessage(t("notice.attachmentConflict"), "critical");
-      return null;
-    }
-    const conflict = makeDocument(documentsRef.current, local.kind, `${local.title} (${t("app.conflictSuffix")})`, local.parentId, local.markdown);
-    conflict.tags = local.tags;
-    conflict.favorite = local.favorite;
-    conflict.locked = derivedNoteLockState(local, "conflict-copy");
-    let persisted: OpenDocument;
-    try {
-      persisted = await persistDocumentCopy(conflict, local.markdown, local.attachmentIds, { commitState });
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.attachmentConflict"), "critical");
-      throw error;
-    }
-    requestPush("structural");
-    if (rebindActive && activeIdRef.current === entry.objectId) {
-      activateDocument(persisted.objectId);
-    }
-    if (commitState) showMessage(t("notice.documentConflict", { title: local.title }), "critical");
-    return persisted;
-  };
-
-  const removePurgedLocal = async (objectId: string, commitState = true) => {
-    await removePurgedLocalData(user.id, objectId);
-    if (!commitState) return;
-    replaceDocuments((all) => all.filter((entry) => entry.objectId !== objectId));
-    replaceAttachments((all) => all.filter((entry) => entry.objectId !== objectId));
-    setSelectedIds((current) => {
-      if (!current.has(objectId)) return current;
-      const next = new Set(current);
-      next.delete(objectId);
-      return next;
-    });
-    if (selectionAnchor.current === objectId) selectionAnchor.current = null;
-  };
-
-  const acknowledgeAcceptedUpload = async (entry: ObjectUploadAttempt, revision: number) => {
-    const result = await acknowledgeOutboxEntry(
-      user.id, entry, revision, () => Date.now() * 1000 + ++generation.current,
-      cryptoClient, () => !logoutStarted.current
-    );
-    if (logoutStarted.current || result.status === "missing") return;
-    const current = entry.objectType === "attachment"
-      ? attachmentIndexRef.current.get(entry.objectId) : documentIndexRef.current.get(entry.objectId);
-    if (current) {
-      const next = applyVaultAcknowledgement(
-        current, result.object, result.status === "rebased" ? result.entry.baseRevision : revision,
-        result.status === "rebased" || documentSaveQueue.hasPending(entry.objectId)
-      );
-      if (next.kind === "attachment") upsertAttachment(next);
-      else upsertDocument(next);
-    }
-    if (result.status === "rebased") requestPush("editor");
-  };
-
-  const publishPullResult = (result: PullControllerResult) => {
-    if (logoutStarted.current) return;
-    // Input can arrive while the IndexedDB commit finishes. Its plaintext draft
-    // must survive until the save queue makes it durable, even after a real conflict.
-    const documentUpserts = [...result.documentUpserts.values()].filter((entry) => !documentSaveQueue.hasPending(entry.objectId));
-    const removedDocumentIds = [...result.removedDocumentIds].filter((id) => !documentSaveQueue.hasPending(id));
-    for (const sourceId of result.conflicts.keys()) {
-      const title = documentIndexRef.current.get(sourceId)?.title ?? "";
-      showMessage(t("notice.documentConflict", { title }), "critical");
-    }
-    if (result.documentUpserts.size || result.removedDocumentIds.size) {
-      replaceDocuments(mergeByObjectId(documentsRef.current, documentUpserts, removedDocumentIds));
-      for (const id of result.documentUpserts.keys()) nameReservations.current.release(id);
-    }
-    if (result.attachmentUpserts.size || result.removedAttachmentIds.size) {
-      replaceAttachments(mergeByObjectId(attachmentsRef.current, result.attachmentUpserts.values(), result.removedAttachmentIds));
-    }
-    if (result.activeConflictId && !documentSaveQueue.hasPending(activeIdRef.current ?? "")) {
-      deferredActiveRemoteId.current = null;
-      deferredActiveRemote.current = null;
-      activateDocument(result.activeConflictId);
-    } else if (result.deferredActive) {
-      deferredActiveRemoteId.current = result.deferredActive.objectId;
-      deferredActiveRemote.current = result.deferredActive.document;
-    }
-    if (result.removedDocumentIds.size || result.removedAttachmentIds.size) {
-      setSelectedIds((current) => new Set([...current].filter((id) => (
-        !result.removedDocumentIds.has(id) && !result.removedAttachmentIds.has(id)
-      ))));
-      if (selectionAnchor.current && (
-        result.removedDocumentIds.has(selectionAnchor.current)
-        || result.removedAttachmentIds.has(selectionAnchor.current)
-      )) selectionAnchor.current = null;
-    }
-    if (result.deferredActive) {
-      showMessage(result.deferredActive.deleted ? t("notice.activeRemoteDeleted") : t("notice.activeRemoteUpdated"), "info");
-    }
-    if (result.purgeDeferred) showMessage(t("notice.purgeWaitSync"), "critical");
-  };
-
-  const pullChanges = async () => {
-    const result = await pullVaultChanges({
-      userId: user.id,
-      isActive: () => !logoutStarted.current,
-      activeObjectId: () => activeIdRef.current,
-      hasPendingSave: documentSaveQueue.hasPending,
-      flushDocument,
-      coordinate: objectPersistence.coordinate,
-      acknowledge: acknowledgeAcceptedUpload,
-      preserveConflict: (entry) => preserveConflict(entry, false, false),
-      discardConflict: async (copy) => {
-        for (const id of copy.attachmentIds) await removePurgedLocal(id);
-        await removePurgedLocal(copy.objectId, false);
-        nameReservations.current.release(copy.objectId);
-      },
-      onPage: publishPullResult
-    });
-    return result.failedObjectIds;
-  };
-
-  const pushHistoryPending = async (): Promise<boolean> => {
-    const entries = await localDb.historyOutbox.where("userId").equals(user.id).sortBy("generation");
-    let pushed = false;
-    for (const entry of entries) {
-      if (logoutStarted.current) return pushed;
-      try {
-        const metadata = await metadataForSnapshot(entry);
-        const response = await api<{ protected: boolean }>(`/api/notes/${entry.noteId}/history/${entry.historyId}`, {
-          method: "POST",
-          body: JSON.stringify({
-            capturedAt: entry.capturedAt,
-            captureKind: entry.captureKind,
-            ciphertext: entry.ciphertext,
-            nonce: entry.nonce,
-            encryptionVersion: entry.encryptionVersion,
-            metadataCiphertext: entry.metadataCiphertext,
-            metadataNonce: entry.metadataNonce,
-            metadataEncryptionVersion: entry.metadataEncryptionVersion,
-            protected: entry.protected,
-            attachmentIds: entry.protected ? metadata.attachmentIds : [],
-            idempotencyKey: entry.idempotencyKey
-          })
-        });
-        if (entry.protected && !response.protected) throw new Error("History protection was not acknowledged");
-        const current = await localDb.historyOutbox.get(entry.key);
-        if (!current || current.generation === entry.generation) {
-          await localDb.historyOutbox.delete(entry.key);
-          const metadataPending = await localDb.historyMetadataOutbox.get(entry.key);
-          await localDb.historySnapshots.update(entry.key, { pending: Boolean(metadataPending) });
-          await localDb.historyIndex.update(entry.key, { pending: Boolean(metadataPending) });
-          setHistoryItems((items) => items.map((item) => (
-            item.historyId === entry.historyId ? { ...item, pending: Boolean(metadataPending) } : item
-          )));
-        }
-        pushed = true;
-        historyQuotaPaused.current = false;
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 409) {
-          await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, async () => {
-            await localDb.historySnapshots.delete(entry.key);
-            await localDb.historyIndex.delete(entry.key);
-            await localDb.historyOutbox.delete(entry.key);
-          });
-          setHistoryItems((items) => items.filter((item) => item.historyId !== entry.historyId));
-          continue;
-        }
-        if (error instanceof ApiError && error.status === 413) {
-          if (!historyQuotaPaused.current) showMessage(t("notice.historyQuotaReached"), "warning");
-          historyQuotaPaused.current = true;
-          break;
-        }
-        if (error instanceof ApiError && error.status === 404) break;
-        throw error;
-      }
-    }
-    return pushed;
-  };
-
-  const pushHistoryMetadataPending = async (): Promise<boolean> => {
-    const entries = await localDb.historyMetadataOutbox.where("userId").equals(user.id).sortBy("generation");
-    let pushed = false;
-    for (const entry of entries) {
-      if (logoutStarted.current) return pushed;
-      const snapshot = await localDb.historySnapshots.get(entry.key);
-      const index = await localDb.historyIndex.get(entry.key);
-      const record = snapshot ?? index;
-      if (!record) {
-        await localDb.historyMetadataOutbox.delete(entry.key);
-        continue;
-      }
-      try {
-        const metadata = await cryptoClient.decryptHistoryMetadata(
-          user.id,
-          entry.noteId,
-          entry.historyId,
-          entry.capturedAt,
-          entry.metadataCiphertext,
-          entry.metadataNonce
-        );
-        const response = await api<{ protected: boolean; byteSize: number }>(
-          `/api/notes/${entry.noteId}/history/${entry.historyId}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({
-              metadataCiphertext: entry.metadataCiphertext,
-              metadataNonce: entry.metadataNonce,
-              metadataEncryptionVersion: entry.metadataEncryptionVersion,
-              ...(entry.protected === undefined ? {} : {
-                protected: entry.protected,
-                attachmentIds: entry.protected ? metadata.attachmentIds : []
-              })
-            })
-          }
-        );
-        if (entry.protected === true && !response.protected) throw new Error("History protection was not acknowledged");
-        const current = await localDb.historyMetadataOutbox.get(entry.key);
-        if (current?.generation === entry.generation) {
-          await localDb.historyMetadataOutbox.delete(entry.key);
-          const createPending = await localDb.historyOutbox.get(entry.key);
-          if (snapshot) await localDb.historySnapshots.update(entry.key, { pending: Boolean(createPending), byteSize: response.byteSize });
-          await localDb.historyIndex.update(entry.key, { pending: Boolean(createPending), byteSize: response.byteSize });
-          setHistoryItems((items) => items.map((item) => item.historyId === entry.historyId
-            ? { ...item, pending: Boolean(createPending), byteSize: response.byteSize }
-            : item));
-        }
-        pushed = true;
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 404 && record.protected && snapshot) {
-          const nextGeneration = Date.now() * 1000 + ++generation.current;
-          await localDb.historyOutbox.put({
-            ...snapshot,
-            pending: true,
-            idempotencyKey: crypto.randomUUID(),
-            generation: nextGeneration
-          });
-          requestPush("editor");
-          break;
-        }
-        if (error instanceof ApiError && error.status === 404 && record.protected) break;
-        if (error instanceof ApiError && error.status === 404) {
-          await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyMetadataOutbox, async () => {
-            await localDb.historySnapshots.delete(entry.key);
-            await localDb.historyIndex.delete(entry.key);
-            await localDb.historyMetadataOutbox.delete(entry.key);
-          });
-          setHistoryItems((items) => items.filter((item) => item.historyId !== entry.historyId));
-          continue;
-        }
-        throw error;
-      }
-    }
-    return pushed;
-  };
-
-  const pushPending = () => pushVaultPending({
+  const {
+    patchDocument,
+    createDocument,
+    createNewDocument,
+    persistDocumentCopy,
+    moveDocuments,
+    addAttachment,
+    duplicateDocuments,
+    pinDocuments,
+    commitDocumentTitle,
+    toggleNoteLock,
+    toggleActiveNoteLock,
+    commitTreeRename,
+    renameDocument
+  } = useVaultDocuments({
+    model,
+    selection,
+    scheduleHistoryEdit,
+    queueDocument,
+    t,
+    nameDocuments,
+    setSearch,
+    setExpanded,
+    persistObject,
+    beginTreeRename: (id) => tree.beginTreeRename(id),
+    applyDeferredActiveRemote: (id) => sync.applyDeferredActiveRemote(id),
+    pendingTitleFocus,
+    setEditorSessionId,
+    setTreeOpen,
+    requestPush,
+    nameReservations,
     userId: user.id,
-    clientId: syncClientId.current,
-    isActive: () => !logoutStarted.current,
-    acknowledge: (entry, revision) => objectPersistence.coordinate(entry.objectId, () => acknowledgeAcceptedUpload(entry, revision)),
-    onConflict: async () => {
-      await localDb.meta.put({ key: cursorKey(user.id), value: "0" });
-      requestPull(0);
-    },
-    pushHistory: pushHistoryPending,
-    pushHistoryMetadata: pushHistoryMetadataPending
+    logoutStarted,
+    serverSessionVerified,
+    removePurgedLocal: (id, commit) => sync.removePurgedLocal(id, commit),
+    showMessage,
+    preferences,
+    titleDraft,
+    flushDocument,
+    documentNavigation,
+    historyPreview,
+    setRenamingDocumentId: (next) => tree.setRenamingDocumentId(next)
   });
 
-  const executeSync = async (intent: SyncIntent) => {
-    if (logoutStarted.current) return;
-    if (!serverSessionVerifiedRef.current) {
-      setUnavailable();
-      return;
-    }
-    const queued = await countPendingSyncEntries(user.id);
-    if (logoutStarted.current) return;
-    if (!intent.pull && (!intent.push || queued === 0)) return;
+  const { pushHistoryPending, pushHistoryMetadataPending } = createHistorySync({
+    history,
+    userId: user.id,
+    logoutStarted,
+    showMessage,
+    t,
+    generation,
+    requestPush
+  });
 
-    if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
-    syncStatusTimer.current = window.setTimeout(() => setSaveState("syncing"), 200);
-    try {
-      const result = await executeVaultSync({
-        isActive: () => !logoutStarted.current,
-        countPending: () => countPendingSyncEntries(user.id),
-        push: pushPending,
-        pull: pullChanges
-      }, intent);
-      if (logoutStarted.current) return;
-      if (result.failedObjectIds.size) showMessage(t("notice.remoteIntegrity", { count: result.failedObjectIds.size }), "critical");
-      setSaveState(documentSaveQueue.pendingIds().length ? "saving" : result.pending ? "local" : "synced");
-    } catch (error) {
-      if (logoutStarted.current) return;
-      if (!(error instanceof ApiError) && !navigator.onLine) setSaveState("offline");
-      else setSyncError(synchronizationFailure(error, t));
-      showMessage(error instanceof ApiError ? translateError(error, t, "notice.syncFailed") : t("notice.syncFailed"));
-      requestFallbackPull();
-      throw error;
-    } finally {
-      if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
-      syncStatusTimer.current = null;
-    }
-  };
-
-  const persistDocumentCopy = async (
-    document: OpenDocument,
-    sourceMarkdown: string,
-    sourceAttachmentIds: readonly string[],
-    options: { commitState?: boolean } = {}
-  ): Promise<OpenDocument> => {
-    document = nameReservations.current.reserve(documentsRef.current, document);
-    const attachmentCloner = new AttachmentCloneService({
-      resolveAttachment: (attachmentId) => attachmentIndexRef.current.get(attachmentId),
-      readAttachment: (attachment) => decryptAttachmentBlob(
-        user.id,
-        attachment,
-        () => !logoutStarted.current,
-        serverSessionVerified
-      ),
-      createAttachment: (ownerNoteId, source, plaintext) => createLocalAttachment(
-        user.id,
-        ownerNoteId,
-        new File([plaintext], source.originalName, { type: source.mime }),
-        () => !logoutStarted.current
-      ),
-      persistAttachment: async (attachment) => {
-        upsertAttachment(attachment);
-        return attachment;
-      },
-      removeAttachment: (attachmentId) => removePurgedLocal(attachmentId)
-    });
-    let cloned: Awaited<ReturnType<AttachmentCloneService["clone"]>> | null = null;
-    let persistedCopy = false;
-    try {
-      cloned = await attachmentCloner.clone({
-        sourceMarkdown,
-        sourceAttachmentIds,
-        targetNoteId: document.objectId
-      });
-      const persisted = await persistObject({
-        ...document,
-        markdown: cloned.markdown,
-        attachmentIds: cloned.attachmentIds,
-        dirty: true
-      }, options);
-      persistedCopy = true;
-      return persisted;
-    } catch (error) {
-      if (cloned) {
-        await Promise.allSettled(cloned.attachments.map((attachment) => (
-          removePurgedLocal(attachment.objectId)
-        )));
-      }
-      throw error;
-    } finally {
-      if (!persistedCopy || options.commitState !== false) nameReservations.current.release(document.objectId);
-    }
-  };
-
-  executeSyncRef.current = executeSync;
+  const sync = useVaultSync({
+    model,
+    selection,
+    userId: user.id,
+    showMessage,
+    t,
+    persistDocumentCopy,
+    generation,
+    logoutStarted,
+    documentSaveQueue,
+    nameReservations,
+    objectPersistence,
+    pushHistoryPending,
+    pushHistoryMetadataPending,
+    serverSessionVerifiedRef,
+    setUnavailable,
+    setSaveState,
+    setSyncError,
+    workspaceLoaded,
+    serverSessionVerified,
+    finishHistorySession,
+    flushDocument
+  });
+  const {
+    syncClientId,
+    applyDeferredActiveRemote,
+    removePurgedLocal,
+    pullChanges,
+    synchronize,
+    stopSync
+  } = sync;
 
   function requestPush(kind: "editor" | "structural" = "editor") {
-    if (logoutStarted.current) return;
-    syncCoordinator.current?.request(
-      { push: true },
-      kind === "structural"
-        ? { delayMs: 250, maxWaitMs: 2_000 }
-        : { delayMs: 2_000, maxWaitMs: 15_000 }
-    );
+    sync.requestPush(kind);
   }
 
-  function requestPull(delayMs = 250) {
-    if (logoutStarted.current) return;
-    syncCoordinator.current?.request({ pull: true }, { delayMs, maxWaitMs: Math.max(1_000, delayMs) });
-  }
-
-  const synchronize = async () => {
-    if (logoutStarted.current) return;
-    await syncCoordinator.current?.runNow({ pull: true, push: true });
-  };
-
-  useEffect(() => {
-    const coordinator = new SyncCoordinator({
-      execute: (intent) => executeSyncRef.current(intent),
-      canRun: () => serverSessionVerifiedRef.current && document.visibilityState === "visible"
-    });
-    syncCoordinator.current = coordinator;
-    return () => {
-      coordinator.dispose();
-      if (syncCoordinator.current === coordinator) syncCoordinator.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [stored, pending, storedPreferences, ignoredFailuresRecord] = await Promise.all([
-          localDb.objects.where("userId").equals(user.id).toArray(),
-          localDb.outbox.where("userId").equals(user.id).toArray(),
-          localDb.meta.get(preferencesKey(user.id)),
-          localDb.meta.get(ignoredDecryptFailuresKey(user.id))
-        ]);
-        if (cancelled || logoutStarted.current) return;
-        let storedUiPreferences: Partial<UiPreferences> = {};
-        try {
-          storedUiPreferences = JSON.parse(storedPreferences?.value ?? "{}") as Partial<UiPreferences>;
-        } catch {
-          // Malformed device-local preferences fall back to defaults.
-        }
-        const pendingByKey = new Map(pending.map((entry) => [entry.key, entry]));
-        const decryptableStored: LocalEncryptedObject[] = [];
-        for (const object of stored) {
-          const queued = pendingByKey.get(object.key);
-          if (queued?.operation === "purge") {
-            await localDb.outbox.delete(queued.key);
-            pendingByKey.delete(object.key);
-          }
-          decryptableStored.push(object);
-        }
-        const opened = await decryptAvailableLocalObjects(decryptableStored, pendingByKey, (object) => (
-          cryptoClient.decryptObject(user.id, object.objectId, object.objectType, object.revision, object.ciphertext, object.nonce)
-        ));
-        if (cancelled || logoutStarted.current) return;
-        // Commit every successfully decrypted record before any network work.
-        // One damaged/stale ciphertext must never make the entire vault look
-        // empty, and the original encrypted record remains untouched in Dexie.
-        const localWorkspace = opened.documents.find((entry) => entry.objectId === WORKSPACE_OBJECT_ID) ?? null;
-        const legacyWorkspace = localWorkspace ? parseLegacyWorkspaceState(localWorkspace) : null;
-        const deviceWorkspace = resolveDeviceWorkspacePreferences(storedUiPreferences, legacyWorkspace);
-        const loadedPreferences: UiPreferences = {
-          ...DEFAULT_PREFERENCES,
-          ...storedUiPreferences,
-          ...deviceWorkspace,
-          fontSize: normalizeFontSize(storedUiPreferences.fontSize),
-          wrapCodeBlocks: normalizeWrapCodeBlocks(storedUiPreferences.wrapCodeBlocks),
-          language: isLanguagePreference(storedUiPreferences.language) ? storedUiPreferences.language : languagePreference
-        };
-        await localDb.transaction("rw", localDb.objects, localDb.outbox, localDb.meta, async () => {
-          await localDb.objects.delete(localKey(user.id, WORKSPACE_OBJECT_ID));
-          await localDb.outbox.delete(localKey(user.id, WORKSPACE_OBJECT_ID));
-          await localDb.meta.put({ key: preferencesKey(user.id), value: JSON.stringify(loadedPreferences) });
-        });
-        pendingByKey.delete(localKey(user.id, WORKSPACE_OBJECT_ID));
-        replaceDocuments(opened.documents.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID));
-        replaceAttachments(opened.attachments);
-        setPreferences(loadedPreferences);
-        setPreferencesLoaded(true);
-
-        const failedLocalObjects = opened.failed.filter((object) => object.objectId !== WORKSPACE_OBJECT_ID);
-        const storedContent = stored.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID);
-        const pendingContent = pending.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID);
-
-        let ignoredFailureFingerprints = new Set<string>();
-        try {
-          const parsed = JSON.parse(ignoredFailuresRecord?.value ?? "[]");
-          if (Array.isArray(parsed)) ignoredFailureFingerprints = new Set(parsed.filter((value): value is string => typeof value === "string"));
-        } catch {
-          // A malformed local preference must not block vault loading.
-        }
-        const repairableFailures = failedLocalObjects.filter((object) => !ignoredFailureFingerprints.has(decryptFailureFingerprint(object)));
-        const canRepairFromServer = repairableFailures.length > 0
-          && repairableFailures.every((object) => !pendingByKey.has(object.key));
-        const mustVerifyServerFromStart = canRepairFromServer || (storedContent.length === 0 && pendingContent.length === 0);
-        if (mustVerifyServerFromStart && !logoutStarted.current) await localDb.meta.put({ key: cursorKey(user.id), value: "0" });
-        let initialPullError: unknown;
-        let failedRemoteIds = new Set<string>();
-        if (serverSessionVerifiedRef.current) {
-          try {
-            failedRemoteIds = await pullChanges();
-          } catch (error) {
-            initialPullError = error;
-          }
-        } else {
-          initialPullError = new Error("Server session has not been verified");
-        }
-
-        const loadedIds = new Set([
-          ...documentsRef.current.map((entry) => entry.objectId),
-          ...attachmentsRef.current.map((entry) => entry.objectId)
-        ]);
-        const unresolved = failedLocalObjects.filter((object) => !loadedIds.has(object.objectId));
-        const visibleFailures = unresolved.filter((object) => !ignoredFailureFingerprints.has(decryptFailureFingerprint(object)));
-        if (logoutStarted.current) return;
-        if (unresolved.length) {
-          const pendingFailures = visibleFailures.filter((object) => pendingByKey.has(object.key)).length;
-          if (visibleFailures.length) showMessage(
-            t("notice.localDecryptFailed", {
-              count: visibleFailures.length,
-              detail: pendingFailures
-                ? t("notice.pendingDecryptFailed", { count: pendingFailures })
-                : t("notice.ciphertextRetained")
-            }),
-            "critical",
-            {
-              label: t("notice.ignoreRevision"),
-              run: async () => {
-                const fingerprints = new Set(ignoredFailureFingerprints);
-                for (const object of visibleFailures) fingerprints.add(decryptFailureFingerprint(object));
-                await localDb.meta.put({ key: ignoredDecryptFailuresKey(user.id), value: JSON.stringify([...fingerprints]) });
-              }
-            }
-          );
-        } else if (failedRemoteIds.size) {
-          showMessage(t("notice.remoteIntegrityOthers", { count: failedRemoteIds.size }), "critical");
-        } else if (initialPullError) {
-          showMessage(navigator.onLine ? t("notice.localRestoredSyncRetry") : t("notice.loadedOffline"), "warning");
-        }
-
-        const verifiedEmptyVault = shouldCreateWelcomeNote({
-          serverSessionVerified: serverSessionVerifiedRef.current,
-          storedContentCount: storedContent.length,
-          pendingContentCount: pendingContent.length,
-          initialPullFailed: Boolean(initialPullError),
-          failedRemoteCount: failedRemoteIds.size
-        });
-        if (verifiedEmptyVault && !documentsRef.current.some((entry) => entry.kind === "note" && !entry.deleted)) {
-          await createDocument("note", t("app.welcomeTitle"), null, t("app.welcomeMarkdown"), { activate: false });
-        }
-        const restoredActiveId = resolveDeviceActiveNoteId(loadedPreferences.activeNoteId, documentsRef.current);
-        if (restoredActiveId) {
-          activateDocument(restoredActiveId);
-        } else {
-          activateDocument(null);
-          setPreferences((current) => ({
-            ...current,
-            activeNoteId: null,
-            openNoteIds: []
-          }));
-        }
-        if (initialPullError) {
-          if (!serverSessionVerifiedRef.current) setUnavailable();
-          else if (!(initialPullError instanceof ApiError) && !navigator.onLine) setSaveState("offline");
-          else setSyncError(synchronizationFailure(initialPullError, t));
-        } else {
-          const remaining = await countPendingSyncEntries(user.id);
-          setSaveState(settledSyncPhase(serverSessionVerifiedRef.current, remaining));
-        }
-        setWorkspaceLoaded(true);
-        setLoading(false);
-        requestPush("structural");
-      } catch (error) {
-        if (cancelled || logoutStarted.current) return;
-        setLoadFailure(translateError(error, t, "notice.openDatabaseFailed"));
-        setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [user.id]);
-
-  useEffect(() => {
-    if (!preferencesLoaded) return;
-    const timer = window.setTimeout(() => {
-      if (!logoutStarted.current) void localDb.meta.put({ key: preferencesKey(user.id), value: JSON.stringify(preferences) });
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [preferences, preferencesLoaded, user.id]);
-
-  useEffect(() => {
-    if (preferencesLoaded) setLanguagePreference(preferences.language);
-  }, [preferences.language, preferencesLoaded, setLanguagePreference]);
-
-  useEffect(() => {
-    if (!workspaceLoaded) return;
-    setPreferences((current) => {
-      const openNoteIds = activeId ? [activeId] : [];
-      if (current.workspaceVersion === 1
-        && current.activeNoteId === activeId
-        && current.openNoteIds.length === openNoteIds.length
-        && current.openNoteIds.every((id, index) => id === openNoteIds[index])) {
-        return current;
-      }
-      return {
-        ...current,
-        workspaceVersion: 1,
-        activeNoteId: activeId,
-        openNoteIds
-      };
-    });
-  }, [activeId, workspaceLoaded]);
-
-  useTheme(preferences.theme);
-
-  const { requestFallbackPull, stop: stopSyncConnection } = useSyncConnection({
+  const { loading, loadFailure } = useVaultLoad({
+    model,
+    selection,
     userId: user.id,
-    clientId: syncClientId.current,
-    enabled: workspaceLoaded,
-    serverSessionVerified,
-    isActive: () => !logoutStarted.current,
-    synchronize,
-    requestPull,
-    onHidden: () => {
-      void finishHistorySession(true);
-      for (const id of documentSaveQueue.pendingIds()) void flushDocument(id);
-    }
+    logoutStarted,
+    languagePreference,
+    setPreferences,
+    setPreferencesLoaded,
+    serverSessionVerifiedRef,
+    pullChanges,
+    showMessage,
+    t,
+    createDocument,
+    setUnavailable,
+    setSaveState,
+    setSyncError,
+    setWorkspaceLoaded,
+    requestPush
   });
 
-  const indexedActiveDocument = activeId ? documentIndexRef.current.get(activeId) : null;
-  const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
-  const activeDocumentLocked = isLockedNote(activeDocument);
-  const editorMode = useWorkspaceEditorMode({ preferences, document: activeDocument, previewing: Boolean(historyPreview), onPreferences: setPreferences });
-  const { effectiveMode, navigation: documentNavigation } = editorMode;
-  const editorModeRef = useRef({ readOnly: editorMode.readOnly, previewing: Boolean(historyPreview) });
-  editorModeRef.current = { readOnly: editorMode.readOnly, previewing: Boolean(historyPreview) };
+  const {
+    saveCurrentHistory,
+    renameHistorySnapshot,
+    toggleHistoryProtection,
+    deleteHistorySnapshot,
+    clearCurrentHistory,
+    clearAllHistory,
+    restoreHistoryAsCurrent,
+    restoreHistoryAsCopy
+  } = useVaultHistoryActions({
+    model,
+    selection,
+    history,
+    activeDocument,
+    flushDocument,
+    formatDateTime,
+    showMessage,
+    t,
+    userId: user.id,
+    requestPush,
+    serverSessionVerified,
+    synchronize,
+    nameDocuments,
+    persistObject,
+    setTitleDraft,
+    setEditorSessionId,
+    persistDocumentCopy
+  });
+
+  const { purging, setDeletedMany, requestPurgeDocuments, requestClearTrash } = useVaultTrash({
+    model,
+    selection,
+    showMessage,
+    t,
+    nameReservations,
+    persistObject,
+    setEditorSessionId,
+    requestPush,
+    serverSessionVerified,
+    documentSaveQueue,
+    objectPersistence,
+    synchronize,
+    userId: user.id,
+    syncClientId,
+    removePurgedLocal
+  });
+
+  const { avatarUrl, updateAvatarUrl } = useVaultProfile({
+    serverSessionVerified,
+    userId: user.id
+  });
+
   const noteEditor = useNoteEditorIntegration({
     document: activeDocument, previewing: Boolean(historyPreview), readOnly: editorMode.readOnly,
     findDocument: id => documentIndexRef.current.get(id), patchDocument,
@@ -1293,20 +434,8 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     },
   });
 
-  useEffect(() => {
-    setHistoryPreview(null);
-    setHistoryItems([]);
-    setHistoryCursor(null);
-    setHistoryHasMore(false);
-    setRenamingHistoryId(null);
-    historySession.current = null;
-    clearHistorySessionTimers();
-    if (activeDocument && preferences.rightPanelTab === "history") void loadHistory(activeDocument.objectId);
-  }, [activeDocument?.objectId]);
-  useEffect(() => {
-    if (preferences.rightPanelTab === "history" && activeDocument) void loadHistory(activeDocument.objectId);
-  }, [preferences.rightPanelTab]);
   useEffect(() => setTitleDraft(activeDocument?.title ?? ""), [activeDocument?.objectId, activeDocument?.title]);
+
   useEffect(() => {
     if (!activeDocument || pendingTitleFocus.current !== activeDocument.objectId) return;
     const frame = window.requestAnimationFrame(() => {
@@ -1314,7 +443,9 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     });
     return () => window.cancelAnimationFrame(frame);
   }, [activeDocument?.objectId, editorSessionId]);
+
   const displayedMarkdown = historyPreview?.payload.markdown ?? activeDocument?.markdown ?? "";
+
   const {
     outline,
     statistics,
@@ -1331,14 +462,17 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     expanded,
     sortMode: preferences.sortMode
   });
+
   const activeAttachmentIds = useMemo(() => [...new Set([
     ...(historyPreview?.payload.attachmentIds ?? activeDocument?.attachmentIds ?? []),
     ...attachmentIdsIn(displayedMarkdown)
   ])], [activeDocument?.attachmentIds.join("|"), displayedMarkdown, historyPreview?.item.historyId]);
+
   const activeAttachmentSignature = useMemo(
     () => attachmentGraphSignature(activeAttachmentIds, attachmentIndexRef.current),
     [activeAttachmentIds.join("|"), attachments]
   );
+
   const attachmentUrlController = useAttachmentUrls({
     userId: user.id,
     activeDocumentId: activeDocument?.objectId ?? null,
@@ -1349,651 +483,47 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     allowNetwork: serverSessionVerified,
     onError: (error) => showMessage(translateError(error, t, "notice.attachmentLoadFailed"))
   });
+
   const attachmentUrls = attachmentUrlController.urls;
+
   const attachmentUrlCache = attachmentUrlController.cache;
 
-  const selectDocument = async (objectId: string) => {
-    const currentActiveId = activeIdRef.current;
-    if (currentActiveId && currentActiveId !== objectId) {
-      await finishHistorySession(true);
-      await flushDocument(currentActiveId);
-      applyDeferredActiveRemote(currentActiveId);
-      setEditorSessionId((current) => current + 1);
-    }
-    setHistoryPreview(null);
-    activateDocument(objectId);
-    setTreeOpen(false);
-  };
-
-  const selectPinnedEntry = (entry: OpenDocument, event: ReactMouseEvent<HTMLButtonElement>) => {
-    if (entry.kind !== "folder") {
-      selectTreeEntry(entry, event);
-    } else {
-      const additive = event.ctrlKey || event.metaKey;
-      if (event.shiftKey) {
-        const range = treeSelectionRange(visibleTree, selectionAnchor.current, entry.objectId);
-        setSelectedIds((current) => additive ? new Set([...current, ...range]) : new Set(range));
-        if (!selectionAnchor.current) selectionAnchor.current = entry.objectId;
-      } else if (additive) {
-        setSelectedIds((current) => {
-          const next = new Set(current);
-          if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId);
-          return next;
-        });
-        selectionAnchor.current = entry.objectId;
-      } else {
-        setSelectedIds(new Set([entry.objectId]));
-        selectionAnchor.current = entry.objectId;
-      }
-    }
-    setSearch("");
-    setExpanded((current) => new Set([
-      ...current,
-      ...folderRevealPath(documentsRef.current, entry.objectId)
-    ]));
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      documentTree.current
-        ?.querySelector<HTMLElement>(`[data-object-id="${entry.objectId}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }));
-  };
-
-  const openWikiLink = (target: string) => {
-    const destination = resolveWikiLink(documentsRef.current, target, activeDocument);
-    if (!destination) {
-      showMessage(t("notice.wikiLinkNotFound", { target }));
-      return;
-    }
-    const { heading } = parseWikiLinkTarget(target);
-    const headingItem = heading
-      ? findOutlineHeading(buildOutline(destination.markdown), heading)
-      : null;
-    void selectDocument(destination.objectId).then(() => {
-      if (!headingItem) return;
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-        documentNavigation.jumpToHeading(headingItem);
-      }));
-    });
-  };
-
-  const selectTreeEntry = (entry: OpenDocument, event: ReactMouseEvent<HTMLButtonElement>) => {
-    const additive = event.ctrlKey || event.metaKey;
-    if (event.shiftKey) {
-      const anchorId = selectionAnchor.current;
-      const anchorVisible = anchorId ? visibleTree.some((item) => item.objectId === anchorId) : false;
-      const range = treeSelectionRange(visibleTree, anchorId, entry.objectId);
-      setSelectedIds((current) => additive ? new Set([...current, ...range]) : new Set(range));
-      if (!anchorVisible) selectionAnchor.current = entry.objectId;
-      return;
-    }
-    selectionAnchor.current = entry.objectId;
-    if (additive) {
-      setSelectedIds((current) => {
-        const next = new Set(current);
-        if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId);
-        return next;
-      });
-      return;
-    }
-    setSelectedIds(new Set([entry.objectId]));
-    if (entry.kind === "folder") {
-      setExpanded((current) => {
-        const next = new Set(current);
-        if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId);
-        return next;
-      });
-    } else {
-      void selectDocument(entry.objectId);
-    }
-  };
-
-  const openTreeContext = (entry: OpenDocument, x: number, y: number) => {
-    if (!selectedIds.has(entry.objectId)) {
-      setSelectedIds(new Set([entry.objectId]));
-      selectionAnchor.current = entry.objectId;
-    }
-    setContextMenu({ objectId: entry.objectId, x, y });
-  };
-
-  const beginTreeDrag = (entry: OpenDocument): string[] => {
-    const ids = selectedIds.has(entry.objectId)
-      ? selectionRoots(documentsRef.current, selectedIds)
-      : [entry.objectId];
-    if (!selectedIds.has(entry.objectId)) {
-      setSelectedIds(new Set(ids));
-      selectionAnchor.current = entry.objectId;
-    }
-    setTreeDraggingIds(new Set(ids.flatMap((id) => [...descendantsOf(documentsRef.current, id)])));
-    return ids;
-  };
-
-  const updateTreeDropTarget = (target: TreeDropTarget | null) => {
-    setTreeDropTarget((current) => (
-      current?.objectId === target?.objectId && current?.position === target?.position
-        ? current
-        : target
-    ));
-  };
-
-  const setDeletedMany = async (objectIds: string[], deleted: boolean) => {
-    const roots = selectionRoots(documentsRef.current, objectIds);
-    if (deleted) {
-      const locked = lockedNoteInSelection(documentsRef.current, roots);
-      if (locked) {
-        showMessage(t("notice.lockedTrashBlocked", { title: locked.title }));
-        return;
-      }
-    }
-    const ids = new Set(roots.flatMap((objectId) => [...descendantsOf(documentsRef.current, objectId)]));
-    if (!ids.size) return;
-    if (!deleted) {
-      const restoring = documentsRef.current.filter((entry) => ids.has(entry.objectId));
-      const conflict = nameReservations.current.claim(documentsRef.current, restoring.map((entry) => ({ ...entry, deleted: false })));
-      if (conflict) return showMessage(t("notice.restoreNameConflict", { title: conflict.title }));
-    }
-    try {
-      const noteIds = new Set([...ids].filter((id) => documentsRef.current.find((entry) => entry.objectId === id)?.kind === "note"));
-      const ownedAttachments = attachmentsRef.current.filter((entry) => noteIds.has(entry.ownerNoteId));
-      for (const id of ids) {
-        const document = documentsRef.current.find((entry) => entry.objectId === id);
-        if (document) await persistObject({ ...document, deleted, dirty: true });
-      }
-      for (const attachment of ownedAttachments) await persistObject({ ...attachment, deleted, dirty: true });
-      if (deleted && ids.has(activeIdRef.current ?? "")) {
-        activateDocument(null);
-        setEditorSessionId((current) => current + 1);
-      }
-      setSelectedIds((current) => new Set([...current].filter((id) => !ids.has(id))));
-      if (selectionAnchor.current && ids.has(selectionAnchor.current)) selectionAnchor.current = null;
-      requestPush("structural");
-    } finally {
-      if (!deleted) for (const id of ids) nameReservations.current.release(id);
-    }
-  };
-
-  const requestPurgeDocuments = (objectIds: string[]) => {
-    const roots = selectionRoots(documentsRef.current, objectIds);
-    const targets = roots.map((id) => documentsRef.current.find((entry) => entry.objectId === id && entry.deleted)).filter(Boolean) as OpenDocument[];
-    if (!targets.length) return;
-    const label = targets.length === 1
-      ? t("notice.purgeSingleLabel", { title: targets[0].title })
-      : t("notice.purgeMultipleLabel", { count: targets.length });
-    if (window.confirm(t("notice.purgeConfirm", { label }))) {
-      void purgeTrash(roots);
-    }
-  };
-
-  const requestClearTrash = () => {
-    if (!documentsRef.current.some((entry) => entry.deleted) && !attachmentsRef.current.some((entry) => entry.deleted)) return;
-    if (window.confirm(t("notice.clearTrashConfirm"))) {
-      void purgeTrash(null);
-    }
-  };
-
-  const purgeTrash = async (objectIds: string[] | null) => {
-    if (purging) return;
-    if (!serverSessionVerified) return showMessage(t("notice.purgeOnlineOnly"));
-    setPurging(true);
-    try {
-      await documentSaveQueue.flushAll();
-      await objectPersistence.drainAll();
-      await synchronize();
-      const documentIds = objectIds === null
-        ? new Set(documentsRef.current.filter((entry) => entry.deleted).map((entry) => entry.objectId))
-        : new Set(selectionRoots(documentsRef.current, objectIds).flatMap((objectId) => [...descendantsOf(documentsRef.current, objectId)]));
-      const noteIds = new Set([...documentIds].filter((id) => documentsRef.current.find((entry) => entry.objectId === id)?.kind === "note"));
-      const targets = [
-        ...documentsRef.current.filter((entry) => documentIds.has(entry.objectId) && entry.deleted),
-        ...attachmentsRef.current.filter((entry) => entry.deleted && (objectIds === null || noteIds.has(entry.ownerNoteId)))
-      ];
-      if (!targets.length) return;
-      const targetIds = new Set(targets.map((entry) => entry.objectId));
-      if (
-        targets.some((entry) => entry.dirty || entry.serverRevision < 1)
-        || await hasPendingLocalObjectGraph(user.id, targetIds)
-      ) {
-        return showMessage(t("notice.purgeWaitSync"));
-      }
-      await api("/api/objects/purge", {
-        method: "POST",
-        headers: { "X-WebMD-Sync-Client": syncClientId.current },
-        body: JSON.stringify({ objects: targets.map((entry) => ({ objectId: entry.objectId, baseRevision: entry.serverRevision })) })
-      });
-      for (const entry of targets) await removePurgedLocal(entry.objectId);
-      showMessage(t("notice.purgeComplete"), "info");
-      requestPush("structural");
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.purgeFailed"), "critical");
-    } finally {
-      setPurging(false);
-    }
-  };
-
-  const moveDocument = async (objectId: string, parentId: string | null, beforeId: string | null = null) => {
-    if (!canMoveDocument(documentsRef.current, objectId, parentId)) return showMessage(t("notice.moveIntoDescendant"));
-    const moving = documentsRef.current.find((entry) => entry.objectId === objectId);
-    if (!moving) return;
-    const conflict = nameReservations.current.claim(documentsRef.current, [{ ...moving, parentId }]);
-    if (conflict) return showMessage(t("notice.moveNameConflict", { title: moving.title }));
-    try {
-      if (preferences.sortMode === "manual") {
-        for (const change of reorderedSiblings(documentsRef.current, objectId, parentId, beforeId)) {
-          const document = documentsRef.current.find((entry) => entry.objectId === change.objectId);
-          if (document && (document.parentId !== change.parentId || document.manualOrder !== change.manualOrder)) await persistObject({ ...document, ...change, dirty: true });
-        }
-      } else {
-        await persistObject({ ...moving, parentId, manualOrder: nextManualOrder(documentsRef.current, parentId), dirty: true });
-      }
-      if (parentId) setExpanded((current) => new Set(current).add(parentId));
-      requestPush("structural");
-    } finally { nameReservations.current.release(objectId); }
-  };
-
-  const moveDocuments = async (objectIds: string[], parentId: string | null, beforeId: string | null = null) => {
-    const roots = selectionRoots(documentsRef.current, objectIds);
-    if (!roots.length) return;
-    const moving = roots.map((id) => documentsRef.current.find((entry) => entry.objectId === id)).filter(Boolean) as OpenDocument[];
-    const movingTreeIds = new Set(roots.flatMap((id) => [...descendantsOf(documentsRef.current, id)]));
-    if (parentId && movingTreeIds.has(parentId)) return showMessage(t("notice.batchMoveIntoDescendant"));
-    const conflict = nameReservations.current.claim(documentsRef.current, moving.map((entry) => ({ ...entry, parentId })));
-    if (conflict) return showMessage(t("notice.batchMoveNameConflict", { title: conflict.title }));
-    try {
-      if (preferences.sortMode === "manual") {
-        beforeId = resolveManualDropBeforeId(documentsRef.current, movingTreeIds, parentId, beforeId);
-        let changed = false;
-        for (const change of reorderedSiblingBatch(documentsRef.current, roots, parentId, beforeId)) {
-          const document = documentsRef.current.find((entry) => entry.objectId === change.objectId);
-          if (document && (document.parentId !== change.parentId || document.manualOrder !== change.manualOrder)) {
-            changed = true;
-            await persistObject({ ...document, ...change, dirty: true });
-          }
-        }
-        if (changed) {
-          if (parentId) setExpanded((current) => new Set(current).add(parentId!));
-          requestPush("structural");
-        }
-      } else {
-        for (const entry of moving) await moveDocument(entry.objectId, parentId, beforeId);
-      }
-      setSelectedIds(new Set(roots));
-      selectionAnchor.current = roots[roots.length - 1] ?? null;
-    } finally { for (const entry of moving) nameReservations.current.release(entry.objectId); }
-  };
-
-  const addAttachment = async (noteId: string, file: File) => {
-    const editableNote = documentIndexRef.current.get(noteId);
-    if (editableNote && isLockedNote(editableNote)) throw new Error(t("notice.noteLockedEdit", { title: editableNote.title }));
-    showMessage(t("notice.encryptingAttachment", { name: file.name }), "info");
-    const attachment = await createLocalAttachment(user.id, noteId, file, () => !logoutStarted.current);
-    upsertAttachment(attachment);
-    const note = documentsRef.current.find((entry) => entry.objectId === noteId && entry.kind === "note");
-    if (note) patchDocument(note.objectId, { attachmentIds: [...new Set([...note.attachmentIds, attachment.objectId])] }, 0);
-    showMessage(t("notice.attachmentSaved", { name: attachment.originalName }), "info");
-    requestPush("structural");
-    return attachment;
-  };
-
-  const duplicateDocument = async (objectId: string, parentOverride?: string | null): Promise<string | null> => {
-    const source = documentsRef.current.find((entry) => entry.objectId === objectId);
-    if (!source) return null;
-    if (source.kind === "folder") {
-      const folderId = await createDocument("folder", `${source.title} ${t("app.copySuffix")}`, parentOverride === undefined ? source.parentId : parentOverride);
-      const children = documentsRef.current.filter((entry) => entry.parentId === source.objectId && !entry.deleted).sort(compareDocuments("manual"));
-      for (const child of children) await duplicateDocument(child.objectId, folderId);
-      return folderId;
-    }
-    const parentId = parentOverride === undefined ? source.parentId : parentOverride;
-    const title = uniqueSiblingTitle(nameDocuments(), `${source.title} ${t("app.copySuffix")}`, parentId);
-    const copy = makeDocument(documentsRef.current, "note", title, parentId, source.markdown);
-    copy.locked = derivedNoteLockState(source, "explicit-copy");
-    const persisted = await persistDocumentCopy(copy, source.markdown, source.attachmentIds);
-    const previousActiveId = activeIdRef.current;
-    if (previousActiveId && previousActiveId !== persisted.objectId) applyDeferredActiveRemote(previousActiveId);
-    activateDocument(persisted.objectId);
-    setEditorSessionId((current) => current + 1);
-    requestPush("structural");
-    return persisted.objectId;
-  };
-
-  const duplicateDocuments = async (objectIds: string[]) => {
-    const roots = selectionRoots(documentsRef.current, objectIds);
-    const created: string[] = [];
-    for (const objectId of roots) {
-      const id = await duplicateDocument(objectId);
-      if (id) created.push(id);
-    }
-    if (created.length) {
-      setSelectedIds(new Set(created));
-      selectionAnchor.current = created[created.length - 1];
-      showMessage(t("notice.copiesCreated", { count: created.length }), "info");
-    }
-  };
-
-  const saveCurrentHistory = async () => {
-    if (!activeDocument) return;
-    try {
-      await flushDocument(activeDocument.objectId);
-      const current = documentIndexRef.current.get(activeDocument.objectId);
-      const saved = current ? await saveHistorySnapshot(
-        current,
-        "manual",
-        manualHistorySnapshotOptions(new Date(), formatDateTime)
-      ) : null;
-      if (saved) setRenamingHistoryId(saved.historyId);
-      showMessage(saved ? t("notice.historySaved") : t("notice.historyUnchanged"), "info");
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.historySaveFailed"), "critical");
-    }
-  };
-
-  const updateHistoryMetadata = async (
-    item: HistoryListItem,
-    change: { name?: string; protected?: boolean }
-  ): Promise<boolean> => {
-    try {
-      const key = historyKey(user.id, item.noteId, item.historyId);
-      let snapshot = await localDb.historySnapshots.get(key) ?? null;
-      const metadataRecord = snapshot ?? await localDb.historyIndex.get(key) ?? item;
-      let currentMetadata = await historyController.decryptMetadata(metadataRecord);
-      if (!currentMetadata) {
-        snapshot = await ensureHistorySnapshot(item);
-        currentMetadata = await metadataForSnapshot(snapshot);
-      }
-      const name = change.name === undefined ? currentMetadata.name : normalizeHistoryName(change.name);
-      if (change.name !== undefined && name === null) {
-        showMessage(t("notice.historyNameRequired"));
-        return false;
-      }
-      if (change.protected) {
-        const invalid = currentMetadata.attachmentIds.filter((attachmentId) => {
-          const attachment = attachmentIndexRef.current.get(attachmentId);
-          return !attachment || attachment.deleted || attachment.ownerNoteId !== item.noteId;
-        });
-        if (invalid.length) {
-          showMessage(t("notice.historyProtectedMissingAttachments", { count: invalid.length }), "critical");
-          return false;
-        }
-      }
-      const updated = await historyController.queueMetadataUpdate(item, snapshot, currentMetadata, {
-        name,
-        protected: change.protected
-      });
-      const { item: nextItem } = updated;
-      const sizeDelta = nextItem.byteSize - item.byteSize;
-      if (sizeDelta) {
-        setHistorySettings((current) => {
-          const next = { ...current, usedBytes: Math.max(0, current.usedBytes + sizeDelta) };
-          historySettingsRef.current = next;
-          return next;
-        });
-      }
-      setHistoryItems((items) => items.map((entry) => entry.historyId === item.historyId ? nextItem : entry));
-      setHistoryPreview((current) => current?.item.historyId === item.historyId
-        ? { ...current, item: nextItem }
-        : current);
-      requestPush("structural");
-      return true;
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.historyUpdateFailed"), "critical");
-      return false;
-    }
-  };
-
-  const renameHistorySnapshot = async (item: HistoryListItem, name: string) => {
-    const updated = await updateHistoryMetadata(item, { name });
-    if (updated) setRenamingHistoryId((current) => current === item.historyId ? null : current);
-    return updated;
-  };
-
-  const toggleHistoryProtection = async (item: HistoryListItem) => {
-    const updated = await updateHistoryMetadata(item, { protected: !item.protected });
-    if (updated) showMessage(item.protected ? t("notice.historyUnprotected") : t("notice.historyProtected"), "info");
-  };
-
-  const deleteHistorySnapshot = async (item: HistoryListItem) => {
-    if (!canDeleteHistory(item)) return showMessage(t("notice.historyProtectedDeleteBlocked"));
-    if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
-    if (!window.confirm(t("history.deleteConfirm", { date: formatNoteTime(item.capturedAt) }))) return;
-    try {
-      await api(`/api/notes/${item.noteId}/history/${item.historyId}`, { method: "DELETE" });
-      const key = historyKey(user.id, item.noteId, item.historyId);
-      await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
-        await localDb.historySnapshots.delete(key);
-        await localDb.historyIndex.delete(key);
-        await localDb.historyOutbox.delete(key);
-        await localDb.historyMetadataOutbox.delete(key);
-      });
-      setHistoryItems((current) => current.filter((entry) => entry.historyId !== item.historyId));
-      if (historyPreview?.item.historyId === item.historyId) setHistoryPreview(null);
-      await refreshHistorySettings().catch(() => undefined);
-      showMessage(t("notice.historyDeleted"), "info");
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.historyDeleteFailed"), "critical");
-    }
-  };
-
-  const clearCurrentHistory = async () => {
-    if (!activeDocument) return;
-    if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
-    if (!window.confirm(t("history.clearNoteConfirm", { title: activeDocument.title }))) return;
-    try {
-      await synchronize();
-      const protectionPending = (await localDb.historyMetadataOutbox
-        .where("[userId+noteId]").equals([user.id, activeDocument.objectId]).toArray())
-        .some((entry) => entry.protected !== undefined);
-      if (protectionPending) return showMessage(t("notice.historyProtectionSyncRequired"));
-      await api(`/api/notes/${activeDocument.objectId}/history`, { method: "DELETE" });
-      await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
-        const [snapshots, indexes] = await Promise.all([
-          localDb.historySnapshots.where("[userId+noteId]").equals([user.id, activeDocument.objectId]).toArray(),
-          localDb.historyIndex.where("[userId+noteId]").equals([user.id, activeDocument.objectId]).toArray()
-        ]);
-        const removeKeys = [...new Set([
-          ...snapshots.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key),
-          ...indexes.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key)
-        ])];
-        await localDb.historySnapshots.bulkDelete(removeKeys);
-        await localDb.historyIndex.bulkDelete(removeKeys);
-        await localDb.historyOutbox.bulkDelete(removeKeys);
-        await localDb.historyMetadataOutbox.bulkDelete(removeKeys);
-      });
-      historyLastCapturedAt.current.delete(activeDocument.objectId);
-      historyLastSignature.current.delete(activeDocument.objectId);
-      setHistoryItems((items) => items.filter((item) => item.protected));
-      setHistoryPreview((current) => current?.item.protected ? current : null);
-      await refreshHistorySettings().catch(() => undefined);
-      showMessage(t("notice.historyCleared"), "info");
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.historyClearFailed"), "critical");
-    }
-  };
-
-  const clearAllHistory = async () => {
-    if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
-    if (!window.confirm(t("history.clearAllConfirm"))) return;
-    try {
-      await synchronize();
-      const protectionPending = (await localDb.historyMetadataOutbox.where("userId").equals(user.id).toArray())
-        .some((entry) => entry.protected !== undefined);
-      if (protectionPending) return showMessage(t("notice.historyProtectionSyncRequired"));
-      await api("/api/account/note-history", { method: "DELETE" });
-      await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
-        const [snapshots, indexes] = await Promise.all([
-          localDb.historySnapshots.where("userId").equals(user.id).toArray(),
-          localDb.historyIndex.where("userId").equals(user.id).toArray()
-        ]);
-        const removeKeys = [...new Set([
-          ...snapshots.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key),
-          ...indexes.filter((snapshot) => !snapshot.protected).map((snapshot) => snapshot.key)
-        ])];
-        await localDb.historySnapshots.bulkDelete(removeKeys);
-        await localDb.historyIndex.bulkDelete(removeKeys);
-        await localDb.historyOutbox.bulkDelete(removeKeys);
-        await localDb.historyMetadataOutbox.bulkDelete(removeKeys);
-      });
-      historyLastCapturedAt.current.clear();
-      historyLastSignature.current.clear();
-      setHistoryItems((items) => items.filter((item) => item.protected));
-      setHistoryPreview((current) => current?.item.protected ? current : null);
-      await refreshHistorySettings();
-      showMessage(t("notice.historyAllCleared"), "info");
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.historyClearFailed"), "critical");
-    }
-  };
-
-  const restoreHistoryAsCurrent = async () => {
-    if (!activeDocument || !historyPreview) return;
-    if (isLockedNote(activeDocument)) {
-      showMessage(t("notice.noteLockedEdit", { title: activeDocument.title }));
-      return;
-    }
-    const missing = attachmentIdsIn(historyPreview.payload.markdown)
-      .filter((id) => !attachmentIndexRef.current.get(id) || attachmentIndexRef.current.get(id)?.deleted);
-    if (missing.length && !window.confirm(t("history.restoreMissingAttachments", { count: missing.length }))) return;
-    try {
-      await flushDocument(activeDocument.objectId);
-      const current = documentIndexRef.current.get(activeDocument.objectId);
-      if (!current) return;
-      await saveHistorySnapshot(current, "restore-safety");
-      const title = siblingTitleExists(nameDocuments(), historyPreview.payload.title, current.parentId, current.objectId)
-        ? uniqueSiblingTitle(nameDocuments(), historyPreview.payload.title, current.parentId)
-        : historyPreview.payload.title;
-      const restored = await persistObject({
-        ...current,
-        title,
-        markdown: historyPreview.payload.markdown,
-        tags: [...historyPreview.payload.tags],
-        attachmentIds: [...new Set([
-          ...current.attachmentIds,
-          ...historyPreview.payload.attachmentIds,
-          ...attachmentIdsIn(historyPreview.payload.markdown)
-        ])],
-        dirty: true
-      });
-      setTitleDraft(restored.title);
-      setHistoryPreview(null);
-      setEditorSessionId((value) => value + 1);
-      requestPush("editor");
-      showMessage(t("notice.historyRestored"), "info");
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.historyRestoreFailed"), "critical");
-    }
-  };
-
-  const restoreHistoryAsCopy = async () => {
-    if (!activeDocument || !historyPreview) return;
-    try {
-      const title = uniqueSiblingTitle(
-        documentsRef.current,
-        t("history.restoredCopyTitle", { title: historyPreview.payload.title, date: formatNoteTime(historyPreview.item.capturedAt) }),
-        activeDocument.parentId
-      );
-      const copy = makeDocument(documentsRef.current, "note", title, activeDocument.parentId, historyPreview.payload.markdown);
-      copy.tags = [...historyPreview.payload.tags];
-      copy.locked = derivedNoteLockState(activeDocument, "explicit-copy");
-      const persisted = await persistDocumentCopy(
-        copy,
-        historyPreview.payload.markdown,
-        historyPreview.payload.attachmentIds
-      );
-      activateDocument(persisted.objectId);
-      setHistoryPreview(null);
-      setEditorSessionId((value) => value + 1);
-      requestPush("structural");
-      showMessage(t("notice.historyCopyRestored"), "info");
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.historyCopyFailed"), "critical");
-    }
-  };
-
-  const pinDocuments = async (objectIds: string[], pinned: boolean) => {
-    for (const objectId of objectIds) {
-      const target = documentsRef.current.find((entry) => entry.objectId === objectId && !entry.deleted);
-      if (target && target.favorite !== pinned) await persistObject({ ...target, favorite: pinned, dirty: true });
-    }
-    requestPush("structural");
-  };
-
-  const updateDocumentTitle = async (objectId: string, value: string): Promise<boolean> => {
-    const target = documentsRef.current.find((entry) => entry.objectId === objectId);
-    if (!target) return false;
-    if (isLockedNote(target)) {
-      showMessage(t("notice.noteLockedEdit", { title: target.title }));
-      return false;
-    }
-    const title = value.trim();
-    if (!title) {
-      showMessage(t("notice.nameRequired"));
-      return false;
-    }
-    if (title === target.title) return true;
-    if (siblingTitleExists(nameDocuments(), title, target.parentId, target.objectId)) {
-      showMessage(t("notice.renameConflict", { title }));
-      return false;
-    }
-    const next = { ...target, title, dirty: true };
-    scheduleHistoryEdit(target, next);
-    upsertDocument(next);
-    await persistObject(next, {
-      commitState: () => documentIndexRef.current.get(objectId) === next
-    });
-    requestPush("structural");
-    return true;
-  };
-
-  const commitDocumentTitle = (objectId: string, value: string): Promise<boolean> => {
-    const next = pendingTitleSave.current
-      .catch(() => false)
-      .then(() => updateDocumentTitle(objectId, value));
-    pendingTitleSave.current = next;
-    return next;
-  };
-
-  const toggleNoteLock = async (noteId: string) => {
-    const initial = documentIndexRef.current.get(noteId);
-    if (!initial || initial.kind !== "note") return;
-    try {
-      if (noteId === activeIdRef.current && !isLockedNote(initial)) {
-        const titleSaved = await commitDocumentTitle(noteId, titleDraft);
-        if (!titleSaved) return;
-        await flushDocument(noteId);
-      }
-      const current = documentIndexRef.current.get(noteId);
-      if (!current || current.kind !== "note") return;
-      const locked = !isLockedNote(current);
-      if (noteId === activeIdRef.current) {
-        documentNavigation.prepareModeChange(effectiveEditorMode(preferences.editorMode, { kind: "note", locked }));
-      }
-      await persistObject(
-        { ...current, locked, dirty: true },
-        { preserveUpdatedAt: true }
-      );
-      if (noteId === activeIdRef.current) setEditorSessionId((value) => value + 1);
-      requestPush("structural");
-      showMessage(
-        locked
-          ? t("notice.noteLocked", { title: current.title })
-          : t("notice.noteUnlocked", { title: current.title }),
-        "info"
-      );
-    } catch (error) {
-      showMessage(translateError(error, t, "notice.noteLockFailed"), "critical");
-    }
-  };
-
-  const toggleActiveNoteLock = async () => {
-    const noteId = activeIdRef.current;
-    if (!noteId || historyPreview) return;
-    await toggleNoteLock(noteId);
-  };
-
-  const commitTreeRename = (objectId: string, value: string) => {
-    setRenamingDocumentId((current) => current === objectId ? null : current);
-    void commitDocumentTitle(objectId, value);
-  };
-
-  const renameDocument = (objectId: string) => beginTreeRename(objectId);
+  const tree = useVaultTree({
+    model,
+    selection,
+    showMessage,
+    t,
+    setSearch,
+    setExpanded,
+    finishHistorySession,
+    flushDocument,
+    applyDeferredActiveRemote,
+    setEditorSessionId,
+    setHistoryPreview,
+    setTreeOpen,
+    visibleTree,
+    activeDocument,
+    documentNavigation
+  });
+  const {
+    treeDraggingIds,
+    setTreeDraggingIds,
+    treeDropTarget,
+    setTreeDropTarget,
+    renamingDocumentId,
+    setRenamingDocumentId,
+    contextMenu,
+    setContextMenu,
+    documentTree,
+    selectDocument,
+    selectPinnedEntry,
+    openWikiLink,
+    selectTreeEntry,
+    openTreeContext,
+    beginTreeDrag,
+    updateTreeDropTarget,
+    revealActiveDocument
+  } = tree;
 
   const importExport = useImportExport({
     userId: user.id, getDocuments: () => documentsRef.current, getAttachments: () => attachmentsRef.current,
@@ -2007,88 +537,30 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     onImported: selectDocument,
     onResult: () => setSettingsOpen(false), notify: showMessage, t
   });
+
   const { exportRoot, exportDocuments, handleImport } = importExport;
+
   useSiblingNameRepair({
     documents, enabled: workspaceLoaded && !logoutStarted.current, getDocuments: () => documentsRef.current,
     queueDocument, onRepair: (count) => showMessage(t("transfer.namesRepaired", { count }), "info")
   });
 
-  const lock = async (logout = false) => {
-    if (logoutStarted.current) return;
-    await importExport.cancel();
-    clearPinRefreshGrant();
-    if (!logout) {
-      try {
-        await finishHistorySession(true);
-        await documentSaveQueue.flushAll();
-        await objectPersistence.drainAll();
-      } catch (error) {
-        importExport.resume();
-        showMessage(translateError(error, t, "notice.localSaveFailed"), "critical");
-        return;
-      }
-    } else {
-      logoutStarted.current = true;
-      objectPersistence.pause();
-      documentSaveQueue.cancelAll();
-      await objectPersistence.drainAll();
-      try {
-        await deleteLocalUserData(user.id);
-      } catch (error) {
-        logoutStarted.current = false;
-        objectPersistence.resume();
-        importExport.resume();
-        for (const document of documentsRef.current) {
-          if (document.dirty) queueDocument(document, 0);
-        }
-        showMessage(translateError(error, t, "notice.logoutLocalClearFailed"), "critical");
-        return;
-      }
-      clearCurrentBrowserSessionGrant();
-      broadcastAccountLogout(user.id);
-      syncCoordinator.current?.dispose();
-      syncCoordinator.current = null;
-      stopSyncConnection();
-      if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
-      syncStatusTimer.current = null;
-    }
-    logoutStarted.current = true;
-    objectPersistence.pause();
-    syncCoordinator.current?.dispose();
-    syncCoordinator.current = null;
-    stopSyncConnection();
-    if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
-    syncStatusTimer.current = null;
-    await cryptoClient.lock();
-    documentsRef.current = [];
-    documentIndexRef.current.clear();
-    attachmentsRef.current = [];
-    attachmentIndexRef.current.clear();
-    for (const cached of attachmentUrlCache.current.values()) URL.revokeObjectURL(cached.url);
-    attachmentUrlCache.current.clear();
-    onLocked(logout);
-    if (logout) {
-      const loggedOut = await api("/api/auth/logout", { method: "POST" })
-        .then(() => true)
-        .catch(() => false);
-      if (loggedOut) await clearPendingEndpointRevocation(endpoint.id).catch(() => undefined);
-      else await markEndpointRevocationPending(user.id, endpoint.id).catch(() => undefined);
-    }
-  };
-
-  const manualLock = () => {
-    if (!hasDevicePin(credential)) {
-      showMessage(t("notice.configurePin"));
-      return;
-    }
-    void lock(false);
-  };
-
-  useWorkspaceAutoLock({
-    minutes: credential?.autoLockMinutes,
+  const { lock, manualLock } = useVaultLock({
+    model,
+    logoutStarted,
+    importExport,
+    finishHistorySession,
+    documentSaveQueue,
+    objectPersistence,
+    showMessage,
+    t,
     userId: user.id,
-    endpointId: endpoint.id,
-    onLock: () => void lock(false)
+    queueDocument,
+    stopSync,
+    attachmentUrlCache,
+    onLocked,
+    endpoint,
+    credential
   });
 
   useEffect(() => {
@@ -2105,43 +577,28 @@ export function VaultWorkspace({ user, endpoint, credential, serverSessionVerifi
     setOutlineOpen(false);
   };
 
-  const revealActiveDocument = () => {
-    if (!activeDocument) return;
-    const ancestors = new Set<string>();
-    const seen = new Set<string>();
-    let parentId = activeDocument.parentId;
-    while (parentId && !seen.has(parentId)) {
-      seen.add(parentId);
-      ancestors.add(parentId);
-      parentId = documentIndexRef.current.get(parentId)?.parentId ?? null;
-    }
-    setSearch("");
-    setExpanded((current) => new Set([...current, ...ancestors]));
-    setSelectedIds(new Set([activeDocument.objectId]));
-    selectionAnchor.current = activeDocument.objectId;
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      documentTree.current
-        ?.querySelector<HTMLElement>(`[data-object-id="${activeDocument.objectId}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }));
-  };
-
   if (loading) return <main className="loading-shell"><div className="spinner" /><p>{t("app.loadingNotes")}</p></main>;
+
   if (loadFailure) return <main className="loading-shell" role="alert"><p>{loadFailure}</p></main>;
 
   const contextDocument = contextMenu ? documentIndexRef.current.get(contextMenu.objectId) ?? null : null;
+
   const contextDocuments = contextDocument
     ? documents.filter((entry) => selectedIds.has(contextDocument.objectId) ? selectedIds.has(entry.objectId) : entry.objectId === contextDocument.objectId)
     : [];
+
   const layoutStyle = {
     "--tree-width": `${preferences.treeWidth}px`,
     "--outline-width": `${preferences.outlineWidth}px`,
     "--font-adjust": `${preferences.fontSize - DEFAULT_FONT_SIZE}px`
   } as CSSProperties;
+
   const statusLabel = syncStatus.failedLocalObjectIds.size
     ? null
     : visibleSyncStatusText(syncStatus.visible, t);
+
   const statusDetail = syncStatusDetailText(syncStatus, t);
+
   return (
     <div className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${settingsOpen ? "settings-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
       <WorkspaceSidebar

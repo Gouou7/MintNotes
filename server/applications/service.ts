@@ -55,9 +55,11 @@ export function applicationSummary(row: ApplicationRow, now = Date.now()): Appli
 }
 
 export function verifyApplicationSecret(secret: string, hash: string): boolean {
-  const actual = Buffer.from(hashToken(secret), "hex");
-  const expected = Buffer.from(hash, "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  if (!/^[A-Za-z0-9_-]{43}$/.test(hash)) return false;
+  const actual = Buffer.from(hashToken(secret), "base64url");
+  const expected = Buffer.from(hash, "base64url");
+  return expected.length === 32 && expected.toString("base64url") === hash
+    && timingSafeEqual(actual, expected);
 }
 
 export function revokeApplicationConnections(db: AppDatabase, userId: string, now = new Date().toISOString()): void {

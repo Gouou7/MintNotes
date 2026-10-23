@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { mkdtempSync, mkdirSync, cpSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { prepareTyporaWeb, applyStrictPatch } from './prepare-typora-web.mjs';
 const roots = [];
@@ -22,6 +23,19 @@ it('rejects a modified baseline before creating generated code', () => {
   const rootDirectory = fresh(); writeFileSync(resolve(rootDirectory, sourcePath, 'LICENSE'), 'changed');
   expect(() => prepareTyporaWeb({ rootDirectory })).toThrow('Original upstream file changed: LICENSE');
   expect(existsSync(resolve(rootDirectory, '.generated'))).toBe(false);
+});
+it('preserves upstream checksums and strict patches with automatic CRLF checkout enabled', () => {
+  const rootDirectory = fresh();
+  cpSync('.gitattributes', resolve(rootDirectory, '.gitattributes'));
+  const git = (...args) => execFileSync('git', args, { cwd: rootDirectory, stdio: 'pipe' });
+  git('init', '--quiet');
+  git('config', 'core.autocrlf', 'true');
+  git('add', '.');
+  const checkoutDirectory = resolve(rootDirectory, 'checkout');
+  git('checkout-index', '--all', `--prefix=${checkoutDirectory.replaceAll('\\', '/')}/`);
+  expect(readFileSync(resolve(checkoutDirectory, sourcePath, 'LICENSE'), 'utf8')).not.toContain('\r\n');
+  expect(readFileSync(resolve(checkoutDirectory, patchesPath, 'integration/upstream.patch'), 'utf8')).not.toContain('\r\n');
+  expect(prepareTyporaWeb({ rootDirectory: checkoutDirectory }).patches).toBeGreaterThan(10);
 });
 it('fails on a patch context mismatch without fuzzy matching', () => {
   const files = new Map([['src/file.ts', 'a\nb\nc\n']]);

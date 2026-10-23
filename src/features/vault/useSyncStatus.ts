@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import type { Translate } from "../../i18n";
+import { ApiError } from "../../api";
+import { translateError, type Translate } from "../../i18n";
 import { localDb } from "../../storage/database";
 
 export type SaveState = "ready" | "saving" | "local" | "syncing" | "synced" | "offline" | "error";
@@ -8,6 +9,12 @@ export type SyncFailure =
   | { kind: "unverified" }
   | { kind: "unreachable" }
   | { kind: "server"; reason: string };
+
+export function synchronizationFailure(error: unknown, t: Translate): SyncFailure {
+  return error instanceof ApiError
+    ? { kind: "server", reason: translateError(error, t, "notice.syncFailed") }
+    : { kind: "unreachable" };
+}
 
 export interface SyncStatusState {
   phase: SaveState;

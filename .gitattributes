@@ -1,0 +1,5 @@
+# The pinned upstream snapshot uses LF for its checksum manifest.
+src/editor/typora-web/** text eol=lf
+
+# Strict patches and generated additions use LF on every platform.
+src/editor/patches/** text eol=lf

@@ -45,6 +45,19 @@ Windows、macOS、CI 和 Docker 统一使用 `.nvmrc` 记录的完整 Node.js �
 
 各操作系统及 CPU 架构应分别安装依赖，不要复制或同步 `node_modules`。切换 Node.js 版本后，在停止开发服务的情况下重新安装依赖，并确认 `better-sqlite3` 等原生模块与当前运行环境匹配。保留 `pnpm-lock.yaml`，不要通过删除锁文件处理原生模块错误。
 
+仓库通过 `.gitattributes` 固定编辑器上游快照和补丁文件使用 LF 换行。若旧的 Windows 检出目录报 `Original upstream file changed`，先用 `git status --short -- src/editor/typora-web src/editor/patches` 确认这两个目录没有未提交修改，再在 PowerShell 中刷新检出文件：
+
+```powershell
+git -c core.quotepath=false ls-files -- src/editor/typora-web src/editor/patches | ForEach-Object {
+  (Get-Item -LiteralPath $_).LastWriteTime = Get-Date
+  git checkout-index --force -- $_
+}
+git add --renormalize -- src/editor/typora-web src/editor/patches
+pnpm prepare:editor
+```
+
+不要跳过校验或修改上游校验清单。
+
 仓库使用 `pnpm-lock.yaml` 锁定依赖。可通过 Corepack 启用项目指定的 pnpm 版本，不要改用其他包管理器安装依赖。
 
 1. 检出准确的稳定版本标签，在项目根目录安装依赖并构建：
