@@ -48,7 +48,7 @@ docker compose ps
 
 ## 本地开发
 
-需要 Node.js 22+，以及 `package.json#packageManager` 指定的 pnpm 版本（当前为 11.9.0）。
+需要 [`.nvmrc`](.nvmrc) 指定的 Node.js 24 LTS，以及 `package.json#packageManager` 指定的 pnpm 版本（当前为 11.9.0）。Windows、macOS 和 CI 使用同一 Node.js 补丁版本。环境切换与依赖安装要求见[部署指南](docs/deployment.md#pnpm-部署)。
 
 ```bash
 pnpm install

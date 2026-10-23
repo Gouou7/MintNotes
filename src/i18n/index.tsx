@@ -10,34 +10,34 @@ const LANGUAGE_STORAGE_KEY = "webmd-notes-language";
 
 const messages = {
   "applications.title": {"en": "Application connections", "zh-CN": "应用连接", "zh-TW": "應用連線"},
-  "applications.help": {"en": "Connect trusted applications with separate keys. Locked notes are read-only. Offline copies cannot be recalled by revocation.", "zh-CN": "使用独立密钥连接受信任的应用。锁定笔记只读；撤销无法收回离线副本。", "zh-TW": "使用獨立金鑰連線受信任的應用。鎖定筆記唯讀；撤銷無法收回離線副本。"},
+  "applications.help": {"en": "Use separate keys to connect trusted applications. Locked notes are read-only. Revocation cannot remove existing offline copies.", "zh-CN": "使用独立密钥连接可信应用。锁定笔记为只读。撤销连接无法删除已有离线副本。", "zh-TW": "使用獨立金鑰連線可信任的應用程式。鎖定筆記為唯讀。撤銷連線無法刪除既有離線副本。"},
   "applications.add": {"en": "Add application", "zh-CN": "添加应用", "zh-TW": "新增應用"},
   "applications.refresh": {"en": "Refresh", "zh-CN": "刷新", "zh-TW": "重新整理"},
   "applications.revokeAll": {"en": "Revoke all applications", "zh-CN": "撤销所有应用", "zh-TW": "撤銷所有應用"},
-  "applications.failed": {"en": "Unable to complete the request. Check your connection and retry.", "zh-CN": "操作未完成，请检查网络并重试。", "zh-TW": "操作未完成，請檢查網路並重試。"},
+  "applications.failed": {"en": "Unable to complete the request. Please retry.", "zh-CN": "操作失败。请重试。", "zh-TW": "操作失敗。請重試。"},
   "applications.name": {"en": "Application name", "zh-CN": "应用名称", "zh-TW": "應用名稱"},
   "applications.permission": {"en": "Permission", "zh-CN": "权限", "zh-TW": "權限"},
   "applications.readWrite": {"en": "Read and write", "zh-CN": "读写", "zh-TW": "讀寫"},
   "applications.readOnly": {"en": "Read only", "zh-CN": "只读", "zh-TW": "唯讀"},
-  "applications.idleExpiry": {"en": "Expire after inactivity", "zh-CN": "不活跃到期", "zh-TW": "不活躍到期"},
+  "applications.idleExpiry": {"en": "Inactivity timeout", "zh-CN": "闲置期限", "zh-TW": "閒置期限"},
   "applications.days": {"en": "{count} days", "zh-CN": "{count} 天", "zh-TW": "{count} 天"},
   "applications.never": {"en": "Never", "zh-CN": "永不", "zh-TW": "永不"},
   "applications.fixedExpiry": {"en": "Fixed expiry (optional)", "zh-CN": "固定到期时间（可选）", "zh-TW": "固定到期時間（選填）"},
-  "applications.policyHelp": {"en": "Inactivity is measured by online data access. Changing permissions requires a new connection. Writes require an online connection.", "zh-CN": "不活跃时间按在线访问数据计算。改变权限需要重新创建连接；写入必须联网。", "zh-TW": "不活躍時間按線上存取資料計算。變更權限需重新建立連線；寫入必須連網。"},
+  "applications.policyHelp": {"en": "Inactivity is measured from the last online data access. Permission changes require a new connection. Writing requires an online connection.", "zh-CN": "闲置时间从最近一次在线数据访问起计算。更改权限需新建连接。写入数据需联网。", "zh-TW": "閒置時間自最近一次線上資料存取起計算。變更權限需建立新連線。寫入資料需連網。"},
   "applications.retry": {"en": "Retry creation", "zh-CN": "重试创建", "zh-TW": "重試建立"},
   "applications.generate": {"en": "Generate application key", "zh-CN": "生成应用密钥", "zh-TW": "產生應用金鑰"},
   "applications.newKey": {"en": "New application key", "zh-CN": "新应用密钥", "zh-TW": "新應用金鑰"},
-  "applications.once": {"en": "This key is shown only once. Save it in the application before closing. If lost, create a new connection.", "zh-CN": "密钥只显示这一次。关闭前请将其保存到应用；丢失后需要重新创建连接。", "zh-TW": "金鑰只顯示這一次。關閉前請將其儲存至應用；遺失後需重新建立連線。"},
+  "applications.once": {"en": "This key is shown only once. Save it before closing. If lost, create a new connection.", "zh-CN": "密钥仅显示一次。关闭前请保存至应用。丢失后需新建连接。", "zh-TW": "金鑰僅顯示一次。關閉前請儲存至應用程式。遺失後需建立新連線。"},
   "applications.serverUrl": {"en": "Server address", "zh-CN": "服务地址", "zh-TW": "服務位址"},
   "applications.key": {"en": "Application key", "zh-CN": "应用密钥", "zh-TW": "應用金鑰"},
   "applications.copyUrl": {"en": "Copy address", "zh-CN": "复制地址", "zh-TW": "複製位址"},
   "applications.copyKey": {"en": "Copy key", "zh-CN": "复制密钥", "zh-TW": "複製金鑰"},
   "applications.savedKey": {"en": "Saved, close", "zh-CN": "已保存，关闭", "zh-TW": "已儲存，關閉"},
   "applications.copied": {"en": "Copied", "zh-CN": "已复制", "zh-TW": "已複製"},
-  "applications.copyFailed": {"en": "Could not copy. Select the value and copy it manually.", "zh-CN": "无法复制，请选中内容手动复制。", "zh-TW": "無法複製，請選取內容手動複製。"},
+  "applications.copyFailed": {"en": "Unable to copy. Select the content and copy it manually.", "zh-CN": "复制失败。请选中内容后手动复制。", "zh-TW": "複製失敗。請選取內容後手動複製。"},
   "applications.revoke": {"en": "Revoke", "zh-CN": "撤销", "zh-TW": "撤銷"},
-  "applications.confirmAll": {"en": "Revoke every application connection? Applications will lose online access. Existing offline copies cannot be recalled.", "zh-CN": "撤销所有应用连接？应用将失去在线访问权限，已有离线副本无法收回。", "zh-TW": "撤銷所有應用連線？應用將失去線上存取權限，既有離線副本無法收回。"},
-  "applications.confirmOne": {"en": "Revoke this application connection? It will lose online access. Existing offline copies cannot be recalled.", "zh-CN": "撤销此应用连接？它将失去在线访问权限，已有离线副本无法收回。", "zh-TW": "撤銷此應用連線？它將失去線上存取權限，既有離線副本無法收回。"},
+  "applications.confirmAll": {"en": "Revoke all application connections? Online access will end. Existing offline copies will remain.", "zh-CN": "撤销所有应用连接？在线访问权限将失效。已有离线副本仍会保留。", "zh-TW": "撤銷所有應用程式連線？線上存取權限將失效。既有離線副本仍會保留。"},
+  "applications.confirmOne": {"en": "Revoke this application connection? Online access will end. Existing offline copies will remain.", "zh-CN": "撤销此应用连接？在线访问权限将失效。已有离线副本仍会保留。", "zh-TW": "撤銷此應用程式連線？線上存取權限將失效。既有離線副本仍會保留。"},
   "applications.empty": {"en": "No application connections", "zh-CN": "尚无应用连接", "zh-TW": "尚無應用連線"},
   "applications.active": {"en": "Active", "zh-CN": "有效", "zh-TW": "有效"},
   "applications.expired": {"en": "Expired", "zh-CN": "已到期", "zh-TW": "已到期"},
@@ -45,7 +45,7 @@ const messages = {
   "applications.created": {"en": "Created: {date}", "zh-CN": "创建：{date}", "zh-TW": "建立：{date}"},
   "applications.lastUsed": {"en": "Last used: {date}", "zh-CN": "最近使用：{date}", "zh-TW": "最近使用：{date}"},
   "applications.unused": {"en": "Not yet used", "zh-CN": "尚未使用", "zh-TW": "尚未使用"},
-  "applications.idlePolicy": {"en": "Inactivity expiry: {value}", "zh-CN": "不活跃到期：{value}", "zh-TW": "不活躍到期：{value}"},
+  "applications.idlePolicy": {"en": "Inactivity timeout: {value}", "zh-CN": "闲置期限：{value}", "zh-TW": "閒置期限：{value}"},
   "applications.expires": {"en": "Valid until: {date}", "zh-CN": "有效期限：{date}", "zh-TW": "有效期限：{date}"},
   "applications.edit": {"en": "Edit", "zh-CN": "编辑", "zh-TW": "編輯"},
   "editor.backToFootnote": { en: "Back to footnote reference", "zh-CN": "返回脚注引用", "zh-TW": "返回註腳引用" },
@@ -84,23 +84,23 @@ const messages = {
   "language.selector": { en: "Interface language", "zh-CN": "界面语言", "zh-TW": "介面語言" },
   "language.system": { en: "Follow browser", "zh-CN": "跟随浏览器", "zh-TW": "跟隨瀏覽器" },
   "pwa.update.confirm": {
-    en: "A new version is available. Confirm that your notes are saved locally, then update.",
-    "zh-CN": "应用有新版本。请确认笔记已保存到本地，然后更新。",
-    "zh-TW": "應用程式有新版本。請確認筆記已儲存在本機，然後更新。"
+    en: "A new version is available. Ensure your notes are saved locally before updating.",
+    "zh-CN": "新版本可用。更新前请确认笔记已保存到本地。",
+    "zh-TW": "新版本可用。更新前請確認筆記已儲存至本機。"
   },
 
   "auth.recovery.title": { en: "Save your recovery key", "zh-CN": "保存恢复密钥", "zh-TW": "儲存復原金鑰" },
   "auth.recovery.description": {
-    en: "The server cannot recover your notes for you. Store this recovery key in a password manager or another secure offline location.",
-    "zh-CN": "服务器无法替你恢复笔记。请把下面的恢复密钥保存在密码管理器或离线安全位置。",
-    "zh-TW": "伺服器無法替你復原筆記。請將下方的復原金鑰儲存在密碼管理器或離線安全位置。"
+    en: "The server cannot recover your notes. Save this recovery key in a password manager or a secure offline location.",
+    "zh-CN": "服务器无法恢复笔记。请将恢复密钥保存至密码管理器或安全的离线位置。",
+    "zh-TW": "伺服器無法復原筆記。請將復原金鑰儲存至密碼管理器或安全的離線位置。"
   },
   "auth.recovery.copy": { en: "Copy recovery key", "zh-CN": "复制恢复密钥", "zh-TW": "複製復原金鑰" },
   "auth.recovery.copied": { en: "Recovery key copied", "zh-CN": "恢复密钥已复制", "zh-TW": "復原金鑰已複製" },
   "auth.recovery.copyFailed": {
-    en: "The recovery key could not be copied. Select it above and copy it manually.",
-    "zh-CN": "无法复制恢复密钥。请选中上方密钥并手动复制。",
-    "zh-TW": "無法複製復原金鑰。請選取上方金鑰並手動複製。"
+    en: "Unable to copy the recovery key. Select it and copy it manually.",
+    "zh-CN": "恢复密钥复制失败。请选中密钥后手动复制。",
+    "zh-TW": "復原金鑰複製失敗。請選取金鑰後手動複製。"
   },
   "auth.recovery.download": { en: "Download recovery key", "zh-CN": "下载恢复密钥", "zh-TW": "下載復原金鑰" },
   "auth.recovery.confirm": {
@@ -108,24 +108,24 @@ const messages = {
     "zh-CN": "我确认已将恢复密钥保存在安全位置。",
     "zh-TW": "我確認已將復原金鑰儲存在安全位置。"
   },
-  "auth.recovery.saved": { en: "I have stored it safely", "zh-CN": "我已经安全保存", "zh-TW": "我已安全儲存" },
+  "auth.recovery.saved": { en: "Recovery key saved", "zh-CN": "已保存恢复密钥", "zh-TW": "已儲存復原金鑰" },
   "auth.register.title": { en: "Create encrypted account", "zh-CN": "创建加密账户", "zh-TW": "建立加密帳戶" },
   "auth.activate.title": { en: "Register with activation code", "zh-CN": "使用激活码注册", "zh-TW": "使用啟用碼註冊" },
   "auth.recover.title": { en: "Recover account", "zh-CN": "找回密码", "zh-TW": "找回密碼" },
   "auth.bootstrap.guidance": {
-    en: "This is the first account on the server. It will become the administrator.",
-    "zh-CN": "这是服务器上的首个账户，创建后将成为管理员。",
-    "zh-TW": "這是伺服器上的第一個帳戶，建立後將成為管理員。"
+    en: "The first account on this server becomes the administrator.",
+    "zh-CN": "服务器的首个账户将成为管理员。",
+    "zh-TW": "伺服器的首個帳戶將成為管理員。"
   },
   "auth.registration.closed": {
-    en: "Public registration is closed. Ask an administrator for an activation code.",
-    "zh-CN": "已关闭公开注册，请向管理员申请注册激活码。",
-    "zh-TW": "公開註冊已關閉，請向管理員申請註冊啟用碼。"
+    en: "Public registration is closed. Contact an administrator for an activation code.",
+    "zh-CN": "公开注册已关闭。请向管理员申请激活码。",
+    "zh-TW": "公開註冊已關閉。請向管理員申請啟用碼。"
   },
   "auth.recover.guidance": {
-    en: "Use your recovery key to reset the master password. If the recovery key is also lost, the data cannot be recovered.",
-    "zh-CN": "可使用恢复密钥重置主密码，如果恢复密钥也丢失，则数据无法再找回。",
-    "zh-TW": "可使用復原金鑰重設主密碼；若復原金鑰也遺失，資料將無法復原。"
+    en: "Use the recovery key to reset your master password. If both are lost, your data cannot be recovered.",
+    "zh-CN": "使用恢复密钥重置主密码。主密码与恢复密钥均丢失时将无法恢复数据。",
+    "zh-TW": "使用復原金鑰重設主密碼。主密碼與復原金鑰均遺失時將無法復原資料。"
   },
   "auth.username": { en: "Username", "zh-CN": "用户名", "zh-TW": "使用者名稱" },
   "auth.displayName": { en: "Display name", "zh-CN": "显示名称", "zh-TW": "顯示名稱" },
@@ -147,14 +147,14 @@ const messages = {
   "auth.forgotPassword": { en: "Forgot password", "zh-CN": "忘记密码", "zh-TW": "忘記密碼" },
   "auth.normalRegistration": { en: "Standard registration", "zh-CN": "普通注册", "zh-TW": "一般註冊" },
   "auth.configError": {
-    en: "Registration settings could not be loaded. Select “Register” to retry.",
-    "zh-CN": "无法获取注册配置，点击“注册”重试。",
-    "zh-TW": "無法取得註冊設定，點選「註冊」重試。"
+    en: "Unable to load registration settings. Select Register to retry.",
+    "zh-CN": "注册配置加载失败。请选择“注册”重试。",
+    "zh-TW": "註冊設定載入失敗。請選擇「註冊」重試。"
   },
   "auth.offlineUnavailable": {
-    en: "Offline access is available only on a remembered device that has completed one online verification with this version.",
-    "zh-CN": "离线访问仅适用于已记住、且已使用当前版本完成过一次在线验证的设备。",
-    "zh-TW": "離線存取僅適用於已記住、且已使用目前版本完成過一次線上驗證的裝置。"
+    en: "Offline access requires a remembered device previously verified online with this version.",
+    "zh-CN": "离线访问需使用已记住的设备。该设备须已通过当前版本的在线验证。",
+    "zh-TW": "離線存取需使用已記住的裝置。該裝置須已通過目前版本的線上驗證。"
   },
   "auth.passwordMin": {
     en: "The master password must contain at least 10 characters",
@@ -172,13 +172,13 @@ const messages = {
     "zh-CN": "两次输入的新密码不一致",
     "zh-TW": "兩次輸入的新密碼不一致"
   },
-  "auth.passwordReset": { en: "Password reset. Log in again.", "zh-CN": "密码已重设，请重新登录", "zh-TW": "密碼已重設，請重新登入" },
+  "auth.passwordReset": { en: "Master password reset. Please log in again.", "zh-CN": "主密码已重置。请重新登录。", "zh-TW": "主密碼已重設。請重新登入。" },
   "auth.operationFailed": { en: "The operation failed", "zh-CN": "操作失败", "zh-TW": "操作失敗" },
 
   "lock.restoring": {
-    en: "Restoring this device's encrypted vault…",
-    "zh-CN": "正在恢复本设备的加密保险箱…",
-    "zh-TW": "正在復原此裝置的加密保險箱…"
+    en: "Restoring device access…",
+    "zh-CN": "正在恢复设备访问…",
+    "zh-TW": "正在復原裝置存取…"
   },
   "lock.title": { en: "Notes locked", "zh-CN": "笔记已锁定", "zh-TW": "筆記已鎖定" },
   "lock.offline": {
@@ -213,9 +213,9 @@ const messages = {
   "settings.admin": { en: "Administrator settings", "zh-CN": "管理员设置", "zh-TW": "管理員設定" },
   "settings.logoutTitle": { en: "Log out of this device?", "zh-CN": "确认从当前设备登出？", "zh-TW": "確認從目前裝置登出？" },
   "settings.logoutWarning": {
-    en: "Logging out deletes all local data for this account from this browser, including unsynchronized notes, attachments, and changes. Unsynchronized data cannot be recovered. Data already synchronized to the server is not deleted.",
-    "zh-CN": "登出会删除此浏览器中当前账户的全部本地数据，包括尚未同步的笔记、附件和更改；未同步数据将无法恢复。已同步到服务器的数据不会被删除。",
-    "zh-TW": "登出會刪除此瀏覽器中目前帳戶的全部本機資料，包括尚未同步的筆記、附件和變更；未同步資料將無法復原。已同步到伺服器的資料不會被刪除。"
+    en: "Logging out deletes all local data for this account from this browser, including notes, attachments, and changes. Unsynced data cannot be recovered. Data synced to the server will remain.",
+    "zh-CN": "登出将删除此浏览器中当前账户的全部本地数据（含笔记、附件和更改）。未同步数据将无法恢复。已同步至服务器的数据不受影响。",
+    "zh-TW": "登出將刪除此瀏覽器中目前帳戶的全部本機資料（含筆記、附件和變更）。未同步資料將無法復原。已同步至伺服器的資料不受影響。"
   },
   "settings.profile": { en: "Profile", "zh-CN": "个人资料", "zh-TW": "個人資料" },
   "settings.editProfile": { en: "Edit profile", "zh-CN": "编辑资料", "zh-TW": "編輯資料" },
@@ -224,23 +224,23 @@ const messages = {
   "settings.changeUsername": { en: "Change username", "zh-CN": "修改用户名", "zh-TW": "變更使用者名稱" },
   "settings.newUsername": { en: "New username", "zh-CN": "新用户名", "zh-TW": "新使用者名稱" },
   "settings.changeUsernameHelp": {
-    en: "Change the login name for this account. Other devices will need to log in again with the new username.",
-    "zh-CN": "修改此账户的登录名称。修改后，其他设备需要使用新用户名重新登录。",
-    "zh-TW": "變更此帳戶的登入名稱。變更後，其他裝置需要使用新使用者名稱重新登入。"
+    en: "Changing the username requires other devices to log in again with the new username.",
+    "zh-CN": "修改用户名后，其他设备需使用新用户名重新登录。",
+    "zh-TW": "變更使用者名稱後，其他裝置需使用新使用者名稱重新登入。"
   },
   "settings.verifyUsernameChange": { en: "Verify username change", "zh-CN": "验证用户名修改", "zh-TW": "驗證使用者名稱變更" },
   "settings.usernameVerificationHelp": {
-    en: "Enter your master password and existing recovery key. If the recovery key is unavailable, reset it and continue.",
-    "zh-CN": "请输入当前主密码和现有恢复密钥。如果找不到恢复密钥，可以重置后继续。",
-    "zh-TW": "請輸入目前主密碼和現有復原金鑰。如果找不到復原金鑰，可以重設後繼續。"
+    en: "Enter your current master password and recovery key. If the key is unavailable, reset it to continue.",
+    "zh-CN": "请输入当前主密码和恢复密钥。恢复密钥不可用时可重置后继续。",
+    "zh-TW": "請輸入目前主密碼和復原金鑰。復原金鑰無法使用時可重設後繼續。"
   },
   "settings.resetRecoveryAndContinue": { en: "Reset recovery key and continue", "zh-CN": "重置恢复密钥并继续", "zh-TW": "重設復原金鑰並繼續" },
   "settings.confirmUsernameChange": { en: "Confirm change", "zh-CN": "确认修改", "zh-TW": "確認變更" },
   "settings.saveReplacementRecovery": { en: "Save the new recovery key", "zh-CN": "保存新的恢复密钥", "zh-TW": "儲存新的復原金鑰" },
   "settings.replacementRecoveryHelp": {
-    en: "Save this replacement key before finishing. The old recovery key becomes invalid only after the username change succeeds.",
-    "zh-CN": "完成修改前请先保存这个新密钥。只有用户名修改成功后，旧恢复密钥才会失效。",
-    "zh-TW": "完成變更前請先儲存這個新金鑰。只有使用者名稱變更成功後，舊復原金鑰才會失效。"
+    en: "Save the new recovery key before continuing. The old key becomes invalid after the username change succeeds.",
+    "zh-CN": "继续前请保存新恢复密钥。用户名修改成功后旧密钥才会失效。",
+    "zh-TW": "繼續前請儲存新復原金鑰。使用者名稱變更成功後舊金鑰才會失效。"
   },
   "settings.finishUsernameChange": { en: "Finish username change", "zh-CN": "完成用户名修改", "zh-TW": "完成使用者名稱變更" },
   "settings.avatar": { en: "Avatar", "zh-CN": "头像", "zh-TW": "頭像" },
@@ -259,9 +259,9 @@ const messages = {
   "settings.editor": { en: "Editor", "zh-CN": "编辑器", "zh-TW": "編輯器" },
   "settings.wrapCodeBlocks": { en: "Wrap code blocks", "zh-CN": "代码块自动换行", "zh-TW": "程式碼區塊自動換行" },
   "settings.trashHelp": {
-    en: "Items in trash are automatically deleted after the selected retention period.",
-    "zh-CN": "回收站的内容会在到达设置的自动删除时间后自动删除。",
-    "zh-TW": "垃圾桶中的內容會在到達設定的自動刪除時間後自動刪除。"
+    en: "Trash items are permanently deleted when the retention period expires.",
+    "zh-CN": "回收站内容将在保留期满后永久删除。",
+    "zh-TW": "垃圾桶內容將在保留期限屆滿後永久刪除。"
   },
   "settings.autoDelete": { en: "Automatically delete after", "zh-CN": "自动删除时间", "zh-TW": "自動刪除時間" },
   "settings.days": { en: "{count} days", "zh-CN": "{count} 天", "zh-TW": "{count} 天" },
@@ -301,24 +301,24 @@ const messages = {
   "settings.devicePin": { en: "Device PIN", "zh-CN": "本机 PIN", "zh-TW": "本機 PIN" },
   "settings.setPin": { en: "Set PIN", "zh-CN": "设置 PIN", "zh-TW": "設定 PIN" },
   "settings.pinHelp": {
-    en: "After you set a PIN, it will be required each time the app starts. The PIN applies only to this device.",
-    "zh-CN": "设置 PIN 之后，每次启动将要求输入 PIN；PIN 只应用于当前设备。",
-    "zh-TW": "設定 PIN 之後，每次啟動將要求輸入 PIN；PIN 只套用於目前裝置。"
+    en: "After setup, the PIN is required at app startup. It applies only to this device.",
+    "zh-CN": "设置后每次启动应用均需输入 PIN。PIN 仅适用于当前设备。",
+    "zh-TW": "設定後每次啟動應用程式均需輸入 PIN。PIN 僅適用於目前裝置。"
   },
   "settings.pinConfiguredHelp": {
-    en: "A PIN is configured for this device. Change or remove it only when needed.",
-    "zh-CN": "当前设备已设置 PIN；需要时可更改或移除。",
-    "zh-TW": "目前裝置已設定 PIN；需要時可變更或移除。"
+    en: "A PIN is set for this device. You can change or remove it.",
+    "zh-CN": "当前设备已设置 PIN。可更改或移除。",
+    "zh-TW": "目前裝置已設定 PIN。可變更或移除。"
   },
   "settings.pinVerificationHelp": {
-    en: "Enter the current master password and the new PIN to continue.",
-    "zh-CN": "请输入当前主密码和新 PIN 后继续。",
-    "zh-TW": "請輸入目前主密碼和新 PIN 後繼續。"
+    en: "Enter your current master password and new PIN.",
+    "zh-CN": "请输入当前主密码和新 PIN。",
+    "zh-TW": "請輸入目前主密碼和新 PIN。"
   },
   "settings.removePinHelp": {
-    en: "Enter the current master password to remove this device's PIN. Automatic locking will also be disabled.",
-    "zh-CN": "请输入当前主密码以移除本机 PIN；自动锁定也会同时关闭。",
-    "zh-TW": "請輸入目前主密碼以移除本機 PIN；自動鎖定也會同時關閉。"
+    en: "Enter your current master password to remove this device's PIN. This also disables automatic locking.",
+    "zh-CN": "输入当前主密码以移除本机 PIN。移除后将关闭自动锁定。",
+    "zh-TW": "輸入目前主密碼以移除本機 PIN。移除後將關閉自動鎖定。"
   },
   "settings.newPin": { en: "New PIN", "zh-CN": "新 PIN", "zh-TW": "新 PIN" },
   "settings.pinMin": { en: "At least 4 characters", "zh-CN": "至少 4 个字符", "zh-TW": "至少 4 個字元" },
@@ -326,9 +326,9 @@ const messages = {
   "settings.removePin": { en: "Remove PIN", "zh-CN": "移除 PIN", "zh-TW": "移除 PIN" },
   "settings.autoLock": { en: "Automatic locking", "zh-CN": "自动锁定", "zh-TW": "自動鎖定" },
   "settings.autoLockHelp": {
-    en: "When enabled, the app locks after a period of inactivity. Unlock it with this device's PIN or the master password.",
-    "zh-CN": "开启后，长时间未操作时会自动锁定应用。可使用当前设备的 PIN 快速解锁，也可以使用主密码。",
-    "zh-TW": "開啟後，長時間未操作時會自動鎖定應用程式。可使用目前裝置的 PIN 快速解鎖，或使用主密碼。"
+    en: "The app locks after the selected period of inactivity. Unlock with the device PIN or master password.",
+    "zh-CN": "应用将在设定的无操作时长后自动锁定。可使用本机 PIN 或主密码解锁。",
+    "zh-TW": "應用程式將在設定的閒置時間後自動鎖定。可使用本機 PIN 或主密碼解鎖。"
   },
   "settings.autoLockAfter": { en: "Lock after inactivity", "zh-CN": "无操作后自动锁定", "zh-TW": "閒置後自動鎖定" },
   "settings.offDefault": { en: "Off (default)", "zh-CN": "关闭（默认）", "zh-TW": "關閉（預設）" },
@@ -336,14 +336,14 @@ const messages = {
   "settings.minute": { en: "1 minute", "zh-CN": "1 分钟", "zh-TW": "1 分鐘" },
   "settings.loginDevices": { en: "Login devices", "zh-CN": "登录设备", "zh-TW": "登入裝置" },
   "settings.loginDevicesHelp": {
-    en: "Review signed-in devices, sign out devices you no longer use, and remove inactive records. A new device must be signed in for 24 hours before it can sign out other active devices.",
-    "zh-CN": "查看已登录的设备、登出不再使用的设备，并可移除失效记录。为保护账户安全，新设备登录 24 小时后才能登出其他有效设备。",
-    "zh-TW": "查看已登入的裝置、登出不再使用的裝置，並可移除失效記錄。為保護帳戶安全，新裝置登入 24 小時後才能登出其他有效裝置。"
+    en: "Manage signed-in devices and remove inactive records. New devices must remain signed in for 24 hours before signing out other active devices.",
+    "zh-CN": "管理登录设备并移除失效记录。新设备登录满 24 小时后才能登出其他有效设备。",
+    "zh-TW": "管理登入裝置並移除失效記錄。新裝置登入滿 24 小時後才能登出其他有效裝置。"
   },
   "settings.inactiveDeviceRetention": {
-    en: "Signed-out and expired device records are automatically removed after {count} days. You can remove them immediately below.",
-    "zh-CN": "已登出和已过期的设备记录会在 {count} 天后自动删除，也可在下方立即移除。",
-    "zh-TW": "已登出和已過期的裝置記錄會在 {count} 天後自動刪除，也可在下方立即移除。"
+    en: "Signed-out and expired device records are removed after {count} days. You can also remove them manually.",
+    "zh-CN": "已登出和已过期的设备记录将在 {count} 天后自动移除。也可手动移除。",
+    "zh-TW": "已登出和已過期的裝置記錄將在 {count} 天後自動移除。也可手動移除。"
   },
   "settings.loadingDevices": { en: "Loading login devices…", "zh-CN": "正在加载登录设备…", "zh-TW": "正在載入登入裝置…" },
   "settings.revokeAfter": { en: "Other devices can be signed out after {date}.", "zh-CN": "可在 {date} 后登出其他设备。", "zh-TW": "可在 {date} 後登出其他裝置。" },
@@ -361,28 +361,28 @@ const messages = {
   "settings.signOut": { en: "Sign out", "zh-CN": "登出", "zh-TW": "登出" },
   "settings.accountCredentials": { en: "Account credentials", "zh-CN": "账户凭据", "zh-TW": "帳戶憑證" },
   "settings.accountCredentialsHelp": {
-    en: "Change the master password or replace the recovery key only when needed. Verification fields open after you choose an action.",
-    "zh-CN": "需要时可修改主密码或重置恢复密钥；选择操作后才会显示验证输入框。",
-    "zh-TW": "需要時可變更主密碼或重設復原金鑰；選擇操作後才會顯示驗證輸入框。"
+    en: "Manage your master password and recovery key. Select an action to verify your identity.",
+    "zh-CN": "管理主密码和恢复密钥。选择操作后需验证身份。",
+    "zh-TW": "管理主密碼和復原金鑰。選擇操作後需驗證身分。"
   },
   "settings.changePassword": { en: "Change master password", "zh-CN": "修改主密码", "zh-TW": "變更主密碼" },
   "settings.changePasswordHelp": {
-    en: "After changing the master password, other devices must log in again. The recovery key is unaffected.",
-    "zh-CN": "修改主密码后，其他设备需要重新登录；恢复密钥不受影响。",
-    "zh-TW": "變更主密碼後，其他裝置需要重新登入；復原金鑰不受影響。"
+    en: "Changing the master password requires other devices to log in again. The recovery key remains valid.",
+    "zh-CN": "修改主密码后其他设备需重新登录。恢复密钥仍然有效。",
+    "zh-TW": "變更主密碼後其他裝置需重新登入。復原金鑰仍然有效。"
   },
   "settings.recoveryHelp": {
-    en: "The recovery key can reset a forgotten master password. Replacing it immediately invalidates the old key, so save the new key at once.",
-    "zh-CN": "恢复密钥可在忘记主密码时重置密码。重置后旧恢复密钥将立即失效，请马上保存新密钥。",
-    "zh-TW": "復原金鑰可在忘記主密碼時重設密碼。重設後舊復原金鑰將立即失效，請立即儲存新金鑰。"
+    en: "Use the recovery key to reset a forgotten master password. Resetting the key immediately invalidates the old key. Save the new key promptly.",
+    "zh-CN": "恢复密钥可用于重置遗忘的主密码。重置密钥后旧密钥将立即失效。请及时保存新密钥。",
+    "zh-TW": "復原金鑰可用於重設遺忘的主密碼。重設金鑰後舊金鑰將立即失效。請及時儲存新金鑰。"
   },
   "settings.resetRecovery": { en: "Reset recovery key", "zh-CN": "重置恢复密钥", "zh-TW": "重設復原金鑰" },
   "settings.recoveryShownOnce": { en: "The new recovery key is shown only once", "zh-CN": "新的恢复密钥仅在本次显示", "zh-TW": "新的復原金鑰僅在本次顯示" },
   "settings.savedRecovery": { en: "I have saved it", "zh-CN": "我已保存", "zh-TW": "我已儲存" },
   "settings.portableHelp": {
-    en: "Markdown ZIP files contain readable plaintext. Store them in a trusted location. ZIP exports retain folders, empty directories, and attachments.",
-    "zh-CN": "Markdown ZIP 是可读的明文，请保存到可信位置。ZIP 会保留文件夹、空目录和附件。",
-    "zh-TW": "Markdown ZIP 是可讀的明文，請儲存到可信任的位置。ZIP 會保留資料夾、空目錄和附件。"
+    en: "Markdown ZIP exports contain plaintext. Save them in a trusted location. Folder structure, empty folders, and attachments are preserved.",
+    "zh-CN": "Markdown ZIP 导出文件包含明文。请保存至可信位置。导出将保留目录结构、空文件夹和附件。",
+    "zh-TW": "Markdown ZIP 匯出檔案包含明文。請儲存至可信任的位置。匯出將保留目錄結構、空資料夾和附件。"
   },
   "settings.import": { en: "Import Markdown / ZIP", "zh-CN": "导入 Markdown / ZIP", "zh-TW": "匯入 Markdown / ZIP" },
   "settings.export": { en: "Export complete ZIP", "zh-CN": "导出完整 ZIP", "zh-TW": "匯出完整 ZIP" },
@@ -393,9 +393,9 @@ const messages = {
   },
   "settings.version": { en: "Version", "zh-CN": "版本", "zh-TW": "版本" },
   "settings.aboutDescription": {
-    en: "Mint Notes is a lightweight, self-hosted Markdown notes app with multi-user support, offline PWA editing, and cross-device sync.",
-    "zh-CN": "Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户、PWA 离线编辑和跨设备同步。",
-    "zh-TW": "Mint Notes 是一款自託管的輕量 Markdown 筆記應用程式，支援多使用者、PWA 離線編輯和跨裝置同步。"
+    en: "Mint Notes is a lightweight, self-hosted Markdown notes app. It supports multiple users, offline PWA editing, and cross-device sync.",
+    "zh-CN": "Mint Notes 是一款轻量的自托管 Markdown 笔记应用。支持多用户、PWA 离线编辑和跨设备同步。",
+    "zh-TW": "Mint Notes 是一款輕量的自託管 Markdown 筆記應用程式。支援多使用者、PWA 離線編輯和跨裝置同步。"
   },
   "settings.acknowledgements": { en: "Acknowledgements", "zh-CN": "致谢", "zh-TW": "致謝" },
   "settings.editorCoreOrigin": { en: "Upstream project for the editor core", "zh-CN": "编辑器核心的上游项目", "zh-TW": "編輯器核心的上游專案" },
@@ -403,39 +403,39 @@ const messages = {
   "settings.diagramRendering": { en: "Used to render diagrams", "zh-CN": "用于渲染图表", "zh-TW": "用於算繪圖表" },
   "settings.iconLibrary": { en: "Used for interface icons", "zh-CN": "用于界面图标", "zh-TW": "用於介面圖示" },
 
-  "notice.loadDevicesFailed": { en: "Unable to load device sessions", "zh-CN": "无法加载设备会话", "zh-TW": "無法載入裝置工作階段" },
+  "notice.loadDevicesFailed": { en: "Unable to load login devices", "zh-CN": "无法加载登录设备", "zh-TW": "無法載入登入裝置" },
   "notice.loadTrashRetentionFailed": { en: "Unable to load trash retention settings", "zh-CN": "无法加载回收站保留设置", "zh-TW": "無法載入垃圾桶保留設定" },
   "notice.trashForever": { en: "Trash items will be kept forever", "zh-CN": "回收站内容将永久保留", "zh-TW": "垃圾桶內容將永久保留" },
   "notice.trashDeleteAfter": { en: "Trash items will be automatically deleted after {count} days", "zh-CN": "回收站内容将在 {count} 天后自动删除", "zh-TW": "垃圾桶內容將在 {count} 天後自動刪除" },
   "notice.settingRestored": { en: "{message}. The previous setting was restored.", "zh-CN": "{message}，已恢复原设置", "zh-TW": "{message}，已復原原設定" },
-  "notice.saveTrashFailed": { en: "Unable to save trash settings. The previous setting was restored.", "zh-CN": "无法保存回收站设置，已恢复原设置", "zh-TW": "無法儲存垃圾桶設定，已復原原設定" },
+  "notice.saveTrashFailed": { en: "Unable to save trash settings. Previous settings restored.", "zh-CN": "回收站设置保存失败。已恢复原设置。", "zh-TW": "垃圾桶設定儲存失敗。已復原原設定。" },
   "notice.displayNameUpdated": { en: "Name updated", "zh-CN": "名称已更新", "zh-TW": "名稱已更新" },
   "notice.displayNameFailed": { en: "Unable to update name", "zh-CN": "无法更新名称", "zh-TW": "無法更新名稱" },
-  "notice.usernameUpdated": { en: "Username updated; other devices must log in again", "zh-CN": "用户名已更新，其他设备需要重新登录", "zh-TW": "使用者名稱已更新，其他裝置需要重新登入" },
-  "notice.usernameRecoveryReset": { en: "Username and recovery key updated; other devices must log in again", "zh-CN": "用户名和恢复密钥已更新，其他设备需要重新登录", "zh-TW": "使用者名稱和復原金鑰已更新，其他裝置需要重新登入" },
+  "notice.usernameUpdated": { en: "Username updated. Other devices must log in again.", "zh-CN": "用户名已更新。其他设备需重新登录。", "zh-TW": "使用者名稱已更新。其他裝置需重新登入。" },
+  "notice.usernameRecoveryReset": { en: "Username and recovery key updated. Other devices must log in again.", "zh-CN": "用户名和恢复密钥已更新。其他设备需重新登录。", "zh-TW": "使用者名稱和復原金鑰已更新。其他裝置需重新登入。" },
   "notice.usernameFailed": { en: "Unable to update username", "zh-CN": "无法更新用户名", "zh-TW": "無法更新使用者名稱" },
   "notice.usernameUnchanged": { en: "Enter a different username", "zh-CN": "请输入不同的用户名", "zh-TW": "請輸入不同的使用者名稱" },
   "notice.avatarUpdated": { en: "Avatar updated", "zh-CN": "头像已更新", "zh-TW": "頭像已更新" },
   "notice.avatarUpdateFailed": { en: "Unable to update avatar", "zh-CN": "无法更新头像", "zh-TW": "無法更新頭像" },
   "notice.avatarRemoved": { en: "Avatar removed", "zh-CN": "头像已移除", "zh-TW": "頭像已移除" },
   "notice.avatarRemoveFailed": { en: "Unable to remove avatar", "zh-CN": "无法移除头像", "zh-TW": "無法移除頭像" },
-  "notice.signOutDeviceConfirm": { en: "Sign out {device}? It will need to log in again on its next request.", "zh-CN": "确定登出 {device}？该设备下次请求时将需要重新登录。", "zh-TW": "確定登出 {device}？該裝置下次請求時將需要重新登入。" },
+  "notice.signOutDeviceConfirm": { en: "Sign out {device}? It must log in again on its next connection.", "zh-CN": "登出 {device}？该设备下次连接时需重新登录。", "zh-TW": "登出 {device}？該裝置下次連線時需重新登入。" },
   "notice.deviceSignedOut": { en: "{device} signed out", "zh-CN": "{device} 已登出", "zh-TW": "{device} 已登出" },
   "notice.deviceSignOutFailed": { en: "Unable to sign out device", "zh-CN": "登出设备失败", "zh-TW": "登出裝置失敗" },
-  "notice.removeDeviceConfirm": { en: "Remove the inactive record for {device}?", "zh-CN": "确定立即移除 {device} 的失效记录？", "zh-TW": "確定立即移除 {device} 的失效記錄？" },
+  "notice.removeDeviceConfirm": { en: "Remove the inactive record for {device}?", "zh-CN": "移除 {device} 的失效记录？", "zh-TW": "移除 {device} 的失效記錄？" },
   "notice.deviceRemoved": { en: "{device} removed", "zh-CN": "已移除 {device}", "zh-TW": "已移除 {device}" },
   "notice.deviceRemoveFailed": { en: "Unable to remove device record", "zh-CN": "移除设备记录失败", "zh-TW": "移除裝置記錄失敗" },
   "notice.pinSaved": { en: "PIN saved for this device", "zh-CN": "当前设备 PIN 已保存", "zh-TW": "目前裝置的 PIN 已儲存" },
   "notice.pinSaveFailed": { en: "Unable to save PIN", "zh-CN": "无法保存 PIN", "zh-TW": "無法儲存 PIN" },
-  "notice.pinRemoved": { en: "PIN removed from this device and automatic locking disabled", "zh-CN": "当前设备 PIN 已移除，自动锁定已关闭", "zh-TW": "目前裝置的 PIN 已移除，自動鎖定已關閉" },
+  "notice.pinRemoved": { en: "Device PIN removed. Automatic locking disabled.", "zh-CN": "本机 PIN 已移除。自动锁定已关闭。", "zh-TW": "本機 PIN 已移除。自動鎖定已關閉。" },
   "notice.pinRemoveFailed": { en: "Unable to remove PIN", "zh-CN": "无法移除 PIN", "zh-TW": "無法移除 PIN" },
-  "notice.setPinFirst": { en: "Set a device PIN above before enabling automatic locking", "zh-CN": "请先在上方设置本机 PIN，再开启自动锁定", "zh-TW": "請先在上方設定本機 PIN，再開啟自動鎖定" },
+  "notice.setPinFirst": { en: "Set a device PIN before enabling automatic locking", "zh-CN": "开启自动锁定前请先设置本机 PIN", "zh-TW": "開啟自動鎖定前請先設定本機 PIN" },
   "notice.autoLockEnabled": { en: "The app will lock after {count} minutes of inactivity", "zh-CN": "无操作 {count} 分钟后将自动锁定", "zh-TW": "閒置 {count} 分鐘後將自動鎖定" },
-  "notice.autoLockDisabled": { en: "Automatic locking disabled; the device PIN is retained", "zh-CN": "自动锁定已关闭，本机 PIN 已保留", "zh-TW": "自動鎖定已關閉，本機 PIN 已保留" },
+  "notice.autoLockDisabled": { en: "Automatic locking disabled. Device PIN retained.", "zh-CN": "自动锁定已关闭。本机 PIN 已保留。", "zh-TW": "自動鎖定已關閉。本機 PIN 已保留。" },
   "notice.autoLockSaveFailed": { en: "Unable to save automatic locking settings", "zh-CN": "无法保存自动锁定设置", "zh-TW": "無法儲存自動鎖定設定" },
-  "notice.passwordChanged": { en: "Master password changed. Other devices must log in again; the recovery key is unaffected.", "zh-CN": "主密码已修改，其他设备需要重新登录；恢复密钥不受影响。", "zh-TW": "主密碼已變更，其他裝置需要重新登入；復原金鑰不受影響。" },
+  "notice.passwordChanged": { en: "Master password changed. Other devices must log in again. The recovery key remains valid.", "zh-CN": "主密码已修改。其他设备需重新登录。恢复密钥仍然有效。", "zh-TW": "主密碼已變更。其他裝置需重新登入。復原金鑰仍然有效。" },
   "notice.passwordChangeFailed": { en: "Unable to change password", "zh-CN": "密码修改失败", "zh-TW": "密碼變更失敗" },
-  "notice.recoveryReset": { en: "Recovery key reset; the old recovery key is no longer valid", "zh-CN": "恢复密钥已重置，旧恢复密钥已失效", "zh-TW": "復原金鑰已重設，舊復原金鑰已失效" },
+  "notice.recoveryReset": { en: "Recovery key reset. The old key is no longer valid.", "zh-CN": "恢复密钥已重置。旧密钥已失效。", "zh-TW": "復原金鑰已重設。舊金鑰已失效。" },
   "notice.recoveryResetFailed": { en: "Unable to reset recovery key", "zh-CN": "无法重置恢复密钥", "zh-TW": "無法重設復原金鑰" },
   "notice.itemRestored": { en: "“{title}” restored", "zh-CN": "“{title}”已恢复", "zh-TW": "「{title}」已復原" },
   "notice.itemRestoreFailed": { en: "Unable to restore “{title}”", "zh-CN": "无法恢复“{title}”", "zh-TW": "無法復原「{title}」" },
@@ -448,9 +448,9 @@ const messages = {
   "admin.userManagement": { en: "User management", "zh-CN": "用户管理", "zh-TW": "使用者管理" },
   "admin.createPending": { en: "Add user", "zh-CN": "新增用户", "zh-TW": "新增使用者" },
   "admin.createPendingHelp": {
-    en: "After you specify a username and display name, a registration activation code valid for 72 hours is generated.",
-    "zh-CN": "指定用户名和显示名称后，将生成一个 72 小时内有效的注册激活码。",
-    "zh-TW": "指定使用者名稱和顯示名稱後，將產生一個 72 小時內有效的註冊啟用碼。"
+    en: "Enter a username and display name to generate an activation code valid for 72 hours.",
+    "zh-CN": "输入用户名和显示名称以生成激活码。激活码有效期为 72 小时。",
+    "zh-TW": "輸入使用者名稱和顯示名稱以產生啟用碼。啟用碼有效期限為 72 小時。"
   },
   "admin.createCode": { en: "Create activation code", "zh-CN": "创建激活码", "zh-TW": "建立啟用碼" },
   "admin.codeShownOnce": { en: "Activation code is shown only once", "zh-CN": "激活码仅显示一次", "zh-TW": "啟用碼僅顯示一次" },
@@ -467,15 +467,15 @@ const messages = {
   "admin.deleteUser": { en: "Permanently delete user", "zh-CN": "永久删除用户", "zh-TW": "永久刪除使用者" },
   "admin.deleteUserTitle": { en: "Permanently delete @{username}", "zh-CN": "永久删除 @{username}", "zh-TW": "永久刪除 @{username}" },
   "admin.deleteWarning": {
-    en: "This user's account, notes, revision history, attachments, and login devices will be permanently deleted from this server database. This cannot be undone and does not remove independent backups or ciphertext left in the user's browser.",
-    "zh-CN": "该用户的账户、笔记、历史版本、附件和登录设备将从当前服务器数据库中永久删除。此操作无法撤销，也不会删除独立备份或用户浏览器中遗留的本地密文。",
-    "zh-TW": "該使用者的帳戶、筆記、歷史版本、附件和登入裝置將從目前伺服器資料庫中永久刪除。此操作無法復原，也不會刪除獨立備份或使用者瀏覽器中遺留的本機密文。"
+    en: "This permanently deletes the account, notes, history, attachments, and login devices from this server database. This cannot be undone. Independent backups and local browser ciphertext will remain.",
+    "zh-CN": "此操作将从服务器数据库中永久删除该账户及其笔记、历史版本、附件和登录设备。删除后无法恢复。独立备份及浏览器中的本地密文仍会保留。",
+    "zh-TW": "此操作將從伺服器資料庫中永久刪除該帳戶及其筆記、歷史版本、附件和登入裝置。刪除後無法復原。獨立備份及瀏覽器中的本機密文仍會保留。"
   },
   "admin.confirmUsername": { en: "Enter the username to confirm", "zh-CN": "输入用户名确认", "zh-TW": "輸入使用者名稱確認" },
-  "admin.yourPassword": { en: "Your master password", "zh-CN": "你的主密码", "zh-TW": "你的主密碼" },
+  "admin.yourPassword": { en: "Your master password", "zh-CN": "您的主密码", "zh-TW": "您的主密碼" },
   "admin.cancelActivationConfirm": { en: "Cancel activation eligibility for @{username}?", "zh-CN": "取消 @{username} 的激活资格？", "zh-TW": "取消 @{username} 的啟用資格？" },
   "admin.loadFailed": { en: "Unable to load administrator settings", "zh-CN": "无法加载管理员设置", "zh-TW": "無法載入管理員設定" },
-  "admin.codeCreated": { en: "Activation code created. Save it now.", "zh-CN": "激活码已创建，请立即保存", "zh-TW": "啟用碼已建立，請立即儲存" },
+  "admin.codeCreated": { en: "Activation code created. Save it now.", "zh-CN": "激活码已创建。请立即保存。", "zh-TW": "啟用碼已建立。請立即儲存。" },
   "admin.createFailed": { en: "Unable to create user", "zh-CN": "无法创建用户", "zh-TW": "無法建立使用者" },
   "admin.userEnabled": { en: "{name} enabled", "zh-CN": "{name} 已启用", "zh-TW": "{name} 已啟用" },
   "admin.userDisabled": { en: "{name} disabled", "zh-CN": "{name} 已禁用", "zh-TW": "{name} 已停用" },
@@ -486,36 +486,36 @@ const messages = {
   "admin.deleteFailed": { en: "Unable to delete user", "zh-CN": "无法删除用户", "zh-TW": "無法刪除使用者" },
 
   "app.save.saving": { en: "Saving locally…", "zh-CN": "正在保存到本地…", "zh-TW": "正在儲存到本機…" },
-  "app.save.local": { en: "Saved locally · waiting for the server", "zh-CN": "已保存到本地 · 正在等待服务器", "zh-TW": "已儲存在本機 · 正在等待伺服器" },
+  "app.save.local": { en: "Saved locally · pending sync", "zh-CN": "已保存到本地 · 等待同步", "zh-TW": "已儲存至本機 · 等待同步" },
   "app.save.syncing": { en: "Syncing…", "zh-CN": "正在同步…", "zh-TW": "正在同步…" },
   "app.save.synced": { en: "Synced", "zh-CN": "已同步", "zh-TW": "已同步" },
   "app.save.offline": { en: "Offline · saved locally", "zh-CN": "离线 · 已保存到本地", "zh-TW": "離線 · 已儲存在本機" },
   "app.save.unverifiedDetail": {
-    en: "Server session is not verified · changes are saved locally and verification will retry automatically",
-    "zh-CN": "服务器会话尚未验证 · 修改已保存到本地，将自动重试验证",
-    "zh-TW": "伺服器工作階段尚未驗證 · 修改已儲存在本機，將自動重試驗證"
+    en: "Server session not verified. Changes are saved locally. Verification will retry automatically.",
+    "zh-CN": "服务器会话未验证。修改已保存到本地。系统将自动重试验证。",
+    "zh-TW": "伺服器工作階段未驗證。變更已儲存至本機。系統將自動重試驗證。"
   },
   "app.save.error": { en: "Sync error · saved locally", "zh-CN": "同步错误 · 已保存到本地", "zh-TW": "同步錯誤 · 已儲存在本機" },
   "app.save.syncingDetail": { en: "Synchronizing with the server…", "zh-CN": "正在与服务器同步…", "zh-TW": "正在與伺服器同步…" },
   "app.save.offlineDetail": {
-    en: "Device is offline · changes are saved locally and will synchronize after reconnecting",
-    "zh-CN": "设备当前离线 · 修改已保存到本地，联网后自动同步",
-    "zh-TW": "裝置目前離線 · 修改已儲存在本機，連線後自動同步"
+    en: "Offline. Changes are saved locally and will sync after reconnection.",
+    "zh-CN": "设备离线。修改已保存到本地。联网后将自动同步。",
+    "zh-TW": "裝置離線。變更已儲存至本機。連網後將自動同步。"
   },
   "app.save.unreachableDetail": {
-    en: "Unable to connect to the server · changes are saved locally and synchronization will retry automatically",
-    "zh-CN": "无法连接服务器 · 修改已保存到本地，将自动重试",
-    "zh-TW": "無法連線到伺服器 · 修改已儲存在本機，將自動重試"
+    en: "Unable to connect to the server. Changes are saved locally. Sync will retry automatically.",
+    "zh-CN": "无法连接服务器。修改已保存到本地。系统将自动重试同步。",
+    "zh-TW": "無法連線至伺服器。變更已儲存至本機。系統將自動重試同步。"
   },
   "app.save.serverErrorDetail": {
-    en: "The server rejected synchronization: {reason} · changes are saved locally and synchronization will retry automatically",
-    "zh-CN": "服务器拒绝同步：{reason} · 修改已保存到本地，将自动重试",
-    "zh-TW": "伺服器拒絕同步：{reason} · 修改已儲存在本機，將自動重試"
+    en: "Server rejected sync: {reason}. Changes are saved locally. Sync will retry automatically.",
+    "zh-CN": "服务器拒绝同步：{reason}。修改已保存到本地。系统将自动重试同步。",
+    "zh-TW": "伺服器拒絕同步：{reason}。變更已儲存至本機。系統將自動重試同步。"
   },
   "app.save.localFailureDetail": {
-    en: "Local save failed · the latest changes are not yet safely stored",
-    "zh-CN": "本地保存失败 · 最新修改尚未安全保存",
-    "zh-TW": "本機儲存失敗 · 最新修改尚未安全儲存"
+    en: "Local save failed. The latest changes have not been saved.",
+    "zh-CN": "本地保存失败。最新修改尚未保存。",
+    "zh-TW": "本機儲存失敗。最新變更尚未儲存。"
   },
   "app.loadingNotes": { en: "Decrypting local notes…", "zh-CN": "正在解密本地笔记…", "zh-TW": "正在解密本機筆記…" },
   "app.untitled": { en: "Untitled note", "zh-CN": "无标题笔记", "zh-TW": "無標題筆記" },
@@ -550,7 +550,7 @@ const messages = {
   "app.lock": { en: "Lock", "zh-CN": "锁定", "zh-TW": "鎖定" },
   "app.lockNote": { en: "Lock note", "zh-CN": "锁定笔记", "zh-TW": "鎖定筆記" },
   "app.unlockNote": { en: "Unlock note", "zh-CN": "解锁笔记", "zh-TW": "解鎖筆記" },
-  "app.unlockToEdit": { en: "Unlock this note to edit it", "zh-CN": "请先解锁此笔记再进行编辑", "zh-TW": "請先解鎖此筆記再進行編輯" },
+  "app.unlockToEdit": { en: "Unlock this note to edit", "zh-CN": "解锁笔记后可编辑", "zh-TW": "解鎖筆記後可編輯" },
   "app.noteLockedBadge": { en: "Locked note", "zh-CN": "已锁定笔记", "zh-TW": "已鎖定筆記" },
   "app.logout": { en: "Log out", "zh-CN": "登出", "zh-TW": "登出" },
   "app.resizeLeft": { en: "Resize left sidebar", "zh-CN": "调整左侧栏宽度", "zh-TW": "調整左側欄寬度" },
@@ -565,9 +565,9 @@ const messages = {
   "app.openRight": { en: "Open right sidebar", "zh-CN": "打开右侧栏", "zh-TW": "開啟右側欄" },
   "app.emptyTitle": { en: "Select or create a note", "zh-CN": "选择或创建一篇笔记", "zh-TW": "選擇或建立一篇筆記" },
   "app.emptyNoteHint": { en: "Start writing…", "zh-CN": "开始写作…", "zh-TW": "開始寫作…" },
-  "app.createdAt": { en: "Created: {date}", "zh-CN": "创建时间: {date}", "zh-TW": "建立時間：{date}" },
-  "app.updatedAt": { en: "Modified: {date}", "zh-CN": "修改时间: {date}", "zh-TW": "修改時間：{date}" },
-  "app.countHelp": { en: "Words are segmented by language and exclude punctuation; characters exclude whitespace but include symbols", "zh-CN": "字词按语言分段，标点不计入；字符排除空白但包含符号", "zh-TW": "字詞依語言分段，標點不計入；字元排除空白但包含符號" },
+  "app.createdAt": { en: "Created: {date}", "zh-CN": "创建时间：{date}", "zh-TW": "建立時間：{date}" },
+  "app.updatedAt": { en: "Modified: {date}", "zh-CN": "修改时间：{date}", "zh-TW": "修改時間：{date}" },
+  "app.countHelp": { en: "Words are segmented by language and exclude punctuation. Characters exclude whitespace and include symbols.", "zh-CN": "字词按语言分段且不计标点。字符数不计空白但包含符号。", "zh-TW": "字詞依語言分段且不計標點。字元數不計空白但包含符號。" },
   "app.count": { en: "{words} words · {characters} characters", "zh-CN": "{words} 字词 · {characters} 字符", "zh-TW": "{words} 字詞 · {characters} 字元" },
   "app.resizeRight": { en: "Resize right sidebar", "zh-CN": "调整右侧栏宽度", "zh-TW": "調整右側欄寬度" },
   "app.rightPanel": { en: "Right panel", "zh-CN": "右侧面板", "zh-TW": "右側面板" },
@@ -575,7 +575,7 @@ const messages = {
   "app.collapseRight": { en: "Collapse right sidebar", "zh-CN": "折叠右侧栏", "zh-TW": "收合右側欄" },
   "app.closeRight": { en: "Close right sidebar", "zh-CN": "关闭右侧栏", "zh-TW": "關閉右側欄" },
   "app.noteOutline": { en: "Note outline", "zh-CN": "笔记大纲", "zh-TW": "筆記大綱" },
-  "app.outlineEmpty": { en: "Add Markdown headings to see a live outline here.", "zh-CN": "添加 Markdown 标题后，大纲会实时显示在这里。", "zh-TW": "新增 Markdown 標題後，大綱會即時顯示在這裡。" },
+  "app.outlineEmpty": { en: "Add Markdown headings to display an outline.", "zh-CN": "添加 Markdown 标题后将显示大纲。", "zh-TW": "新增 Markdown 標題後將顯示大綱。" },
   "outline.expandHeading": { en: "Expand {title}", "zh-CN": "展开 {title}", "zh-TW": "展開 {title}" },
   "outline.collapseHeading": { en: "Collapse {title}", "zh-CN": "收起 {title}", "zh-TW": "收合 {title}" },
   "app.closeSidebars": { en: "Close sidebars", "zh-CN": "关闭侧栏", "zh-TW": "關閉側欄" },
@@ -605,9 +605,9 @@ const messages = {
   "properties.keyRequired": { en: "A property name is required.", "zh-CN": "属性名称不能为空。", "zh-TW": "屬性名稱不能為空。" },
   "properties.keyDuplicate": { en: "That property name already exists.", "zh-CN": "该属性名称已存在。", "zh-TW": "該屬性名稱已存在。" },
   "properties.invalid": {
-    en: "This YAML frontmatter is invalid and has been left unchanged.",
-    "zh-CN": "这段 YAML 元数据无效，内容已原样保留。",
-    "zh-TW": "這段 YAML 中繼資料無效，內容已原樣保留。"
+    en: "Invalid YAML frontmatter. The original content is preserved.",
+    "zh-CN": "YAML 元数据无效。已保留原始内容。",
+    "zh-TW": "YAML 中繼資料無效。已保留原始內容。"
   },
   "properties.sourceHint": {
     en: "Switch to Source mode to edit the original YAML.",
@@ -617,88 +617,88 @@ const messages = {
   "properties.complexValue": { en: "Complex YAML value", "zh-CN": "复杂 YAML 值", "zh-TW": "複雜 YAML 值" },
   "properties.complexHint": {
     en: "Complex YAML values are read-only here. Edit them in Source mode.",
-    "zh-CN": "复杂 YAML 值在此处为只读，请在源码模式中编辑。",
-    "zh-TW": "複雜 YAML 值在此處為唯讀，請在原始碼模式中編輯。"
+    "zh-CN": "复杂 YAML 值在此处为只读。请在源码模式中编辑。",
+    "zh-TW": "複雜 YAML 值在此處為唯讀。請在原始碼模式中編輯。"
   },
   "app.attachmentNotLoaded": { en: "Attachment not loaded: {name}", "zh-CN": "附件尚未加载：{name}", "zh-TW": "附件尚未載入：{name}" },
 
-  "notice.attachmentConflict": { en: "Attachment metadata conflict detected. The server version was retained and local attachment chunks were not deleted.", "zh-CN": "检测到附件元数据冲突；已保留服务器版本，本地附件分块仍未删除。", "zh-TW": "偵測到附件中繼資料衝突；已保留伺服器版本，本機附件分塊仍未刪除。" },
-  "notice.documentConflict": { en: "“{title}” has a cross-device conflict. Local changes were saved as a conflict copy.", "zh-CN": "“{title}”存在多端冲突，本地修改已保存为冲突副本。", "zh-TW": "「{title}」發生跨裝置衝突，本機修改已儲存為衝突副本。" },
-  "notice.activeRemoteDeleted": { en: "The current note was deleted on another device. To avoid interrupting editing, the interface will update after you leave this note.", "zh-CN": "当前笔记已在其他设备上删除；为避免打断编辑，将在离开当前笔记后更新界面。", "zh-TW": "目前筆記已在其他裝置上刪除；為避免中斷編輯，將在離開目前筆記後更新介面。" },
-  "notice.activeRemoteUpdated": { en: "The current note was updated on another device. To avoid interrupting editing, the remote version will be applied after you leave this note.", "zh-CN": "当前笔记在其他设备上已更新；为避免打断编辑，将在离开当前笔记后应用远端版本。", "zh-TW": "目前筆記已在其他裝置上更新；為避免中斷編輯，將在離開目前筆記後套用遠端版本。" },
-  "notice.remoteIntegrity": { en: "{count} encrypted server items failed integrity checks. The last readable local versions were retained.", "zh-CN": "{count} 个服务器加密项目未能通过完整性校验；已保留本机最后一次可读版本。", "zh-TW": "{count} 個伺服器加密項目未通過完整性驗證；已保留本機最後一次可讀版本。" },
-  "notice.syncFailed": { en: "Synchronization failed. Changes remain saved locally.", "zh-CN": "同步失败，修改仍保存在本地", "zh-TW": "同步失敗，修改仍儲存在本機" },
+  "notice.attachmentConflict": { en: "Attachment metadata conflict. Server version retained. Local attachment chunks preserved.", "zh-CN": "附件元数据冲突。已保留服务器版本及本地附件分块。", "zh-TW": "附件中繼資料衝突。已保留伺服器版本及本機附件分塊。" },
+  "notice.documentConflict": { en: "Sync conflict in “{title}”. Local changes saved as a conflict copy.", "zh-CN": "“{title}”存在同步冲突。本地修改已保存为冲突副本。", "zh-TW": "「{title}」存在同步衝突。本機變更已儲存為衝突副本。" },
+  "notice.activeRemoteDeleted": { en: "This note was deleted on another device. The view will update when you leave this note.", "zh-CN": "此笔记已在其他设备上删除。离开当前笔记后将更新界面。", "zh-TW": "此筆記已在其他裝置上刪除。離開目前筆記後將更新介面。" },
+  "notice.activeRemoteUpdated": { en: "This note was updated on another device. The remote version will load when you leave this note.", "zh-CN": "此笔记已在其他设备上更新。离开当前笔记后将应用远端版本。", "zh-TW": "此筆記已在其他裝置上更新。離開目前筆記後將套用遠端版本。" },
+  "notice.remoteIntegrity": { en: "{count} encrypted server items failed integrity checks. The last readable local versions were preserved.", "zh-CN": "{count} 个服务器加密项目未通过完整性校验。已保留本地最后可读版本。", "zh-TW": "{count} 個伺服器加密項目未通過完整性驗證。已保留本機最後可讀版本。" },
+  "notice.syncFailed": { en: "Sync failed. Changes are saved locally.", "zh-CN": "同步失败。修改已保存到本地。", "zh-TW": "同步失敗。變更已儲存至本機。" },
   "notice.localSaveFailed": {
-    en: "Local save failed. The latest changes are still open but are not yet safely stored.",
-    "zh-CN": "本地保存失败，最新修改仍在当前页面中，但尚未安全保存。",
-    "zh-TW": "本機儲存失敗，最新修改仍在目前頁面中，但尚未安全儲存。"
+    en: "Local save failed. The latest changes remain on this page but have not been saved.",
+    "zh-CN": "本地保存失败。最新修改仅保留在当前页面中。",
+    "zh-TW": "本機儲存失敗。最新變更僅保留在目前頁面中。"
   },
-  "notice.localDecryptFailed": { en: "{count} local encrypted items could not be decrypted. Other notes loaded normally. {detail}", "zh-CN": "{count} 个本地加密项目暂时无法解密，其他笔记已正常加载。{detail}", "zh-TW": "{count} 個本機加密項目暫時無法解密，其他筆記已正常載入。{detail}" },
-  "notice.pendingDecryptFailed": { en: "{count} contain unsynchronized changes and were retained unchanged.", "zh-CN": "其中 {count} 个含未同步修改，已原样保留。", "zh-TW": "其中 {count} 個包含未同步修改，已原樣保留。" },
+  "notice.localDecryptFailed": { en: "Unable to decrypt {count} local items. Other notes loaded successfully. {detail}", "zh-CN": "{count} 个本地加密项目无法解密。其他笔记已加载。{detail}", "zh-TW": "{count} 個本機加密項目無法解密。其他筆記已載入。{detail}" },
+  "notice.pendingDecryptFailed": { en: "{count} items contain unsynced changes and were preserved unchanged.", "zh-CN": "其中 {count} 个项目含未同步修改并已原样保留。", "zh-TW": "其中 {count} 個項目含未同步變更並已原樣保留。" },
   "notice.ciphertextRetained": { en: "The original ciphertext was retained.", "zh-CN": "已保留原始密文。", "zh-TW": "已保留原始密文。" },
   "notice.ignoreRevision": { en: "Do not show this version again", "zh-CN": "不再提示此版本", "zh-TW": "不再提示此版本" },
-  "notice.remoteIntegrityOthers": { en: "{count} encrypted server items failed integrity checks. Other notes loaded normally and all readable local versions were retained.", "zh-CN": "{count} 个服务器加密项目未能通过完整性校验；其他笔记已正常加载，本机可读版本均已保留。", "zh-TW": "{count} 個伺服器加密項目未通過完整性驗證；其他筆記已正常載入，本機可讀版本均已保留。" },
-  "notice.localRestoredSyncRetry": { en: "Notes were restored locally, but server synchronization failed and will retry automatically.", "zh-CN": "笔记已从本地恢复，但本次服务器同步失败，稍后会自动重试。", "zh-TW": "筆記已從本機復原，但本次伺服器同步失敗，稍後會自動重試。" },
-  "notice.loadedOffline": { en: "Local notes loaded while offline.", "zh-CN": "离线状态下已加载本地笔记。", "zh-TW": "已在離線狀態載入本機筆記。" },
+  "notice.remoteIntegrityOthers": { en: "{count} encrypted server items failed integrity checks. Other notes loaded successfully. Readable local versions were preserved.", "zh-CN": "{count} 个服务器加密项目未通过完整性校验。其他笔记已加载。本地可读版本均已保留。", "zh-TW": "{count} 個伺服器加密項目未通過完整性驗證。其他筆記已載入。本機可讀版本均已保留。" },
+  "notice.localRestoredSyncRetry": { en: "Local notes restored. Server sync failed and will retry automatically.", "zh-CN": "本地笔记已恢复。同步失败，稍后自动重试。", "zh-TW": "本機筆記已復原。同步失敗，稍後自動重試。" },
+  "notice.loadedOffline": { en: "Local notes loaded offline.", "zh-CN": "已离线加载本地笔记。", "zh-TW": "已離線載入本機筆記。" },
   "notice.onlineSessionRequired": {
     en: "This action requires an online, verified server session.",
     "zh-CN": "此操作需要联网并完成服务器会话验证。",
     "zh-TW": "此操作需要連線並完成伺服器工作階段驗證。"
   },
   "notice.openDatabaseFailed": { en: "Unable to open the local encrypted database", "zh-CN": "无法打开本地加密数据库", "zh-TW": "無法開啟本機加密資料庫" },
-  "notice.logoutLocalClearFailed": { en: "Unable to delete this account's local data. You have not been logged out.", "zh-CN": "无法删除当前账户的本地数据，尚未登出。", "zh-TW": "無法刪除目前帳戶的本機資料，尚未登出。" },
+  "notice.logoutLocalClearFailed": { en: "Unable to delete local account data. You are still logged in.", "zh-CN": "本地账户数据删除失败。当前账户尚未登出。", "zh-TW": "本機帳戶資料刪除失敗。目前帳戶尚未登出。" },
   "notice.attachmentLoadFailed": { en: "Unable to load attachment", "zh-CN": "附件加载失败", "zh-TW": "附件載入失敗" },
   "notice.attachmentSaveFailed": { en: "Unable to save attachment", "zh-CN": "附件保存失败", "zh-TW": "附件儲存失敗" },
-  "notice.restoreNameConflict": { en: "Cannot restore: “{title}” already exists in that directory.", "zh-CN": "无法恢复：“{title}”所在目录中已有同名项目。", "zh-TW": "無法復原：「{title}」所在目錄中已有同名項目。" },
+  "notice.restoreNameConflict": { en: "Unable to restore: “{title}” already exists in the destination.", "zh-CN": "无法恢复：目标目录中已存在“{title}”。", "zh-TW": "無法復原：目標目錄中已存在「{title}」。" },
   "notice.wikiLinkNotFound": { en: "WikiLink target not found: {target}", "zh-CN": "找不到 WikiLink 目标：{target}", "zh-TW": "找不到 WikiLink 目標：{target}" },
   "notice.purgeSingleLabel": { en: "“{title}” and its child items and attachments", "zh-CN": "“{title}”及其子项目和附件", "zh-TW": "「{title}」及其子項目和附件" },
   "notice.purgeMultipleLabel": { en: "the selected {count} items and their child items and attachments", "zh-CN": "选中的 {count} 个项目及其子项目和附件", "zh-TW": "選取的 {count} 個項目及其子項目和附件" },
-  "notice.purgeConfirm": { en: "Permanently delete {label}? Server revision history will also be removed. This cannot be undone.", "zh-CN": "永久删除{label}？服务器历史版本也会被清除，此操作无法撤销。", "zh-TW": "永久刪除{label}？伺服器歷史版本也會被清除，此操作無法復原。" },
-  "notice.clearTrashConfirm": { en: "Permanently delete everything in trash? Server revision history and encrypted attachments will also be removed. This cannot be undone.", "zh-CN": "永久删除回收站中的全部内容？服务器历史版本及附件密文也会被清除，此操作无法撤销。", "zh-TW": "永久刪除垃圾桶中的所有內容？伺服器歷史版本及附件密文也會被清除，此操作無法復原。" },
-  "notice.purgeOnlineOnly": { en: "Permanent deletion requires an online connection. The content remains in trash while offline.", "zh-CN": "永久删除必须联网完成；离线时内容仍保留在回收站。", "zh-TW": "永久刪除必須連線完成；離線時內容仍保留在垃圾桶。" },
+  "notice.purgeConfirm": { en: "Permanently delete {label}? Server revision history will also be deleted. This cannot be undone.", "zh-CN": "永久删除{label}？服务器历史版本也将删除。此操作无法撤销。", "zh-TW": "永久刪除{label}？伺服器歷史版本也將刪除。此操作無法復原。" },
+  "notice.clearTrashConfirm": { en: "Permanently delete all trash contents? Server revision history and encrypted attachments will also be deleted. This cannot be undone.", "zh-CN": "永久删除回收站全部内容？服务器历史版本及附件密文也将删除。此操作无法撤销。", "zh-TW": "永久刪除垃圾桶全部內容？伺服器歷史版本及附件密文也將刪除。此操作無法復原。" },
+  "notice.purgeOnlineOnly": { en: "Permanent deletion requires an online connection. Offline items remain in trash.", "zh-CN": "永久删除需联网。离线时内容仍保留在回收站。", "zh-TW": "永久刪除需連網。離線時內容仍保留在垃圾桶。" },
   "notice.purgeWaitSync": { en: "Wait for deletion status to synchronize before permanently deleting.", "zh-CN": "请等待删除状态同步完成后再永久删除。", "zh-TW": "請等待刪除狀態同步完成後再永久刪除。" },
   "notice.purgeComplete": { en: "Selected trash content permanently deleted.", "zh-CN": "已永久删除所选回收站内容。", "zh-TW": "已永久刪除所選垃圾桶內容。" },
   "notice.purgeFailed": { en: "Permanent deletion failed", "zh-CN": "永久删除失败", "zh-TW": "永久刪除失敗" },
-  "notice.moveIntoDescendant": { en: "A folder cannot be moved into itself or one of its descendants.", "zh-CN": "不能把文件夹移动到自身或其子文件夹中。", "zh-TW": "不能將資料夾移動到自身或其子資料夾中。" },
+  "notice.moveIntoDescendant": { en: "A folder cannot be moved into itself or a subfolder.", "zh-CN": "文件夹不能移入自身或其子文件夹。", "zh-TW": "資料夾不能移入自身或其子資料夾。" },
   "notice.moveNameConflict": { en: "Cannot move: an item named “{title}” already exists in the destination.", "zh-CN": "无法移动：目标目录中已有名为“{title}”的项目。", "zh-TW": "無法移動：目標目錄中已有名為「{title}」的項目。" },
-  "notice.batchMoveIntoDescendant": { en: "Selected folders cannot be moved into themselves or their descendants.", "zh-CN": "不能把所选文件夹移动到自身或其子文件夹中。", "zh-TW": "不能將所選資料夾移動到自身或其子資料夾中。" },
+  "notice.batchMoveIntoDescendant": { en: "Selected folders cannot be moved into themselves or their subfolders.", "zh-CN": "所选文件夹不能移入自身或其子文件夹。", "zh-TW": "所選資料夾不能移入自身或其子資料夾。" },
   "notice.batchMoveNameConflict": { en: "Cannot move selection: the destination would contain duplicate items named “{title}”.", "zh-CN": "无法批量移动：目标目录会出现名为“{title}”的重复项目。", "zh-TW": "無法批次移動：目標目錄會出現名為「{title}」的重複項目。" },
   "notice.encryptingAttachment": { en: "Encrypting {name} locally…", "zh-CN": "正在本地加密 {name}…", "zh-TW": "正在本機加密 {name}…" },
-  "notice.attachmentSaved": { en: "Attachment “{name}” saved locally and synchronizing in the background.", "zh-CN": "附件“{name}”已保存到本地，正在后台同步。", "zh-TW": "附件「{name}」已儲存在本機，正在背景同步。" },
+  "notice.attachmentSaved": { en: "Attachment “{name}” saved locally. Syncing in the background.", "zh-CN": "附件“{name}”已保存到本地。正在后台同步。", "zh-TW": "附件「{name}」已儲存至本機。正在背景同步。" },
   "notice.noteLocked": { en: "“{title}” locked", "zh-CN": "已锁定“{title}”", "zh-TW": "已鎖定「{title}」" },
   "notice.noteUnlocked": { en: "“{title}” unlocked", "zh-CN": "已解锁“{title}”", "zh-TW": "已解鎖「{title}」" },
-  "notice.noteLockedEdit": { en: "Unlock “{title}” before editing it", "zh-CN": "请先解锁“{title}”再进行编辑", "zh-TW": "請先解鎖「{title}」再進行編輯" },
+  "notice.noteLockedEdit": { en: "Unlock “{title}” to edit", "zh-CN": "解锁“{title}”后可编辑", "zh-TW": "解鎖「{title}」後可編輯" },
   "notice.noteLockFailed": { en: "Unable to update note lock", "zh-CN": "无法更新笔记锁定状态", "zh-TW": "無法更新筆記鎖定狀態" },
-  "notice.lockedTrashBlocked": { en: "Unlock “{title}” before moving this selection to trash", "zh-CN": "所选内容包含已锁定的“{title}”，请先解锁再移到回收站", "zh-TW": "所選內容包含已鎖定的「{title}」，請先解鎖再移到垃圾桶" },
+  "notice.lockedTrashBlocked": { en: "Unlock “{title}” before moving this selection to trash", "zh-CN": "所选内容包含已锁定的“{title}”。请先解锁再移至回收站。", "zh-TW": "所選內容包含已鎖定的「{title}」。請先解鎖再移至垃圾桶。" },
   "notice.copiesCreated": { en: "{count} copies created.", "zh-CN": "已创建 {count} 个副本。", "zh-TW": "已建立 {count} 個副本。" },
   "notice.nameRequired": { en: "The name cannot be empty.", "zh-CN": "名称不能为空。", "zh-TW": "名稱不能為空。" },
   "notice.renameConflict": { en: "Cannot rename: an item named “{title}” already exists in this directory.", "zh-CN": "无法重命名：所在目录中已有名为“{title}”的项目。", "zh-TW": "無法重新命名：所在目錄中已有名為「{title}」的項目。" },
   "notice.allNotes": { en: "all notes", "zh-CN": "全部笔记", "zh-TW": "全部筆記" },
-  "notice.exportConfirm": { en: "Export {label}? The export contains readable plaintext. Store it in a trusted location.", "zh-CN": "确认导出{label}？导出文件包含可读取的明文内容，请保存到可信位置。", "zh-TW": "確認匯出{label}？匯出檔案包含可讀取的明文內容，請儲存到可信任的位置。" },
-  "notice.exportSelectionConfirm": { en: "Export the selected {count} items? The export contains readable plaintext. Store it in a trusted location.", "zh-CN": "确认导出选中的 {count} 个项目？导出文件包含可读取的明文内容，请保存到可信位置。", "zh-TW": "確認匯出所選的 {count} 個項目？匯出檔案包含可讀取的明文內容，請儲存到可信任的位置。" },
+  "notice.exportConfirm": { en: "Export {label}? Exported files contain plaintext. Save them in a trusted location.", "zh-CN": "导出{label}？导出文件包含明文。请保存至可信位置。", "zh-TW": "匯出{label}？匯出檔案包含明文。請儲存至可信任的位置。" },
+  "notice.exportSelectionConfirm": { en: "Export the selected {count} items? Exported files contain plaintext. Save them in a trusted location.", "zh-CN": "导出所选 {count} 个项目？导出文件包含明文。请保存至可信位置。", "zh-TW": "匯出所選 {count} 個項目？匯出檔案包含明文。請儲存至可信任的位置。" },
   "transfer.progress": { en: "Saving imported items: {completed} / {total}", "zh-CN": "正在保存导入项目：{completed} / {total}", "zh-TW": "正在儲存匯入項目：{completed} / {total}" },
-  "transfer.namesRepaired": {"en": "Renamed {count} conflicting items. All content has been preserved.", "zh-CN": "已为 {count} 个同名项目自动编号，全部内容已保留。", "zh-TW": "已為 {count} 個同名項目自動編號，全部內容已保留。"},
-  "transfer.completedWithIssues": {"en": "Imported {count} notes. Review the warnings and unfinished items.", "zh-CN": "已导入 {count} 篇笔记，请查看警告及未完成项目。", "zh-TW": "已匯入 {count} 篇筆記，請查看警告及未完成項目。"},
-  "transfer.exportFailed": {"en": "Export failed. Check that the notes and all attachments are available, then retry.", "zh-CN": "导出失败，请确认笔记及全部附件可读取后重试。", "zh-TW": "匯出失敗，請確認筆記及全部附件可讀取後重試。"},
+  "transfer.namesRepaired": {"en": "Added numbers to {count} conflicting names. All content was preserved.", "zh-CN": "已为 {count} 个同名项目自动编号。全部内容已保留。", "zh-TW": "已為 {count} 個同名項目自動編號。全部內容已保留。"},
+  "transfer.completedWithIssues": {"en": "Imported {count} notes. Review warnings and unfinished items.", "zh-CN": "已导入 {count} 篇笔记。请查看警告及未完成项目。", "zh-TW": "已匯入 {count} 篇筆記。請查看警告及未完成項目。"},
+  "transfer.exportFailed": {"en": "Export failed. Ensure all notes and attachments are readable before retrying.", "zh-CN": "导出失败。请确认笔记及全部附件可读取后重试。", "zh-TW": "匯出失敗。請確認筆記及全部附件可讀取後重試。"},
   "transfer.resultTitle": {"en": "Import results", "zh-CN": "导入结果", "zh-TW": "匯入結果"},
-  "transfer.summary": {"en": "Imported {notes} notes and {folders} folders; {warnings} warnings; {pending} unfinished items.", "zh-CN": "已导入 {notes} 篇笔记、{folders} 个文件夹；{warnings} 条警告，{pending} 个未完成项目。", "zh-TW": "已匯入 {notes} 篇筆記、{folders} 個資料夾；{warnings} 條警告，{pending} 個未完成項目。"},
+  "transfer.summary": {"en": "Imported {notes} notes and {folders} folders. Warnings: {warnings}. Unfinished items: {pending}.", "zh-CN": "已导入 {notes} 篇笔记及 {folders} 个文件夹。警告：{warnings} 条。未完成：{pending} 项。", "zh-TW": "已匯入 {notes} 篇筆記及 {folders} 個資料夾。警告：{warnings} 則。未完成：{pending} 項。"},
   "transfer.renamed": {"en": "Renamed items ({count})", "zh-CN": "自动改名（{count}）", "zh-TW": "自動改名（{count}）"},
   "transfer.source": {"en": "Source", "zh-CN": "来源", "zh-TW": "來源"},
   "transfer.originalName": {"en": "Original name", "zh-CN": "原名称", "zh-TW": "原名稱"},
   "transfer.finalName": {"en": "Imported name", "zh-CN": "导入名称", "zh-TW": "匯入名稱"},
   "transfer.warnings": {"en": "Warnings ({count}) — original references retained", "zh-CN": "警告（{count}）：已保留原引用", "zh-TW": "警告（{count}）：已保留原引用"},
   "transfer.pending": {"en": "Unfinished items ({count})", "zh-CN": "未完成项目（{count}）", "zh-TW": "未完成項目（{count}）"},
-  "transfer.issue.unsafePath": {"en": "Unsafe archive path. No files were imported.", "zh-CN": "归档包含不安全路径，未写入任何文件。", "zh-TW": "封存檔包含不安全路徑，未寫入任何檔案。"},
+  "transfer.issue.unsafePath": {"en": "Unsafe archive path. No files were imported.", "zh-CN": "归档包含不安全路径。未导入任何文件。", "zh-TW": "封存檔包含不安全路徑。未匯入任何檔案。"},
   "transfer.issue.archiveInvalid": {"en": "The archive is damaged, encrypted, or uses an unsupported format.", "zh-CN": "归档已损坏、已加密或使用不支持的格式。", "zh-TW": "封存檔已損壞、已加密或使用不支援的格式。"},
   "transfer.issue.fileLimit": {"en": "An import can contain at most 4,000 files.", "zh-CN": "每次最多导入 4,000 个文件。", "zh-TW": "每次最多匯入 4,000 個檔案。"},
   "transfer.issue.manifestInvalid": {"en": "The export manifest is invalid or ambiguous.", "zh-CN": "导出清单无效或存在歧义。", "zh-TW": "匯出清單無效或存在歧義。"},
-  "transfer.issue.missingImage": {"en": "The local image was not found in this input.", "zh-CN": "当前输入中未找到该本地图片。", "zh-TW": "目前輸入中未找到該本機圖片。"},
+  "transfer.issue.missingImage": {"en": "Image not found in the imported files.", "zh-CN": "导入文件中未找到该图片。", "zh-TW": "匯入檔案中未找到該圖片。"},
   "transfer.issue.ambiguousImage": {"en": "Multiple archive entries match this image reference.", "zh-CN": "归档中有多个条目匹配该图片引用。", "zh-TW": "封存檔中有多個項目符合該圖片引用。"},
   "transfer.issue.invalidImage": {"en": "The file is empty or is not a supported raster image.", "zh-CN": "文件为空或不是支持的栅格图片。", "zh-TW": "檔案為空或不是支援的點陣圖片。"},
   "transfer.issue.largeImage": {"en": "The image exceeds the 25 MiB attachment limit.", "zh-CN": "图片超过 25 MiB 附件限制。", "zh-TW": "圖片超過 25 MiB 附件限制。"},
   "transfer.issue.invalidUrl": {"en": "The image path cannot be decoded or leaves the archive.", "zh-CN": "图片路径无法解码或超出归档范围。", "zh-TW": "圖片路徑無法解碼或超出封存檔範圍。"},
   "transfer.issue.unmappedImage": {"en": "The image reference could not be safely located in the source.", "zh-CN": "无法准确定位图片引用的源码范围。", "zh-TW": "無法準確定位圖片引用的原始碼範圍。"},
-  "transfer.issue.writeFailed": {"en": "Saving stopped. Completed items are preserved; retry the unfinished items.", "zh-CN": "保存已停止。已完成项目保留，请重试未完成项目。", "zh-TW": "儲存已停止。已完成項目保留，請重試未完成項目。"},
+  "transfer.issue.writeFailed": {"en": "Saving stopped. Completed items were preserved. Retry unfinished items.", "zh-CN": "保存已停止。已保留完成项目。请重试未完成项目。", "zh-TW": "儲存已停止。已保留完成項目。請重試未完成項目。"},
   "transfer.issue.cancelled": {"en": "Import was cancelled.", "zh-CN": "导入已取消。", "zh-TW": "匯入已取消。"},
   "notice.importing": { en: "Parsing and encrypting imported files…", "zh-CN": "正在解析并加密导入文件…", "zh-TW": "正在解析並加密匯入檔案…" },
   "notice.imported": { en: "{count} notes imported and saved locally.", "zh-CN": "已导入 {count} 篇笔记并保存到本机。", "zh-TW": "已匯入 {count} 篇筆記並儲存到本機。" },
@@ -709,7 +709,7 @@ const messages = {
   "history.list": { en: "Note history", "zh-CN": "笔记历史", "zh-TW": "筆記歷史" },
   "history.saveNow": { en: "Create snapshot", "zh-CN": "创建快照", "zh-TW": "建立快照" },
   "history.clearNote": { en: "Clear history", "zh-CN": "清空历史", "zh-TW": "清空歷史" },
-  "history.empty": { en: "No saved history for this note yet.", "zh-CN": "这篇笔记还没有保存的历史版本。", "zh-TW": "這篇筆記還沒有儲存的歷史版本。" },
+  "history.empty": { en: "No history saved for this note.", "zh-CN": "此笔记暂无历史版本。", "zh-TW": "此筆記暫無歷史版本。" },
   "history.loading": { en: "Loading history…", "zh-CN": "正在加载历史…", "zh-TW": "正在載入歷史…" },
   "history.loadMore": { en: "Load older versions", "zh-CN": "加载更早版本", "zh-TW": "載入更早版本" },
   "history.pending": { en: "Pending sync", "zh-CN": "等待同步", "zh-TW": "等待同步" },
@@ -718,13 +718,13 @@ const messages = {
   "history.protect": { en: "Protect", "zh-CN": "保护", "zh-TW": "保護" },
   "history.unprotect": { en: "Remove protection", "zh-CN": "取消保护", "zh-TW": "取消保護" },
   "history.protectedBadge": { en: "Protected history", "zh-CN": "受保护的历史版本", "zh-TW": "受保護的歷史版本" },
-  "history.protectedDeleteHint": { en: "Remove protection before deleting this version", "zh-CN": "请先取消保护，再删除这个版本", "zh-TW": "請先取消保護，再刪除這個版本" },
+  "history.protectedDeleteHint": { en: "Remove protection before deleting this version", "zh-CN": "取消保护后可删除此版本", "zh-TW": "取消保護後可刪除此版本" },
   "history.kindBaseline": { en: "Before editing", "zh-CN": "编辑前基线", "zh-TW": "編輯前基線" },
   "history.kindInterval": { en: "Saved automatically", "zh-CN": "自动保存", "zh-TW": "自動儲存" },
   "history.kindIdle": { en: "End of editing", "zh-CN": "编辑结束", "zh-TW": "編輯結束" },
   "history.kindManual": { en: "Saved manually", "zh-CN": "手动保存", "zh-TW": "手動儲存" },
   "history.kindRestoreSafety": { en: "Before restore", "zh-CN": "恢复前保护", "zh-TW": "復原前保護" },
-  "history.deleteOne": { en: "Delete this version", "zh-CN": "删除这个版本", "zh-TW": "刪除這個版本" },
+  "history.deleteOne": { en: "Delete this version", "zh-CN": "删除此版本", "zh-TW": "刪除此版本" },
   "history.deleteConfirm": { en: "Permanently delete the history version from {date}?", "zh-CN": "永久删除 {date} 的历史版本？", "zh-TW": "永久刪除 {date} 的歷史版本？" },
   "history.clearNoteConfirm": { en: "Permanently clear unprotected history for “{title}”? Protected versions will be kept.", "zh-CN": "永久清空“{title}”中未保护的历史版本？受保护版本将保留。", "zh-TW": "永久清空「{title}」中未保護的歷史版本？受保護版本將保留。" },
   "history.clearAllConfirm": { en: "Permanently clear all unprotected note history for this account? Protected versions will be kept.", "zh-CN": "永久清空此账户中所有未保护的笔记历史？受保护版本将保留。", "zh-TW": "永久清空此帳戶中所有未保護的筆記歷史？受保護版本將保留。" },
@@ -732,17 +732,17 @@ const messages = {
   "history.exitPreview": { en: "Exit preview", "zh-CN": "退出预览", "zh-TW": "退出預覽" },
   "history.restoreCopy": { en: "Restore as copy", "zh-CN": "恢复为副本", "zh-TW": "復原為副本" },
   "history.restoreCurrent": { en: "Restore current note", "zh-CN": "恢复为当前版本", "zh-TW": "復原為目前版本" },
-  "history.restoreMissingAttachments": { en: "{count} referenced attachments are unavailable. Restore the text anyway?", "zh-CN": "有 {count} 个引用附件不可用，仍然只恢复文本吗？", "zh-TW": "有 {count} 個引用附件無法使用，仍然只復原文字嗎？" },
-  "history.copyMissingAttachment": { en: "Cannot restore the copy because attachment {attachment} is unavailable.", "zh-CN": "附件 {attachment} 不可用，无法完整恢复副本。", "zh-TW": "附件 {attachment} 無法使用，無法完整復原副本。" },
+  "history.restoreMissingAttachments": { en: "{count} referenced attachments are unavailable. Restore text only?", "zh-CN": "{count} 个引用附件不可用。是否仅恢复文本？", "zh-TW": "{count} 個引用附件無法使用。是否僅復原文字？" },
+  "history.copyMissingAttachment": { en: "Attachment {attachment} is unavailable. Unable to restore the copy.", "zh-CN": "附件 {attachment} 不可用。无法恢复副本。", "zh-TW": "附件 {attachment} 無法使用。無法復原副本。" },
   "history.restoredCopyTitle": { en: "{title} (restored {date})", "zh-CN": "{title}（恢复副本 {date}）", "zh-TW": "{title}（復原副本 {date}）" },
-  "history.unsupported": { en: "This history format is not supported.", "zh-CN": "不支持这个历史版本格式。", "zh-TW": "不支援這個歷史版本格式。" },
+  "history.unsupported": { en: "Unsupported history format.", "zh-CN": "不支持此历史版本格式。", "zh-TW": "不支援此歷史版本格式。" },
 
   "settings.history": { en: "Note history", "zh-CN": "笔记历史", "zh-TW": "筆記歷史" },
-  "settings.historyHelp": { en: "Versions are encrypted in your browser, saved locally first, and synchronized across your devices.", "zh-CN": "历史版本先在浏览器中加密并保存到本地，再跨设备同步。", "zh-TW": "歷史版本先在瀏覽器中加密並儲存到本機，再跨裝置同步。" },
+  "settings.historyHelp": { en: "History is encrypted in the browser and saved locally before syncing across devices.", "zh-CN": "历史版本在浏览器中加密并保存到本地。随后跨设备同步。", "zh-TW": "歷史版本在瀏覽器中加密並儲存至本機。隨後跨裝置同步。" },
   "settings.historyAutomatic": { en: "Automatic history", "zh-CN": "自动保存历史", "zh-TW": "自動儲存歷史" },
   "settings.historyFrequency": { en: "Active editing interval", "zh-CN": "持续编辑保存间隔", "zh-TW": "持續編輯儲存間隔" },
   "settings.historyRetention": { en: "Keep history for", "zh-CN": "历史保留时间", "zh-TW": "歷史保留時間" },
-  "settings.historyTiered": { en: "All automatic versions are kept for 24 hours, then one per hour through day 7, and one per day afterward. Manual and pre-restore versions are not thinned.", "zh-CN": "自动版本在 24 小时内全部保留，2–7 天每小时保留一份，之后每天保留一份；手动和恢复前版本不降采样。", "zh-TW": "自動版本在 24 小時內全部保留，2–7 天每小時保留一份，之後每天保留一份；手動和復原前版本不降採樣。" },
+  "settings.historyTiered": { en: "All automatic versions are kept for 24 hours. One per hour is kept through day 7, then one per day. Manual and pre-restore versions are not thinned.", "zh-CN": "自动版本在 24 小时内全部保留。第 2 至第 7 天每小时保留一份。此后每天保留一份。手动及恢复前版本不受此精简规则影响。", "zh-TW": "自動版本在 24 小時內全部保留。第 2 至第 7 天每小時保留一份。此後每天保留一份。手動及復原前版本不受此精簡規則影響。" },
   "settings.historyStorage": { en: "Encrypted history storage", "zh-CN": "加密历史存储", "zh-TW": "加密歷史儲存空間" },
   "settings.historyVersionCount": { en: "{count} versions", "zh-CN": "{count} 个版本", "zh-TW": "{count} 個版本" },
   "settings.historyClearAll": { en: "Clear all note history", "zh-CN": "清空全部笔记历史", "zh-TW": "清空全部筆記歷史" },
@@ -751,7 +751,7 @@ const messages = {
   "notice.historyUnchanged": { en: "This content is already the latest saved version.", "zh-CN": "当前内容与最新历史版本相同。", "zh-TW": "目前內容與最新歷史版本相同。" },
   "notice.historySaveFailed": { en: "Unable to save note history", "zh-CN": "无法保存笔记历史", "zh-TW": "無法儲存筆記歷史" },
   "notice.historyLoadFailed": { en: "Unable to load note history", "zh-CN": "无法加载笔记历史", "zh-TW": "無法載入筆記歷史" },
-  "notice.historyDecryptFailed": { en: "This history version could not be decrypted. Other versions remain available.", "zh-CN": "无法解密这个历史版本，其他版本仍可使用。", "zh-TW": "無法解密這個歷史版本，其他版本仍可使用。" },
+  "notice.historyDecryptFailed": { en: "Unable to decrypt this history version. Other versions remain available.", "zh-CN": "此历史版本解密失败。其他版本仍可使用。", "zh-TW": "此歷史版本解密失敗。其他版本仍可使用。" },
   "notice.historyDeleteOnlineOnly": { en: "History deletion requires an internet connection.", "zh-CN": "删除历史记录需要联网。", "zh-TW": "刪除歷史記錄需要連線。" },
   "notice.historyDeleted": { en: "History version deleted.", "zh-CN": "历史版本已删除。", "zh-TW": "歷史版本已刪除。" },
   "notice.historyDeleteFailed": { en: "Unable to delete the history version", "zh-CN": "无法删除历史版本", "zh-TW": "無法刪除歷史版本" },
@@ -759,10 +759,10 @@ const messages = {
   "notice.historyAllCleared": { en: "All note history was cleared.", "zh-CN": "全部笔记历史已清空。", "zh-TW": "全部筆記歷史已清空。" },
   "notice.historyClearFailed": { en: "Unable to clear note history", "zh-CN": "无法清空笔记历史", "zh-TW": "無法清空筆記歷史" },
   "notice.historyRestored": { en: "The historical content is now the current version.", "zh-CN": "历史内容已恢复为当前版本。", "zh-TW": "歷史內容已復原為目前版本。" },
-  "notice.historyRestoreFailed": { en: "Unable to restore this history version", "zh-CN": "无法恢复这个历史版本", "zh-TW": "無法復原這個歷史版本" },
+  "notice.historyRestoreFailed": { en: "Unable to restore this history version", "zh-CN": "无法恢复此历史版本", "zh-TW": "無法復原此歷史版本" },
   "notice.historyCopyRestored": { en: "The history version was restored as a new note.", "zh-CN": "历史版本已恢复为一篇新笔记。", "zh-TW": "歷史版本已復原為一篇新筆記。" },
   "notice.historyCopyFailed": { en: "Unable to restore the history version as a copy", "zh-CN": "无法将历史版本恢复为副本", "zh-TW": "無法將歷史版本復原為副本" },
-  "notice.historyQuotaReached": { en: "The encrypted history quota is full. Automatic history is paused until space is freed.", "zh-CN": "加密历史配额已用尽；释放空间前将暂停自动历史同步。", "zh-TW": "加密歷史配額已用盡；釋放空間前將暫停自動歷史同步。" },
+  "notice.historyQuotaReached": { en: "History storage quota reached. Automatic history is paused until space is freed.", "zh-CN": "历史存储配额已用尽。释放空间前将暂停自动保存历史版本。", "zh-TW": "歷史儲存配額已用盡。釋放空間前將暫停自動儲存歷史版本。" },
   "notice.historySettingsSaved": { en: "Note history settings saved.", "zh-CN": "笔记历史设置已保存。", "zh-TW": "筆記歷史設定已儲存。" },
   "notice.historySettingsLoadFailed": { en: "Unable to load note history settings", "zh-CN": "无法加载笔记历史设置", "zh-TW": "無法載入筆記歷史設定" },
   "notice.historySettingsSaveFailed": { en: "Unable to save note history settings", "zh-CN": "无法保存笔记历史设置", "zh-TW": "無法儲存筆記歷史設定" },
@@ -770,12 +770,12 @@ const messages = {
   "notice.historyUpdateFailed": { en: "Unable to update the history version", "zh-CN": "无法更新历史版本", "zh-TW": "無法更新歷史版本" },
   "notice.historyProtected": { en: "History version protected.", "zh-CN": "历史版本已保护。", "zh-TW": "歷史版本已保護。" },
   "notice.historyUnprotected": { en: "History protection removed.", "zh-CN": "历史版本保护已取消。", "zh-TW": "歷史版本保護已取消。" },
-  "notice.historyProtectedDeleteBlocked": { en: "Remove protection before deleting this history version.", "zh-CN": "请先取消保护，再删除这个历史版本。", "zh-TW": "請先取消保護，再刪除這個歷史版本。" },
+  "notice.historyProtectedDeleteBlocked": { en: "Remove protection before deleting this history version.", "zh-CN": "取消保护后可删除此历史版本。", "zh-TW": "取消保護後可刪除此歷史版本。" },
   "notice.historyProtectionSyncRequired": { en: "Protection changes must finish synchronizing before history can be cleared.", "zh-CN": "保护状态同步完成后才能清空历史。", "zh-TW": "保護狀態同步完成後才能清空歷史。" },
-  "notice.historyProtectedMissingAttachments": { en: "Protected this version, but {count} referenced attachments were already unavailable.", "zh-CN": "历史版本已保护，但其中 {count} 个引用附件此前已经不可用。", "zh-TW": "歷史版本已保護，但其中 {count} 個引用附件先前已無法使用。" },
+  "notice.historyProtectedMissingAttachments": { en: "History version protected. {count} referenced attachments were already unavailable.", "zh-CN": "历史版本已保护。其中 {count} 个引用附件此前已不可用。", "zh-TW": "歷史版本已保護。其中 {count} 個引用附件先前已無法使用。" },
 
   "error.pinMin": { en: "The PIN must contain at least 4 characters", "zh-CN": "PIN 至少需要 4 个字符", "zh-TW": "PIN 至少需要 4 個字元" },
-  "error.deviceCredentialMissing": { en: "No device unlock credential is available on this device", "zh-CN": "当前设备没有可用的本机解锁凭据", "zh-TW": "目前裝置沒有可用的本機解鎖憑證" },
+  "error.deviceCredentialMissing": { en: "No local unlock credential is available for this device", "zh-CN": "当前设备无可用的本机解锁凭据", "zh-TW": "目前裝置無可用的本機解鎖憑證" },
   "error.autoLockUnsupported": { en: "Unsupported automatic locking duration", "zh-CN": "不支持的自动锁定时间", "zh-TW": "不支援的自動鎖定時間" },
   "error.avatarProcess": { en: "Unable to process avatar image", "zh-CN": "无法处理头像图片", "zh-TW": "無法處理頭像圖片" },
   "error.avatarTooLarge": { en: "The source avatar image cannot exceed 10 MiB", "zh-CN": "头像原图不能超过 10 MiB", "zh-TW": "頭像原圖不能超過 10 MiB" },
@@ -783,8 +783,8 @@ const messages = {
   "error.avatarBrowser": { en: "This browser cannot process the avatar image", "zh-CN": "当前浏览器无法处理头像图片", "zh-TW": "目前瀏覽器無法處理頭像圖片" },
   "error.attachmentEmpty": { en: "The attachment is empty", "zh-CN": "附件为空", "zh-TW": "附件是空的" },
   "error.attachmentFileTooLarge": { en: "An attachment cannot exceed 25 MiB", "zh-CN": "单个附件不能超过 25 MiB", "zh-TW": "單一附件不能超過 25 MiB" },
-  "error.attachmentFormat": { en: "Only PNG, JPEG, GIF, WebP, and AVIF images are supported, and their actual file format is verified", "zh-CN": "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片，且会校验真实文件格式", "zh-TW": "僅支援 PNG、JPEG、GIF、WebP 和 AVIF 圖片，且會驗證實際檔案格式" },
-  "error.attachmentOffline": { en: "Attachment “{name}” is not cached and cannot be read while offline", "zh-CN": "附件“{name}”尚未缓存，离线时无法读取", "zh-TW": "附件「{name}」尚未快取，離線時無法讀取" },
+  "error.attachmentFormat": { en: "Only PNG, JPEG, GIF, WebP, and AVIF images are supported. File formats are verified.", "zh-CN": "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片。文件格式须通过校验。", "zh-TW": "僅支援 PNG、JPEG、GIF、WebP 和 AVIF 圖片。檔案格式須通過驗證。" },
+  "error.attachmentOffline": { en: "Attachment “{name}” is not cached. Offline access is unavailable.", "zh-CN": "附件“{name}”未缓存。离线时无法读取。", "zh-TW": "附件「{name}」未快取。離線時無法讀取。" },
   "error.missingAttachment": { en: "Note “{title}” is missing attachment {attachment}", "zh-CN": "笔记“{title}”缺少附件 {attachment}", "zh-TW": "筆記「{title}」缺少附件 {attachment}" },
 
   "api.crossOrigin": { en: "Cross-origin state change rejected", "zh-CN": "已拒绝跨来源状态变更", "zh-TW": "已拒絕跨來源狀態變更" },
@@ -798,7 +798,7 @@ const messages = {
   "api.invalidActivation": { en: "Invalid account activation", "zh-CN": "账户激活资料无效", "zh-TW": "帳戶啟用資料無效" },
   "api.activationInvalid": { en: "Activation code is invalid or expired", "zh-CN": "激活码无效或已过期", "zh-TW": "啟用碼無效或已過期" },
   "api.accountNotFound": { en: "Account not found", "zh-CN": "未找到账户", "zh-TW": "找不到帳戶" },
-  "api.invalidCredentials": { en: "Invalid credentials", "zh-CN": "用户名或密码不正确", "zh-TW": "使用者名稱或密碼不正確" },
+  "api.invalidCredentials": { en: "Incorrect username or password", "zh-CN": "用户名或密码不正确", "zh-TW": "使用者名稱或密碼不正確" },
   "api.invalidRecovery": { en: "Invalid recovery request", "zh-CN": "密码恢复请求无效", "zh-TW": "密碼復原請求無效" },
   "api.recoveryFailed": { en: "Recovery failed", "zh-CN": "密码恢复失败", "zh-TW": "密碼復原失敗" },
   "api.invalidPasswordChange": { en: "Invalid password change", "zh-CN": "密码修改请求无效", "zh-TW": "密碼變更請求無效" },
@@ -819,10 +819,10 @@ const messages = {
   "api.historyExists": { en: "History snapshot already exists", "zh-CN": "历史版本已存在", "zh-TW": "歷史版本已存在" },
   "api.historyQuota": { en: "Note history quota exceeded", "zh-CN": "笔记历史配额已用尽", "zh-TW": "筆記歷史配額已用盡" },
   "api.protectedHistory": { en: "Protected history blocks this operation", "zh-CN": "受保护的历史版本阻止了此操作", "zh-TW": "受保護的歷史版本阻止了此操作" },
-  "api.endpointNotFound": { en: "Endpoint not found", "zh-CN": "未找到设备", "zh-TW": "找不到裝置" },
-  "api.endpointTooNew": { en: "Current endpoint must be at least 24 hours old", "zh-CN": "当前设备登录满 24 小时后才能执行此操作", "zh-TW": "目前裝置登入滿 24 小時後才能執行此操作" },
-  "api.logoutCurrentEndpoint": { en: "Use logout to end the current endpoint", "zh-CN": "请使用登出结束当前设备会话", "zh-TW": "請使用登出結束目前裝置工作階段" },
-  "api.endpointAlreadySignedOut": { en: "Endpoint is already signed out", "zh-CN": "该设备已经登出", "zh-TW": "該裝置已經登出" },
+  "api.endpointNotFound": { en: "Device not found", "zh-CN": "未找到设备", "zh-TW": "找不到裝置" },
+  "api.endpointTooNew": { en: "This device must be signed in for 24 hours before this action is available", "zh-CN": "当前设备登录满 24 小时后才能执行此操作", "zh-TW": "目前裝置登入滿 24 小時後才能執行此操作" },
+  "api.logoutCurrentEndpoint": { en: "Use Log out to end the current device session", "zh-CN": "请使用“登出”结束当前设备会话", "zh-TW": "請使用「登出」結束目前裝置工作階段" },
+  "api.endpointAlreadySignedOut": { en: "Device already signed out", "zh-CN": "该设备已登出", "zh-TW": "該裝置已登出" },
   "api.invalidSyncEvent": { en: "Invalid synchronization event request", "zh-CN": "同步事件请求无效", "zh-TW": "同步事件請求無效" },
   "api.invalidEncryptedObject": { en: "Invalid encrypted object", "zh-CN": "加密对象无效", "zh-TW": "加密物件無效" },
   "api.invalidEncryptedObjectBatch": { en: "Invalid encrypted object batch", "zh-CN": "批量加密对象无效", "zh-TW": "批次加密物件無效" },

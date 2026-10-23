@@ -24,6 +24,25 @@ afterEach(() => {
 });
 
 describe("crypto client worker lifecycle", () => {
+  it.each(["", "Decryption failed"])("rejects an unlock error with message %j and allows retry", async (message) => {
+    const { createCryptoClient } = await import("./client");
+    const client = createCryptoClient();
+    const worker = FakeWorker.instances.at(-1)!;
+    const unlock = () => client.unlockVaultFromDeviceWithPin(
+      "user-id", "endpoint-id", {} as CryptoKey, "1234", "salt", "ciphertext", "nonce", 1
+    );
+    const rejected = expect(unlock()).rejects.toThrow(message || "Cryptographic operation failed");
+    const failedRequest = worker.postMessage.mock.calls.at(-1)![0];
+    worker.onmessage?.({ data: { id: failedRequest.id, error: message } } as MessageEvent);
+    await rejected;
+
+    const retry = unlock();
+    const retryRequest = worker.postMessage.mock.calls.at(-1)![0];
+    worker.onmessage?.({ data: { id: retryRequest.id, result: { unlocked: true } } } as MessageEvent);
+    await expect(retry).resolves.toEqual({ unlocked: true });
+    expect(worker.terminate).not.toHaveBeenCalled();
+  });
+
   it("rejects pending and future operations when the worker crashes", async () => {
     const { createCryptoClient } = await import("./client");
     const client = createCryptoClient();

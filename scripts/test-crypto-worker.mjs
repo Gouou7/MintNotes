@@ -38,7 +38,7 @@ function createCryptoWorker() {
       const listener = (message) => {
         if (message.id !== id) return;
         worker.off("message", listener);
-        if (message.error) reject(new Error(message.error));
+        if ("error" in message) reject(new Error(message.error || "Cryptographic operation failed"));
         else resolveCall(message.result);
       };
       worker.on("message", listener);
@@ -171,8 +171,20 @@ try {
 } catch {
   wrongPinRejected = true;
 }
-await wrongPinWorker.worker.terminate();
-if (!wrongPinRejected) throw new Error("Incorrect PIN released the device credential");
+try {
+  if (!wrongPinRejected) throw new Error("Incorrect PIN released the device credential");
+  const stillLocked = await wrongPinWorker.call("decryptObject", {
+    userId,
+    objectId,
+    objectType: "note",
+    revision: 1,
+    ciphertext: encrypted.ciphertext,
+    nonce: encrypted.nonce
+  }).then(() => false, () => true);
+  if (!stillLocked) throw new Error("Incorrect PIN allowed note decryption");
+} finally {
+  await wrongPinWorker.worker.terminate();
+}
 
 const pinWorker = createCryptoWorker();
 await pinWorker.call("unlockVaultFromDeviceWithPin", {

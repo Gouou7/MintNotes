@@ -86,7 +86,7 @@ describe("sync status presentation", () => {
   it("does not call an unverified session offline when the browser reports a connection", () => {
     const unverified = createSyncStatus(false, true);
     expect(unverified.visible).toBe("error");
-    expect(syncStatusDetailText(unverified, zh)).toContain("服务器会话尚未验证");
+    expect(syncStatusDetailText(unverified, zh)).toContain("服务器会话未验证");
     expect(createSyncStatus(false, false).visible).toBe("offline");
     expect(createSyncStatus(true, false).visible).toBe("synced");
   });
@@ -108,7 +108,7 @@ describe("sync status presentation", () => {
       type: "sync-error",
       failure: { kind: "unreachable" }
     });
-    expect(syncStatusDetailText(unreachable, zh)).toBe("无法连接服务器 · 修改已保存到本地，将自动重试");
+    expect(syncStatusDetailText(unreachable, zh)).toBe("无法连接服务器。修改已保存到本地。系统将自动重试同步。");
 
     const rejected = reduceSyncStatus(createSyncStatus(true), {
       type: "sync-error",
@@ -122,7 +122,7 @@ describe("sync status presentation", () => {
       type: "local-failure",
       objectId: "note-1"
     });
-    expect(syncStatusDetailText(failed, zh)).toBe("本地保存失败 · 最新修改尚未安全保存");
+    expect(syncStatusDetailText(failed, zh)).toBe("本地保存失败。最新修改尚未保存。");
     expect(syncStatusDetailText(failed, zh)).not.toContain("已保存到本地");
   });
 });

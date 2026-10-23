@@ -39,7 +39,7 @@ describe("FrontmatterProperties", () => {
       <I18nProvider><FrontmatterProperties editable markdown={"---\nvalue: [\n---\nBody"} /></I18nProvider>
     );
 
-    expect(html).toContain("has been left unchanged");
+    expect(html).toContain("The original content is preserved");
     expect(html).toContain("value: [");
     expect(html).not.toContain("Add note property");
   });

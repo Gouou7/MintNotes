@@ -100,7 +100,7 @@ describe("OutlinePanel", () => {
 
   it("shows the existing empty-state prompt without tree controls", async () => {
     const { host } = await renderOutline([]);
-    expect(host.querySelector(".outline-empty")?.textContent).toBe("Add Markdown headings to see a live outline here.");
+    expect(host.querySelector(".outline-empty")?.textContent).toBe("Add Markdown headings to display an outline.");
     expect(host.querySelector("button")).toBeNull();
   });
 });

@@ -29,7 +29,7 @@ Mint Notes 是一款可自托管的多用户 Markdown 笔记 PWA，采用本地�
 
 ## 开发与命令
 
-使用 Node.js 22+ 和 `package.json#packageManager` 指定的 pnpm 版本，依赖锁定在 `pnpm-lock.yaml`。不要引入其他包管理器的锁文件。
+使用 `.nvmrc` 指定的 Node.js 24 LTS 和 `package.json#packageManager` 指定的 pnpm 版本，依赖锁定在 `pnpm-lock.yaml`。升级 Node.js 时同步更新 `.nvmrc`、两个包的 `engines.node` 和 Dockerfile 默认版本；CI 从 `.nvmrc` 读取并传给镜像构建。不要引入其他包管理器的锁文件。
 
 | 命令 | 用途 |
 | --- | --- |

@@ -406,6 +406,6 @@ self.onmessage = async (event: MessageEvent<RequestMessage>) => {
     const result = await handle(operation, payload);
     self.postMessage({ id, result }, responseTransferables(operation, result));
   } catch (error) {
-    self.postMessage({ id, error: error instanceof Error ? error.message : "Cryptographic operation failed" });
+    self.postMessage({ id, error: (error instanceof Error && error.message) || "Cryptographic operation failed" });
   }
 };

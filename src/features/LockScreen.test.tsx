@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
+import { unlockDeviceWithPin } from "../crypto/deviceUnlock";
 import type { DeviceUnlockCredential } from "../storage/database";
 import type { AuthEndpoint, User } from "../types";
 import { LockScreen } from "./LockScreen";
@@ -53,6 +54,40 @@ afterEach(async () => {
 });
 
 describe("LockScreen keyboard submission", () => {
+  it.each([true, false])("keeps an incorrect PIN locked and permits retry (online: %s)", async (serverSessionVerified) => {
+    localStorage.setItem("webmd-notes-language", "zh-CN");
+    vi.mocked(unlockDeviceWithPin).mockResolvedValueOnce("invalid").mockResolvedValueOnce("ok");
+    const onUnlocked = vi.fn().mockResolvedValue(undefined);
+    const onTrustExhausted = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onUnlocked={onUnlocked} onTrustExhausted={onTrustExhausted} onLogout={vi.fn()} /></I18nProvider>));
+
+    const enterPin = async (value: string) => {
+      const input = container.querySelector("input")!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await act(async () => input.form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    };
+
+    await enterPin("wrong");
+    expect(unlockDeviceWithPin).toHaveBeenLastCalledWith(user.id, endpoint.id, "wrong");
+    expect(onUnlocked).not.toHaveBeenCalled();
+    expect(onTrustExhausted).not.toHaveBeenCalled();
+    expect(container.querySelector(".error")?.textContent).toBe("PIN 不正确");
+    expect(container.querySelector(".lock-status")?.textContent).toContain("笔记已锁定");
+    expect(button(container, "使用 PIN 解锁").disabled).toBe(false);
+
+    await enterPin("246810");
+    expect(unlockDeviceWithPin).toHaveBeenLastCalledWith(user.id, endpoint.id, "246810");
+    expect(onUnlocked).toHaveBeenCalledExactlyOnceWith(false);
+    expect(container.querySelector(".error")).toBeNull();
+  });
+
   it("submits PIN and master-password unlock with Enter", async () => {
     localStorage.setItem("webmd-notes-language", "zh-CN");
     const container = document.createElement("div");

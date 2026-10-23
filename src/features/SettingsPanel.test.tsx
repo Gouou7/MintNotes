@@ -249,7 +249,7 @@ describe("SettingsPanel", () => {
     );
     expect(api).toHaveBeenCalledWith("/api/account/username", expect.objectContaining({ method: "PATCH" }));
     expect(onUsername).toHaveBeenCalledWith("renamed-admin");
-    expect(onNotify).toHaveBeenCalledWith("用户名已更新，其他设备需要重新登录", "info");
+    expect(onNotify).toHaveBeenCalledWith("用户名已更新。其他设备需重新登录。", "info");
   });
 
   it("resets a missing recovery key before committing the username change", async () => {
@@ -300,13 +300,13 @@ describe("SettingsPanel", () => {
       replacementRecoveryAuthSecret: "replacement-recovery-auth"
     });
     expect(onUsername).toHaveBeenCalledWith("renamed-admin");
-    expect(onNotify).toHaveBeenCalledWith("用户名和恢复密钥已更新，其他设备需要重新登录", "info");
+    expect(onNotify).toHaveBeenCalledWith("用户名和恢复密钥已更新。其他设备需重新登录。", "info");
   });
 
   it("keeps deleted folders collapsed, reveals matching paths, and auto-saves retention", async () => {
     const container = await renderSettings();
     await act(async () => button(container, "回收站").click());
-    expect(container.textContent).toContain("回收站的内容会在到达设置的自动删除时间后自动删除。");
+    expect(container.textContent).toContain("回收站内容将在保留期满后永久删除。");
     expect(container.textContent).toContain("1 个删除项目 · 共 2 项");
     expect(container.textContent).toContain("包含 1 项");
     expect(container.querySelector(".trash-children")).toBeNull();
@@ -338,8 +338,8 @@ describe("SettingsPanel", () => {
     expect(tabs.slice(0, 6).map((entry) => entry.textContent?.trim())).toEqual(["常规", "安全", "笔记历史", "回收站", "数据迁移", "关于"]);
     expect(tabs.slice(0, 6).every((entry) => Boolean(entry.querySelector("svg")))).toBe(true);
     await act(async () => button(container, "安全").click());
-    expect(container.textContent).toContain("查看已登录的设备、登出不再使用的设备，并可移除失效记录。");
-    expect(container.textContent).toContain("已登出和已过期的设备记录会在 30 天后自动删除");
+    expect(container.textContent).toContain("管理登录设备并移除失效记录。");
+    expect(container.textContent).toContain("已登出和已过期的设备记录将在 30 天后自动移除");
     const headings = [...container.querySelectorAll(".settings-section h3")].map((entry) => entry.textContent?.trim());
     expect(headings.slice(0, 5)).toEqual(["本机 PIN", "自动锁定", "登录设备", "应用连接", "账户凭据"]);
     expect(button(container, "设置 PIN")).toBeTruthy();
@@ -360,11 +360,11 @@ describe("SettingsPanel", () => {
     const autoLockSelect = container.querySelector(".settings-section select") as HTMLSelectElement;
     await act(async () => { autoLockSelect.value = "5"; autoLockSelect.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(vi.mocked(setAutoLockMinutes)).not.toHaveBeenCalled();
-    expect(onNotify).toHaveBeenCalledWith("请先在上方设置本机 PIN，再开启自动锁定", "warning");
+    expect(onNotify).toHaveBeenCalledWith("开启自动锁定前请先设置本机 PIN", "warning");
     expect(container.querySelector(".notice")).toBeNull();
     expect(container.textContent).not.toContain("本机 PIN 与自动锁定");
     expect(container.textContent).not.toContain("保存自动锁定设置");
-    expect(container.textContent).toContain("设置 PIN 之后，每次启动将要求输入 PIN；PIN 只应用于当前设备。");
+    expect(container.textContent).toContain("设置后每次启动应用均需输入 PIN。PIN 仅适用于当前设备。");
     expect(container.textContent).toContain("重置恢复密钥");
   });
 
@@ -525,7 +525,7 @@ describe("SettingsPanel", () => {
     const container = await renderSettings();
     await act(async () => button(container, "关于").click());
     expect(container.querySelector(".about-product")?.textContent).toContain(`Mint Notes版本 ${APP_VERSION}`);
-    expect(container.querySelector(".about-introduction")?.textContent).toBe("Mint Notes 是一款自托管的轻量 Markdown 笔记应用，支持多用户、PWA 离线编辑和跨设备同步。");
+    expect(container.querySelector(".about-introduction")?.textContent).toBe("Mint Notes 是一款轻量的自托管 Markdown 笔记应用。支持多用户、PWA 离线编辑和跨设备同步。");
     expect(container.querySelector(".about-feedback")).toBeNull();
     expect(container.textContent).not.toContain("如果你发现 Bug 或者有功能建议");
     expect(container.textContent).toContain("致谢");
@@ -556,7 +556,7 @@ describe("SettingsPanel", () => {
     expect(onLogout).not.toHaveBeenCalled();
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("确认从当前设备登出？");
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
-    expect(container.querySelector(".logout-confirm")?.textContent).toContain("已同步到服务器的数据不会被删除");
+    expect(container.querySelector(".logout-confirm")?.textContent).toContain("已同步至服务器的数据不受影响");
     await act(async () => (container.querySelector(".logout-confirm .settings-action-button.danger") as HTMLButtonElement).click());
     expect(onLogout).toHaveBeenCalledOnce();
   });

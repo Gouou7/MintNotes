@@ -5,6 +5,9 @@
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
   "scripts": {
     "dev": "pnpm build:client && pnpm prepare:editor && concurrently -k -n web,api -c cyan,magenta \"vite\" \"tsx watch server/index.ts\"",
     "dev:web": "pnpm build:client && pnpm prepare:editor && vite",

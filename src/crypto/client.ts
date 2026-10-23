@@ -94,7 +94,8 @@ export function createCryptoClient(): CryptoClient {
     const entry = pending.get(event.data.id);
     if (!entry) return;
     pending.delete(event.data.id);
-    if (event.data.error) entry.reject(new Error(event.data.error));
+    // Web Crypto can reject with an empty message; the error field still means failure.
+    if ("error" in event.data) entry.reject(new Error(event.data.error || "Cryptographic operation failed"));
     else entry.resolve(event.data.result);
   };
   worker.onerror = (event) => {

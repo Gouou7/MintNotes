@@ -39,7 +39,11 @@ Compose 默认仅在主机的 `127.0.0.1:8787` 监听。主机健康检查地址
 
 ## pnpm 部署
 
-pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。需要 Node.js 22+、`package.json#packageManager` 指定的 pnpm 版本，以及编译 `better-sqlite3` 时可能用到的 Python 3、Make 和 C/C++ 编译器。应使用独立的非 root 服务账户，并固定部署目录。
+pnpm 部署直接在主机上构建并运行 Node.js 服务，不使用容器。需要 [`.nvmrc`](../.nvmrc) 指定的 Node.js 24 LTS、`package.json#packageManager` 指定的 pnpm 版本，以及编译 `better-sqlite3` 时可能用到的 Python 3、Make 和 C/C++ 编译器。应使用独立的非 root 服务账户，并固定部署目录。
+
+Windows、macOS、CI 和 Docker 统一使用 `.nvmrc` 记录的完整 Node.js 版本。使用支持 `.nvmrc` 的版本管理器安装并切换版本，安装依赖前通过 `node --version` 确认。Dockerfile 的默认版本与 `.nvmrc` 保持一致，发布流程自动将该版本传给镜像构建。
+
+各操作系统及 CPU 架构应分别安装依赖，不要复制或同步 `node_modules`。切换 Node.js 版本后，在停止开发服务的情况下重新安装依赖，并确认 `better-sqlite3` 等原生模块与当前运行环境匹配。保留 `pnpm-lock.yaml`，不要通过删除锁文件处理原生模块错误。
 
 仓库使用 `pnpm-lock.yaml` 锁定依赖。可通过 Corepack 启用项目指定的 pnpm 版本，不要改用其他包管理器安装依赖。
 

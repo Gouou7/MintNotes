@@ -117,7 +117,7 @@ describe("AuthScreen account entry points", () => {
     const container = await renderAuth({ allowRegistration: false, bootstrapAllowed: false });
     await click(button(container, "注册"));
     expect(container.querySelector("h1")?.textContent).toBe("使用激活码注册");
-    expect(container.textContent).toContain("已关闭公开注册，请向管理员申请注册激活码。");
+    expect(container.textContent).toContain("公开注册已关闭。请向管理员申请激活码。");
     expect(container.textContent).not.toContain("显示名称");
   });
 
@@ -125,7 +125,7 @@ describe("AuthScreen account entry points", () => {
     const container = await renderAuth({ allowRegistration: false, bootstrapAllowed: true });
     await click(button(container, "注册"));
     expect(container.querySelector("h1")?.textContent).toBe("创建加密账户");
-    expect(container.textContent).toContain("这是服务器上的首个账户，创建后将成为管理员。");
+    expect(container.textContent).toContain("服务器的首个账户将成为管理员。");
     expect(container.textContent).not.toContain("使用激活码注册");
   });
 
@@ -161,7 +161,7 @@ describe("AuthScreen account entry points", () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(container.querySelector("h1")?.textContent).toBe("保存恢复密钥");
-    expect(button(container, "我已经安全保存").disabled).toBe(true);
+    expect(button(container, "已保存恢复密钥").disabled).toBe(true);
     expect(button(container, "下载恢复密钥")).toBeTruthy();
     await click(button(container, "复制恢复密钥"));
     expect(writeText).toHaveBeenCalledWith("recovery-code");
@@ -169,21 +169,21 @@ describe("AuthScreen account entry points", () => {
 
     const confirmation = container.querySelector(".recovery-confirm input") as HTMLInputElement;
     await act(async () => confirmation.click());
-    expect(button(container, "我已经安全保存").disabled).toBe(false);
+    expect(button(container, "已保存恢复密钥").disabled).toBe(false);
   });
 
   it("explains recovery-key password reset", async () => {
     const container = await renderAuth({ allowRegistration: true, bootstrapAllowed: false });
     await click(button(container, "忘记密码"));
     expect(container.querySelector("h1")?.textContent).toBe("找回密码");
-    expect(container.textContent).toContain("可使用恢复密钥重置主密码，如果恢复密钥也丢失，则数据无法再找回。");
+    expect(container.textContent).toContain("使用恢复密钥重置主密码。主密码与恢复密钥均丢失时将无法恢复数据。");
     expect(container.textContent).toContain("恢复密钥");
   });
 
   it("stays on login and retries a failed registration config request", async () => {
     const container = await renderAuth(new Error("offline"));
     expect(container.querySelector("h1")?.textContent).toBe("Mint Notes");
-    expect(container.textContent).toContain("无法获取注册配置，点击“注册”重试。");
+    expect(container.textContent).toContain("注册配置加载失败。请选择“注册”重试。");
     vi.mocked(api).mockResolvedValueOnce({ allowRegistration: true, bootstrapAllowed: false });
     await click(button(container, "注册"));
     expect(container.querySelector("h1")?.textContent).toBe("创建加密账户");
@@ -193,8 +193,8 @@ describe("AuthScreen account entry points", () => {
     vi.mocked(api).mockReset();
     const container = await renderAuth(new Error("unused"), true);
 
-    expect(container.textContent).toContain("离线访问仅适用于已记住");
-    expect(container.textContent).not.toContain("无法获取注册配置");
+    expect(container.textContent).toContain("离线访问需使用已记住的设备");
+    expect(container.textContent).not.toContain("注册配置加载失败");
     expect(api).not.toHaveBeenCalled();
   });
 });

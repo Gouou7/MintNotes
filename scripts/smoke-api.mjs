@@ -199,7 +199,7 @@ try {
   const syncedObjectB = syncB.changes.find((change) => change.objectId === objectId);
   const [chunkA, chunkB] = await Promise.all([getChunk(alpha, attachmentId), getChunk(bravo, attachmentId)]);
   const historyId = crypto.randomUUID();
-  const historyCapturedAt = "2026-07-23T10:00:00.000Z";
+  const historyCapturedAt = new Date(Date.now() - 60_000).toISOString();
   const historyEnvelope = {
     capturedAt: historyCapturedAt,
     captureKind: "manual",
