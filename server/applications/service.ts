@@ -17,10 +17,13 @@ export function initializeApplicationConnections(db: AppDatabase): void {
       last_used_at TEXT,
       idle_timeout_days INTEGER CHECK (idle_timeout_days IS NULL OR idle_timeout_days IN (7, 30, 90)),
       expires_at TEXT,
-      revoked_at TEXT
+      revoked_at TEXT,
+      removed_at TEXT
     );
     CREATE INDEX IF NOT EXISTS application_connections_user ON application_connections(user_id, created_at);
   `);
+  const columns = db.pragma("table_info(application_connections)") as { name: string }[];
+  if (!columns.some((column) => column.name === "removed_at")) db.exec("ALTER TABLE application_connections ADD COLUMN removed_at TEXT");
 }
 
 export interface ApplicationRow {

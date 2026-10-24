@@ -23,7 +23,7 @@ function useDatabaseStorage() {
 export function DatabaseStorageSection() {
   const { t, formatDateTime } = useI18n();
   const { status, failed, busy, refresh } = useDatabaseStorage();
-  return <section className="settings-section settings-card database-storage"><div className="storage-heading"><h3>{t("storage.database")}</h3><SettingsButton icon={RefreshCw} aria-label={t("storage.refresh")} title={t("storage.refresh")} disabled={busy} onClick={refresh} /></div>
+  return <section className="settings-section settings-card database-storage"><div className="storage-heading"><h3>{t("storage.database")}</h3><SettingsButton icon={RefreshCw} iconOnly aria-label={t("storage.refresh")} title={t("storage.refresh")} disabled={busy} onClick={refresh} /></div>
     {failed && <p className="settings-help warning">{t("storage.databaseFailed")}</p>}
     {status && <><p className="storage-total" title={t("storage.databaseFiles")}><strong>{formatHistoryBytes(status.databaseBytes + status.walBytes + status.shmBytes)}</strong><span className="storage-db-state">{t(status.available ? "storage.databaseReady" : "storage.databaseFailed")}</span></p>
       <dl className="storage-metrics">{([["storage.allUserData", status.logicalBytes], ["storage.backups", status.backupsBytes]] as const).map(([label, value]) => <div key={label}><dt>{t(label)}</dt><dd>{formatHistoryBytes(value)}</dd></div>)}</dl>

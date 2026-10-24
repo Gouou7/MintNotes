@@ -49,6 +49,27 @@ describe("application connection controller", () => {
     await act(async () => { await current.create({ name: "corrected", idleTimeoutDays: 30, expiresAt: null }, "read-write"); });
     expect(cryptoClient.createApplicationCredential).toHaveBeenCalledTimes(2);
   });
+  it("keeps records on failed removal and applies successful removal only to the current online session", async () => {
+    let fails = true;
+    const rows = [{ connectionId: "revoked", status: "revoked" }, { connectionId: "other", status: "active" }];
+    vi.mocked(api).mockImplementation(async (_path, init) => {
+      if (init?.method === "DELETE") { if (fails) throw new Error("network"); return { ok: true } as never; }
+      return { connections: rows } as never;
+    });
+    await render();
+    await act(async () => { expect(await current.remove("revoked")).toBe(false); });
+    expect(current.connections).toEqual(rows);
+    expect(current.error).toBe(true);
+    fails = false;
+    await act(async () => { expect(await current.remove("revoked")).toBe(true); });
+    expect(api).toHaveBeenCalledWith("/api/account/application-connections/revoked/record", expect.objectContaining({ method: "DELETE" }));
+    expect(current.connections).toEqual([rows[1]]);
+    await render(false);
+    vi.mocked(api).mockClear();
+    await act(async () => { expect(await current.remove("other")).toBe(false); });
+    expect(api).not.toHaveBeenCalled();
+  });
+
   it("discards an in-flight credential when the session loses online validation", async () => {
     vi.mocked(api).mockResolvedValue({ connections: [] } as never);
     let resolve!: (value: typeof credential) => void;

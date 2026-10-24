@@ -32,7 +32,7 @@ export function registerApplicationRoutes(app: FastifyInstance, dependencies: {
   app.get(prefix, { preHandler: authenticate }, async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     const { userId } = authenticatedScope(request);
-    const rows = db.prepare("SELECT * FROM application_connections WHERE user_id = ? ORDER BY created_at DESC").all(userId) as ApplicationRow[];
+    const rows = db.prepare("SELECT * FROM application_connections WHERE user_id = ? AND removed_at IS NULL ORDER BY created_at DESC").all(userId) as ApplicationRow[];
     return { connections: rows.map((row) => applicationSummary(row)) };
   });
   app.post(prefix, { preHandler: authenticate, config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
@@ -82,6 +82,20 @@ export function registerApplicationRoutes(app: FastifyInstance, dependencies: {
       .run(new Date().toISOString(), id.data, userId);
     if (!result.changes) return reply.code(404).send({ error: "Application connection not found" });
     logEvent(request.log, "info", "application.revoked", { actorRef: logRefs.create("user", userId) });
+    return { ok: true };
+  });
+  app.delete(`${prefix}/:id/record`, { preHandler: authenticate }, async (request, reply) => {
+    const id = z.string().uuid().safeParse((request.params as { id: string }).id);
+    if (!id.success) return reply.code(400).send({ error: "Invalid connection ID" });
+    const { userId } = authenticatedScope(request);
+    const row = db.prepare("SELECT revoked_at FROM application_connections WHERE connection_id = ? AND user_id = ?")
+      .get(id.data, userId) as { revoked_at: string | null } | undefined;
+    if (!row) return reply.code(404).send({ error: "Application connection not found" });
+    if (!row.revoked_at) return reply.code(409).send({ error: "Revoke the application before removing its record", code: "APPLICATION_NOT_REVOKED" });
+    // Keep the revoked identity so delayed registration retries cannot recreate its grant.
+    db.prepare("UPDATE application_connections SET removed_at = COALESCE(removed_at, ?) WHERE connection_id = ? AND user_id = ? AND revoked_at IS NOT NULL")
+      .run(new Date().toISOString(), id.data, userId);
+    logEvent(request.log, "info", "application.removed", { actorRef: logRefs.create("user", userId) });
     return { ok: true };
   });
   app.post(`${prefix}/revoke-all`, { preHandler: authenticate }, async (request) => {

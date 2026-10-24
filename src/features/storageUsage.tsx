@@ -24,13 +24,13 @@ export function StorageUsage({ status }: { status: StorageStatus }) {
   const usage = status.usage;
   const level = usage ? capacityLevel(usage.totalBytes, usage.quotaBytes) : "normal";
   const limit = (bytes: number | null) => bytes === null ? t("storage.unlimited") : formatHistoryBytes(bytes);
-  return <section className="settings-section settings-card storage-usage"><div className="storage-heading"><h3>{t("storage.logical")}</h3><SettingsButton icon={RefreshCw} aria-label={t("storage.refresh")} title={t("storage.refresh")} disabled={status.refreshing} onClick={() => void status.refresh()} /></div>
+  return <section className="settings-section settings-card storage-usage"><div className="storage-heading"><h3>{t("storage.logical")}</h3><SettingsButton icon={RefreshCw} iconOnly aria-label={t("storage.refresh")} title={t("storage.refresh")} disabled={status.refreshing} onClick={() => void status.refresh()} /></div>
     <div className="storage-overview"><div className="storage-server">
     {usage ? <><p className="storage-total"><strong>{formatHistoryBytes(usage.totalBytes)}</strong><span> / {limit(usage.quotaBytes)}</span></p>
       {usage.quotaBytes !== null && <progress aria-label={t("storage.total")} max={usage.quotaBytes} value={Math.min(usage.totalBytes, usage.quotaBytes)} />}
       {level !== "normal" && level !== "unlimited" && <p className={`storage-capacity ${level}`}>{t(`storage.level.${level}`)}</p>}
-      <dl className="storage-metrics storage-categories">{([["storage.notes", usage.noteBytes], ["storage.attachments", usage.attachmentBytes], ["settings.history", usage.historyBytes], ["storage.avatar", usage.profileBytes]] as const).map(([key, value]) => <div key={key}><dt>{t(key)}</dt><dd>{formatHistoryBytes(value)}</dd></div>)}</dl>
-      <p className="settings-help storage-summary">{t("storage.trashIncluded", { size: formatHistoryBytes(usage.trashBytes) })}<span>{t(status.stale ? "storage.cachedAt" : "storage.updatedAt", { date: formatDateTime(usage.checkedAt) })}</span></p>
+      <dl className="storage-categories">{([["storage.notes", usage.noteBytes], ["storage.attachments", usage.attachmentBytes], ["settings.history", usage.historyBytes], ["settings.trash", usage.trashBytes]] as const).map(([key, value]) => <div className="storage-count-item" key={key} title={key === "settings.trash" ? t("storage.trashIncluded", { size: formatHistoryBytes(value) }) : undefined}><dt>{t(key)}</dt><dd>{formatHistoryBytes(value)}</dd></div>)}</dl>
+      <p className="settings-help storage-summary"><span>{t(status.stale ? "storage.cachedAt" : "storage.updatedAt", { date: formatDateTime(usage.checkedAt) })}</span></p>
     </> : <p className="settings-help">{t(status.failed ? "storage.unavailable" : "storage.noServerUsage")}</p>}
     </div><div className="storage-local"><h4 className="storage-local-title">{t("storage.local")}</h4>
     <dl className="storage-metrics"><div><dt title={t("storage.cacheHelp")}>{t("storage.localEstimate")}</dt><dd>{formatHistoryBytes(status.local.bytes)}</dd></div>

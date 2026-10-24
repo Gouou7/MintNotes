@@ -3,10 +3,16 @@ import { createRoot } from "react-dom/client";
 import { SettingsPanelLoading } from "../../../src/features/SettingsPanelLoading";
 import { DEFAULT_DEVICE_WORKSPACE_PREFERENCES } from "../../../src/features/workspace";
 import { I18nProvider } from "../../../src/i18n";
-import type { HistorySettings, UiPreferences } from "../../../src/types";
+import type { HistorySettings, OpenDocument, UiPreferences } from "../../../src/types";
 import "../../../src/styles.css";
 
 const historySettings: HistorySettings = { enabled: false, intervalMinutes: 10, retentionDays: 90, count: 0, usedBytes: 0, quotaBytes: 256 * 1024 * 1024, clearedBefore: null };
+const trashItems: OpenDocument[] = ["folder", "note"].map((kind, index) => ({
+  objectId: `trash-${kind}`, kind: kind as "folder" | "note", title: `Deleted ${kind}`, markdown: "",
+  parentId: null, tags: [], favorite: false, locked: false, deleted: true,
+  createdAt: "2026-10-23T10:30:00Z", updatedAt: "2026-10-23T10:30:00Z", manualOrder: index,
+  attachmentIds: [], schemaVersion: 2, serverRevision: 1, dirty: false,
+}));
 const noop = () => {};
 const done = async () => {};
 
@@ -36,7 +42,7 @@ function SettingsFixture() {
       endpoint={{ id: "fixture-endpoint", remembered: false }} credential={null} serverSessionVerified={!new URLSearchParams(location.search).has("offline")}
       onCredentialChange={noop} preferences={preferences} onPreferences={setPreferences} onClose={() => setOpen(false)} onLogout={done}
       onImport={done} onExport={done} onDisplayName={noop} onUsername={noop} avatarUrl={null} onAvatarChange={noop}
-      trashItems={[]} purging={false} onRestoreTrash={done} onPurgeTrash={noop} onClearTrash={noop}
+      trashItems={trashItems} purging={false} onRestoreTrash={done} onPurgeTrash={noop} onClearTrash={noop}
       historySettings={historySettings} onHistorySettings={noop} onRefreshHistorySettings={async () => historySettings} onClearHistory={done} onNotify={noop}
     /></Suspense>}
   </div>;

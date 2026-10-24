@@ -94,12 +94,17 @@ export function useApplicationConnections(userId: string, online: boolean) {
     if (lifetime.current === generation) setConnections((rows) => rows.map((row) => row.connectionId === id ? value.connection : row));
   });
 
-  const revoke = (id: string | null) => run(async (signal, generation) => {
-    await api(id ? `${prefix}/${id}` : `${prefix}/revoke-all`, { method: id ? "DELETE" : "POST", signal });
+  const revoke = (id: string) => run(async (signal, generation) => {
+    await api(`${prefix}/${id}`, { method: "DELETE", signal });
     const value = await api<{ connections: ApplicationConnection[] }>(prefix, { signal });
     if (lifetime.current === generation) setConnections(connectionList(value));
   });
 
+  const remove = (id: string) => run(async (signal, generation) => {
+    await api(`${prefix}/${id}/record`, { method: "DELETE", signal });
+    if (lifetime.current === generation) setConnections((rows) => rows.filter((row) => row.connectionId !== id));
+  });
+
   const dismissKey = () => { setApplicationKey(null); pending.current = null; setRetryPending(false); };
-  return { connections, busy, error, applicationKey, retryPending, create, update, revoke, refresh, dismissKey };
+  return { connections, busy, error, applicationKey, retryPending, create, update, revoke, remove, refresh, dismissKey };
 }

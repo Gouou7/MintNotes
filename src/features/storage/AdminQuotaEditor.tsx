@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import { X } from "lucide-react";
+import { Save, X } from "lucide-react";
 import { api } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
 import { SettingsButton } from "../../components/SettingsButton";
@@ -36,7 +36,7 @@ export function AdminQuotaEditor({ user, defaultBytes, onSaved, onClose, onNotif
     <form onSubmit={(event) => void controller.submit(event)}>
       <QuotaFields label={t("storage.totalQuota")} defaultBytes={defaultBytes} value={controller.draft} onChange={(value) => { controller.setDraft(value); controller.setConfirmed(false); }} disabled={controller.busy} />
       {controller.belowUsage && <label className="quota-confirm"><input type="checkbox" checked={controller.confirmed} onChange={(event) => controller.setConfirmed(event.target.checked)} />{t("storage.lowerQuotaWarning")}</label>}
-      <div className="settings-actions"><SettingsButton type="button" disabled={controller.busy} onClick={onClose}>{t("common.cancel")}</SettingsButton><SettingsButton disabled={controller.busy || controller.belowUsage && !controller.confirmed}>{t("storage.saveQuota")}</SettingsButton></div>
+      <div className="settings-actions"><SettingsButton icon={X} type="button" disabled={controller.busy} onClick={onClose}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Save} disabled={controller.busy || controller.belowUsage && !controller.confirmed}>{t("storage.saveQuota")}</SettingsButton></div>
     </form>
   </div>;
 }

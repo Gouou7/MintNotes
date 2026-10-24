@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Copy, KeyRound, Pencil, Plug, RefreshCw, Trash2, X } from "lucide-react";
+import { Copy, KeyRound, Pencil, Plug, Trash2, X } from "lucide-react";
 import type { ApplicationConnection, ApplicationPolicy } from "@mint-notes/application-client";
 import { AppIcon } from "../../components/AppIcon";
 import { SettingsButton } from "../../components/SettingsButton";
@@ -23,7 +23,7 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
   const [access, setAccess] = useState<"read" | "read-write">("read-write");
   const [idle, setIdle] = useState<ApplicationPolicy["idleTimeoutDays"]>(30);
   const [expiry, setExpiry] = useState("");
-  const [confirming, setConfirming] = useState<string | "all" | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const disabled = !online || controller.busy;
   const startEdit = (row: ApplicationConnection | "new") => {
     controller.dismissKey();
@@ -45,14 +45,11 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
     catch { onNotify(t("applications.copyFailed"), "warning"); }
   };
   return <section className="settings-section settings-card application-connections" aria-label={t("applications.title")}>
-    <h3>{t("applications.title")}</h3>
+    <div className="settings-section-heading"><h3>{t("applications.title")}</h3>
+      <SettingsButton icon={Plug} className="primary" disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit("new")}>{t("applications.add")}</SettingsButton>
+    </div>
     <p className="settings-help">{t("applications.help")}</p>
     {!online && <p className="session-gate">{t("notice.onlineSessionRequired")}</p>}
-    <div className="settings-actions">
-      <SettingsButton icon={Plug} className="primary" disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit("new")}>{t("applications.add")}</SettingsButton>
-      <SettingsButton icon={RefreshCw} disabled={disabled} onClick={() => void controller.refresh()}>{t("applications.refresh")}</SettingsButton>
-      <SettingsButton icon={Trash2} className="danger" disabled={disabled || Boolean(controller.applicationKey) || !controller.connections.some((row) => row.status === "active")} onClick={() => setConfirming("all")}>{t("applications.revokeAll")}</SettingsButton>
-    </div>
     {controller.error && <p className="error" role="alert">{t("applications.failed")}</p>}
     {editing && online && <form className="compact-form application-form" onSubmit={(event) => void submit(event)}>
       <label>{t("applications.name")}<input value={name} maxLength={80} required disabled={disabled || controller.retryPending} onChange={(event) => setName(event.target.value)} autoFocus /></label>
@@ -70,8 +67,8 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
       <div className="settings-actions"><SettingsButton icon={Copy} onClick={() => void copy(window.location.origin)}>{t("applications.copyUrl")}</SettingsButton><SettingsButton icon={Copy} onClick={() => void copy(controller.applicationKey!)}>{t("applications.copyKey")}</SettingsButton><SettingsButton icon={X} onClick={controller.dismissKey}>{t("applications.savedKey")}</SettingsButton></div>
     </div>}
     {confirming && online && <div className="application-confirm" role="alertdialog" aria-label={t("applications.revoke")}>
-      <p>{t(confirming === "all" ? "applications.confirmAll" : "applications.confirmOne")}</p>
-      <div className="settings-actions"><SettingsButton icon={X} disabled={disabled} onClick={() => setConfirming(null)}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Trash2} className="danger" disabled={disabled} onClick={() => void controller.revoke(confirming === "all" ? null : confirming).then((ok) => { if (ok) setConfirming(null); })}>{t("applications.revoke")}</SettingsButton></div>
+      <p>{t("applications.confirmOne")}</p>
+      <div className="settings-actions"><SettingsButton icon={X} disabled={disabled} onClick={() => setConfirming(null)}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Trash2} className="danger" disabled={disabled} onClick={() => void controller.revoke(confirming).then((ok) => { if (ok) setConfirming(null); })}>{t("applications.revoke")}</SettingsButton></div>
     </div>}
     {online && controller.connections.length === 0 && !controller.busy && <p className="settings-help">{t("applications.empty")}</p>}
     <div className="session-list">{controller.connections.map((row) => <article className="session-row" key={row.connectionId}>
@@ -82,7 +79,12 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
         <small>{t("applications.idlePolicy", { value: row.idleTimeoutDays === null ? t("applications.never") : t("applications.days", { count: row.idleTimeoutDays }) })}</small>
         <small>{t("applications.expires", { date: row.validUntil ? formatDateTime(row.validUntil) : t("applications.never") })}</small>
       </span>
-      <div className="application-row-actions">{row.status === "active" && <><SettingsButton icon={Pencil} disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit(row)}>{t("applications.edit")}</SettingsButton><SettingsButton icon={Trash2} className="danger" disabled={disabled || Boolean(controller.applicationKey)} onClick={() => setConfirming(row.connectionId)}>{t("applications.revoke")}</SettingsButton></>}</div>
+      <div className="application-row-actions">
+        {row.status === "active" && <SettingsButton icon={Pencil} disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit(row)}>{t("applications.edit")}</SettingsButton>}
+        {row.status === "revoked"
+          ? <SettingsButton icon={Trash2} disabled={disabled || Boolean(controller.applicationKey)} onClick={() => void controller.remove(row.connectionId)}>{t("applications.removeDevice")}</SettingsButton>
+          : <SettingsButton icon={Trash2} className="danger" disabled={disabled || Boolean(controller.applicationKey)} onClick={() => setConfirming(row.connectionId)}>{t("applications.revoke")}</SettingsButton>}
+      </div>
     </article>)}</div>
   </section>;
 }

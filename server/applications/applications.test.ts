@@ -139,6 +139,42 @@ describe("application grants and encrypted adapters", () => {
     expect(row.auth_hash).not.toBe(credential.authSecret);
   });
 
+  it("removes only revoked records and prevents registration replay from restoring their credentials", async () => {
+    const note = await putNote("retained note");
+    const grant = await registerGrant();
+    const recordUrl = `/api/account/application-connections/${grant.value.connectionId}/record`;
+    expect((await app.inject({ method: "DELETE", url: recordUrl, headers: browser() })).statusCode).toBe(409);
+    const revoke = await app.inject({ method: "DELETE", url: `/api/account/application-connections/${grant.value.connectionId}`, headers: browser() });
+    expect(revoke.statusCode).toBe(200);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect((await app.inject({ method: "DELETE", url: recordUrl, headers: browser() })).statusCode).toBe(200);
+    }
+    const listed = (await app.inject({ method: "GET", url: "/api/account/application-connections", headers: browser() })).json();
+    expect(listed.connections.map((row: { connectionId: string }) => row.connectionId)).toEqual([credential.connectionId]);
+    expect((await app.inject({ method: "GET", url: `/api/apps/v2/objects/${note.objectId}`, headers: { authorization: bearer } })).statusCode).toBe(200);
+    const replay = await app.inject({ method: "POST", url: "/api/account/application-connections", headers: browser(), payload: grant.body });
+    expect(replay.statusCode).toBe(409);
+    const oldCredential = await app.inject({ method: "GET", url: "/api/apps/v2/connection", headers: { authorization: `Bearer ${grant.value.connectionId}.${grant.value.authSecret}` } });
+    expect(oldCredential.statusCode).toBe(401);
+    expect(oldCredential.json().code).toBe("APPLICATION_REVOKED");
+    expect(db.prepare("SELECT removed_at, revoked_at FROM application_connections WHERE connection_id = ?").get(grant.value.connectionId))
+      .toEqual({ removed_at: expect.any(String), revoked_at: expect.any(String) });
+  });
+
+  it("protects record removal with browser authentication, Origin checks and account ownership", async () => {
+    const url = `/api/account/application-connections/${credential.connectionId}/record`;
+    await app.inject({ method: "DELETE", url: `/api/account/application-connections/${credential.connectionId}`, headers: browser() });
+    expect((await app.inject({ method: "DELETE", url, headers: { origin, authorization: bearer } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "DELETE", url, headers: { cookie } })).statusCode).toBe(403);
+    const other = await app.inject({ method: "POST", url: "/api/auth/register", headers: { origin }, payload: registration("beta") });
+    const otherCookie = (other.headers["set-cookie"] as string[]).map((value) => value.split(";", 1)[0]).join("; ");
+    expect((await app.inject({ method: "DELETE", url, headers: { origin, cookie: otherCookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "DELETE", url: "/api/account/application-connections/invalid/record", headers: browser() })).statusCode).toBe(400);
+    expect((await app.inject({ method: "DELETE", url: `/api/account/application-connections/${crypto.randomUUID()}/record`, headers: browser() })).statusCode).toBe(404);
+    const listed = (await app.inject({ method: "GET", url: "/api/account/application-connections", headers: browser() })).json();
+    expect(listed.connections).toHaveLength(1);
+  });
+
   it("makes registration idempotent and status checks unable to prolong idle expiry", async () => {
     const grant = await registerGrant();
     const retry = await app.inject({ method: "POST", url: "/api/account/application-connections", headers: browser(), payload: grant.body });

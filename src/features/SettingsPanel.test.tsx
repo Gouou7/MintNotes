@@ -504,7 +504,7 @@ describe("SettingsPanel", () => {
     await act(async () => button(container, "笔记和存储").click());
     const mode = container.querySelector(".history-budget select") as HTMLSelectElement;
     await act(async () => { mode.value = "unlimited"; mode.dispatchEvent(new Event("change", { bubbles: true })); });
-    await act(async () => container.querySelector(".history-budget")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(container.querySelector(".history-budget button")).toBeNull();
     expect(api).toHaveBeenCalledWith("/api/account/note-history-settings", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ quotaBytes: null }) }));
     expect(container.textContent).toContain("历史计入总配额");
   });
@@ -526,7 +526,7 @@ describe("SettingsPanel", () => {
     await act(async () => { await Promise.resolve(); });
     const management = container.querySelector(".admin-user-management");
     expect(management?.firstElementChild?.textContent).toBe("用户管理");
-    expect([...management!.querySelectorAll(".admin-subsection > h4")].map((heading) => heading.textContent)).toEqual(["新增用户", "现有用户"]);
+    expect([...management!.querySelectorAll(".admin-subsection h4")].map((heading) => heading.textContent)).toEqual(["新增用户", "现有用户"]);
     expect(container.textContent).not.toContain("创建待激活用户");
     expect(button(container, "禁用").querySelector(".lucide-user-round-x")).toBeTruthy();
     expect(button(container, "删除").querySelector(".lucide-trash-2")).toBeTruthy();

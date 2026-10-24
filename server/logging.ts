@@ -181,6 +181,7 @@ export interface ServerLogEventFields {
   "security.origin_rejected": { reason: "missing" | "mismatch" };
   "application.created": { actorRef: LogReference };
   "application.revoked": { actorRef: LogReference };
+  "application.removed": { actorRef: LogReference };
   "auth.registered": { actorRef: LogReference; role: "admin" | "user" };
   "auth.activated": { actorRef: LogReference };
   "auth.login_succeeded": { actorRef: LogReference; endpointRef: LogReference; remembered: boolean };
@@ -213,6 +214,7 @@ const EVENT_MESSAGES: Record<keyof ServerLogEventFields, string> = {
   "security.origin_rejected": "state-changing request rejected by origin policy",
   "application.created": "application connection created",
   "application.revoked": "application connection revoked",
+  "application.removed": "application connection record removed",
   "auth.registered": "account registered",
   "auth.activated": "account activated",
   "auth.login_succeeded": "login succeeded",

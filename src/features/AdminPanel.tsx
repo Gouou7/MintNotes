@@ -3,8 +3,8 @@ import { AdminQuotaEditor, type StorageQuotaUser } from "./storage/AdminQuotaEdi
 import { QuotaFields, quotaDraft, quotaPayload } from "./storage/QuotaFields";
 import { formatHistoryBytes } from "./history";
 import { capacityLevel } from "../storage/storageStatus";
-import { type FormEvent, useEffect, useState } from "react";
-import { Copy, KeyRound, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { type FormEvent, useEffect, useId, useState } from "react";
+import { Copy, HardDrive, KeyRound, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
@@ -32,6 +32,7 @@ interface AccountSetup {
 
 export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNotify: (text: string, tone: ToastTone) => void }) {
   const { formatDateTime, t } = useI18n();
+  const createFormId = useId();
   const [defaultQuotaBytes, setDefaultQuotaBytes] = useState(2 * 1024 * 1024 * 1024);
   const [newQuota, setNewQuota] = useState(() => quotaDraft("inherit", null));
   const [quotaTarget, setQuotaTarget] = useState<ManagedUser | null>(null);
@@ -109,13 +110,13 @@ export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNot
     <section className="settings-section settings-card admin-user-management">
       <h3>{t("admin.userManagement")}</h3>
       <div className="admin-subsection">
-        <h4>{t("admin.createPending")}</h4><p className="settings-help">{t("admin.createPendingHelp")}</p>
-        <form className="admin-create" onSubmit={create}><label>{t("auth.username")}<input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" required /></label><label>{t("auth.displayName")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label><QuotaFields label={t("storage.totalQuota")} defaultBytes={defaultQuotaBytes} value={newQuota} onChange={setNewQuota} disabled={busy} /><SettingsButton icon={KeyRound} className="primary compact" disabled={busy}>{t("admin.createCode")}</SettingsButton></form>
+        <div className="admin-create-heading"><h4>{t("admin.createPending")}</h4><SettingsButton icon={KeyRound} type="submit" form={createFormId} className="primary compact" disabled={busy}>{t("admin.createCode")}</SettingsButton></div><p className="settings-help">{t("admin.createPendingHelp")}</p>
+        <form id={createFormId} className="admin-create" onSubmit={create}><label>{t("auth.username")}<input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" required /></label><label>{t("auth.displayName")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label><QuotaFields label={t("storage.totalQuota")} defaultBytes={defaultQuotaBytes} value={newQuota} onChange={setNewQuota} disabled={busy} /></form>
         {activation && <div className="activation-result"><strong>{t("admin.codeShownOnce")}</strong><code>{activation}</code><SettingsButton icon={Copy} onClick={() => navigator.clipboard.writeText(activation)}>{t("common.copy")}</SettingsButton></div>}
         {!!setups.length && <><h4>{t("admin.pending")}</h4><div className="user-list">{setups.map((entry) => <div className="user-row" key={entry.id}><span><strong>{entry.displayName}</strong><small>@{entry.username} · {t("admin.expires", { date: formatDateTime(entry.expiresAt) })}</small></span><SettingsButton icon={X} disabled={busy} onClick={() => void cancel(entry)}>{t("common.cancel")}</SettingsButton></div>)}</div></>}
       </div>
       <div className="admin-subsection">
-        <h4>{t("admin.existingUsers")}</h4><div className="user-list">{users.map((entry) => <div className="user-row" key={entry.id}><span><strong>{entry.displayName}{entry.id === currentUser.id && <em>{t("admin.currentAccount")}</em>}</strong><small>@{entry.username} · {entry.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")}</small><small className="user-storage">{formatHistoryBytes(entry.totalBytes ?? entry.encryptedBytes)} / {entry.quotaBytes === null ? t("storage.unlimited") : formatHistoryBytes(entry.quotaBytes ?? defaultQuotaBytes)} · {t(`storage.level.${capacityLevel(entry.totalBytes ?? entry.encryptedBytes, entry.quotaBytes ?? (entry.quotaMode === "unlimited" ? null : defaultQuotaBytes))}`)}</small></span><div className="user-actions"><SettingsButton disabled={busy} onClick={() => setQuotaTarget(entry)}>{t("storage.editQuota")}</SettingsButton><SettingsButton disabled={busy || entry.id === currentUser.id} onClick={() => void toggle(entry)}><AppIcon icon={entry.disabled ? UserRoundCheck : UserRoundX} size={15} />{entry.disabled ? t("admin.enable") : t("admin.disable")}</SettingsButton>{entry.id !== currentUser.id && <SettingsButton className="danger" disabled={busy} onClick={() => beginDelete(entry)}><AppIcon icon={Trash2} size={15} />{t("admin.delete")}</SettingsButton>}</div></div>)}</div>
+        <h4>{t("admin.existingUsers")}</h4><div className="user-list">{users.map((entry) => <div className="user-row" key={entry.id}><span><strong>{entry.displayName}{entry.id === currentUser.id && <em>{t("admin.currentAccount")}</em>}</strong><small>@{entry.username} · {entry.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")}</small><small className="user-storage">{formatHistoryBytes(entry.totalBytes ?? entry.encryptedBytes)} / {entry.quotaBytes === null ? t("storage.unlimited") : formatHistoryBytes(entry.quotaBytes ?? defaultQuotaBytes)} · {t(`storage.level.${capacityLevel(entry.totalBytes ?? entry.encryptedBytes, entry.quotaBytes ?? (entry.quotaMode === "unlimited" ? null : defaultQuotaBytes))}`)}</small></span><div className="user-actions"><SettingsButton icon={HardDrive} disabled={busy} onClick={() => setQuotaTarget(entry)}>{t("storage.editQuota")}</SettingsButton><SettingsButton icon={entry.disabled ? UserRoundCheck : UserRoundX} disabled={busy || entry.id === currentUser.id} onClick={() => void toggle(entry)}>{entry.disabled ? t("admin.enable") : t("admin.disable")}</SettingsButton>{entry.id !== currentUser.id && <SettingsButton icon={Trash2} className="danger" disabled={busy} onClick={() => beginDelete(entry)}>{t("admin.delete")}</SettingsButton>}</div></div>)}</div>
       </div>
     </section>
     <DatabaseStorageSection />

@@ -19,7 +19,7 @@ async function expectInlineQuota(fields: Locator) {
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/**", route => route.fulfill({ json: route.request().url().endsWith("/admin/storage") ? database : {
-    days: 30, endpoints: [], connections: [], inactiveRetentionDays: 30, canRevokeOthers: true,
+    activationCode: "fixture-activation-code", days: 30, endpoints: [], connections: [], inactiveRetentionDays: 30, canRevokeOthers: true,
     users: [{ id: "fixture-user", username: "mint", displayName: "Mint Notes", role: "admin", disabled: false,
       totalBytes: 389021696, encryptedBytes: 389021696, quotaMode: "inherit", quotaBytes: 2147483648 }], setups: [],
   } }));
@@ -78,7 +78,43 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
         expect(await content.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
         // Individual cards must stay within the scroll surface, including forms and counts.
         expect(await content.locator(".settings-card").evaluateAll(cards => cards.every(card => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
+        for (const action of await content.locator(".settings-action-button").all()) {
+          await expect(action.locator(":scope > svg")).toHaveCount(1);
+          if ((await action.getAttribute("class"))?.includes("settings-icon-button")) {
+            await expect(action).toHaveText("");
+            await expect(action).toHaveAccessibleName(/.+/);
+            const bounds = (await action.boundingBox())!;
+            expect(bounds.width).toBe(bounds.height);
+          } else expect((await action.textContent())?.trim()).toBeTruthy();
+        }
+        if (name !== "mobile") {
+          const close = (await header.locator("button").boundingBox())!, modal = (await page.locator(".settings-modal").boundingBox())!;
+          expect(modal.x + modal.width - close.x - close.width).toBeLessThanOrEqual(10);
+          expect(close.y - modal.y).toBeLessThanOrEqual(10);
+        }
         if (title === "Notes and storage") {
+          await expect(content.locator(".storage-categories dt")).toHaveText(["Notes", "Attachments", "Note history", "Trash"]);
+          await expect(content.locator(".storage-categories dd")).toHaveText(["12.0 MiB", "238.0 MiB", "120.0 MiB", "15.0 MiB"]);
+          await expect(content.locator(".storage-categories dd").first()).toHaveCSS("font-size", "22px");
+          const categories = content.locator(".storage-categories");
+          await expect(categories).toHaveCSS("border-radius", "8px");
+          await expect(categories).toHaveCSS("background-color", await content.locator(".storage-local .storage-pending").evaluate(element => getComputedStyle(element).backgroundColor));
+          const tiles = await categories.locator(".storage-count-item").evaluateAll(items => items.map(item => { const { x, y } = item.getBoundingClientRect(); return { x, y }; }));
+          expect(tiles[0].y).toBe(tiles[1].y);
+          expect(tiles[2].y).toBe(tiles[3].y);
+          expect(tiles[0].x).toBe(tiles[2].x);
+          expect(tiles[1].x).toBe(tiles[3].x);
+          expect(tiles[2].y).toBeGreaterThan(tiles[0].y);
+          await expect(content.locator(".history-settings details")).toHaveCount(0);
+          await expect(content.getByRole("combobox", { name: "Note history quota", exact: true })).toBeVisible();
+          await expect(content.locator(".history-settings > .settings-help").first()).toBeVisible();
+          await expect(content.locator(".history-settings > .settings-help").first()).toHaveCSS("font-size", "13px");
+          await expect(content.locator(".trash-list")).toHaveCSS("border-top-width", "1px");
+          await expect(content.locator(".trash-list")).toHaveCSS("border-radius", "10px");
+          for (const row of await content.locator(".trash-row").all()) {
+            await expect(row).toHaveCSS("border-top-width", "0px");
+            expect(await row.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+          }
           const counts = content.locator(".storage-pending-item");
           await expect(counts).toHaveCount(3);
           expect(await counts.evaluateAll(items => items.every((item, i) => !i || item.getBoundingClientRect().left - items[i - 1].getBoundingClientRect().right >= 15))).toBe(true);
@@ -86,20 +122,46 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           await expect(counts.first().locator("span")).toHaveCSS("font-size", "14px");
           const historyQuota = content.locator(".history-budget .quota-fields");
           await expect(historyQuota.locator("option")).toHaveText(["Unlimited", "100MiB", "200MiB", "500MiB", "Custom"]);
+          const quotaSaved = page.waitForRequest(request => request.url().endsWith("/api/account/note-history-settings") && request.method() === "PATCH" && request.postDataJSON().quotaBytes === 200 * 1048576);
           await expectInlineQuota(historyQuota);
-          const saveQuota = content.locator(".history-budget").getByRole("button", { name: "Save quota", exact: true });
-          const [controls, save] = await Promise.all([historyQuota.locator(".quota-controls").boundingBox(), saveQuota.boundingBox()]);
-          expect(save!.x).toBeGreaterThanOrEqual(controls!.x + controls!.width);
-          expect(Math.abs(save!.y + save!.height / 2 - controls!.y - controls!.height / 2)).toBeLessThanOrEqual(2);
-          await expect(saveQuota).toHaveText(width <= 720 ? "Save" : "Save quota", { useInnerText: true });
-          await expect(saveQuota).toHaveCSS("font-size", "14px");
-          await expect(saveQuota).toHaveCSS("font-weight", "700");
-          await expect(saveQuota).not.toHaveClass(/primary/);
-          expect(save!.width).toBeLessThan(controls!.width);
+          await quotaSaved;
+          await expect(content.locator(".history-budget button")).toHaveCount(0);
+          const controls = await historyQuota.locator(".quota-controls").boundingBox();
+          await expect(historyQuota.locator(":scope > label")).toHaveCSS("font-weight", "400");
+          if (name !== "mobile") {
+            const label = (await historyQuota.locator(":scope > label").boundingBox())!;
+            expect(label.x + label.width).toBeLessThanOrEqual(controls!.x);
+            expect(Math.abs(label.y + label.height / 2 - controls!.y - controls!.height / 2)).toBeLessThanOrEqual(2);
+            expect(controls!.width).toBeLessThanOrEqual(220);
+          }
+          const usage = content.locator(".history-usage");
+          await expect(usage.locator("strong")).toHaveText("Note history usage");
+          const clear = usage.getByRole("button", { name: "Clear all history", exact: true });
+          const [progress, clearBounds] = await Promise.all([usage.locator("progress").boundingBox(), clear.boundingBox()]);
+          expect(clearBounds!.x).toBeGreaterThanOrEqual(progress!.x + progress!.width);
+          const meter = (await usage.locator(".history-usage-meter").boundingBox())!;
+          expect(Math.abs(clearBounds!.y + clearBounds!.height / 2 - meter.y - meter.height / 2)).toBeLessThanOrEqual(2);
+          if (name === "desktop") {
+            const label = (await usage.locator(".history-usage-label").boundingBox())!;
+            expect(Math.abs(label.y + label.height / 2 - clearBounds!.y - clearBounds!.height / 2)).toBeLessThanOrEqual(2);
+            expect((await usage.boundingBox())!.height).toBeLessThanOrEqual(64);
+          }
+          await usage.scrollIntoViewIfNeeded();
+          await page.screenshot({ path: info.outputPath(`${name}-${theme}-history-usage.png`) });
+          await expect(content.locator(".history-settings > .settings-section-heading")).toHaveCount(0);
           await page.screenshot({ path: info.outputPath(`${name}-${theme}-history-custom.png`) });
           await content.evaluate(element => { element.scrollTop = 0; });
         }
         if (title === "Administrator settings") {
+          const form = content.locator(".admin-create");
+          if (name !== "mobile") {
+            const inputs = await form.locator("input, select").all();
+            const bounds = await Promise.all(inputs.map(input => input.boundingBox()));
+            expect(Math.max(...bounds.map(box => box!.y)) - Math.min(...bounds.map(box => box!.y))).toBeLessThanOrEqual(2);
+            const row = content.locator(".user-row").first();
+            const identity = (await row.locator(":scope > span").boundingBox())!, actions = (await row.locator(".user-actions").boundingBox())!;
+            expect(actions.x).toBeGreaterThanOrEqual(identity.x + identity.width);
+          }
           const newQuota = content.locator(".admin-create .quota-fields");
           await expect(newQuota.locator("option")).toHaveText(["Unlimited", "100MiB", "200MiB", "500MiB", "1GiB", "2GiB", "Custom"]);
           await page.getByRole("button", { name: "Edit quota", exact: true }).first().click();
@@ -153,6 +215,13 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
     const logout = page.getByRole("dialog", { name: "Log out of this device?", exact: true });
     await expect(logout.locator(".storage-pending-item strong")).toHaveText(["12", "3", "24"]);
     await logout.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.locator(".settings-tabs").getByRole("button", { name: "Administrator settings", exact: true }).click();
+    await page.locator(".admin-create input").nth(0).fill("new-user");
+    await page.locator(".admin-create input").nth(1).fill("New User");
+    const created = page.waitForRequest(request => request.url().endsWith("/api/admin/account-setups") && request.method() === "POST");
+    await page.locator(".admin-create-heading button").click();
+    expect((await created).postDataJSON()).toMatchObject({ username: "new-user", displayName: "New User", storageQuota: { mode: "inherit", bytes: null } });
+    await expect(page.locator(".activation-result code")).toHaveText("fixture-activation-code");
     await page.getByRole("button", { name: "Close settings", exact: true }).click();
     await expect(page.locator(".settings-modal")).toHaveCount(0);
   });

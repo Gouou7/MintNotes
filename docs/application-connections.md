@@ -9,7 +9,7 @@
 3. 已解锁的浏览器 Worker 随机生成应用密钥，包装保险库密钥，再向服务器登记认证派生值、包装信封与策略。
 4. 页面只显示一次完整应用密钥。将服务地址及密钥配置给插件；页面关闭、锁定或登出后插件可独立工作。
 5. 插件用认证派生值取回自己的信封，在本地解密保险库，拉取密文并在本地搜索、读取或编辑。
-6. 在原页面撤销连接或修改到期策略。丢失密钥只能撤销重建；失效连接不能续期，权限不能原地升级。
+6. 在原页面逐条撤销连接或修改到期策略，已撤销条目可通过“移除设备”移出列表。丢失密钥只能撤销重建；失效连接不能续期，权限不能原地升级。
 
 网络中断或响应不明时，重试保持原连接 ID、认证派生值、包装信封和策略；明确的客户端错误（限流除外）允许修正表单并重新生成凭据。服务端对完全一致的有效连接返回幂等成功。客户端未确认服务器是否创建成功时不要生成第二把密钥。退出创建界面后，遗留连接可以通过连接列表撤销。
 
@@ -46,7 +46,10 @@ bootstrap 声明 `protocolVersion: 2`、`objectSchemaVersion: 2`、`encryptionVe
 | `POST /` | `connectionId, name, access, authSecret, vaultEnvelope, idleTimeoutDays, expiresAt` | `201 { connection }`；完全相同重试返回 `200 { connection, idempotent: true }` |
 | `PATCH /:id` | `name, idleTimeoutDays, expiresAt` 三项全部提供 | `{ connection }`；不可改变权限或信封 |
 | `DELETE /:id` | 无 | `{ ok: true }`，幂等撤销 |
+| `DELETE /:id/record` | 无 | `{ ok: true }`，幂等移除已撤销的条目；未撤销返回 `409` |
 | `POST /revoke-all` | 无 | `{ ok: true }` |
+
+移除条目只隐藏连接列表中的记录，服务器保留已撤销的连接身份以拒绝旧注册请求重放；不会恢复旧密钥，也不删除笔记或第三方离线副本。`GET /` 不再返回已移除条目。批量撤销接口保留供兼容使用，设置页只提供逐条撤销。
 
 `access` 为 `read` 或 `read-write`；`idleTimeoutDays` 为 `7`、`30`、`90` 或 `null`；`expiresAt` 为含时区的 ISO 8601 时间或 `null`。名称限制 80 字符，每账户最多 50 个有效连接。响应包含 `createdAt`、`lastUsedAt`、`revokedAt`、`validUntil` 和 `status`（`active`／`expired`／`revoked`）。实际失效时间取固定期限与「最后业务活动时间，未使用时取创建时间，加不活跃期限」的较早值。
 
