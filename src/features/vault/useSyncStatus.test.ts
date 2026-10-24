@@ -86,7 +86,7 @@ describe("sync status presentation", () => {
   it("does not call an unverified session offline when the browser reports a connection", () => {
     const unverified = createSyncStatus(false, true);
     expect(unverified.visible).toBe("error");
-    expect(syncStatusDetailText(unverified, zh)).toContain("服务器会话未验证");
+    expect(syncStatusDetailText(unverified, zh)).toContain("登录状态尚未验证");
     expect(createSyncStatus(false, false).visible).toBe("offline");
     expect(createSyncStatus(true, false).visible).toBe("synced");
   });
@@ -122,7 +122,7 @@ describe("sync status presentation", () => {
       type: "local-failure",
       objectId: "note-1"
     });
-    expect(syncStatusDetailText(failed, zh)).toBe("本地保存失败。最新修改尚未保存。");
+    expect(syncStatusDetailText(failed, zh)).toBe("本地保存失败。最新修改尚未保存，请保留当前页面并复制内容备份。");
     expect(syncStatusDetailText(failed, zh)).not.toContain("已保存到本地");
   });
 });

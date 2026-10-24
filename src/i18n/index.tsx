@@ -268,9 +268,9 @@ const messages = {
   "auth.operationFailed": { en: "The operation failed", "zh-CN": "操作失败", "zh-TW": "操作失敗" },
 
   "lock.restoring": {
-    en: "Restoring device access…",
-    "zh-CN": "正在恢复设备访问…",
-    "zh-TW": "正在復原裝置存取…"
+    en: "Loading sign-in status…",
+    "zh-CN": "正在加载登录状态…",
+    "zh-TW": "正在載入登入狀態…"
   },
   "lock.title": { en: "Notes locked", "zh-CN": "笔记已锁定", "zh-TW": "筆記已鎖定" },
   "lock.offline": {
@@ -584,9 +584,9 @@ const messages = {
   "app.save.synced": { en: "Synced", "zh-CN": "已同步", "zh-TW": "已同步" },
   "app.save.offline": { en: "Offline · saved locally", "zh-CN": "离线 · 已保存到本地", "zh-TW": "離線 · 已儲存在本機" },
   "app.save.unverifiedDetail": {
-    en: "Server session not verified. Changes are saved locally. Verification will retry automatically.",
-    "zh-CN": "服务器会话未验证。修改已保存到本地。系统将自动重试验证。",
-    "zh-TW": "伺服器工作階段未驗證。變更已儲存至本機。系統將自動重試驗證。"
+    en: "Sync is unavailable until sign-in status is verified. Changes are saved locally. Verification will retry automatically.",
+    "zh-CN": "登录状态尚未验证，暂时无法同步。修改已保存到本地，系统将自动重试验证。",
+    "zh-TW": "登入狀態尚未驗證，暫時無法同步。變更已儲存至本機，系統將自動重試驗證。"
   },
   "app.save.error": { en: "Sync error · saved locally", "zh-CN": "同步错误 · 已保存到本地", "zh-TW": "同步錯誤 · 已儲存在本機" },
   "app.save.syncingDetail": { en: "Synchronizing with the server…", "zh-CN": "正在与服务器同步…", "zh-TW": "正在與伺服器同步…" },
@@ -606,11 +606,11 @@ const messages = {
     "zh-TW": "伺服器拒絕同步：{reason}。變更已儲存至本機。系統將自動重試同步。"
   },
   "app.save.localFailureDetail": {
-    en: "Local save failed. The latest changes have not been saved.",
-    "zh-CN": "本地保存失败。最新修改尚未保存。",
-    "zh-TW": "本機儲存失敗。最新變更尚未儲存。"
+    en: "Local save failed. The latest changes have not been saved. Keep this page open and copy the content as a backup.",
+    "zh-CN": "本地保存失败。最新修改尚未保存，请保留当前页面并复制内容备份。",
+    "zh-TW": "本機儲存失敗。最新變更尚未儲存，請保留目前頁面並複製內容備份。"
   },
-  "app.loadingNotes": { en: "Decrypting local notes…", "zh-CN": "正在解密本地笔记…", "zh-TW": "正在解密本機筆記…" },
+  "app.loadingNotes": { en: "Loading local notes…", "zh-CN": "正在加载本地笔记…", "zh-TW": "正在載入本機筆記…" },
   "app.untitled": { en: "Untitled note", "zh-CN": "无标题笔记", "zh-TW": "無標題筆記" },
   "app.newFolder": { en: "New folder", "zh-CN": "新文件夹", "zh-TW": "新資料夾" },
   "app.welcomeTitle": { en: "Welcome", "zh-CN": "欢迎使用", "zh-TW": "歡迎使用" },
@@ -719,26 +719,26 @@ const messages = {
   "notice.documentConflict": { en: "Sync conflict in “{title}”. Local changes saved as a conflict copy.", "zh-CN": "“{title}”存在同步冲突。本地修改已保存为冲突副本。", "zh-TW": "「{title}」存在同步衝突。本機變更已儲存為衝突副本。" },
   "notice.activeRemoteDeleted": { en: "This note was deleted on another device. The view will update when you leave this note.", "zh-CN": "此笔记已在其他设备上删除。离开当前笔记后将更新界面。", "zh-TW": "此筆記已在其他裝置上刪除。離開目前筆記後將更新介面。" },
   "notice.activeRemoteUpdated": { en: "This note was updated on another device. The remote version will load when you leave this note.", "zh-CN": "此笔记已在其他设备上更新。离开当前笔记后将应用远端版本。", "zh-TW": "此筆記已在其他裝置上更新。離開目前筆記後將套用遠端版本。" },
-  "notice.remoteIntegrity": { en: "{count} encrypted server items failed integrity checks. The last readable local versions were preserved.", "zh-CN": "{count} 个服务器加密项目未通过完整性校验。已保留本地最后可读版本。", "zh-TW": "{count} 個伺服器加密項目未通過完整性驗證。已保留本機最後可讀版本。" },
-  "notice.syncFailed": { en: "Sync failed. Changes are saved locally.", "zh-CN": "同步失败。修改已保存到本地。", "zh-TW": "同步失敗。變更已儲存至本機。" },
+  "notice.remoteIntegrity": { en: "{count} items from the server failed integrity checks. Readable local versions have been retained.", "zh-CN": "服务器上的 {count} 项数据未通过完整性校验。已保留本地可读取的版本。", "zh-TW": "伺服器上的 {count} 項資料未通過完整性驗證。已保留本機可讀取的版本。" },
+  "notice.syncFailed": { en: "Sync failed. Changes are saved locally. Sync will retry automatically.", "zh-CN": "同步失败。修改已保存到本地，系统将自动重试。", "zh-TW": "同步失敗。變更已儲存至本機，系統將自動重試。" },
   "notice.localSaveFailed": {
-    en: "Local save failed. The latest changes remain on this page but have not been saved.",
-    "zh-CN": "本地保存失败。最新修改仅保留在当前页面中。",
-    "zh-TW": "本機儲存失敗。最新變更僅保留在目前頁面中。"
+    en: "Local save failed. The latest changes have not been saved. Keep this page open and copy the content as a backup.",
+    "zh-CN": "本地保存失败。最新修改尚未保存，请保留当前页面并复制内容备份。",
+    "zh-TW": "本機儲存失敗。最新變更尚未儲存，請保留目前頁面並複製內容備份。"
   },
-  "notice.localDecryptFailed": { en: "Unable to decrypt {count} local items. Other notes loaded successfully. {detail}", "zh-CN": "{count} 个本地加密项目无法解密。其他笔记已加载。{detail}", "zh-TW": "{count} 個本機加密項目無法解密。其他筆記已載入。{detail}" },
-  "notice.pendingDecryptFailed": { en: "{count} items contain unsynced changes and were preserved unchanged.", "zh-CN": "其中 {count} 个项目含未同步修改并已原样保留。", "zh-TW": "其中 {count} 個項目含未同步變更並已原樣保留。" },
-  "notice.ciphertextRetained": { en: "The original ciphertext was retained.", "zh-CN": "已保留原始密文。", "zh-TW": "已保留原始密文。" },
+  "notice.localDecryptFailed": { en: "Unable to decrypt and load {count} local items. Other readable notes have been loaded. {detail}", "zh-CN": "无法解密并加载 {count} 项本地数据。已加载其他可读取的笔记。{detail}", "zh-TW": "無法解密並載入 {count} 項本機資料。已載入其他可讀取的筆記。{detail}" },
+  "notice.pendingDecryptFailed": { en: "Of these, {count} items contain unsynced changes. Their original data has been retained.", "zh-CN": "其中 {count} 项包含尚未同步的修改，原始数据已保留。", "zh-TW": "其中 {count} 項包含尚未同步的變更，原始資料已保留。" },
+  "notice.ciphertextRetained": { en: "The original encrypted data has been retained.", "zh-CN": "原始加密数据已保留。", "zh-TW": "原始加密資料已保留。" },
   "notice.ignoreRevision": { en: "Do not show this version again", "zh-CN": "不再提示此版本", "zh-TW": "不再提示此版本" },
-  "notice.remoteIntegrityOthers": { en: "{count} encrypted server items failed integrity checks. Other notes loaded successfully. Readable local versions were preserved.", "zh-CN": "{count} 个服务器加密项目未通过完整性校验。其他笔记已加载。本地可读版本均已保留。", "zh-TW": "{count} 個伺服器加密項目未通過完整性驗證。其他筆記已載入。本機可讀版本均已保留。" },
-  "notice.localRestoredSyncRetry": { en: "Local notes restored. Server sync failed and will retry automatically.", "zh-CN": "本地笔记已恢复。同步失败，稍后自动重试。", "zh-TW": "本機筆記已復原。同步失敗，稍後自動重試。" },
-  "notice.loadedOffline": { en: "Local notes loaded offline.", "zh-CN": "已离线加载本地笔记。", "zh-TW": "已離線載入本機筆記。" },
+  "notice.remoteIntegrityOthers": { en: "{count} items from the server failed integrity checks. Other readable notes have been loaded, and readable local versions have been retained.", "zh-CN": "服务器上的 {count} 项数据未通过完整性校验。已加载其他可读取的笔记，并保留本地可读取的版本。", "zh-TW": "伺服器上的 {count} 項資料未通過完整性驗證。已載入其他可讀取的筆記，並保留本機可讀取的版本。" },
+  "notice.localRestoredSyncRetry": { en: "Unable to sync with the server at this time. Local notes have been loaded. Sync will retry automatically.", "zh-CN": "暂时无法与服务器同步。已加载本地笔记，系统将自动重试。", "zh-TW": "暫時無法與伺服器同步。已載入本機筆記，系統將自動重試。" },
+  "notice.loadedOffline": { en: "Currently offline. Local notes have been loaded and will sync after reconnection.", "zh-CN": "当前处于离线状态。已加载本地笔记，联网后将自动同步。", "zh-TW": "目前處於離線狀態。已載入本機筆記，連網後將自動同步。" },
   "notice.onlineSessionRequired": {
-    en: "This action requires an online, verified server session.",
-    "zh-CN": "此操作需要联网并完成服务器会话验证。",
-    "zh-TW": "此操作需要連線並完成伺服器工作階段驗證。"
+    en: "This action requires a connection to the server and verification of sign-in status.",
+    "zh-CN": "此操作需要连接服务器并验证登录状态。",
+    "zh-TW": "此操作需要連線至伺服器並驗證登入狀態。"
   },
-  "notice.openDatabaseFailed": { en: "Unable to open the local encrypted database", "zh-CN": "无法打开本地加密数据库", "zh-TW": "無法開啟本機加密資料庫" },
+  "notice.openDatabaseFailed": { en: "Unable to read local note data.", "zh-CN": "无法读取本地笔记数据。", "zh-TW": "無法讀取本機筆記資料。" },
   "notice.logoutLocalClearFailed": { en: "Unable to delete local account data. You are still logged in.", "zh-CN": "本地账户数据删除失败。当前账户尚未登出。", "zh-TW": "本機帳戶資料刪除失敗。目前帳戶尚未登出。" },
   "notice.attachmentLoadFailed": { en: "Unable to load attachment", "zh-CN": "附件加载失败", "zh-TW": "附件載入失敗" },
   "notice.attachmentSaveFailed": { en: "Unable to save attachment", "zh-CN": "附件保存失败", "zh-TW": "附件儲存失敗" },
@@ -757,7 +757,7 @@ const messages = {
   "notice.batchMoveIntoDescendant": { en: "Selected folders cannot be moved into themselves or their subfolders.", "zh-CN": "所选文件夹不能移入自身或其子文件夹。", "zh-TW": "所選資料夾不能移入自身或其子資料夾。" },
   "notice.batchMoveNameConflict": { en: "Cannot move selection: the destination would contain duplicate items named “{title}”.", "zh-CN": "无法批量移动：目标目录会出现名为“{title}”的重复项目。", "zh-TW": "無法批次移動：目標目錄會出現名為「{title}」的重複項目。" },
   "notice.encryptingAttachment": { en: "Encrypting {name} locally…", "zh-CN": "正在本地加密 {name}…", "zh-TW": "正在本機加密 {name}…" },
-  "notice.attachmentSaved": { en: "Attachment “{name}” saved locally. Syncing in the background.", "zh-CN": "附件“{name}”已保存到本地。正在后台同步。", "zh-TW": "附件「{name}」已儲存至本機。正在背景同步。" },
+  "notice.attachmentSaved": { en: "Attachment “{name}” saved locally. Pending sync.", "zh-CN": "附件“{name}”已保存到本地，等待同步。", "zh-TW": "附件「{name}」已儲存至本機，等待同步。" },
   "notice.noteLocked": { en: "“{title}” locked", "zh-CN": "已锁定“{title}”", "zh-TW": "已鎖定「{title}」" },
   "notice.noteUnlocked": { en: "“{title}” unlocked", "zh-CN": "已解锁“{title}”", "zh-TW": "已解鎖「{title}」" },
   "notice.noteLockedEdit": { en: "Unlock “{title}” to edit", "zh-CN": "解锁“{title}”后可编辑", "zh-TW": "解鎖「{title}」後可編輯" },
@@ -840,11 +840,11 @@ const messages = {
   "settings.historyVersionCount": { en: "{count} versions", "zh-CN": "{count} 个版本", "zh-TW": "{count} 個版本" },
   "settings.historyClearAll": { en: "Clear all history", "zh-CN": "清空全部历史", "zh-TW": "清空全部歷史" },
 
-  "notice.historySaved": { en: "The current version was encrypted and saved locally.", "zh-CN": "当前版本已加密并保存到本地。", "zh-TW": "目前版本已加密並儲存到本機。" },
+  "notice.historySaved": { en: "The current note was saved as a local history version.", "zh-CN": "当前笔记已保存为本地历史版本。", "zh-TW": "目前筆記已儲存為本機歷史版本。" },
   "notice.historyUnchanged": { en: "This content is already the latest saved version.", "zh-CN": "当前内容与最新历史版本相同。", "zh-TW": "目前內容與最新歷史版本相同。" },
   "notice.historySaveFailed": { en: "Unable to save note history", "zh-CN": "无法保存笔记历史", "zh-TW": "無法儲存筆記歷史" },
-  "notice.historyLoadFailed": { en: "Unable to load note history", "zh-CN": "无法加载笔记历史", "zh-TW": "無法載入筆記歷史" },
-  "notice.historyDecryptFailed": { en: "Unable to decrypt this history version. Other versions remain available.", "zh-CN": "此历史版本解密失败。其他版本仍可使用。", "zh-TW": "此歷史版本解密失敗。其他版本仍可使用。" },
+  "notice.historyLoadFailed": { en: "Unable to load history from the server. Available local records are shown.", "zh-CN": "无法加载服务器上的历史记录。已显示本地可用记录。", "zh-TW": "無法載入伺服器上的歷史記錄。已顯示本機可用記錄。" },
+  "notice.historyDecryptFailed": { en: "Unable to read this history version. Try viewing another version.", "zh-CN": "无法读取此历史版本。可尝试查看其他版本。", "zh-TW": "無法讀取此歷史版本。可嘗試查看其他版本。" },
   "notice.historyDeleteOnlineOnly": { en: "History deletion requires an internet connection.", "zh-CN": "删除历史记录需要联网。", "zh-TW": "刪除歷史記錄需要連線。" },
   "notice.historyDeleted": { en: "History version deleted.", "zh-CN": "历史版本已删除。", "zh-TW": "歷史版本已刪除。" },
   "notice.historyDeleteFailed": { en: "Unable to delete the history version", "zh-CN": "无法删除历史版本", "zh-TW": "無法刪除歷史版本" },
