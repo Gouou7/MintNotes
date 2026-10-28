@@ -1,4 +1,5 @@
 import { persistWithCacheRecovery } from "../../storage/cache";
+import { persistBodyBlocks } from "../../storage/noteBodies";
 import { operationId } from "@mint-notes/application-client";
 import { useEffect, useRef } from "react";
 import { cryptoClient } from "../../crypto/client";
@@ -77,6 +78,7 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
         ciphertext: encrypted.ciphertext,
         nonce: encrypted.nonce,
         encryptionVersion: encrypted.encryptionVersion,
+        ...(encrypted.bodyBlockIds ? { bodyBlockIds: encrypted.bodyBlockIds } : {}),
         revision: intendedRevision,
         deleted: next.deleted,
         updatedAt: next.updatedAt,
@@ -90,9 +92,22 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
         generation: Date.now() * 1000 + ++dependencies.generation.current,
         ...(pending?.upload ? { upload: pending.upload } : {})
       };
-      await persistWithCacheRecovery(dependencies.userId, () => localDb.transaction("rw", localDb.objects, localDb.outbox, async () => {
+      await persistWithCacheRecovery(dependencies.userId, () => localDb.transaction("rw", localDb.objects, localDb.outbox, localDb.bodyBlocks, localDb.recoveries, localDb.attachmentChunks, async () => {
         if (!dependencies.isActive()) return;
         const latest = await localDb.outbox.get(key);
+        const previous = await localDb.objects.get(key);
+        if (previous?.encryptionVersion === 1 && encrypted.encryptionVersion === 2) {
+          const recoveryKey = `${key}:conversion:${previous.nonce}`;
+          const attachments = (await localDb.objects.where("userId").equals(dependencies.userId).toArray()).filter((entry) => entry.ownerNoteId === object.objectId);
+          const ids = new Set(attachments.map((entry) => entry.objectId));
+          const chunks = (await localDb.attachmentChunks.where("userId").equals(dependencies.userId).toArray()).filter((chunk) => ids.has(chunk.attachmentId));
+          if (!await localDb.recoveries.get(recoveryKey)) await localDb.recoveries.add({
+            key: recoveryKey, userId: dependencies.userId, sourceId: object.objectId, copyId: object.objectId,
+            kind: "conversion", source: { ...previous, operation: "upsert", baseRevision: Math.max(0, previous.revision - 1),
+              idempotencyKey: operationId(), generation: outbox.generation }, attachments, chunks
+          });
+        }
+        await persistBodyBlocks(dependencies.userId, object.objectId, encrypted);
         await localDb.objects.put(localObject);
         // Upload staging can happen while encryption runs. Carry that exact
         // request forward even when this save replaces its durable generation.

@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { argon2id } from "hash-wasm";
+import { encodeVaultObject, decodeVaultObject } from "@mint-notes/application-client/crypto";
 import { b64, fromB64, ownedBuffer, randomBytes, deriveSubkey, seal, open, sealBinary, openBinary, objectAad, attachmentChunkAad, historyAad, historyMetadataAad, createApplicationCredential, encryptAttachmentBytes, decryptAttachmentBytes } from "@mint-notes/application-client/crypto";
 
 import type { EncryptedAttachmentChunk, KdfParams, NoteHistoryMetadataPayload, NoteHistoryPayload, VaultAttachment, VaultObject } from "../types";
@@ -312,18 +313,24 @@ async function handle(operation: string, payload: any): Promise<any> {
     }
     case "encryptObject": {
       if (!vaultKey) throw new Error("Vault is locked");
-      const bytes = new TextEncoder().encode(JSON.stringify(payload.document));
-      return { ...await seal(bytes, vaultKey, objectAad(payload.userId, payload.objectId, payload.objectType, payload.revision)), encryptionVersion: ENCRYPTION_VERSION };
+      return encodeVaultObject(vaultKey, payload.userId, payload.objectId, payload.objectType, payload.revision,
+        payload.document, async (_note, id) => {
+          const block = payload.blocks?.find((entry: { blockId: string }) => entry.blockId === id);
+          if (!block) throw new Error("Note body block is not cached");
+          return block;
+        }, payload.previous, payload.enabled !== false);
     }
     case "decryptObject": {
       if (!vaultKey) throw new Error("Vault is locked");
-      const bytes = await open(
-        payload.ciphertext,
-        payload.nonce,
-        vaultKey,
-        objectAad(payload.userId, payload.objectId, payload.objectType, payload.revision)
-      );
-      return JSON.parse(new TextDecoder().decode(bytes)) as VaultObject;
+      if (!payload.envelope) {
+        const bytes = await open(payload.ciphertext, payload.nonce, vaultKey, objectAad(payload.userId, payload.objectId, payload.objectType, payload.revision));
+        try { return JSON.parse(new TextDecoder().decode(bytes)) as VaultObject; } finally { bytes.fill(0); }
+      }
+      return decodeVaultObject(vaultKey, payload.userId, payload.envelope, async (_note, id) => {
+        const block = payload.blocks?.find((entry: { blockId: string }) => entry.blockId === id);
+        if (!block) throw new Error("Note body block is not cached");
+        return block;
+      });
     }
     case "encryptHistory": {
       if (!vaultKey) throw new Error("Vault is locked");

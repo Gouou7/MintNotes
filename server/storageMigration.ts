@@ -1,12 +1,6 @@
 import type { AppDatabase } from "./database.js";
-import { migrationBackup } from "./backupStorage.js";
-import { join } from "node:path";
 
-export function migrateStorage(db: AppDatabase, previousVersion: number, directory: string) {
-  if (previousVersion === 2) {
-    migrationBackup(db, join(directory, "backups", "pre-schema3.sqlite"));
-  }
-  if (previousVersion === 3) migrationBackup(db, join(directory, "backups", "pre-schema4.sqlite"));
+export function migrateStorage(db: AppDatabase, previousVersion: number, _directory: string) {
   db.transaction(() => {
     if (previousVersion === 2) {
       const mismatch = db.prepare(`SELECT 1 FROM objects o LEFT JOIN object_revisions r
@@ -56,7 +50,6 @@ export function migrateStorage(db: AppDatabase, previousVersion: number, directo
         SELECT u.id, lower(hex(randomblob(16))), COALESCE(MAX(c.sequence), 0) FROM users u LEFT JOIN changes c ON c.user_id = u.id GROUP BY u.id;
         INSERT OR IGNORE INTO ownership_state (user_id, complete) SELECT id, ${previousVersion === 2 ? 0 : 1} FROM users;
         DELETE FROM changes WHERE sequence NOT IN (SELECT MAX(sequence) FROM changes GROUP BY user_id, object_id, category);
-        DELETE FROM object_revisions;
         INSERT INTO note_trash_periods(user_id, note_id, entered_at) SELECT user_id, object_id, COALESCE(trashed_at, updated_at)
           FROM objects WHERE deleted = 1 AND object_type = 'note';`);
     }
@@ -81,8 +74,17 @@ export function migrateStorage(db: AppDatabase, previousVersion: number, directo
     }
     if (!columns("users").has("history_quota_mode")) db.exec(`ALTER TABLE users ADD COLUMN history_quota_mode TEXT NOT NULL DEFAULT 'inherit' CHECK(history_quota_mode IN ('inherit','limited','unlimited'));
       ALTER TABLE users ADD COLUMN history_quota_bytes INTEGER CHECK(history_quota_bytes IS NULL OR history_quota_bytes > 0);`);
-    if (previousVersion !== 4) db.exec(`UPDATE note_history SET byte_size = LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB))
+    if (previousVersion > 0 && previousVersion < 4) db.exec(`UPDATE note_history SET byte_size = LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB))
       + COALESCE(LENGTH(CAST(metadata_ciphertext AS BLOB)), 0) + COALESCE(LENGTH(CAST(metadata_nonce AS BLOB)), 0)`);
-    db.exec("PRAGMA user_version = 4");
+    if (!columns("objects").has("body_block_ids")) db.exec("ALTER TABLE objects ADD COLUMN body_block_ids TEXT NOT NULL DEFAULT '[]'");
+    db.exec(`CREATE TABLE IF NOT EXISTS note_body_blocks (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      note_id TEXT NOT NULL, block_id TEXT NOT NULL, ciphertext TEXT NOT NULL, nonce TEXT NOT NULL,
+      PRIMARY KEY(user_id, note_id, block_id));
+      CREATE TABLE IF NOT EXISTS note_body_refs (
+      user_id TEXT NOT NULL, note_id TEXT NOT NULL, block_id TEXT NOT NULL,
+      PRIMARY KEY(user_id, note_id, block_id),
+      FOREIGN KEY(user_id, note_id, block_id) REFERENCES note_body_blocks(user_id, note_id, block_id) ON DELETE CASCADE);
+      PRAGMA user_version = 5;`);
   })();
 }

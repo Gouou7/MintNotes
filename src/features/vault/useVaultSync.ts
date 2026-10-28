@@ -1,4 +1,6 @@
 import { recordCompleteSync } from "../../storage/storageStatus";
+import { reserveConflictRecovery, completeConflictRecoveries, restoreRecoveryChunks } from "./conflictRecovery";
+import { attachmentIdsIn } from "../attachments";
 import { prepareVaultSynchronization } from "./syncReconciliation";
 import { VaultHistoryController } from "./historyController";
 import { operationExpired } from "@mint-notes/application-client";
@@ -9,7 +11,7 @@ import { api, ApiError } from "../../api";
 import { cryptoClient } from "../../crypto/client";
 import { translateError, type Translate } from "../../i18n";
 import { cursorKey, localDb, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
-import type { OpenDocument } from "../../types";
+import type { OpenDocument, OpenAttachment } from "../../types";
 import { derivedNoteLockState } from "../noteLock";
 import { NameReservations } from "../siblingNames";
 import { applyVaultAcknowledgement } from "../syncChanges";
@@ -38,7 +40,7 @@ interface Options {
   userId: string;
   showMessage: ReturnType<typeof useToastNotifications>["showMessage"];
   t: Translate;
-  persistDocumentCopy: (document: OpenDocument, sourceMarkdown: string, sourceAttachmentIds: readonly string[], options?: { commitState?: boolean; allowMissing?: boolean; }) => Promise<OpenDocument>;
+  persistDocumentCopy: (document: OpenDocument, sourceMarkdown: string, sourceAttachmentIds: readonly string[], options?: { commitState?: boolean; allowMissing?: boolean; sourceAttachments?: OpenAttachment[]; }) => Promise<OpenDocument>;
   generation: RefObject<number>;
   logoutStarted: RefObject<boolean>;
   documentSaveQueue: ReturnType<typeof useDocumentSaveQueue>;
@@ -120,22 +122,41 @@ export function useVaultSync(options: Options) {
     rebindActive = true
   ): Promise<OpenDocument | null> => {
     if (entry.objectId === WORKSPACE_OBJECT_ID) return null;
-    const local = await cryptoClient.decryptObject(userId, entry.objectId, entry.objectType, entry.revision, entry.ciphertext, entry.nonce);
+    const local = await cryptoClient.decryptObject(userId, entry.objectId, entry.objectType, entry.revision, entry.ciphertext, entry.nonce, entry);
+    const recoveryRecord = await reserveConflictRecovery(userId, entry, local.kind === "attachment" ? [entry.objectId]
+      : [...local.attachmentIds, ...attachmentIdsIn(local.markdown)], () => !logoutStarted.current);
+    const sourceAttachments: OpenAttachment[] = [];
+    await restoreRecoveryChunks(recoveryRecord, () => !logoutStarted.current);
+    for (const object of recoveryRecord.attachments) {
+      const metadata = await cryptoClient.decryptObject(userId, object.objectId, object.objectType, object.revision, object.ciphertext, object.nonce, object);
+      if (metadata.kind !== "attachment") throw new Error("Invalid recovery attachment");
+      sourceAttachments.push({ ...metadata, objectId: object.objectId, serverRevision: object.revision, dirty: false });
+    }
+    if (logoutStarted.current) throw new DOMException("Inactive vault", "AbortError");
+    const savedCopy = await localDb.objects.get(`${userId}:${recoveryRecord.copyId}`);
+    if (savedCopy) {
+      const plain = await cryptoClient.decryptObject(userId, savedCopy.objectId, savedCopy.objectType, savedCopy.revision, savedCopy.ciphertext, savedCopy.nonce);
+      if (plain.kind === "attachment") throw new Error("Invalid recovery copy");
+      const queued = await localDb.outbox.get(savedCopy.key);
+      return { ...plain, objectId: savedCopy.objectId, serverRevision: queued?.baseRevision ?? savedCopy.revision, dirty: Boolean(queued) };
+    }
     if (local.kind === "attachment") {
       const text = `![${local.originalName}](webmd-attachment:${entry.objectId})`;
       const recovery = makeDocument(documentsRef.current, "note", `${local.originalName} (${t("app.conflictSuffix")})`, null, text);
-      const copy = await persistDocumentCopy(recovery, text, [entry.objectId], { commitState, allowMissing: true });
+      recovery.objectId = recoveryRecord.copyId;
+      const copy = await persistDocumentCopy(recovery, text, [entry.objectId], { commitState, allowMissing: true, sourceAttachments });
       requestPush("structural");
       return copy;
     }
     const parentId = documentsRef.current.some((r) => r.objectId === local.parentId && r.kind === "folder" && !r.deleted) ? local.parentId : null;
     const conflict = makeDocument(documentsRef.current, local.kind, `${local.title} (${t("app.conflictSuffix")})`, parentId, local.markdown);
+    conflict.objectId = recoveryRecord.copyId;
     conflict.tags = local.tags;
     conflict.favorite = local.favorite;
     conflict.locked = derivedNoteLockState(local, "conflict-copy");
     let persisted: OpenDocument;
     try {
-      persisted = await persistDocumentCopy(conflict, local.markdown, local.attachmentIds, { commitState, allowMissing: true });
+      persisted = await persistDocumentCopy(conflict, local.markdown, local.attachmentIds, { commitState, allowMissing: true, sourceAttachments });
     } catch (error) {
       showMessage(translateError(error, t, "notice.attachmentConflict"), "critical");
       throw error;
@@ -260,14 +281,9 @@ export function useVaultSync(options: Options) {
       const pending = await localDb.outbox.get(object.key);
       const chunks = await localDb.attachmentOutbox.where("[userId+attachmentId]").equals([userId, objectId]).toArray();
       if (pending || chunks.length) {
-        if (!attachmentIndexRef.current.has(objectId)) {
-          const decoded = await cryptoClient.decryptObject(userId, objectId, "attachment", object.revision, object.ciphertext, object.nonce);
-          if (decoded.kind !== "attachment") return false;
-          upsertAttachment({ ...decoded, objectId, serverRevision: pending?.baseRevision ?? object.revision, dirty: Boolean(pending) });
-        }
-        const text = `![${t("app.conflictSuffix") }](webmd-attachment:${objectId})`;
-        const recovery = makeDocument(documentsRef.current, "note", t("app.conflictSuffix"), null, text);
-        await persistDocumentCopy(recovery, text, [objectId], { allowMissing: true });
+        const source: OutboxEntry = pending ?? { ...object, operation: "upsert", baseRevision: Math.max(0, object.revision - 1),
+          idempotencyKey: chunks[0].idempotencyKey, generation: chunks[0].generation };
+        if (!await preserveConflict(source, true, false)) return false;
         if (logoutStarted.current) return false;
         await localDb.transaction("rw", localDb.outbox, localDb.attachmentOutbox, async () => {
           if ((await localDb.outbox.get(object.key))?.idempotencyKey === pending?.idempotencyKey) await localDb.outbox.delete(object.key);
@@ -288,8 +304,9 @@ export function useVaultSync(options: Options) {
     preserveConflict: (entry: OutboxEntry) => preserveConflict(entry, false, false),
     recoverAuxiliary,
     discardConflict: async (copy: OpenDocument) => {
-      for (const id of copy.attachmentIds) await removePurgedLocal(id);
-      await removePurgedLocal(copy.objectId, false);
+      // A copy may already be the only durable recovery graph after a crash.
+      // Keep it even when a newer source invalidates this page's optimistic commit.
+      if (!logoutStarted.current) upsertDocument(copy);
       nameReservations.current.release(copy.objectId);
     },
     onPage: publishPullResult,
@@ -331,10 +348,18 @@ export function useVaultSync(options: Options) {
       const result = await executeVaultSync({
         isActive: () => !logoutStarted.current,
         countPending: () => countPendingSyncEntries(userId),
-        prepare: () => prepareVaultSynchronization(pullDependencies()),
+        prepare: async () => {
+          for (const record of await localDb.recoveries.where("userId").equals(userId).toArray()) {
+            if (record.kind === "conversion" || await localDb.objects.get(`${userId}:${record.copyId}`)) continue;
+            await preserveConflict(record.source, true, false);
+          }
+          return prepareVaultSynchronization(pullDependencies());
+        },
         push: pushPending,
         pull: pullChanges
       }, intent);
+      await completeConflictRecoveries(userId, () => !logoutStarted.current);
+      result.pending = await countPendingSyncEntries(userId);
       if (logoutStarted.current) return;
       if (!result.failedObjectIds.size) await maintainVaultStorage({ userId, isActive: () => !logoutStarted.current,
         documents: documentsRef.current, attachments: attachmentsRef.current, getDocument: (id) => documentIndexRef.current.get(id), hasPendingSave: documentSaveQueue.hasPending, trashOrphan: async (attachment) => {
@@ -380,6 +405,12 @@ export function useVaultSync(options: Options) {
     if (logoutStarted.current) return;
     await syncCoordinator.current?.runNow({ pull: true, push: true });
   };
+
+  useEffect(() => {
+    const retry = () => { void synchronize().catch(() => {}); };
+    window.addEventListener("webmd:retry-recoveries", retry);
+    return () => window.removeEventListener("webmd:retry-recoveries", retry);
+  });
 
   useEffect(() => {
     const coordinator = new SyncCoordinator({

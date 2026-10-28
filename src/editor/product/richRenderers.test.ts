@@ -81,8 +81,10 @@ describe("Mermaid theme and preview lifecycle", () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(mermaid.initialize).toHaveBeenCalledTimes(1);
     finish({ svg });
-    await vi.waitFor(() => expect(second.host.querySelector("img")).not.toBeNull());
-    expect(first.host.querySelector("img")).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(second.host.querySelector("img")).not.toBeNull();
+      expect(first.host.querySelector("img")).not.toBeNull();
+    });
     expect(mermaid.initialize.mock.calls.map(([config]) => config.theme)).toEqual(["dark", "default", "default"]);
     expect(createUrl).toHaveBeenCalledTimes(2);
   });

@@ -1,5 +1,5 @@
-export const APPLICATION_PROTOCOL_VERSION = 2 as const;
-export const APPLICATION_API_PREFIX = "/api/apps/v2";
+export const APPLICATION_PROTOCOL_VERSION = 3 as const;
+export const APPLICATION_API_PREFIX = "/api/apps/v3";
 export type ApplicationAccess = "read" | "read-write";
 
 export interface VaultEnvelope {
@@ -39,9 +39,12 @@ export interface CreateApplicationConnectionRequest extends ApplicationPolicy {
 }
 
 export interface ApplicationConnectionBootstrap {
-  protocolVersion: 2;
+  protocolVersion: 3;
   objectSchemaVersion: 2;
   encryptionVersion: 1;
+  objectSchemaVersions?: number[];
+  encryptionVersions?: number[];
+  bodyChunkingEnabled?: boolean;
   userId: string;
   connection: ApplicationConnection;
   vaultEnvelope: VaultEnvelope;

@@ -78,8 +78,8 @@ describe("unified user storage quota", () => {
     db.pragma("user_version=3"); db.close();
     const upgraded = openDatabase(directory);
     try {
-      expect(upgraded.pragma("user_version", { simple: true })).toBe(4);
-      expect(existsSync(join(directory, "backups", "pre-schema4.sqlite.sha256"))).toBe(true);
+      expect(upgraded.pragma("user_version", { simple: true })).toBe(5);
+      expect(existsSync(join(directory, "backups", "pre-schema5.sqlite.sha256"))).toBe(true);
       expect(storageUsage(upgraded, user).totalBytes).toBe(56);
       expect(upgraded.prepare("SELECT COUNT(*) AS count FROM note_trash_periods").get()).toEqual({ count: 1 });
       expect(userQuotas(upgraded, user, loadServerConfig({})).quotaMode).toBe("inherit");
@@ -100,7 +100,7 @@ describe("unified user storage quota", () => {
     const own = await app.inject({ method: "PATCH", url: `/api/admin/users/${admin.user.id}/storage-quota`, headers: { cookie: admin.cookie }, payload: { mode: "unlimited" } }); expect(own.statusCode).toBe(200);
     const budget = await app.inject({ method: "PATCH", url: "/api/account/note-history-settings", headers: { cookie: user.cookie }, payload: { quotaBytes: null } }); expect(budget.json().quotaBytes).toBeNull();
     expect((await app.inject({ method: "GET", url: "/api/admin/storage", headers: { cookie: user.cookie } })).statusCode).toBe(403);
-    expect((await app.inject({ method: "GET", url: "/api/admin/storage", headers: { cookie: admin.cookie } })).json()).toMatchObject({ schemaVersion: 4, available: true, userCount: 2, journalMode: "wal" });
+    expect((await app.inject({ method: "GET", url: "/api/admin/storage", headers: { cookie: admin.cookie } })).json()).toMatchObject({ schemaVersion: 5, available: true, userCount: 2, journalMode: "wal" });
     const setup = await app.inject({ method: "POST", url: "/api/admin/account-setups", headers: { cookie: admin.cookie }, payload: { username: "invited", displayName: "Invited", storageQuota: { mode: "limited", bytes: 1048576 } } }); expect(setup.statusCode).toBe(201);
     const activation = await app.inject({ method: "POST", url: "/api/auth/activate", payload: { ...registration("invited"), activationCode: setup.json().activationCode } }); expect(activation.statusCode).toBe(201);
     expect(userQuotas(db, activation.json().user.id, config).quotaBytes).toBe(1048576);

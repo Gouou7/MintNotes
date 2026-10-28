@@ -3,6 +3,7 @@ import { z } from "zod";
 import { LOG_LEVELS, type LogLevel } from "./logging.js";
 
 export interface ServerConfig {
+  bodyChunkingEnabled?: boolean;
   host: string;
   port: number;
   dataDirectory: string;
@@ -61,6 +62,7 @@ export function loadServerConfig(environment: NodeJS.ProcessEnv = process.env): 
   const host = environment.HOST ?? "127.0.0.1";
   if (!host.trim() || host !== host.trim()) throw new Error(`Invalid HOST: ${host}`);
   return {
+    bodyChunkingEnabled: booleanEnvironmentValue("NOTE_BODY_CHUNKING", environment.NOTE_BODY_CHUNKING, true),
     host,
     port: numericEnvironmentValue("PORT", environment.PORT, 8787, portValue),
     dataDirectory: resolve(production ? "/data" : environment.MINT_NOTES_SMOKE_STORAGE_PATH ?? "./data"),

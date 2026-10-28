@@ -29,6 +29,7 @@ services:
       USER_HISTORY_QUOTA_MB: ${USER_HISTORY_QUOTA_MB:-256}
       # Ordinary session lifetime in hours.
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+      NOTE_BODY_CHUNKING: ${NOTE_BODY_CHUNKING:-true}
       # Advanced: the standard HTTPS proxy overwrites forwarded headers;
       # the loopback-only port below prevents public backend access.
       TRUST_PROXY: ${TRUST_PROXY:-true}

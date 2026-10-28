@@ -24,6 +24,15 @@ function attachment(objectId: string, ownerNoteId = "source-note"): OpenAttachme
 }
 
 describe("AttachmentCloneService", () => {
+  it("does not treat a failed read as a missing attachment even during recovery", async () => {
+    const createAttachment = vi.fn();
+    const service = new AttachmentCloneService({ resolveAttachment: (id) => attachment(id),
+      readAttachment: async () => { throw new Error("temporary download failure"); }, createAttachment,
+      persistAttachment: async (value) => value, removeAttachment: async () => {} });
+    await expect(service.clone({ sourceMarkdown: "", sourceAttachmentIds: ["source"], targetNoteId: "copy", allowMissing: true }))
+      .rejects.toThrow("temporary download failure");
+    expect(createAttachment).not.toHaveBeenCalled();
+  });
   it("clones the union of manifest and Markdown references with new ownership", async () => {
     const attachmentA = "00000000-0000-4000-8000-00000000000a";
     const attachmentB = "00000000-0000-4000-8000-00000000000b";

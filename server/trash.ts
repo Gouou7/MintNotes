@@ -16,6 +16,8 @@ function removeObject(db: AppDatabase, userId: string, objectId: string, objectT
     for (const owner of pendingOwners) {
       db.prepare("DELETE FROM attachment_chunks WHERE user_id = ? AND attachment_id = ?").run(userId, owner.attachment_id);
     }
+    db.prepare("DELETE FROM note_body_refs WHERE user_id = ? AND note_id = ?").run(userId, objectId);
+    db.prepare("DELETE FROM note_body_blocks WHERE user_id = ? AND note_id = ?").run(userId, objectId);
     db.prepare("DELETE FROM attachment_owners WHERE user_id = ? AND note_id = ?").run(userId, objectId);
     db.prepare("DELETE FROM note_history WHERE user_id = ? AND note_id = ?").run(userId, objectId);
     db.prepare("DELETE FROM note_history_clear_markers WHERE user_id = ? AND note_id = ?").run(userId, objectId);

@@ -16,6 +16,11 @@ export function storageUsage(db: AppDatabase, userId: string) {
     COALESCE((SELECT SUM(byte_size) FROM note_history WHERE user_id = ?), 0) AS historyBytes,
     COALESCE((SELECT LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB)) FROM profile_assets WHERE user_id = ?), 0) AS profileBytes
   `).get(userId, userId, userId, userId, userId, userId, userId, userId, userId) as { objectCount: number; contentBytes: number; historyBytes: number; profileBytes: number; noteBytes: number; trashBytes: number };
+  const body = db.prepare(`SELECT COALESCE(SUM(LENGTH(CAST(b.ciphertext AS BLOB)) + LENGTH(CAST(b.nonce AS BLOB))), 0) AS bytes,
+    COALESCE(SUM(CASE WHEN EXISTS (SELECT 1 FROM objects o WHERE o.user_id = b.user_id AND o.object_id = b.note_id AND o.deleted = 1)
+      THEN LENGTH(CAST(b.ciphertext AS BLOB)) + LENGTH(CAST(b.nonce AS BLOB)) ELSE 0 END), 0) AS trash
+    FROM note_body_blocks b WHERE b.user_id = ?`).get(userId) as { bytes: number; trash: number };
+  row.contentBytes += body.bytes; row.noteBytes += body.bytes; row.trashBytes += body.trash;
   return { ...row, attachmentBytes: row.contentBytes - row.noteBytes, totalBytes: row.contentBytes + row.historyBytes + row.profileBytes, ...metadataUsage(db, userId), encryptedBytes: row.contentBytes + row.historyBytes + row.profileBytes };
 }
 export function physicalStorageUsage(db: AppDatabase) {
@@ -28,8 +33,9 @@ export function physicalStorageUsage(db: AppDatabase) {
 
 export function metadataUsage(db: AppDatabase, userId: string) {
   const row = db.prepare(`SELECT (SELECT COUNT(*) * 2 FROM objects WHERE user_id = ?) +
-    (SELECT COUNT(*) FROM sync_receipts WHERE user_id = ?) + (SELECT COUNT(*) FROM changes WHERE user_id = ?) + (SELECT COUNT(*) FROM note_trash_periods WHERE user_id = ?) AS used`)
-    .get(userId, userId, userId, userId) as { used: number };
+    (SELECT COUNT(*) FROM sync_receipts WHERE user_id = ?) + (SELECT COUNT(*) FROM changes WHERE user_id = ?) + (SELECT COUNT(*) FROM note_trash_periods WHERE user_id = ?)
+    + (SELECT COUNT(*) * 2 FROM note_body_blocks WHERE user_id = ?) AS used`)
+    .get(userId, userId, userId, userId, userId) as { used: number };
   return { metadataUsedSlots: row.used, metadataLimit: 100_000 };
 }
 

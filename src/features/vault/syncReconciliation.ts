@@ -4,7 +4,7 @@ import { cursorKey, localDb, localKey } from "../../storage/database";
 import type { SyncChange } from "../../types";
 import { pullVaultChanges, type PullControllerDependencies } from "./pullController";
 
-interface SyncStatus { epoch: string; head: number; floor: number; reconcile: boolean; lease: string; }
+interface SyncStatus { epoch: string; head: number; floor: number; reconcile: boolean; lease: string; bodyChunkingEnabled?: boolean; }
 export async function prepareVaultSynchronization(dependencies: PullControllerDependencies) {
   const { userId, isActive } = dependencies;
   const stored = await localDb.meta.get(`sync-state:${userId}`);
@@ -15,11 +15,13 @@ export async function prepareVaultSynchronization(dependencies: PullControllerDe
   setSyncLease(previousLease);
   const status = await api<SyncStatus>(`/api/sync/status?since=${cursor}&epoch=${encodeURIComponent(state?.epoch ?? "")}`);
   if (!isActive()) return false;
+  await localDb.meta.put({ key: `body-chunking:${userId}`, value: String(status.bodyChunkingEnabled !== false) });
   const pending = await localDb.outbox.where("userId").equals(userId).toArray();
   const chunks = await localDb.attachmentOutbox.where("userId").equals(userId).toArray();
   const histories = await localDb.historyOutbox.where("userId").equals(userId).toArray();
   const forceConflictIds = new Set(chunks.filter((entry) => operationExpired(entry.idempotencyKey)).map((entry) => entry.ownerNoteId).filter((id): id is string => Boolean(id)));
   const epochChanged = Boolean(state?.epoch && state.epoch !== status.epoch);
+  if (epochChanged) await localDb.bodyBlocks.where("userId").equals(userId).modify({ uploaded: false });
   if (epochChanged) for (const entry of pending) forceConflictIds.add(entry.objectId);
   const expired = forceConflictIds.size || histories.some((entry) => operationExpired(entry.idempotencyKey)) || pending.some((entry) => operationExpired(entry.idempotencyKey) || (entry.upload && operationExpired(entry.upload.idempotencyKey)));
   if (status.reconcile || expired) {

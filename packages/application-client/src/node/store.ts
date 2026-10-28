@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { ApplicationConnectionBootstrap } from "../protocol.js";
-import type { EncryptedAttachmentChunk, EncryptedObject } from "../types.js";
+import type { EncryptedAttachmentChunk, EncryptedObject, EncryptedNoteBodyBlock } from "../types.js";
 
 export interface ObjectWrite extends EncryptedObject {
   baseRevision: number;
@@ -32,6 +32,8 @@ export interface ConflictDraft {
   chunks: Array<Omit<EncryptedAttachmentChunk, "ciphertext"> & { ciphertext: string; idempotencyKey: string }>;
 }
 export interface PendingWrite {
+  conversionSource?: EncryptedObject;
+  conflictNoteId?: string;
   note: ObjectWrite;
   history?: HistoryWrite;
   sourceAttachments: EncryptedObject[];
@@ -65,7 +67,7 @@ export class ApplicationStore {
     const path = join(directory, `${originHash}-${connectionId}.sqlite`);
     this.db = new DatabaseSync(path);
     const version = Number(this.db.prepare("PRAGMA user_version").get()?.user_version);
-    if (version > 2) { this.db.close(); throw new ApplicationError("CACHE_VERSION_UNSUPPORTED", "Unsupported cache version"); }
+    if (version > 3) { this.db.close(); throw new ApplicationError("CACHE_VERSION_UNSUPPORTED", "Unsupported cache version"); }
     chmodSync(path, 0o600);
     this.db.exec(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
       CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -76,7 +78,9 @@ export class ApplicationStore {
       CREATE TABLE IF NOT EXISTS reconciliation_objects (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS operations (id TEXT PRIMARY KEY, request_hash TEXT NOT NULL,
         body TEXT, result TEXT NOT NULL, created_at INTEGER NOT NULL);
-      PRAGMA user_version = 2;`);
+      CREATE TABLE IF NOT EXISTS body_blocks (note_id TEXT NOT NULL, block_id TEXT NOT NULL,
+        data TEXT NOT NULL, uploaded INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(note_id, block_id));
+      PRAGMA user_version = 3;`);
   }
 
   transaction<T>(operation: () => T): T {
@@ -99,6 +103,7 @@ export class ApplicationStore {
   }
   removeObject(id: string): void { this.db.prepare("DELETE FROM objects WHERE id = ?").run(id); }
   putObject(object: EncryptedObject): void {
+    for (const block of object.bodyBlocks ?? []) this.putBodyBlock(object.objectId, block);
     this.db.prepare("INSERT INTO objects (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data WHERE json_extract(excluded.data, '$.revision') >= json_extract(objects.data, '$.revision')")
       .run(object.objectId, JSON.stringify(object));
   }
@@ -167,6 +172,11 @@ export class ApplicationStore {
     });
   }
   saveOperation(operation: Operation): void {
+    if (operation.body) {
+      for (const note of [operation.body.note, operation.body.conflict?.note]) {
+        if (note) for (const block of note.bodyBlocks ?? []) this.putBodyBlock(note.objectId, block);
+      }
+    }
     this.db.prepare("UPDATE operations SET body = ?, result = ? WHERE id = ?")
       .run(operation.body ? JSON.stringify(operation.body) : null, JSON.stringify(operation.result), operation.operationId);
   }
@@ -206,4 +216,19 @@ export class ApplicationStore {
     return Number(this.db.prepare("DELETE FROM operations WHERE body IS NULL AND created_at <= ?").run(now - 90 * 86_400_000).changes);
   }
   close(): void { this.db.close(); }
+  bodyBlock(noteId: string, blockId: string): EncryptedNoteBodyBlock | null {
+    const row = this.db.prepare("SELECT data FROM body_blocks WHERE note_id = ? AND block_id = ?").get(noteId, blockId);
+    return row ? JSON.parse(String(row.data)) : null;
+  }
+  putBodyBlock(noteId: string, block: EncryptedNoteBodyBlock): void {
+    const old = this.bodyBlock(noteId, block.blockId);
+    if (old && (old.ciphertext !== block.ciphertext || old.nonce !== block.nonce)) throw new ApplicationError("INVALID_OBJECT", "Immutable body block mismatch");
+    this.db.prepare("INSERT OR IGNORE INTO body_blocks(note_id, block_id, data) VALUES (?, ?, ?)").run(noteId, block.blockId, JSON.stringify(block));
+  }
+  bodyBlockUploaded(noteId: string, blockId: string): boolean {
+    return Boolean(this.db.prepare("SELECT uploaded FROM body_blocks WHERE note_id = ? AND block_id = ?").get(noteId, blockId)?.uploaded);
+  }
+  markBodyBlockUploaded(noteId: string, blockId: string): void {
+    this.db.prepare("UPDATE body_blocks SET uploaded = 1 WHERE note_id = ? AND block_id = ?").run(noteId, blockId);
+  }
 }

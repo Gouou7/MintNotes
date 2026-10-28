@@ -2,28 +2,29 @@ import { localDb } from "./database";
 
 export interface LocalStorageStatus { bytes: number; objects: number; attachments: number; history: number; }
 export async function readPendingStorageStatus(userId: string) {
-  const [objects, chunks, history, metadata] = await Promise.all([
+  const [objects, chunks, history, metadata, recoveries] = await Promise.all([
     localDb.outbox.where("userId").equals(userId).primaryKeys(), localDb.attachmentOutbox.where("userId").equals(userId).primaryKeys(),
-    localDb.historyOutbox.where("userId").equals(userId).primaryKeys(), localDb.historyMetadataOutbox.where("userId").equals(userId).primaryKeys()
+    localDb.historyOutbox.where("userId").equals(userId).primaryKeys(), localDb.historyMetadataOutbox.where("userId").equals(userId).primaryKeys(),
+    localDb.recoveries.where("userId").equals(userId).primaryKeys()
   ]);
-  return { objects: objects.length, attachments: new Set(chunks.map((key) => key.slice(0, key.lastIndexOf(":")))).size,
+  return { objects: objects.length + recoveries.length, attachments: new Set(chunks.map((key) => key.slice(0, key.lastIndexOf(":")))).size,
     history: new Set([...history, ...metadata]).size };
 }
 function payloadBytes(value: unknown): number {
   if (!value || typeof value !== "object") return 0;
   return Object.entries(value).reduce((sum, [key, item]) => sum + (
     item instanceof ArrayBuffer ? item.byteLength : typeof item === "string" && /ciphertext|nonce/i.test(key)
-      ? new TextEncoder().encode(item).byteLength : key === "upload" ? payloadBytes(item) : 0), 0);
+      ? new TextEncoder().encode(item).byteLength : item && typeof item === "object" ? payloadBytes(item) : 0), 0);
 }
 export async function readLocalStorageStatus(userId: string): Promise<LocalStorageStatus> {
   return localDb.transaction("r", [localDb.objects, localDb.outbox, localDb.attachmentChunks, localDb.attachmentOutbox,
-    localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox], async () => {
-    const [objects, outbox, chunks, attachmentOutbox, snapshots, index, historyOutbox, metadataOutbox] = await Promise.all([
+    localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.bodyBlocks, localDb.recoveries], async () => {
+    const [objects, outbox, chunks, attachmentOutbox, snapshots, index, historyOutbox, metadataOutbox, bodyBlocks, recoveries] = await Promise.all([
       localDb.objects, localDb.outbox, localDb.attachmentChunks, localDb.attachmentOutbox,
-      localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox
+      localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.bodyBlocks, localDb.recoveries
     ].map((table) => table.where("userId").equals(userId).toArray()));
-    return { bytes: [...objects, ...outbox, ...chunks, ...attachmentOutbox, ...snapshots, ...index, ...historyOutbox, ...metadataOutbox].reduce((sum, value) => sum + payloadBytes(value), 0),
-      objects: outbox.length,
+    return { bytes: [...objects, ...outbox, ...chunks, ...attachmentOutbox, ...snapshots, ...index, ...historyOutbox, ...metadataOutbox, ...bodyBlocks, ...recoveries].reduce((sum, value) => sum + payloadBytes(value), 0),
+      objects: outbox.length + recoveries.length,
       attachments: new Set(attachmentOutbox.map((row) => (row as { attachmentId: string }).attachmentId)).size,
       history: new Set([...historyOutbox, ...metadataOutbox].map((row) => (row as { noteId: string; historyId: string }).noteId + ":" + (row as { historyId: string }).historyId)).size };
   });

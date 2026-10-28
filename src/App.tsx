@@ -3,12 +3,16 @@ import { AuthScreen } from "./features/AuthScreen";
 import { LockScreen } from "./features/LockScreen";
 import { useSessionController } from "./features/session/useSessionController";
 import { useI18n } from "./i18n";
+import { useDatabaseUpgrade } from "./storage/useDatabaseUpgrade";
 
 const VaultApp = lazy(() => import("./features/vault/VaultApp").then((module) => ({ default: module.VaultApp })));
 
 export default function App() {
   const { t } = useI18n();
+  const databaseBlocked = useDatabaseUpgrade();
   const session = useSessionController();
+
+  if (databaseBlocked) return <main className="loading-shell"><p role="status">{t("storage.upgradeBlocked")}</p></main>;
 
   if (session.restoringDevice) {
     return <main className="loading-shell"><div className="spinner" /><p>{t("lock.restoring")}</p></main>;

@@ -2,6 +2,7 @@ import type { StorageStatus } from "./storage/useStorageStatus";
 import { HistoryStorageSection } from "./storage/HistoryStorageSection";
 import { TrashStorageSection } from "./storage/TrashStorageSection";
 import { MigrationStorageSection } from "./storage/MigrationStorageSection";
+import { RecoveryStorageSection } from "./storage/RecoveryStorageSection";
 import { StorageUsage, PendingStorage } from "./storageUsage";
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Notebook, ChevronDown, ChevronRight, ChevronsUp, Check, Copy, Download, Ellipsis, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, Search, Settings, Palette, UserRoundCog, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
@@ -548,6 +549,7 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
 
             {tab === "storage" && <div className="settings-page note-storage-settings">
               <StorageUsage status={storageStatus} />
+              <RecoveryStorageSection userId={user.id} onNotify={onNotify} />
               <HistoryStorageSection historySettings={historySettings} busy={busy} serverSessionVerified={serverSessionVerified} updateHistorySettings={updateHistorySettings} onClearHistory={onClearHistory} />
               <TrashStorageSection trashItems={trashItems} busy={busy} purging={purging} serverSessionVerified={serverSessionVerified} trashRetentionDays={trashRetentionDays} updateTrashRetention={updateTrashRetention} onRestoreTrash={onRestoreTrash} onPurgeTrash={onPurgeTrash} onClearTrash={onClearTrash} onNotify={onNotify} />
               <MigrationStorageSection onImport={onImport} onExport={onExport} onNotify={onNotify} />

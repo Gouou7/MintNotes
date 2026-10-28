@@ -32,7 +32,7 @@ if (command === "backup-retention") {
         try { await original.backup(staging); } finally { original.close(); }
         database = new Database(staging);
         const version = Number(database.pragma("user_version", { simple: true }));
-        if (version !== 2 && version !== 3 && version !== 4) throw new Error("RESTORE_SCHEMA_UNSUPPORTED");
+        if (version !== 2 && version !== 3 && version !== 4 && version !== 5) throw new Error("RESTORE_SCHEMA_UNSUPPORTED");
         if (version >= 3) {
           database.prepare("UPDATE sync_state SET epoch = lower(hex(randomblob(16))), lease_secret = lower(hex(randomblob(32)))").run();
         } // v2 restores are migrated on next startup, which initializes a new epoch.

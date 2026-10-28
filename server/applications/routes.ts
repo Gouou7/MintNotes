@@ -114,7 +114,8 @@ export function registerApplicationRoutes(app: FastifyInstance, dependencies: {
     }
     const connection = applicationSummary(row);
     if (connection.status !== "active") return void reply.code(401).send({ error: "Application connection is inactive", code: connection.status === "revoked" ? "APPLICATION_REVOKED" : "APPLICATION_EXPIRED" });
-    if (!["GET", "HEAD"].includes(request.method) && row.access !== "read-write") {
+    const readBodyBatch = request.method === "POST" && request.routeOptions.url === "/api/apps/v3/notes/:noteId/body-blocks/read";
+    if (!["GET", "HEAD"].includes(request.method) && !readBodyBatch && row.access !== "read-write") {
       return void reply.code(403).send({ error: "Application is read-only", code: "APPLICATION_READ_ONLY" });
     }
     request.applicationPrincipal = { userId: row.user_id, connectionId: row.connection_id, access: row.access };
@@ -124,18 +125,18 @@ export function registerApplicationRoutes(app: FastifyInstance, dependencies: {
     native.addHook("onRoute", (route) => { route.config = { ...route.config, applicationAuth: true }; });
     native.addHook("onRequest", authenticateApplication);
     native.addHook("onSend", async (request, reply, payload) => {
-      if (reply.statusCode < 400 && request.applicationPrincipal && request.routeOptions.url !== "/api/apps/v2/connection") {
+      if (reply.statusCode < 400 && request.applicationPrincipal && request.routeOptions.url !== "/api/apps/v3/connection") {
         db.prepare("UPDATE application_connections SET last_used_at = ? WHERE connection_id = ? AND revoked_at IS NULL")
           .run(new Date().toISOString(), request.applicationPrincipal.connectionId);
       }
       return payload;
     });
-    native.get("/api/apps/v2/connection", { preHandler: authenticateApplication }, async (request, reply) => {
+    native.get("/api/apps/v3/connection", { preHandler: authenticateApplication }, async (request, reply) => {
       reply.header("Cache-Control", "no-store");
       const row = db.prepare("SELECT * FROM application_connections WHERE connection_id = ?").get(request.applicationPrincipal!.connectionId) as ApplicationRow;
-      return { ...applicationBootstrap(db, row), ...userQuotas(db, row.user_id, dependencies.config) };
+      return { ...applicationBootstrap(db, row), ...userQuotas(db, row.user_id, dependencies.config), bodyChunkingEnabled: dependencies.config.bodyChunkingEnabled !== false };
     });
-    const dataDependencies = { ...dependencies, authenticate: authenticateApplication, apiPrefix: "/api/apps/v2", scope: applicationObjectScope, applicationOnly: true };
+    const dataDependencies = { ...dependencies, authenticate: authenticateApplication, apiPrefix: "/api/apps/v3", scope: applicationObjectScope, applicationOnly: true };
     registerSyncRoutes(native, dataDependencies);
     registerAttachmentRoutes(native, dataDependencies);
     registerHistoryRoutes(native, dataDependencies);

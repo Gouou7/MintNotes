@@ -49,8 +49,9 @@ export class AttachmentCloneService {
         if (input.allowMissing) { missingAttachmentIds.push(attachmentId); continue; }
         throw new Error(`Attachment ${attachmentId} is unavailable`);
       }
-      try { sources.push({ attachment, plaintext: await this.dependencies.readAttachment(attachment) }); }
-      catch (error) { if (!input.allowMissing) throw error; missingAttachmentIds.push(attachmentId); }
+      // A known object which cannot be read is not proof of a missing attachment.
+      // Preserve the source graph and retry rather than committing an incomplete copy.
+      sources.push({ attachment, plaintext: await this.dependencies.readAttachment(attachment) });
     }
 
     const created: OpenAttachment[] = [];

@@ -9,7 +9,7 @@ export function pinCache(userId: string, kind: "attachment" | "history", ids: re
 /** Unique local data and every pending graph are excluded, even above the cache budget. */
 export async function evictDownloadableCaches(userId: string, attachmentLimit = 128 * 1024 * 1024, historyLimit = 64 * 1024 * 1024) {
   return localDb.transaction("rw", [localDb.objects, localDb.outbox, localDb.attachmentOutbox, localDb.attachmentChunks,
-    localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.historySnapshots], async () => {
+    localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.historySnapshots, localDb.recoveries], async () => {
     const [outbox, chunkOutbox, historyOutbox, metadataOutbox, objects, chunks, histories] = await Promise.all([
       localDb.outbox.where("userId").equals(userId).toArray(), localDb.attachmentOutbox.where("userId").equals(userId).toArray(),
       localDb.historyOutbox.where("userId").equals(userId).toArray(), localDb.historyMetadataOutbox.where("userId").equals(userId).toArray(),
@@ -18,6 +18,10 @@ export async function evictDownloadableCaches(userId: string, attachmentLimit = 
     ]);
     const pendingNotes = new Set([...outbox.map((r) => r.objectId), ...historyOutbox.map((r) => r.noteId), ...metadataOutbox.map((r) => r.noteId)]);
     const pendingAttachments = new Set([...outbox.filter((r) => r.objectType === "attachment").map((r) => r.objectId), ...chunkOutbox.map((r) => r.attachmentId)]);
+    for (const recovery of await localDb.recoveries.where("userId").equals(userId).toArray()) {
+      pendingNotes.add(recovery.sourceId); pendingNotes.add(recovery.copyId);
+      for (const attachment of recovery.attachments) pendingAttachments.add(attachment.objectId);
+    }
     const byObject = new Map(objects.map((r) => [r.objectId, r]));
     const groups = new Map<string, { size: number; touched: number; keys: string[]; owner?: string }>();
     for (const chunk of chunks) {

@@ -1,4 +1,5 @@
 import { ApiError, api, uploadAttachmentChunk } from "../../api";
+import { uploadBodyBlocks } from "../../storage/noteBodies";
 import { localDb, type ObjectUploadAttempt } from "../../storage/database";
 import { ATTACHMENT_TRANSFER_CONCURRENCY } from "../attachments";
 import { mapWithConcurrency } from "../concurrency";
@@ -21,7 +22,7 @@ type WriteResult =
 
 function payload(entry: ObjectUploadAttempt) {
   const { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted, ownerNoteId } = entry;
-  return { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted, ...(ownerNoteId ? { ownerNoteId } : {}) };
+  return { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted, ...(ownerNoteId ? { ownerNoteId } : {}), ...(entry.bodyBlockIds ? { bodyBlockIds: entry.bodyBlockIds } : {}) };
 }
 
 /** Snapshot dependency graphs together; retain exact requests through response loss and later edits. */
@@ -64,6 +65,10 @@ export async function pushVaultPending(dependencies: PushControllerDependencies)
     });
   });
   let conflictDetected = false;
+  for (const entry of snapshot.entries) {
+    await uploadBodyBlocks(userId, entry, isActive);
+    if (!isActive()) return;
+  }
   const conflict = async (entry: ObjectUploadAttempt) => {
     conflictDetected = true;
     await localDb.transaction("rw", localDb.outbox, async () => {

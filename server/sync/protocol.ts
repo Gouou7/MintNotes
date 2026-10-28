@@ -24,11 +24,11 @@ export function validSyncLease(db: AppDatabase, userId: string, lease: unknown):
 export function registerProtocolGate(app: FastifyInstance) {
   app.addHook("onRequest", async (request, reply) => {
     const path = request.url.split("?")[0];
-    if (path.startsWith("/api/apps/v1/")) return reply.code(426).send({ error: "Client upgrade required", code: "PROTOCOL_UPGRADE_REQUIRED", protocolVersion: 2 });
+    if (/^\/api\/apps\/v[12]\//.test(path)) return reply.code(426).send({ error: "Client upgrade required", code: "PROTOCOL_UPGRADE_REQUIRED", protocolVersion: 3 });
     if (/^\/api\/(?:sync(?:\/|$)|objects(?:\/|$)|attachments(?:\/|$)|notes\/)/.test(path)
-      && request.headers["x-webmd-protocol"] !== "2"
-      && !(path === "/api/sync/events" && new URL(request.url, "http://localhost").searchParams.get("protocol") === "2")) {
-      return reply.code(426).send({ error: "Client upgrade required", code: "PROTOCOL_UPGRADE_REQUIRED", protocolVersion: 2 });
+      && request.headers["x-webmd-protocol"] !== "3"
+      && !(path === "/api/sync/events" && new URL(request.url, "http://localhost").searchParams.get("protocol") === "3")) {
+      return reply.code(426).send({ error: "Client upgrade required", code: "PROTOCOL_UPGRADE_REQUIRED", protocolVersion: 3 });
     }
   });
 }

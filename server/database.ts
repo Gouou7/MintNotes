@@ -4,11 +4,12 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { initializeApplicationConnections } from "./applications/service.js";
 import { migrateStorage } from "./storageMigration.js";
+import { migrationBackup } from "./backupStorage.js";
 
 export type AppDatabase = Database.Database;
 export type RegistrationRole = "admin" | "user";
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export function runRegistrationTransaction<T>(
   db: AppDatabase,
@@ -36,7 +37,7 @@ export function openDatabase(dataDirectory: string): AppDatabase {
 
   const version = Number(db.pragma("user_version", { simple: true }));
   const hasLegacyTables = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get());
-  if (version !== 0 && version !== 2 && version !== 3 && version !== SCHEMA_VERSION) {
+  if (version !== 0 && version !== 2 && version !== 3 && version !== 4 && version !== SCHEMA_VERSION) {
     db.close();
     throw new Error(`Unsupported database schema ${version}; Mint Notes requires a fresh schema v${SCHEMA_VERSION} volume`);
   }
@@ -45,6 +46,10 @@ export function openDatabase(dataDirectory: string): AppDatabase {
     throw new Error("Legacy database detected; export and back it up, then deploy Mint Notes v2 with a fresh data volume");
   }
 
+  try {
+    if (version > 0 && version < SCHEMA_VERSION) migrationBackup(db, join(dataDirectory, "backups", "pre-schema5.sqlite"));
+  } catch (error) { db.close(); throw error; }
+  const initialize = db.transaction(() => {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -322,7 +327,8 @@ export function openDatabase(dataDirectory: string): AppDatabase {
       ON protected_history_attachments(user_id, attachment_id);
   `);
   initializeApplicationConnections(db);
-  try { migrateStorage(db, version, dataDirectory); }
-  catch (error) { db.close(); throw error; }
+  migrateStorage(db, version, dataDirectory);
+  });
+  try { initialize.immediate(); } catch (error) { db.close(); throw error; }
   return db;
 }

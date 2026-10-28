@@ -34,7 +34,9 @@
 - 包装信封为 `{ version: 1, ciphertext, nonce }`，编码均为无填充 Base64URL；密文包含 GCM tag。
 - 原生认证头为 `Authorization: Bearer <connectionId>.<authSecret>`。完整应用密钥不得直接放入 HTTP 头、URL、日志或工具参数。
 
-bootstrap 声明 `protocolVersion: 2`、`objectSchemaVersion: 2`、`encryptionVersion: 1`。不兼容版本、账户或信封拒绝解密，不自动删除旧缓存。现有对象、历史及附件沿用 `webmd-*` AAD 和标头，准确格式以共享 `crypto.ts` 为准；不得用应用品牌重新命名协议。
+bootstrap额外声明`objectSchemaVersions: [2, 3]`、`encryptionVersions: [1, 2]`及正文分块开关。通用客户端负责加密清单、正文块、缺块获取、完整验证和持久重试，适配器不得绕过它直接覆盖对象。旧完整对象和缓存操作继续兼容。
+
+bootstrap 声明 `protocolVersion: 3`、`objectSchemaVersion: 2`、`encryptionVersion: 1`。不兼容版本、账户或信封拒绝解密，不自动删除旧缓存。现有对象、历史及附件沿用 `webmd-*` AAD 和标头，准确格式以共享 `crypto.ts` 为准；不得用应用品牌重新命名协议。
 
 ## 浏览器管理 API
 
@@ -55,7 +57,7 @@ bootstrap 声明 `protocolVersion: 2`、`objectSchemaVersion: 2`、`encryptionVe
 
 ## 原生密文 API
 
-统一前缀`/api/apps/v2`，使用`X-WebMD-Protocol: 2`，仅接受自己的 Bearer 凭据。HTTPS 地址只能是绝对源，如 `https://notes.example.com`；本地开发允许回环 HTTP。客户端禁止 URL 用户名、密码、路径、查询、片段和 HTTP 重定向，不携带浏览器 Cookie。
+统一前缀`/api/apps/v3`，使用`X-WebMD-Protocol: 2`，仅接受自己的 Bearer 凭据。HTTPS 地址只能是绝对源，如 `https://notes.example.com`；本地开发允许回环 HTTP。客户端禁止 URL 用户名、密码、路径、查询、片段和 HTTP 重定向，不携带浏览器 Cookie。
 
 | 方法与路径 | 用途 |
 | --- | --- |
@@ -64,8 +66,10 @@ bootstrap 声明 `protocolVersion: 2`、`objectSchemaVersion: 2`、`encryptionVe
 | `GET /sync/snapshot?epoch=<epoch>&after=<objectId>` | 当前对象分页，返回objects与next；校准从状态接口返回的水位H开始 |
 | `GET /sync?since=<cursor>&epoch=<epoch>&limit=200` | `{ changes, cursor, hasMore, epoch, floor }`；reset要求完整校准，不得清空待提交操作 |
 | `GET /objects/:id` | 当前用户的一个 `EncryptedObject`，不存在或跨账户均返回 404 |
-| `PUT /objects/:id` | 复用对象写协议：`objectType, ciphertext, nonce, encryptionVersion, baseRevision, deleted, idempotencyKey`，附件还须提供`ownerNoteId` |
+| `PUT /objects/:id` | 复用对象写协议：`objectType, ciphertext, nonce, encryptionVersion, baseRevision, deleted, idempotencyKey`，附件还须提供`ownerNoteId`；加密版本2的笔记须提供`bodyBlockIds` |
 | `POST /objects/batch` | 复用批量对象协议，供其他适配器使用；插件逐项保存 |
+| `POST /notes/:noteId/body-blocks/batch` | `{ blocks: [{ blockId, ciphertext, nonce }] }`；每批1至16块，请求最多1.5MiB，返回`{ accepted: blockId[] }`。同ID同密文重复成功，不同密文拒绝；只读连接拒绝 |
+| `POST /notes/:noteId/body-blocks/read` | `{ blockIds: UUID[] }`；每批1至16块，返回`{ blocks: [{ blockId, ciphertext, nonce }] }`。只读连接可调用，任一缺块返回404 |
 | `GET /attachments/:id/chunks/:index` | 附件密文二进制与已有 `X-WebMD-*` 标头 |
 | `PUT /attachments/:id/chunks/:index` | 写入密文分块，用于适配器内部冲突副本；只读连接拒绝 |
 | `POST /notes/:noteId/history/:historyId` | 保存编辑前的密文历史快照；沿用历史协议与幂等键 |

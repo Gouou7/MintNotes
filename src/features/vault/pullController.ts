@@ -1,4 +1,6 @@
 import { api } from "../../api";
+import { ensureBodyBlocks, persistBodyBlocks } from "../../storage/noteBodies";
+import type { EncryptedNoteBodyBlock } from "@mint-notes/application-client";
 import { operationExpired, operationId } from "@mint-notes/application-client";
 import { cryptoClient } from "../../crypto/client";
 import { cursorKey, localDb, localKey, type LocalEncryptedObject, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
@@ -59,6 +61,7 @@ function sameLocalVersion(left: LocalEncryptedObject | undefined, right: LocalEn
 }
 
 interface Candidate {
+  bodyBlocks?: EncryptedNoteBodyBlock[];
   change: SyncChange;
   stored?: LocalEncryptedObject;
   pending?: OutboxEntry;
@@ -116,10 +119,12 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
       }
       if (!change.purged && isAcknowledgedLocalEcho(stored, change) && !pending) continue;
       let decrypted: VaultObject | undefined;
+      let bodyBlocks: EncryptedNoteBodyBlock[] = [];
       if (!change.purged && shouldSynchronizeWorkspaceObject(change.objectId)) {
         try {
+          bodyBlocks = await ensureBodyBlocks(userId, change, isActive);
           decrypted = normalizeVaultObject(await cryptoClient.decryptObject(
-            userId, change.objectId, change.objectType, change.revision, change.ciphertext, change.nonce
+            userId, change.objectId, change.objectType, change.revision, change.ciphertext, change.nonce, { ...change, bodyBlocks }
           ));
           if (decrypted.kind !== change.objectType || decrypted.deleted !== change.deleted) throw new Error("Invalid object envelope");
         } catch {
@@ -136,7 +141,7 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
         blocked.add(change.objectId);
         continue;
       }
-      const candidate: Candidate = { change, stored, pending, decrypted };
+      const candidate: Candidate = { change, stored, pending, decrypted, bodyBlocks };
       if (!shouldSynchronizeWorkspaceObject(change.objectId)) {
         candidates.push(candidate);
         continue;
@@ -173,7 +178,7 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
     const commit = async (): Promise<void> => {
       await localDb.transaction("rw", [
         localDb.objects, localDb.outbox, localDb.attachmentChunks, localDb.attachmentOutbox,
-        localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.meta
+        localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.meta, localDb.bodyBlocks
       ], async () => {
         for (const candidate of candidates) {
           const { change } = candidate;
@@ -200,10 +205,13 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
             await localDb.historyOutbox.where("[userId+noteId]").equals([userId, change.objectId]).delete();
             await localDb.historyMetadataOutbox.where("[userId+noteId]").equals([userId, change.objectId]).delete();
           } else {
+            await persistBodyBlocks(userId, change.objectId, { ...change, bodyBlocks: candidate.bodyBlocks });
+            for (const block of candidate.bodyBlocks ?? []) await localDb.bodyBlocks.update(localKey(userId, `${change.objectId}:${block.blockId}`), { uploaded: true });
             await localDb.objects.put({
               key, userId, objectId: change.objectId, objectType: change.objectType,
               ciphertext: change.ciphertext, nonce: change.nonce, encryptionVersion: change.encryptionVersion,
               revision: change.revision, deleted: change.deleted, updatedAt: change.serverUpdatedAt, serverTrashedAt: change.serverTrashedAt,
+              ...(change.bodyBlockIds ? { bodyBlockIds: change.bodyBlockIds } : {}),
               ...(candidate.decrypted?.kind === "attachment" ? { ownerNoteId: candidate.decrypted.ownerNoteId } : {})
             });
             if (pending) await localDb.outbox.delete(key);

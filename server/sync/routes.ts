@@ -1,4 +1,5 @@
 import { userQuotas, quotaState } from "../storageQuota.js";
+import { registerNoteBodyRoutes } from "./noteBodies.js";
 import { syncState } from "./lifecycle.js";
 import { issueSyncLease, validSyncLease } from "./protocol.js";
 import { storageUsage } from "../storageUsage.js";
@@ -29,6 +30,7 @@ export function registerSyncRoutes(
   const apiPrefix = dependencies.apiPrefix ?? "/api";
   const getScope = dependencies.scope ?? authenticatedScope;
   const applicationOnly = dependencies.applicationOnly ?? false;
+  registerNoteBodyRoutes(app, db, config, apiPrefix, authenticate, getScope);
   const syncClientHeader = z.string().uuid().optional();
 
   if (!applicationOnly) app.get(`${apiPrefix}/sync/events`, { preHandler: authenticate, compress: false }, async (request, reply) => {
@@ -90,7 +92,7 @@ export function registerSyncRoutes(
     const state = syncState(db, userId);
     const query = request.query as { epoch?: string; since?: string };
     const since = Number(query.since ?? 0);
-    return { ...state, protocolVersion: 2, serverTime: new Date().toISOString(),
+    return { ...state, protocolVersion: 3, bodyChunkingEnabled: config.bodyChunkingEnabled !== false, serverTime: new Date().toISOString(),
       reconcile: query.epoch !== state.epoch || !validSyncLease(db, userId, request.headers["x-webmd-sync-lease"])
         || !Number.isSafeInteger(since) || since < state.floor || since > state.head,
       lease: issueSyncLease(db, userId) };
@@ -113,7 +115,7 @@ export function registerSyncRoutes(
     const state = syncState(db, scope.userId);
     if ((epoch && epoch !== state.epoch) || since < state.floor || since > state.head) return { changes: [], cursor: state.head, hasMore: false, reset: true, epoch: state.epoch };
     const rows = db.prepare(`SELECT c.sequence, c.object_id, c.revision AS change_revision, c.category, c.change_type, c.created_at AS change_created_at,
-        o.object_type, o.ciphertext, o.nonce, o.encryption_version, o.revision, o.deleted, o.trashed_at
+        o.object_type, o.ciphertext, o.nonce, o.encryption_version, o.revision, o.deleted, o.trashed_at, o.body_block_ids
       FROM changes c LEFT JOIN objects o ON o.user_id = c.user_id AND o.object_id = c.object_id
       WHERE c.user_id = ? AND c.sequence > ? ORDER BY c.sequence LIMIT ?`).all(scope.userId, since, limit) as any[];
     return { epoch: state.epoch, floor: state.floor,
@@ -130,13 +132,12 @@ export function registerSyncRoutes(
   app.get(`${apiPrefix}/objects/:objectId`, { preHandler: authenticate }, async (request, reply) => {
     const id = z.string().uuid().safeParse((request.params as { objectId: string }).objectId);
     if (!id.success) return reply.code(400).send({ error: "Invalid object ID" });
-    const row = db.prepare(`SELECT object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted, trashed_at
+    const row = db.prepare(`SELECT object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted, trashed_at, body_block_ids
       FROM objects WHERE user_id = ? AND object_id = ?`).get(getScope(request).userId, id.data) as {
         object_id: string; object_type: string; ciphertext: string; nonce: string; encryption_version: number; revision: number; deleted: number; trashed_at: string | null;
       } | undefined;
     if (!row) return reply.code(404).send({ error: "Object not found" });
-    return { objectId: row.object_id, objectType: row.object_type, ciphertext: row.ciphertext, nonce: row.nonce,
-      encryptionVersion: row.encryption_version, revision: row.revision, deleted: Boolean(row.deleted), serverTrashedAt: row.trashed_at };
+    return objectResponse(row);
   });
 
   app.put(`${apiPrefix}/objects/:objectId`, { preHandler: authenticate }, async (request, reply) => {
@@ -151,7 +152,7 @@ export function registerSyncRoutes(
     }
     let result;
     try {
-      result = writeObject(db, scope, objectId.data, parsed.data, config.userStorageQuotaBytes);
+      result = writeObject(db, scope, objectId.data, parsed.data, config.userStorageQuotaBytes, config.bodyChunkingEnabled !== false);
     } catch (error) {
       if (error instanceof StorageQuotaError) {
         logEvent(request.log, "warn", "storage.quota_rejected", {
@@ -200,7 +201,7 @@ export function registerSyncRoutes(
     let results;
     try {
       results = parsed.data.objects.map(({ objectId, ...body }) => (
-        writeObject(db, scope, objectId, body, config.userStorageQuotaBytes)
+        writeObject(db, scope, objectId, body, config.userStorageQuotaBytes, config.bodyChunkingEnabled !== false)
       ));
     } catch (error) {
       if (error instanceof StorageQuotaError) {
@@ -301,5 +302,6 @@ export function registerSyncRoutes(
 function objectResponse(row: any) {
   return { objectId: row.object_id, objectType: row.object_type ?? "note", ciphertext: row.ciphertext ?? "", nonce: row.nonce ?? "",
     encryptionVersion: row.encryption_version ?? 1, revision: row.revision ?? 0, deleted: Boolean(row.deleted), serverTrashedAt: row.trashed_at, serverUpdatedAt: row.updated_at ?? row.change_created_at,
-    ...(row.owner_note_id ? { ownerNoteId: row.owner_note_id } : {}) };
+    ...(row.owner_note_id ? { ownerNoteId: row.owner_note_id } : {}),
+    ...(row.encryption_version === 2 ? { bodyBlockIds: JSON.parse(row.body_block_ids ?? "[]") } : {}) };
 }

@@ -5,7 +5,7 @@ import type { ApplicationConnectionBootstrap } from "./protocol";
 import { makeDocument } from "./documentFactory";
 
 function bootstrap(credential: Awaited<ReturnType<typeof createApplicationCredential>>, userId: string): ApplicationConnectionBootstrap {
-  return { protocolVersion: 2, objectSchemaVersion: 2, encryptionVersion: 1, userId, historyEnabled: true, serverTime: new Date().toISOString(),
+  return { protocolVersion: 3, objectSchemaVersion: 2, encryptionVersion: 1, userId, historyEnabled: true, serverTime: new Date().toISOString(),
     vaultEnvelope: credential.vaultEnvelope, connection: { connectionId: credential.connectionId, name: "test", access: "read-write", idleTimeoutDays: 30,
       expiresAt: null, createdAt: new Date().toISOString(), lastUsedAt: null, revokedAt: null, validUntil: null, status: "active" } };
 }

@@ -37,6 +37,7 @@ function operationCode(error: unknown): string { return error instanceof Applica
 
 /** All plaintext and keys live in the caller's worker, never in SQLite. */
 export class ApplicationClient {
+  private serverVerified = false;
   private store: ApplicationStore;
   private transport: ApplicationTransport;
   private cipher: VaultCipher | null = null;
@@ -70,7 +71,7 @@ export class ApplicationClient {
 
   private async applyBootstrap(value: ApplicationConnectionBootstrap): Promise<void> {
     const expected = await applicationAuthSecret(this.options.applicationKey);
-    if (value?.protocolVersion !== 2 || value.objectSchemaVersion !== 2 || value.encryptionVersion !== 1
+    if (value?.protocolVersion !== 3 || value.objectSchemaVersion !== 2 || value.encryptionVersion !== 1
       || value.connection?.connectionId !== expected.connectionId || !["read", "read-write"].includes(value.connection.access)
       || typeof value.userId !== "string" || !Number.isFinite(Date.parse(value.serverTime))) {
       throw new ApplicationError("PROTOCOL_UNSUPPORTED", "Unsupported application protocol");
@@ -83,6 +84,12 @@ export class ApplicationClient {
     catch { throw new ApplicationError("VAULT_DECRYPT_FAILED", "Unable to unlock the application vault"); }
     this.cipher?.dispose();
     this.cipher = cipher;
+    cipher.setBodyReader(async (note, id) => {
+      const block = this.store.bodyBlock(note, id);
+      if (!block) throw new ApplicationError("BODY_BLOCK_MISSING", "Note body block is not cached");
+      return block;
+    });
+    cipher.bodyChunkingEnabled = value.bodyChunkingEnabled !== false;
     this.bootstrap = value;
     this.store.transaction(() => {
       this.store.set("bootstrap", value);
@@ -94,9 +101,11 @@ export class ApplicationClient {
   private async refreshBootstrap(): Promise<void> {
     const value = await this.transport.json<ApplicationConnectionBootstrap>("/connection", {}, this.activeSignal);
     await this.applyBootstrap(value);
+    this.serverVerified = true;
   }
 
   private async prepare(synchronize = true, allowOffline = true): Promise<ReadState> {
+    this.serverVerified = false;
     const rejected = this.store.get<string>("rejected");
     if (rejected) throw new ApplicationError(rejected, "Application connection requires new credentials", 401);
     try {
@@ -114,6 +123,7 @@ export class ApplicationClient {
       }
       return { offline: false, lastSyncedAt: this.store.get("lastSyncedAt") };
     } catch (error) {
+      this.serverVerified = false;
       if (error instanceof ApplicationError && error.status === 401) {
         this.store.set("rejected", error.code);
         this.cipher?.dispose(); this.cipher = null;
@@ -123,7 +133,14 @@ export class ApplicationClient {
       const cached = this.store.bootstrap();
       if (!cached || this.store.get("rejected")) throw new ApplicationError("OFFLINE_CACHE_MISSING", "No verified offline cache is available");
       assertApplicationActive(cached.connection, Math.max(Date.now(), this.store.get<number>("serverTime") ?? 0));
-      if (!this.cipher) this.cipher = await VaultCipher.unlock(this.options.applicationKey, cached);
+      if (!this.cipher) {
+        this.cipher = await VaultCipher.unlock(this.options.applicationKey, cached);
+        this.cipher.setBodyReader(async (note, id) => {
+          const block = this.store.bodyBlock(note, id);
+          if (!block) throw new ApplicationError("BODY_BLOCK_MISSING", "Note body block is not cached");
+          return block;
+        });
+      }
       this.bootstrap = cached;
       return { offline: true, lastSyncedAt: this.store.get("lastSyncedAt") };
     }
@@ -140,7 +157,7 @@ export class ApplicationClient {
       do {
         const page: { epoch: string; objects: EncryptedObject[]; next: string | null } = await this.transport.json(`/sync/snapshot?epoch=${encodeURIComponent(status.epoch)}${after ? `&after=${after}` : ""}`, {}, this.activeSignal);
         if (page.epoch !== status.epoch) throw new ApplicationError("SYNC_RECONCILE_REQUIRED", "Epoch changed during reconciliation", 409);
-        for (const object of page.objects) await this.cipher!.decryptObject(object);
+        for (const object of page.objects) await this.decryptObject(object);
         this.store.stageReconciliation(page.objects);
         if (page.next && page.next === after) throw new ApplicationError("INVALID_RESPONSE", "Invalid snapshot pagination");
         after = page.next;
@@ -151,7 +168,7 @@ export class ApplicationClient {
         if (page.reset || page.epoch !== status.epoch || page.cursor < since || (page.hasMore && page.cursor <= since)) throw new ApplicationError("SYNC_RECONCILE_REQUIRED", "Reconciliation interrupted", 409);
         for (const object of page.changes) {
           if (object.historyVersion !== undefined) continue;
-          if (!object.purged) await this.cipher!.decryptObject(object);
+          if (!object.purged) await this.decryptObject(object);
         }
         this.store.stageReconciliation(page.changes.filter((object) => object.historyVersion === undefined));
         since = page.cursor;
@@ -177,7 +194,7 @@ export class ApplicationClient {
         argumentId(change.objectId);
         if (!Number.isSafeInteger(change.sequence) || change.sequence <= sequence || change.sequence > page.cursor) throw new ApplicationError("INVALID_RESPONSE", "Invalid synchronization sequence");
         sequence = change.sequence;
-        if (!change.purged && change.historyVersion === undefined) await this.cipher!.decryptObject(change);
+        if (!change.purged && change.historyVersion === undefined) await this.decryptObject(change);
       }
       if (page.cursor < cursor || (page.hasMore && page.cursor <= cursor)) throw new ApplicationError("INVALID_RESPONSE", "Synchronization made no progress");
       this.store.applyPage(page.changes.filter((r) => r.historyVersion === undefined), page.cursor);
@@ -186,10 +203,35 @@ export class ApplicationClient {
     }
   }
 
+  private async decryptObject(object: EncryptedObject) {
+    const fetched: import("../types.js").EncryptedNoteBodyBlock[] = [];
+    if (object.encryptionVersion === 2) {
+      const ids = object.bodyBlockIds;
+      if (!Array.isArray(ids) || !ids.length || ids.length > 1000 || new Set(ids).size !== ids.length) throw new ApplicationError("INVALID_OBJECT", "Invalid body references");
+      const embedded = new Set(object.bodyBlocks?.map((block) => block.blockId));
+      const missing = ids.filter((id) => !embedded.has(id) && !this.store.bodyBlock(object.objectId, id));
+      for (let offset = 0; offset < missing.length; offset += 16) {
+        if (!this.serverVerified) throw new ApplicationError("BODY_BLOCK_MISSING", "Note body is unavailable offline");
+        const blockIds = missing.slice(offset, offset + 16);
+        const response = await this.transport.json<{ blocks: import("../types.js").EncryptedNoteBodyBlock[] }>(`/notes/${object.objectId}/body-blocks/read`,
+          { method: "POST", body: JSON.stringify({ blockIds }) }, this.activeSignal);
+        if (!Array.isArray(response.blocks) || response.blocks.length !== blockIds.length
+          || response.blocks.some((block, index) => block.blockId !== blockIds[index])) throw new ApplicationError("INVALID_OBJECT", "Invalid body block response");
+        fetched.push(...response.blocks);
+      }
+    }
+    const value = await this.cipher!.decryptObject({ ...object, bodyBlocks: [...(object.bodyBlocks ?? []), ...fetched] });
+    if (this.activeSignal?.aborted || this.lifetime.signal.aborted) throw new ApplicationError("CANCELLED", "Body read cancelled");
+    if (fetched.length) this.store.transaction(() => { for (const block of fetched) {
+      this.store.putBodyBlock(object.objectId, block); this.store.markBodyBlockUploaded(object.objectId, block.blockId);
+    } });
+    return value;
+  }
+
   private async *iterateDocuments(): AsyncGenerator<OpenDocument> {
     for (const object of this.store.visibleObjects()) {
       if (object.objectType === "attachment") continue;
-      const document = await this.cipher!.decryptObject(object) as VaultDocument;
+      const document = await this.decryptObject(object) as VaultDocument;
       const pending = this.store.pendingForObject(object.objectId);
       yield { ...document, objectId: object.objectId, serverRevision: pending && !pending.body?.noteCommitted ? (pending.body?.conflict ? 0 : pending.body!.note.baseRevision) : object.revision, dirty: Boolean(pending) };
     }
@@ -204,7 +246,7 @@ export class ApplicationClient {
   private async note(id: string): Promise<OpenDocument> {
     const object = this.store.visibleObjects().find((entry) => entry.objectId === id);
     if (!object) throw new ApplicationError("NOTE_NOT_FOUND", "Note is not in the available cache", 404);
-    const note = await this.cipher!.decryptObject(object);
+    const note = await this.decryptObject(object);
     if (note.kind !== "note" || !noteAccess(note, this.bootstrap!.connection.access).canRead) throw new ApplicationError("NOTE_NOT_FOUND", "Note is not available", 404);
     const pending = this.store.pendingForObject(id);
     return { ...note, objectId: id, serverRevision: pending && !pending.body?.noteCommitted ? (pending.body?.conflict ? 0 : pending.body!.note.baseRevision) : object.revision, dirty: Boolean(pending) };
@@ -242,7 +284,7 @@ export class ApplicationClient {
       if (![...note.attachmentIds, ...attachmentReferences(note.markdown)].includes(id)) throw new ApplicationError("ATTACHMENT_NOT_FOUND", "Attachment does not belong to this note", 404);
       const object = this.store.visibleObjects().find((entry) => entry.objectId === id);
       if (!object) throw new ApplicationError("ATTACHMENT_NOT_CACHED", "Attachment metadata is not cached");
-      const metadata = await this.cipher!.decryptObject(object);
+      const metadata = await this.decryptObject(object);
       if (metadata.kind !== "attachment" || metadata.ownerNoteId !== note.objectId || metadata.deleted) throw new ApplicationError("ATTACHMENT_NOT_FOUND", "Invalid attachment owner", 404);
       const data = await this.attachmentBytes(id, metadata, state.offline);
       this.store.evictAttachments();
@@ -334,7 +376,7 @@ export class ApplicationClient {
     for (const id of sourceIds) {
       const object = this.store.object(id);
       if (!object) throw new ApplicationError("ATTACHMENT_NOT_CACHED", "An attachment is unavailable");
-      const metadata = await this.cipher!.decryptObject(object);
+      const metadata = await this.decryptObject(object);
       if (metadata.kind !== "attachment" || metadata.ownerNoteId !== document.objectId || metadata.deleted) throw new ApplicationError("ATTACHMENT_NOT_FOUND", "Invalid attachment owner");
       await this.attachmentBytes(id, metadata, false);
       sourceAttachments.push(object);
@@ -342,6 +384,8 @@ export class ApplicationClient {
     const baseRevision = original?.serverRevision ?? 0;
     const note = await this.objectWrite(document, baseRevision);
     const body: PendingWrite = { note, sourceAttachments };
+    const conversionSource = this.store.object(note.objectId);
+    if (note.encryptionVersion === 2 && conversionSource?.encryptionVersion === 1) body.conversionSource = conversionSource;
     if (original && this.bootstrap!.historyEnabled) {
       const history = await this.historyWrite(original);
       const pendingBytes = this.store.pending().reduce((sum, operation) => sum + (operation.body?.history?.ciphertext.length ?? 0) + (operation.body?.history?.metadataCiphertext.length ?? 0) + (operation.body?.history?.nonce.length ?? 0) + (operation.body?.history?.metadataNonce.length ?? 0), 0);
@@ -358,7 +402,7 @@ export class ApplicationClient {
 
   private async objectWrite(document: OpenDocument | OpenAttachment, baseRevision: number): Promise<ObjectWrite> {
     const { objectId, serverRevision: _revision, dirty: _dirty, serverTrashedAt: _trashedAt, ...payload } = document;
-    const sealed = await this.cipher!.encryptObject(objectId, document.kind, baseRevision + 1, payload);
+    const sealed = await this.cipher!.encryptObject(objectId, document.kind, baseRevision + 1, payload, this.store.object(objectId) ?? undefined);
     if (sealed.ciphertext.length > 2_000_000) throw new ApplicationError("NOTE_TOO_LARGE", "Encrypted note exceeds the API limit");
     return { objectId, objectType: document.kind, baseRevision, revision: baseRevision + 1, deleted: document.deleted,
       ...(document.kind === "attachment" ? { ownerNoteId: document.ownerNoteId } : {}), idempotencyKey: newOperationId(), ...sealed };
@@ -378,7 +422,21 @@ export class ApplicationClient {
   }
 
   private async sendObject(object: ObjectWrite): Promise<number> {
-    const { objectId, revision: _revision, purged: _purged, ...body } = object;
+    if (object.encryptionVersion === 2) {
+      const pending = (object.bodyBlockIds ?? []).filter((id) => !this.store.bodyBlockUploaded(object.objectId, id));
+      for (let offset = 0; offset < pending.length; offset += 16) {
+        const blocks = pending.slice(offset, offset + 16).map((id) => {
+          const block = this.store.bodyBlock(object.objectId, id);
+          if (!block) throw new ApplicationError("BODY_BLOCK_MISSING", "Pending body block is missing");
+          return block;
+        });
+        const accepted = await this.transport.json<{ accepted: string[] }>(`/notes/${object.objectId}/body-blocks/batch`, { method: "POST", body: JSON.stringify({ blocks }) }, this.activeSignal);
+        if (!Array.isArray(accepted.accepted) || JSON.stringify(accepted.accepted) !== JSON.stringify(blocks.map((block) => block.blockId)))
+          throw new ApplicationError("INVALID_RESPONSE", "Invalid body block acknowledgement");
+        for (const block of blocks) this.store.markBodyBlockUploaded(object.objectId, block.blockId);
+      }
+    }
+    const { objectId, revision: _revision, purged: _purged, bodyBlocks: _blocks, ...body } = object;
     const response = await this.transport.json<{ revision: number }>(`/objects/${objectId}`, { method: "PUT", body: JSON.stringify(body) }, this.activeSignal);
     if (response.revision !== object.revision) throw new ApplicationError("INVALID_RESPONSE", "Unexpected accepted revision");
     return response.revision;
@@ -426,7 +484,7 @@ export class ApplicationClient {
           this.store.complete(operation, result, [body.note]);
           return result;
         } catch (error) {
-          if (!(error instanceof ApplicationError) || error.status !== 409 || ["OPERATION_EXPIRED", "SYNC_RECONCILE_REQUIRED"].includes(error.code)) throw error;
+          if (!(error instanceof ApplicationError) || error.status !== 409 || ["OPERATION_EXPIRED", "SYNC_RECONCILE_REQUIRED", "BODY_BLOCK_MISSING", "BODY_CHUNKING_DISABLED"].includes(error.code)) throw error;
           body.conflict = await this.conflictDraft(body);
           operation.result.conflictNoteId = body.conflict.note.objectId;
           this.store.saveOperation(operation);
@@ -450,7 +508,7 @@ export class ApplicationClient {
       let original: EncryptedObject | null;
       try { original = await this.transport.json<EncryptedObject>(`/objects/${body.note.objectId}`, {}, this.activeSignal); }
       catch (error) { if (!(error instanceof ApplicationError) || error.status !== 404) throw error; original = null; }
-      if (original) await this.cipher!.decryptObject(original);
+      if (original) await this.decryptObject(original);
       this.store.complete(operation, result, [body.conflict.note, ...body.conflict.attachments, ...(original ? [original] : [])], original ? undefined : body.note.objectId);
       return result;
     } catch (error) {
@@ -464,14 +522,20 @@ export class ApplicationClient {
   }
 
   private async conflictDraft(body: PendingWrite, allowMissing = false): Promise<ConflictDraft> {
-    const proposed = await this.cipher!.decryptObject(body.note) as VaultDocument;
+    const proposed = await this.decryptObject(body.note) as VaultDocument;
     const documents = await this.documents();
     const parentId = documents.some((entry) => entry.objectId === proposed.parentId && entry.kind === "folder" && !entry.deleted) ? proposed.parentId : null;
     const document = makeDocument(documents, "note", uniqueSiblingTitle(documents, `${proposed.title} (conflict)`, parentId), parentId, proposed.markdown);
+    if (!body.conflictNoteId) {
+      body.conflictNoteId = crypto.randomUUID();
+      const operation = this.store.pending().find((entry) => entry.body?.note.idempotencyKey === body.note.idempotencyKey);
+      if (operation) { operation.body = body; this.store.saveOperation(operation); }
+    }
+    document.objectId = body.conflictNoteId;
     Object.assign(document, { tags: proposed.tags, favorite: proposed.favorite, locked: proposed.locked, deleted: false });
     const sourceMap = new Map<string, OpenAttachment>();
     for (const object of body.sourceAttachments) {
-      const source = await this.cipher!.decryptObject(object);
+      const source = await this.decryptObject(object);
       if (source.kind !== "attachment") throw new ApplicationError("INVALID_OBJECT", "Invalid conflict attachment");
       sourceMap.set(object.objectId, { ...source, objectId: object.objectId, serverRevision: object.revision, dirty: false });
     }

@@ -2,6 +2,8 @@ import { localDb, localKey } from "../../storage/database";
 
 export async function hasPendingLocalObjectGraph(userId: string, objectIds: ReadonlySet<string>): Promise<boolean> {
   if (!objectIds.size) return false;
+  if ((await localDb.recoveries.where("userId").equals(userId).toArray()).some((record) => objectIds.has(record.sourceId) || objectIds.has(record.copyId)
+    || record.attachments.some((attachment) => objectIds.has(attachment.objectId)))) return true;
   const [objects, history, historyMetadata, chunks] = await Promise.all([
     localDb.outbox.where("userId").equals(userId).toArray(),
     localDb.historyOutbox.where("userId").equals(userId).toArray(),
@@ -32,10 +34,11 @@ export async function removePurgedLocalData(userId: string, objectId: string): P
     localDb.historySnapshots,
     localDb.historyIndex,
     localDb.historyOutbox,
-    localDb.historyMetadataOutbox, localDb.meta
+    localDb.historyMetadataOutbox, localDb.meta, localDb.bodyBlocks
   ], async () => {
     await localDb.meta.bulkDelete([`history-invalid:${userId}:${objectId}`, `history-verified:${userId}:${objectId}`]);
     await localDb.objects.delete(localKey(userId, objectId));
+    await localDb.bodyBlocks.where("[userId+noteId]").equals([userId, objectId]).delete();
     await localDb.outbox.delete(localKey(userId, objectId));
     await localDb.attachmentChunks.where("[userId+attachmentId]").equals([userId, objectId]).delete();
     await localDb.attachmentOutbox.where("[userId+attachmentId]").equals([userId, objectId]).delete();

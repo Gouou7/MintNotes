@@ -21,8 +21,8 @@ export class ApplicationTransport {
     if (signal) signals.push(signal);
     let response: Response;
     try {
-      response = await fetch(`${this.origin}/api/apps/v2${path}`, { ...init, credentials: "omit", redirect: "error", cache: "no-store",
-        signal: AbortSignal.any(signals), headers: { "X-WebMD-Protocol": "2", ...(this.syncLease ? { "X-WebMD-Sync-Lease": this.syncLease } : {}), ...init.headers, Authorization: `Bearer ${this.bearer}` } });
+      response = await fetch(`${this.origin}/api/apps/v3${path}`, { ...init, credentials: "omit", redirect: "error", cache: "no-store",
+        signal: AbortSignal.any(signals), headers: { "X-WebMD-Protocol": "3", ...(this.syncLease ? { "X-WebMD-Sync-Lease": this.syncLease } : {}), ...init.headers, Authorization: `Bearer ${this.bearer}` } });
     } catch {
       if (this.lifetime.aborted || signal?.aborted) throw new ApplicationError("CANCELLED", "Request cancelled");
       throw new ApplicationError("NETWORK_UNAVAILABLE", "The notes server is unavailable");

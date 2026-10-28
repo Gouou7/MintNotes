@@ -1,7 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useRef } from "react";
 import { translateError, type Translate } from "../../i18n";
-import type { HistoryListItem, NoteHistoryPayload, OpenDocument, UiPreferences } from "../../types";
+import type { HistoryListItem, NoteHistoryPayload, OpenDocument, OpenAttachment, UiPreferences } from "../../types";
 import { AttachmentCloneService } from "../attachmentClone";
 import { createLocalAttachment, decryptAttachmentBlob } from "../attachments";
 import { documentPatchChanges } from "../documentPatch";
@@ -150,11 +150,11 @@ export function useVaultDocuments(options: Options) {
     document: OpenDocument,
     sourceMarkdown: string,
     sourceAttachmentIds: readonly string[],
-    options: { commitState?: boolean; allowMissing?: boolean } = {}
+    options: { commitState?: boolean; allowMissing?: boolean; sourceAttachments?: OpenAttachment[] } = {}
   ): Promise<OpenDocument> => {
     document = nameReservations.current.reserve(documentsRef.current, document);
     const attachmentCloner = new AttachmentCloneService({
-      resolveAttachment: (attachmentId) => attachmentIndexRef.current.get(attachmentId),
+      resolveAttachment: (attachmentId) => options.sourceAttachments?.find((attachment) => attachment.objectId === attachmentId) ?? attachmentIndexRef.current.get(attachmentId),
       readAttachment: (attachment) => decryptAttachmentBlob(
         userId,
         attachment,
@@ -181,13 +181,14 @@ export function useVaultDocuments(options: Options) {
         sourceAttachmentIds,
         targetNoteId: document.objectId, allowMissing: options.allowMissing
       });
-      if (cloned.missingAttachmentIds.length) showMessage(t("notice.recoveryMissingAttachments", { count: cloned.missingAttachmentIds.length }), "critical");
       const persisted = await persistObject({
         ...document,
         markdown: cloned.markdown,
         attachmentIds: cloned.attachmentIds,
         dirty: true
       }, options);
+      if (logoutStarted.current) throw new DOMException("Inactive vault", "AbortError");
+      if (cloned.missingAttachmentIds.length) showMessage(t("notice.recoveryMissingAttachments", { count: cloned.missingAttachmentIds.length }), "critical");
       persistedCopy = true;
       return persisted;
     } catch (error) {

@@ -10,11 +10,11 @@ const leases = new Map();
 let attachmentOwner = "";
 async function request(url, init = {}) {
   const headers = new Headers(init.headers);
-  headers.set("X-WebMD-Protocol", "2");
+  headers.set("X-WebMD-Protocol", "3");
   const cookie = headers.get("Cookie");
   if (cookie && ["PUT", "POST"].includes(init.method) && /\/api\/(?:objects|attachments)\//.test(String(url))) {
     if (!leases.has(cookie)) {
-      const status = await nativeFetch(`${baseUrl}/api/sync/status`, { headers: { Cookie: cookie, "X-WebMD-Protocol": "2" } });
+      const status = await nativeFetch(`${baseUrl}/api/sync/status`, { headers: { Cookie: cookie, "X-WebMD-Protocol": "3" } });
       if (status.ok) leases.set(cookie, (await status.json()).lease);
     }
     if (leases.has(cookie)) headers.set("X-WebMD-Sync-Lease", leases.get(cookie));

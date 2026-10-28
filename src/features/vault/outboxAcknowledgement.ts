@@ -1,4 +1,5 @@
 import { operationId } from "@mint-notes/application-client";
+import { persistBodyBlocks } from "../../storage/noteBodies";
 import { cryptoClient } from "../../crypto/client";
 import { localDb, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
 import type { VaultObject } from "../../types";
@@ -36,7 +37,7 @@ export async function acknowledgeOutboxEntry(
     const current = await localDb.outbox.get(sent.key);
     if (!current) return { status: "missing" };
     const object = await crypto.decryptObject(
-      userId, current.objectId, current.objectType, current.revision, current.ciphertext, current.nonce
+      userId, current.objectId, current.objectType, current.revision, current.ciphertext, current.nonce, current
     );
     const matchesSent = current.idempotencyKey === sent.idempotencyKey;
     let rebased: OutboxEntry | undefined;
@@ -58,9 +59,11 @@ export async function acknowledgeOutboxEntry(
     }
     if (!isActive()) return { status: "missing" };
     let committed = false;
-    await localDb.transaction("rw", localDb.objects, localDb.outbox, async () => {
+    await localDb.transaction("rw", localDb.objects, localDb.outbox, localDb.bodyBlocks, async () => {
       if (!isActive() || !sameOutboxEntry(await localDb.outbox.get(sent.key), current)) return;
       if (rebased) {
+        await persistBodyBlocks(userId, rebased.objectId, rebased);
+        delete rebased.bodyBlocks;
         const { operation: _operation, baseRevision: _base, idempotencyKey: _id, generation: _generation, upload: _upload, ...stored } = rebased;
         await localDb.objects.put(stored);
         await localDb.outbox.put(rebased);

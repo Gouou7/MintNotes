@@ -1,7 +1,7 @@
 const jsonHeaders = { "Content-Type": "application/json" };
 let syncLease = "";
 export function setSyncLease(value: string) { syncLease = value; }
-function protocolHeaders() { return { "X-WebMD-Protocol": "2", ...(syncLease ? { "X-WebMD-Sync-Lease": syncLease } : {}) }; }
+function protocolHeaders() { return { "X-WebMD-Protocol": "3", ...(syncLease ? { "X-WebMD-Sync-Lease": syncLease } : {}) }; }
 
 export class ApiError extends Error {
   constructor(

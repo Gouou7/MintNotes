@@ -19,7 +19,7 @@ vi.mock("../../crypto/client", () => ({
 vi.mock("../../storage/database", () => ({
   localKey: (userId: string, objectId: string) => `${userId}:${objectId}`,
   localDb: {
-    objects: { put: mocks.objectPut },
+    objects: { get: vi.fn(), put: mocks.objectPut },
     outbox: { get: mocks.outboxGet, put: mocks.outboxPut },
     transaction: mocks.transaction
   }

@@ -12,13 +12,17 @@ const objectFields = z.object({
   objectType: z.enum(["note", "folder", "attachment"]),
   ciphertext: envelopeField,
   nonce: z.string().min(16).max(200),
-  encryptionVersion: z.number().int().positive(),
+  encryptionVersion: z.union([z.literal(1), z.literal(2)]),
+  bodyBlockIds: z.array(z.string().uuid()).max(1000).optional(),
   baseRevision: z.number().int().nonnegative(),
   idempotencyKey: operationKeySchema,
   ownerNoteId: z.string().uuid().optional(),
   deleted: z.boolean().default(false)
 });
-const validOwner = (body: { objectType: string; ownerNoteId?: string }) => body.objectType === "attachment" ? Boolean(body.ownerNoteId) : body.ownerNoteId === undefined;
+const validOwner = (body: { objectType: string; ownerNoteId?: string; encryptionVersion: number; bodyBlockIds?: string[] }) =>
+  (body.objectType === "attachment" ? Boolean(body.ownerNoteId) : body.ownerNoteId === undefined)
+  && (body.encryptionVersion === 2 ? body.objectType === "note" && Boolean(body.bodyBlockIds?.length)
+    && new Set(body.bodyBlockIds).size === body.bodyBlockIds!.length : !body.bodyBlockIds?.length);
 export const objectSchema = objectFields.refine(validOwner, { message: "Invalid attachment ownership" });
 
 export const objectBatchSchema = z.object({
@@ -54,24 +58,34 @@ export function writeObject(
   scope: ObjectScope,
   objectId: string,
   body: ObjectWrite,
-  quotaBytes: number
+  quotaBytes: number,
+  bodyChunkingEnabled = true
 ): ObjectWriteResult {
   return db.transaction((): ObjectWriteResult => {
     const userId = scope.userId;
     requireLiveOperation(body.idempotencyKey);
-    const digest = createHash("sha256").update(JSON.stringify([objectId, body.objectType, body.ciphertext,
-      body.nonce, body.encryptionVersion, body.baseRevision, body.deleted, body.ownerNoteId ?? null])).digest("hex");
+    const digestFields: unknown[] = [objectId, body.objectType, body.ciphertext,
+      body.nonce, body.encryptionVersion, body.baseRevision, body.deleted, body.ownerNoteId ?? null];
+    if (body.encryptionVersion === 2) digestFields.push([...body.bodyBlockIds!].sort());
+    const digest = createHash("sha256").update(JSON.stringify(digestFields)).digest("hex");
     const prior = db.prepare("SELECT object_id, digest, revision FROM sync_receipts WHERE user_id = ? AND operation_id = ?")
       .get(userId, body.idempotencyKey) as { object_id: string; digest: string; revision: number } | undefined;
     if (prior) return prior.object_id === objectId && prior.digest === digest
       ? { objectId, status: "idempotent", revision: prior.revision }
       : { objectId, status: "conflict", currentRevision: prior.revision, reason: "idempotency" };
     const current = db.prepare("SELECT *, LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB)) AS bytes FROM objects WHERE user_id = ? AND object_id = ?")
-      .get(userId, objectId) as { revision: number; object_type: string; bytes: number; deleted: number; trashed_at: string | null; owner_note_id: string | null } | undefined;
+      .get(userId, objectId) as { revision: number; object_type: string; bytes: number; deleted: number; trashed_at: string | null; owner_note_id: string | null; encryption_version: number } | undefined;
     if (current && current.object_type !== body.objectType) return { objectId, status: "conflict", currentRevision: current.revision, reason: "objectType" };
+    if (!bodyChunkingEnabled && body.encryptionVersion === 2 && current?.encryption_version !== 2)
+      throw Object.assign(new Error("New note body conversions are disabled"), { statusCode: 409, code: "BODY_CHUNKING_DISABLED" });
     const revision = current?.revision ?? 0;
     if (revision !== body.baseRevision || (!current && db.prepare("SELECT 1 FROM changes WHERE user_id = ? AND object_id = ? AND change_type = 'purge'").get(userId, objectId))) {
       return { objectId, status: "conflict", currentRevision: revision, reason: "revision" };
+    }
+    for (const id of body.bodyBlockIds ?? []) {
+      if (!db.prepare("SELECT 1 FROM note_body_blocks WHERE user_id = ? AND note_id = ? AND block_id = ?").get(userId, objectId, id)) {
+        throw Object.assign(new Error("Note body block is missing"), { statusCode: 409, code: "BODY_BLOCK_MISSING" });
+      }
     }
     if (body.objectType !== "attachment" && body.ownerNoteId) throw new ObjectOwnershipError("ATTACHMENT_OWNER_INVALID");
     if (body.objectType === "attachment" && !body.ownerNoteId) throw new ObjectOwnershipError("ATTACHMENT_OWNER_REQUIRED");
@@ -92,14 +106,16 @@ export function writeObject(
       db.prepare("UPDATE note_trash_periods SET restored_at = ? WHERE user_id = ? AND note_id = ? AND restored_at IS NULL").run(now, userId, objectId);
 
     }
-    db.prepare(`INSERT INTO objects (user_id, object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted, updated_at, trashed_at, owner_note_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    db.prepare(`INSERT INTO objects (user_id, object_id, object_type, ciphertext, nonce, encryption_version, revision, deleted, updated_at, trashed_at, owner_note_id, body_block_ids)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, object_id) DO UPDATE SET ciphertext = excluded.ciphertext, nonce = excluded.nonce,
         encryption_version = excluded.encryption_version, revision = excluded.revision, deleted = excluded.deleted,
-        updated_at = excluded.updated_at, owner_note_id = COALESCE(objects.owner_note_id, excluded.owner_note_id),
+        updated_at = excluded.updated_at, owner_note_id = COALESCE(objects.owner_note_id, excluded.owner_note_id), body_block_ids = excluded.body_block_ids,
         trashed_at = CASE WHEN excluded.deleted = 0 THEN NULL ELSE COALESCE(objects.trashed_at, excluded.trashed_at) END,
         trash_grace_until = CASE WHEN excluded.deleted = 0 THEN NULL ELSE objects.trash_grace_until END`)
-      .run(userId, objectId, body.objectType, body.ciphertext, body.nonce, body.encryptionVersion, revision + 1, Number(body.deleted), now, body.deleted ? now : null, body.ownerNoteId ?? null);
+      .run(userId, objectId, body.objectType, body.ciphertext, body.nonce, body.encryptionVersion, revision + 1, Number(body.deleted), now, body.deleted ? now : null, body.ownerNoteId ?? null, JSON.stringify(body.bodyBlockIds ?? []));
+    db.prepare("DELETE FROM note_body_refs WHERE user_id = ? AND note_id = ?").run(userId, objectId);
+    for (const id of body.bodyBlockIds ?? []) db.prepare("INSERT INTO note_body_refs VALUES (?, ?, ?)").run(userId, objectId, id);
     if (body.objectType === "note" && body.deleted && !current?.deleted) {
       db.prepare("INSERT INTO note_trash_periods(user_id, note_id, entered_at) VALUES (?, ?, ?)").run(userId, objectId, now);
     }

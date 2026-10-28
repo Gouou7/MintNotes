@@ -1,7 +1,8 @@
 import type { ApplicationConnectionBootstrap, ApplicationCredential, VaultEnvelope } from "./protocol.js";
 import type { EncryptedObject, VaultObject, VaultAttachment, EncryptedAttachmentChunk } from "./types.js";
 import { ApplicationError } from "./protocol.js";
-import { validateVaultObject } from "./policy.js";
+import { encodeVaultObject, decodeVaultObject, type BodyBlockReader } from "./noteBodies.js";
+export { encodeVaultObject, decodeVaultObject, splitNoteBody } from "./noteBodies.js";
 const ENCRYPTION_VERSION = 1;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -49,6 +50,9 @@ export async function createApplicationCredential(userId: string, vaultKey: Uint
 }
 
 export class VaultCipher {
+  private bodyReader: BodyBlockReader = async () => { throw new Error("Note body block is not cached"); };
+  bodyChunkingEnabled = true;
+  setBodyReader(reader: BodyBlockReader) { this.bodyReader = reader; }
   #key: Uint8Array;
   #disposed = false;
   private requireActive(): void { if (this.#disposed) throw new ApplicationError("CLIENT_STOPPED", "Vault cipher was disposed"); }
@@ -56,7 +60,7 @@ export class VaultCipher {
 
   static async unlock(applicationKey: string, bootstrap: ApplicationConnectionBootstrap): Promise<VaultCipher> {
     const { seed, connectionId } = parseApplicationKey(applicationKey);
-    if (![1, 2].includes(Number(bootstrap.protocolVersion)) || bootstrap.objectSchemaVersion !== 2 || bootstrap.encryptionVersion !== 1
+    if (![1, 2, 3].includes(Number(bootstrap.protocolVersion)) || bootstrap.objectSchemaVersion !== 2 || bootstrap.encryptionVersion !== 1
       || bootstrap.connection.connectionId !== connectionId || bootstrap.vaultEnvelope.version !== 1) {
       seed.fill(0);
       throw new ApplicationError("PROTOCOL_UNSUPPORTED", "Application protocol is unsupported");
@@ -72,20 +76,13 @@ export class VaultCipher {
 
   async decryptObject(object: EncryptedObject): Promise<VaultObject> {
     this.requireActive();
-    if (object.encryptionVersion !== 1 || !Number.isSafeInteger(object.revision) || object.revision < 1) {
-      throw new ApplicationError("PROTOCOL_UNSUPPORTED", "Object encryption version is unsupported");
-    }
-    const bytes = await open(object.ciphertext, object.nonce, this.#key,
-      objectAad(this.userId, object.objectId, object.objectType, object.revision));
-    try {
-      const result = validateVaultObject(JSON.parse(new TextDecoder().decode(bytes)), object.objectType);
-      if (result.deleted !== object.deleted) throw new ApplicationError("INVALID_OBJECT", "Object deletion state mismatch");
-      return result;
-    } finally { bytes.fill(0); }
+    return decodeVaultObject(this.#key, this.userId, object, async (note, id) =>
+      object.bodyBlocks?.find((block) => block.blockId === id) ?? this.bodyReader(note, id));
   }
 
-  async encryptObject(objectId: string, objectType: string, revision: number, object: VaultObject) {
-    return { ...await this.encryptJson(object, objectAad(this.userId, objectId, objectType, revision)), encryptionVersion: 1 as const };
+  async encryptObject(objectId: string, objectType: string, revision: number, object: VaultObject, previous?: EncryptedObject) {
+    this.requireActive();
+    return encodeVaultObject(this.#key, this.userId, objectId, objectType, revision, object, this.bodyReader, previous, this.bodyChunkingEnabled);
   }
 
   async encryptJson(value: unknown, aad: string): Promise<Omit<VaultEnvelope, "version">> {

@@ -30,7 +30,9 @@ describe("deleteLocalUserData", () => {
       [localDb.historySnapshots, deleteHistory],
       [localDb.historyIndex, deleteHistoryIndex],
       [localDb.historyOutbox, deleteHistoryOutbox],
-      [localDb.historyMetadataOutbox, deleteHistoryMetadataOutbox]
+      [localDb.historyMetadataOutbox, deleteHistoryMetadataOutbox],
+      [localDb.bodyBlocks, vi.fn().mockResolvedValue(undefined)],
+      [localDb.recoveries, vi.fn().mockResolvedValue(undefined)]
     ] as const;
     const equalsSpies: ReturnType<typeof vi.fn>[] = [];
 

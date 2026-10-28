@@ -59,6 +59,23 @@ export interface EncryptedObject {
   purged?: boolean;
   serverTrashedAt?: string | null;
   ownerNoteId?: string;
+  bodyBlockIds?: string[];
+  /** Encrypted local dependencies, excluded from object wire writes. */
+  bodyBlocks?: EncryptedNoteBodyBlock[];
+}
+
+export interface EncryptedNoteBodyBlock {
+  blockId: string;
+  ciphertext: string;
+  nonce: string;
+}
+
+export interface EncryptedObjectEncoding {
+  ciphertext: string;
+  nonce: string;
+  encryptionVersion: number;
+  bodyBlockIds?: string[];
+  bodyBlocks?: EncryptedNoteBodyBlock[];
 }
 
 export interface SyncChange extends EncryptedObject {

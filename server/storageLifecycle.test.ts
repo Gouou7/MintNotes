@@ -127,19 +127,44 @@ describe("storage lifecycle v3", () => {
       expect(db.prepare("SELECT 1 FROM objects WHERE object_id = ?").get(attachmentId)).toBeUndefined();
     } finally { await app.close(); }
   });
-  it("migrates matching v2 objects without changing ciphertext, history protection or keys", () => {
+  it.each([2, 3, 4])("migrates schema v%i without changing ciphertext, history protection, receipts or keys", (version) => {
     const { db, directory } = fixture(); writeObject(db, scope, "note", body(), 1000); snapshot(db, "note", "protected", "manual", true);
     db.prepare(`INSERT INTO object_revisions(user_id,object_id,object_type,ciphertext,nonce,encryption_version,revision,deleted,idempotency_key,created_at)
       SELECT user_id,object_id,object_type,ciphertext,nonce,encryption_version,revision,deleted,?,updated_at FROM objects`).run(crypto.randomUUID());
-    const before = db.prepare("SELECT * FROM objects").all();
-    db.exec("PRAGMA user_version = 2"); db.close();
+    db.exec("DROP TABLE note_body_refs; DROP TABLE note_body_blocks; ALTER TABLE objects DROP COLUMN body_block_ids");
+    const before = db.prepare("SELECT * FROM objects").all() as Record<string, unknown>[];
+    const users = db.prepare("SELECT * FROM users").all();
+    db.prepare("INSERT INTO sync_receipts VALUES (?, ?, ?, ?, ?, ?)").run("user", "legacy-operation", "note", "unchanged-request-digest", 1, new Date().toISOString());
+    const receipts = db.prepare("SELECT * FROM sync_receipts").all();
+    db.exec(`PRAGMA user_version = ${version}`); db.close();
     const migrated = openDatabase(directory); resources.find((r) => r.directory === directory)!.db = migrated;
-    expect(migrated.pragma("user_version", { simple: true })).toBe(4);
-    expect(migrated.prepare("SELECT * FROM objects").all()).toEqual(before);
-    expect(migrated.prepare("SELECT COUNT(*) AS count FROM object_revisions").get()).toEqual({ count: 0 });
+    expect(migrated.pragma("user_version", { simple: true })).toBe(5);
+    expect(migrated.prepare("SELECT * FROM objects").all()).toEqual(before.map((row) => ({ ...row, body_block_ids: "[]" })));
+    expect(migrated.prepare("SELECT * FROM users").all()).toEqual(users);
+    expect(migrated.prepare("SELECT * FROM sync_receipts").all()).toEqual(receipts);
+    expect(migrated.prepare("SELECT COUNT(*) AS count FROM object_revisions").get()).toEqual({ count: 1 });
     expect(migrated.prepare("SELECT is_protected FROM note_history").get()).toEqual({ is_protected: 1 });
-    expect(readdirSync(join(directory, "backups"))).toContain("pre-schema3.sqlite");
+    expect(readdirSync(join(directory, "backups"))).toContain("pre-schema5.sqlite");
     migrated.close();
+  });
+  it("does not publish a manifest with missing or cross-note body blocks and retains unreferenced blocks", () => {
+    const { db } = fixture();
+    const note = crypto.randomUUID(), blockId = crypto.randomUUID();
+    const first = body(); writeObject(db, scope, note, first, 100_000);
+    const before = db.prepare("SELECT * FROM objects WHERE object_id = ?").get(note);
+    const manifest = body(1, { encryptionVersion: 2, bodyBlockIds: [blockId] });
+    expect(() => writeObject(db, scope, note, manifest, 100_000)).toThrow("Note body block is missing");
+    expect(db.prepare("SELECT * FROM objects WHERE object_id = ?").get(note)).toEqual(before);
+    db.prepare("INSERT INTO note_body_blocks VALUES (?, ?, ?, ?, ?)").run("user", crypto.randomUUID(), blockId, "x".repeat(100), "n".repeat(16));
+    expect(() => writeObject(db, scope, note, manifest, 100_000)).toThrow("Note body block is missing");
+    db.prepare("INSERT INTO note_body_blocks VALUES (?, ?, ?, ?, ?)").run("user", note, blockId, "x".repeat(100), "n".repeat(16));
+    expect(storageUsage(db, "user").noteBytes).toBeGreaterThan(200);
+    expect(writeObject(db, scope, note, manifest, 100_000).status).toBe("accepted");
+    const nextId = crypto.randomUUID();
+    db.prepare("INSERT INTO note_body_blocks VALUES (?, ?, ?, ?, ?)").run("user", note, nextId, "y".repeat(100), "m".repeat(16));
+    writeObject(db, scope, note, body(2, { encryptionVersion: 2, bodyBlockIds: [nextId] }), 100_000);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM note_body_blocks WHERE note_id = ?").get(note)).toEqual({ count: 2 });
+    expect(db.prepare("SELECT block_id FROM note_body_refs WHERE note_id = ?").get(note)).toEqual({ block_id: nextId });
   });
   it("leases expire and are bound to user and restored epoch", () => {
     const { db } = fixture(); const lease = issueSyncLease(db, "user");

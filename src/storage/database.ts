@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
 import type { AuthEndpoint, HistoryCaptureKind, ObjectType, User } from "../types";
+import type { EncryptedNoteBodyBlock } from "@mint-notes/application-client";
 
 export interface LocalEncryptedObject {
   key: string;
@@ -14,6 +15,15 @@ export interface LocalEncryptedObject {
   updatedAt: string;
   ownerNoteId?: string;
   serverTrashedAt?: string | null;
+  bodyBlockIds?: string[];
+  bodyBlocks?: EncryptedNoteBodyBlock[];
+}
+
+export interface LocalBodyBlock extends EncryptedNoteBodyBlock { key: string; userId: string; noteId: string; uploaded?: boolean; }
+export interface RecoveryRecord {
+  kind?: "conflict" | "conversion";
+  key: string; userId: string; sourceId: string; copyId: string; source: OutboxEntry;
+  attachments: LocalEncryptedObject[]; chunks: LocalAttachmentChunk[];
 }
 
 export interface ObjectUploadAttempt extends LocalEncryptedObject {
@@ -160,6 +170,8 @@ export interface HistoryMetadataOutboxEntry {
 }
 
 class NotesDatabase extends Dexie {
+  bodyBlocks!: EntityTable<LocalBodyBlock, "key">;
+  recoveries!: EntityTable<RecoveryRecord, "key">;
   objects!: EntityTable<LocalEncryptedObject, "key">;
   outbox!: EntityTable<OutboxEntry, "key">;
   attachmentChunks!: EntityTable<LocalAttachmentChunk, "key">;
@@ -270,6 +282,10 @@ class NotesDatabase extends Dexie {
       historyOutbox: "key, userId, [userId+noteId], generation",
       historyMetadataOutbox: "key, userId, [userId+noteId], generation"
     });
+    this.version(8).stores({
+      bodyBlocks: "key, userId, [userId+noteId]",
+      recoveries: "key, userId, sourceId, copyId"
+    });
   }
 }
 
@@ -316,7 +332,8 @@ export async function deleteLocalUserData(userId: string): Promise<void> {
       localDb.historySnapshots,
       localDb.historyIndex,
       localDb.historyOutbox,
-      localDb.historyMetadataOutbox
+      localDb.historyMetadataOutbox,
+      localDb.bodyBlocks, localDb.recoveries
     ],
     async () => {
       await localDb.objects.where("userId").equals(userId).delete();
@@ -338,6 +355,8 @@ export async function deleteLocalUserData(userId: string): Promise<void> {
       await localDb.historyIndex.where("userId").equals(userId).delete();
       await localDb.historyOutbox.where("userId").equals(userId).delete();
       await localDb.historyMetadataOutbox.where("userId").equals(userId).delete();
+      await localDb.bodyBlocks.where("userId").equals(userId).delete();
+      await localDb.recoveries.where("userId").equals(userId).delete();
     }
   );
 }

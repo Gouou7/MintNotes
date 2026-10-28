@@ -59,9 +59,9 @@ test("protected history follows a note through trash, restore and permanent clea
   const headings = await page.locator(".note-storage-settings h3").allTextContents();
   expect(headings.filter((value) => ["Storage usage", "Note history", "Trash", "Note migration"].includes(value))).toEqual(["Storage usage", "Note history", "Trash", "Note migration"]);
   await expect(page.getByText("Local status", { exact: true })).toBeVisible();
-  await page.locator(".history-budget select").selectOption("unlimited");
   const budgetSaved = page.waitForResponse((response) => response.url().endsWith("/api/account/note-history-settings") && response.request().method() === "PATCH");
-  await page.locator(".history-budget").getByRole("button", { name: "Save quota" }).click();
+  await page.locator(".history-budget select").selectOption("unlimited");
+  await page.locator(".history-budget select").press("Tab");
   expect((await (await budgetSaved).json()).quotaBytes).toBeNull();
   if (info.project.name === "desktop") {
     await page.getByRole("button", { name: "Administrator settings", exact: true }).click();

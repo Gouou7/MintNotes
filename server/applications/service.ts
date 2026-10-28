@@ -72,7 +72,7 @@ export function revokeApplicationConnections(db: AppDatabase, userId: string, no
 export function applicationBootstrap(db: AppDatabase, row: ApplicationRow, historyQuotaBytes = 256 * 1024 * 1024): ApplicationConnectionBootstrap {
   const user = db.prepare("SELECT history_enabled FROM users WHERE id = ?").get(row.user_id) as { history_enabled: number };
   return {
-    protocolVersion: 2, objectSchemaVersion: 2, encryptionVersion: 1,
+    protocolVersion: 3, objectSchemaVersion: 2, encryptionVersion: 1, objectSchemaVersions: [2, 3], encryptionVersions: [1, 2],
     userId: row.user_id,
     connection: applicationSummary(row),
     vaultEnvelope: { version: 1, ciphertext: row.envelope_ciphertext, nonce: row.envelope_nonce },

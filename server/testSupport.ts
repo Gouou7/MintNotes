@@ -8,7 +8,7 @@ export async function createApp(options: ServerDependencies = {}) {
   const inject = app.inject.bind(app);
   app.inject = ((input: any, callback?: any) => {
     if (typeof input === "string" || callback) return inject(input, callback);
-    const headers = { "x-webmd-protocol": "2", ...input.headers } as Record<string, string>;
+    const headers = { "x-webmd-protocol": "3", ...input.headers } as Record<string, string>;
     const db = options.db;
     if (db && !headers["x-webmd-sync-lease"]) {
       const cookie = /(?:^|;\s*)(?:__Host-)?webmd_session=([^;]+)/.exec(headers.cookie ?? headers.Cookie ?? "");
