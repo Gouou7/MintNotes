@@ -34,6 +34,8 @@ export interface ObjectUploadAttempt extends LocalEncryptedObject {
 }
 
 export interface OutboxEntry extends ObjectUploadAttempt {
+  /** Local writer identity; never sent to the server or included in encrypted Markdown. */
+  writerId?: string;
   /** Exact encrypted request retained until its server outcome is known. */
   upload?: ObjectUploadAttempt;
 }

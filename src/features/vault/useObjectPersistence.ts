@@ -1,5 +1,7 @@
 import { persistWithCacheRecovery } from "../../storage/cache";
 import { persistBodyBlocks } from "../../storage/noteBodies";
+import { reserveConflictRecovery } from "./conflictRecovery";
+import { shouldSynchronizeWorkspaceObject } from "../workspace";
 import { operationId } from "@mint-notes/application-client";
 import { useEffect, useRef } from "react";
 import { cryptoClient } from "../../crypto/client";
@@ -40,6 +42,7 @@ function plainObject(object: PersistableObject): VaultObject {
 
 export function useObjectPersistence(dependencies: ObjectPersistenceDependencies) {
   const coordinator = useRef(new ObjectWriteCoordinator());
+  const writerId = useRef(crypto.randomUUID());
 
   useEffect(() => {
     coordinator.current.resume();
@@ -90,12 +93,17 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
         baseRevision,
         idempotencyKey: operationId(),
         generation: Date.now() * 1000 + ++dependencies.generation.current,
+        writerId: writerId.current,
         ...(pending?.upload ? { upload: pending.upload } : {})
       };
       await persistWithCacheRecovery(dependencies.userId, () => localDb.transaction("rw", localDb.objects, localDb.outbox, localDb.bodyBlocks, localDb.recoveries, localDb.attachmentChunks, async () => {
         if (!dependencies.isActive()) return;
         const latest = await localDb.outbox.get(key);
         const previous = await localDb.objects.get(key);
+        if (latest && latest.writerId !== writerId.current && shouldSynchronizeWorkspaceObject(object.objectId)) {
+          await reserveConflictRecovery(dependencies.userId, latest,
+            latest.objectType === "attachment" ? [latest.objectId] : [], dependencies.isActive);
+        }
         if (previous?.encryptionVersion === 1 && encrypted.encryptionVersion === 2) {
           const recoveryKey = `${key}:conversion:${previous.nonce}`;
           const attachments = (await localDb.objects.where("userId").equals(dependencies.userId).toArray()).filter((entry) => entry.ownerNoteId === object.objectId);

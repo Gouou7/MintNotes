@@ -86,7 +86,11 @@ export class ApplicationStore {
   transaction<T>(operation: () => T): T {
     this.db.exec("BEGIN IMMEDIATE");
     try { const result = operation(); this.db.exec("COMMIT"); return result; }
-    catch (error) { this.db.exec("ROLLBACK"); throw error; }
+    catch (error) {
+      // SQLITE_FULL can roll the transaction back before control returns here.
+      if (this.db.isTransaction) this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
   get<T>(key: string): T | null {
     const row = this.db.prepare("SELECT data FROM metadata WHERE key = ?").get(key);

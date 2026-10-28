@@ -1,5 +1,6 @@
 import { recordCompleteSync } from "../../storage/storageStatus";
 import { reserveConflictRecovery, completeConflictRecoveries, restoreRecoveryChunks } from "./conflictRecovery";
+import { withVaultSyncLock } from "./syncLock";
 import { attachmentIdsIn } from "../attachments";
 import { prepareVaultSynchronization } from "./syncReconciliation";
 import { VaultHistoryController } from "./historyController";
@@ -384,7 +385,7 @@ export function useVaultSync(options: Options) {
     }
   };
 
-  executeSyncRef.current = executeSync;
+  executeSyncRef.current = (intent) => withVaultSyncLock(userId, () => executeSync(intent));
 
   function requestPush(kind: "editor" | "structural" = "editor") {
     if (logoutStarted.current) return;

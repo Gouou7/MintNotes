@@ -23,6 +23,17 @@ function commit(page, version) {
     return (body.objects ?? [body]).some((object) => object.objectType === "note" && object.encryptionVersion === version);
   });
 }
+async function pendingNote(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open("webmd-notes-v2");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result, read = db.transaction("outbox").objectStore("outbox").getAll();
+      read.onerror = () => { db.close(); reject(read.error); };
+      read.onsuccess = () => { db.close(); resolve(read.result.find((object) => object.objectType === "note")); };
+    };
+  }));
+}
 
 test("upgrades legacy cache and preserves long-note branches through weak network and offline restart", async ({ page, browser }, info) => {
   test.setTimeout(180_000);
@@ -125,6 +136,20 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
     await expect(other.locator(".app-shell")).toBeVisible();
     await expect(await source(other, title)).toHaveValue(right);
 
+    const originalPending = await pendingNote(other);
+    const sibling = await otherContext.newPage();
+    const third = "Third tab complete offline branch\n" + markdown;
+    try {
+      await sibling.goto("/");
+      await expect(sibling.locator(".app-shell")).toBeVisible();
+      await expect(await source(sibling, title)).toHaveValue(right);
+      await (await source(sibling, title)).fill(third);
+      await expect.poll(async () => {
+        const proposal = await pendingNote(sibling);
+        return Boolean(proposal && proposal.idempotencyKey !== originalPending.idempotencyKey);
+      }).toBe(true);
+    } finally { await sibling.close(); }
+
     const left = "Device one online\n" + markdown;
     const uploaded = [];
     await page.route("**/api/notes/*/body-blocks/batch", async (route) => {
@@ -141,10 +166,15 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
     await expect.poll(() => other.locator(".tree-title").allTextContents()).toContain(`${title} (conflict copy)`);
     await other.evaluate(() => window.dispatchEvent(new CustomEvent("webmd:retry-recoveries")));
     await expect(await source(other, `${title} (conflict copy)`)).toHaveValue(right);
+    await expect.poll(async () => (await other.locator(".tree-title").allTextContents()).filter((value) => value.startsWith(title))).toHaveLength(3);
+    const thirdTitle = (await other.locator(".tree-title").allTextContents()).find((value) => value.startsWith(title)
+      && value !== title && value !== `${title} (conflict copy)`);
+    await expect(await source(other, thirdTitle)).toHaveValue(third);
     await expect(await source(other, title)).toHaveValue(left);
     await expect(other.locator(".status-synced")).toBeVisible();
 
     // A deletion on one device must preserve the other device's complete edit as a visible copy.
+    const priorTitles = new Set(await other.locator(".tree-title").allTextContents());
     await otherContext.setOffline(true);
     const retainedEdit = "Edit surviving deletion\n" + left;
     await (await source(other, title)).fill(retainedEdit);
@@ -162,7 +192,6 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
     await page.getByRole("button", { name: "Move to trash", exact: true }).click();
     expect((await (await deletionAccepted).json()).results.every((object) => ["accepted", "idempotent"].includes(object.status))).toBe(true);
     await otherContext.setOffline(false);
-    const priorTitles = new Set([title, `${title} (conflict copy)`, "Welcome"]);
     const recoveredTitles = async () => (await other.locator(".tree-title").allTextContents()).filter((value) => !priorTitles.has(value));
     await expect.poll(recoveredTitles).toHaveLength(1);
     await expect(await source(other, (await recoveredTitles())[0])).toHaveValue(retainedEdit);

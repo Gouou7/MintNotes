@@ -149,6 +149,49 @@ afterEach(async () => {
 });
 
 describe("synchronization race regressions", () => {
+  it("retains another tab's saved proposal before replacing the shared outbox", async () => {
+    const first = await mount(document("base")), second = await mount(document("base"));
+    await first.persist(document("tab one complete branch"));
+    const saved = (await localDb.outbox.get(key))!;
+    await second.persist(document("tab two complete branch"));
+    expect(JSON.parse((await localDb.outbox.get(key))!.ciphertext).markdown).toBe("tab two complete branch");
+    expect((await localDb.recoveries.toArray()).some((record) => record.source.ciphertext === saved.ciphertext
+      && record.source.idempotencyKey === saved.idempotencyKey)).toBe(true);
+  });
+
+  it("retains a foreign proposal committed while the other tab is encrypting", async () => {
+    const first = await mount(document("base")), second = await mount(document("base"));
+    const encryption = deferred<ReturnType<typeof envelope>>();
+    mocks.encrypt.mockReturnValueOnce(encryption.promise);
+    const saving = second.persist(document("delayed tab"));
+    await vi.waitFor(() => expect(mocks.encrypt).toHaveBeenCalledTimes(1));
+    await first.persist(document("saved during encryption"));
+    const saved = (await localDb.outbox.get(key))!;
+    encryption.resolve(envelope(plain(document("delayed tab"))));
+    await saving;
+    expect((await localDb.recoveries.toArray()).some((record) => record.source.idempotencyKey === saved.idempotencyKey)).toBe(true);
+  });
+
+  it("does not create conflict recoveries for consecutive edits from the same writer", async () => {
+    const app = await mount(document("base"));
+    await app.persist(document("first edit"));
+    await app.persist(document("second edit"));
+    expect(await localDb.recoveries.count()).toBe(0);
+  });
+
+  it("keeps the shared object and proposal intact if foreign recovery persistence fails", async () => {
+    const first = await mount(document("base")), second = await mount(document("base"));
+    await first.persist(document("protected foreign branch"));
+    const saved = await localDb.outbox.get(key), stored = await localDb.objects.get(key);
+    const fault = vi.spyOn(localDb.recoveries, "add").mockRejectedValueOnce(new Error("recovery storage full"));
+    try {
+      await expect(second.persist(document("other tab"))).rejects.toThrow("recovery storage full");
+      expect(await localDb.outbox.get(key)).toEqual(saved);
+      expect(await localDb.objects.get(key)).toEqual(stored);
+      expect(await localDb.recoveries.count()).toBe(0);
+    } finally { fault.mockRestore(); }
+  });
+
   it("serializes an upload acknowledgement behind a save already encrypting", async () => {
     const first = entry("first"); await seed(first);
     const app = await mount(document("first"));

@@ -53,6 +53,7 @@ export async function acknowledgeOutboxEntry(
           key: current.key, userId, objectId: current.objectId, objectType: current.objectType, ownerNoteId: current.ownerNoteId,
           ...encrypted, revision: acceptedRevision + 1, deleted: current.deleted, updatedAt: current.updatedAt,
           operation: "upsert", baseRevision: acceptedRevision,
+          writerId: current.writerId,
           idempotencyKey: operationId(), generation: nextGeneration()
         };
       }

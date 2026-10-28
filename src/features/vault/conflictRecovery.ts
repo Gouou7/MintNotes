@@ -9,7 +9,9 @@ export async function reserveConflictRecovery(userId: string, source: OutboxEntr
     if (existing) return existing;
     const objects = await localDb.objects.where("userId").equals(userId).toArray();
     const requested = new Set(attachmentIds);
-    const attachments = objects.filter((object) => object.objectType === "attachment" && (object.ownerNoteId === source.objectId || requested.has(object.objectId)));
+    const attachments = objects.filter((object) => object.objectType === "attachment"
+      && (object.ownerNoteId === source.objectId || requested.has(object.objectId)
+        || (source.objectType !== "attachment" && !object.ownerNoteId)));
     const ids = new Set(attachments.map((object) => object.objectId));
     const chunks = (await localDb.attachmentChunks.where("userId").equals(userId).toArray())
       .filter((chunk) => ids.has(chunk.attachmentId));

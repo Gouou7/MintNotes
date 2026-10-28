@@ -17,6 +17,7 @@ import { markBackup, backupRetention } from "./backupRetention";
 import { issueSyncLease, validSyncLease } from "./sync/protocol";
 import { createApp } from "./app";
 import { loadServerConfig } from "./config";
+import { registerNoteBodyRoutes } from "./sync/noteBodies";
 
 const resources: Array<{ directory: string; db: AppDatabase }> = [];
 afterEach(() => { for (const r of resources.splice(0)) { if (r.db.open) r.db.close(); rmSync(r.directory, { recursive: true, force: true }); } });
@@ -165,6 +166,37 @@ describe("storage lifecycle v3", () => {
     writeObject(db, scope, note, body(2, { encryptionVersion: 2, bodyBlockIds: [nextId] }), 100_000);
     expect(db.prepare("SELECT COUNT(*) AS count FROM note_body_blocks WHERE note_id = ?").get(note)).toEqual({ count: 2 });
     expect(db.prepare("SELECT block_id FROM note_body_refs WHERE note_id = ?").get(note)).toEqual({ block_id: nextId });
+  });
+  it("rolls back a real SQLITE_FULL during a block batch and preserves the accepted manifest and receipts", async () => {
+    const { db } = fixture();
+    const noteId = crypto.randomUUID(), oldId = crypto.randomUUID();
+    db.prepare("INSERT INTO note_body_blocks VALUES (?, ?, ?, ?, ?)").run("user", noteId, oldId, "a".repeat(32), "n".repeat(16));
+    writeObject(db, scope, noteId, body(0, { encryptionVersion: 2, bodyBlockIds: [oldId] }), 1_000_000);
+    const lease = issueSyncLease(db, "user");
+    const before = ["objects", "note_body_refs", "sync_receipts", "sync_state", "changes"].map((table) => db.prepare(`SELECT * FROM ${table}`).all());
+    const pages = Number(db.pragma("page_count", { simple: true }));
+    db.pragma(`max_page_count = ${pages}`);
+    const app = Fastify();
+    registerNoteBodyRoutes(app, db, loadServerConfig({ NODE_ENV: "test" }), "/api", async () => {}, () => scope);
+    const blocks = [
+      { blockId: crypto.randomUUID(), ciphertext: "b".repeat(32), nonce: "m".repeat(16) },
+      { blockId: crypto.randomUUID(), ciphertext: "c".repeat(80_000), nonce: "k".repeat(16) }
+    ];
+    try {
+      const failed = await app.inject({ method: "POST", url: `/api/notes/${noteId}/body-blocks/batch`,
+        headers: { "x-webmd-sync-lease": lease }, payload: { blocks } });
+      expect(failed.statusCode).toBe(500);
+      expect(failed.json().code).toBe("SQLITE_FULL");
+      expect(db.prepare("SELECT block_id FROM note_body_blocks").all()).toEqual([{ block_id: oldId }]);
+      expect(["objects", "note_body_refs", "sync_receipts", "sync_state", "changes"].map((table) => db.prepare(`SELECT * FROM ${table}`).all())).toEqual(before);
+      expect(db.pragma("integrity_check", { simple: true })).toBe("ok");
+      db.pragma(`max_page_count = ${pages + 128}`);
+      const retried = await app.inject({ method: "POST", url: `/api/notes/${noteId}/body-blocks/batch`,
+        headers: { "x-webmd-sync-lease": lease }, payload: { blocks } });
+      expect(retried.statusCode).toBe(200);
+      expect(retried.json().accepted).toEqual(blocks.map((block) => block.blockId));
+      expect(writeObject(db, scope, noteId, body(1, { encryptionVersion: 2, bodyBlockIds: blocks.map((block) => block.blockId) }), 1_000_000).status).toBe("accepted");
+    } finally { await app.close(); }
   });
   it("leases expire and are bound to user and restored epoch", () => {
     const { db } = fixture(); const lease = issueSyncLease(db, "user");
