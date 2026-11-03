@@ -71,15 +71,15 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
       <div className="settings-actions"><SettingsButton icon={X} disabled={disabled} onClick={() => setConfirming(null)}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Trash2} className="danger" disabled={disabled} onClick={() => void controller.revoke(confirming).then((ok) => { if (ok) setConfirming(null); })}>{t("applications.revoke")}</SettingsButton></div>
     </div>}
     {online && controller.connections.length === 0 && !controller.busy && <p className="settings-help">{t("applications.empty")}</p>}
-    <div className="session-list">{controller.connections.map((row) => <article className="session-row" key={row.connectionId}>
-      <span className="session-device-icon"><AppIcon icon={Plug} /></span>
-      <span className="session-details"><strong>{row.name}<em>{t(row.access === "read" ? "applications.readOnly" : "applications.readWrite")}</em><em>{t(`applications.${row.status}`)}</em></strong>
+    <div className="session-list settings-list">{controller.connections.map((row) => <article className="session-row settings-list-row" key={row.connectionId}>
+      <span className="settings-list-icon"><AppIcon icon={Plug} size={20} /></span>
+      <span className="session-details settings-list-details"><strong>{row.name}<em>{t(row.access === "read" ? "applications.readOnly" : "applications.readWrite")}</em><em>{t(`applications.${row.status}`)}</em></strong>
         <span>{t("applications.created", { date: formatDateTime(row.createdAt) })}</span>
         <small>{t("applications.lastUsed", { date: row.lastUsedAt ? formatDateTime(row.lastUsedAt) : t("applications.unused") })}</small>
         <small>{t("applications.idlePolicy", { value: row.idleTimeoutDays === null ? t("applications.never") : t("applications.days", { count: row.idleTimeoutDays }) })}</small>
         <small>{t("applications.expires", { date: row.validUntil ? formatDateTime(row.validUntil) : t("applications.never") })}</small>
       </span>
-      <div className="application-row-actions">
+      <div className="settings-list-actions">
         {row.status === "active" && <SettingsButton icon={Pencil} disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit(row)}>{t("applications.edit")}</SettingsButton>}
         {row.status === "revoked"
           ? <SettingsButton icon={Trash2} disabled={disabled || Boolean(controller.applicationKey)} onClick={() => void controller.remove(row.connectionId)}>{t("applications.removeDevice")}</SettingsButton>

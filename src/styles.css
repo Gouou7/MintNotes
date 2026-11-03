@@ -480,7 +480,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .application-form, .application-key-card, .application-confirm { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .application-key-card p, .application-confirm p { margin: 0; }
 .application-key-card input { width: 100%; min-width: 0; font-family: monospace; }
-.application-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .settings-content > :is(.settings-section, .admin-settings) { flex: 0 0 auto; }
 .settings-section h3 { margin: 8px 0 0; color: var(--text-strong); }
 .settings-section form { margin: 0; }
@@ -535,19 +534,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .profile-action-button { width: fit-content; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 13px; border-radius: 8px; white-space: nowrap; }
 .profile-dialog-footer { padding-top: 1px; }
 .session-gate { margin: 0; padding: 9px 11px; border-radius: 8px; color: var(--warning-text); background: var(--warning-bg); font-size: 12px; line-height: 1.45; }
-.session-list { display: grid; gap: 8px; }
-.session-row { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
-.session-row.current { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent-soft) 42%, var(--surface)); }
-.session-device-icon { width: 28px; height: 20px; display: grid; place-items: start center; align-self: start; color: var(--text-strong); }
-.session-device-icon > svg { width: 20px; height: 20px; }
-.session-details { min-width: 0; display: grid; gap: 3px; }
-.session-details strong { min-width: 0; display: flex; align-items: center; gap: 7px; color: var(--text-strong); font-size: 13px; }
-.session-details strong em { padding: 2px 6px; border-radius: 999px; color: var(--accent-text); background: var(--accent-soft); font-size: 10px; font-style: normal; font-weight: 650; }
-.session-details span, .session-details small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
-.session-details span { font-size: 12px; }
-.session-details small { font-size: 10px; }
-.settings-section button.session-revoke, .settings-section button.session-remove { min-height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; }
-.settings-section button.session-revoke { color: var(--danger); }
 .trash-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .trash-heading > span:first-child { min-width: 0; display: grid; gap: 3px; }
 .trash-heading h3 { margin: 0; }
@@ -562,28 +548,16 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-section .trash-search input { min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; outline: 0; background: transparent; }
 .settings-section .trash-search input:focus { border: 0; box-shadow: none; }
 .settings-section .trash-toolbar select { width: auto; min-width: 112px; height: 38px; padding: 0 30px 0 10px; background: var(--surface-input); cursor: pointer; }
-.trash-list { display: block; padding: 6px; border: 1px solid var(--border); border-radius: 10px; }
 .trash-node { min-width: 0; }
-.trash-row { position: relative; min-width: 0; display: grid; grid-template-columns: 30px auto minmax(0, 1fr) auto; align-items: center; gap: 7px; min-height: 48px; margin: 1px 0; padding: 6px 7px; border-radius: 8px; background: transparent; }
-.trash-row:hover { background: var(--surface-hover); }
-.trash-item-icon { width: 24px; height: 30px; display: grid; place-items: center; color: var(--text); }
-.settings-section button.trash-disclosure, .trash-disclosure, .trash-disclosure-spacer { width: 30px; height: 30px; min-height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; color: var(--muted); background: transparent; }
+.settings-section button.trash-disclosure, .trash-disclosure { position: absolute; top: 0; right: 100%; width: 20px; height: 20px; min-height: 20px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; color: var(--muted); background: transparent; }
 .settings-section button.trash-disclosure:hover, .settings-section button.trash-disclosure:focus-visible { border: 0; color: var(--text-strong); background: var(--surface-hover); }
-.trash-disclosure.forced { height: 30px; }
-.trash-details { min-width: 0; display: grid; gap: 3px; }
-.trash-details strong, .trash-details small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trash-details strong { color: var(--text-strong); font-size: 13px; }
-.trash-details small { color: var(--muted); font-size: 11px; }
-.trash-actions { display: flex; align-items: center; gap: 5px; }
-.settings-section .trash-actions button { width: 32px; min-height: 32px; padding: 0; display: grid; place-items: center; }
-.settings-section .trash-actions button.danger { color: var(--danger); }
 .trash-more { position: relative; }
 .trash-more summary { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; cursor: pointer; list-style: none; }
 .trash-more summary::-webkit-details-marker { display: none; }
 .trash-more summary:hover, .trash-more summary:focus-visible, .trash-more[open] summary { border-color: var(--accent); background: var(--surface-hover); }
 .trash-more > div { position: absolute; z-index: 5; top: calc(100% + 5px); right: 0; min-width: 154px; padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); box-shadow: 0 10px 30px rgba(0,0,0,.2); }
 .settings-section .trash-more > div button { width: 100%; min-height: 34px; display: flex; justify-content: flex-start; gap: 7px; padding: 0 9px; border: 0; white-space: nowrap; }
-.trash-children { margin-left: 17px; padding-left: 2px; border-left: var(--pane-divider-width) solid var(--border); }
+.trash-children { margin-left: 14px; padding-left: 13px; border-left: var(--pane-divider-width) solid var(--border); }
 .settings-section button.trash-load-more { width: fit-content; min-height: 34px; justify-self: center; padding: 0 14px; color: var(--accent-text); }
 .trash-empty { margin: 0; padding: 28px 16px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); text-align: center; }
 .history-usage { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
@@ -611,14 +585,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .admin-subsection h4 { margin: 0; color: var(--text-strong); font-size: calc(14px + var(--font-adjust)); }
 .activation-result { display: grid; gap: 7px; padding: 12px; border: 1px solid var(--accent); border-radius: 9px; background: var(--accent-soft); }
 .activation-result code { overflow: auto; padding: 8px; background: var(--surface); border-radius: 6px; }
-.user-list { display: grid; gap: 7px; }
-.user-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px; border: 1px solid var(--border); border-radius: 9px; }
-.user-row span { min-width: 0; display: grid; }
-.user-row small { color: var(--muted); overflow-wrap: anywhere; }
-.user-row strong { display: flex; align-items: center; gap: 7px; }
-.user-row strong em { padding: 2px 6px; border-radius: 999px; color: var(--accent-text); background: var(--accent-soft); font-size: calc(10px + var(--font-adjust)); font-style: normal; }
-.user-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-.settings-section .user-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding-inline: 12px; white-space: nowrap; }
+.settings-section .settings-list-actions button { white-space: nowrap; }
 .settings-section button.danger { color: var(--danger); }
 .settings-section button.danger-solid { border-color: var(--danger); color: #fff; background: var(--danger); }
 .settings-section button.settings-action-button, .settings-logout-section button.settings-action-button { min-height: var(--workspace-button-size); height: auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 7px; border: 0; border-radius: var(--workspace-button-radius); background: var(--button-hover); color: var(--settings-button-text); font-size: 14px; font-weight: 600; line-height: 20px; cursor: pointer; transition: background-color 120ms ease; }
@@ -648,8 +615,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .recovery-result { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
 .recovery-result textarea { width: 100%; padding: 10px; resize: none; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 
-.app-shell .settings-help, .app-shell .trash-details strong, .app-shell .session-details strong, .app-shell .sidebar-user-name strong { font-size: calc(13px + var(--font-adjust)); }
-.app-shell .trash-details small, .app-shell .sidebar-user-name small, .app-shell .status-bar { font-size: calc(11px + var(--font-adjust)); }
+.app-shell .settings-help, .app-shell .sidebar-user-name strong { font-size: calc(13px + var(--font-adjust)); }
+.app-shell .sidebar-user-name small, .app-shell .status-bar { font-size: calc(11px + var(--font-adjust)); }
 .app-shell .settings-section label, .app-shell .notice, .app-shell .error { font-size: calc(13px + var(--font-adjust)); }
 
 .context-menu { position: fixed; z-index: 150; width: 204px; max-height: min(430px, calc(100dvh - 20px)); overflow: auto; padding: 5px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); box-shadow: 0 12px 36px rgba(0,0,0,.32); }
@@ -723,20 +690,12 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .profile-avatar-editor .settings-actions { display: grid; grid-template-columns: 1fr; }
   .profile-avatar-editor .profile-action-button, .profile-dialog-footer .profile-action-button { width: 100%; }
   .profile-edit-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 18px; }
-  .session-row { grid-template-columns: auto minmax(0, 1fr); }
-  .application-row-actions { grid-column: 2; justify-self: start; }
-  .session-revoke, .session-remove { grid-column: 2; justify-self: start; }
   .trash-heading { align-items: flex-start; flex-direction: column; }
   .trash-heading-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .trash-toolbar { grid-template-columns: 1fr 1fr; }
   .trash-search { grid-column: 1 / -1; }
   .settings-section .trash-toolbar select { width: 100%; min-width: 0; }
-  .trash-row { grid-template-columns: 30px auto minmax(0, 1fr) auto; gap: 5px; }
-  .trash-item-icon { width: 18px; }
-  .trash-children { margin-left: 17px; padding-left: 2px; }
   .admin-create { grid-template-columns: 1fr; }
-  .user-row { align-items: flex-start; flex-direction: column; }
-  .user-actions { justify-content: flex-start; }
   .recovery-actions { grid-template-columns: 1fr; }
 }
 
@@ -824,17 +783,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-content .profile-summary .profile-avatar { width: 52px; height: 52px; }
 .settings-content .profile-identity strong { font-size: calc(16px + var(--font-adjust)); font-weight: 600; }
 .settings-content .settings-logout-section { margin-top: 0; padding-top: 24px; justify-content: flex-start; }
-.settings-content .session-list, .settings-content .user-list { gap: 0; }
-.settings-content .session-row, .settings-content .user-row { border: 0; border-radius: 0; padding: 14px 0; background: transparent; }
-.settings-content :is(.session-row, .user-row) + :is(.session-row, .user-row) { border-top: 1px solid var(--border); }
-.settings-content .session-row:first-child, .settings-content .user-row:first-child { padding-top: 0; }
-.settings-content .session-row:last-child, .settings-content .user-row:last-child { padding-bottom: 0; }
-.settings-content .session-details strong { flex-wrap: wrap; }
-.settings-content .session-details :is(span, small) { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
-.settings-content .session-details, .settings-content .trash-details { gap: 4px; }
-.settings-content .trash-list { padding: 0; border: 0; border-radius: 0; }
-.settings-content .trash-list > .trash-node + .trash-node { border-top: 1px solid var(--border); }
-.settings-content .trash-row { margin: 0; padding-block: 12px; }
 .settings-content .about-product { gap: 8px; margin: 0; }
 .settings-content .about-product h3 { font-size: calc(27px + var(--font-adjust)); letter-spacing: -.04em; }
 .settings-content .about-product p { font-size: 12px; }
@@ -851,11 +799,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-section-heading, .admin-create-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .settings-content .admin-create { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.2fr); align-items: end; gap: 14px; }
 .settings-content .admin-create > .quota-fields { grid-column: auto; }
-.settings-content .user-row { align-items: center; flex-direction: row; flex-wrap: wrap; gap: 12px; }
-.settings-content .user-row > span { flex: 1 1 160px; gap: 4px; }
-.settings-content .user-row strong { flex-wrap: wrap; font-size: 13px; font-weight: 600; }
 .settings-content .user-storage { font-variant-numeric: tabular-nums; }
-.settings-content .user-actions { margin-left: auto; justify-content: flex-end; }
 .storage-overview { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
 .storage-server, .storage-local { min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 18px; }
 .storage-server { padding-right: 28px; border-right: 1px solid var(--border); }
@@ -917,7 +861,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .quota-dialog { max-width: min(480px, calc(100vw - 32px)); }
 .settings-section label.quota-confirm { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; font-size: 12px; font-weight: 400; line-height: 1.6; }
 .quota-confirm input { flex: 0 0 auto; width: auto; margin-top: 4px; }
-.note-storage-settings .trash-list { max-height: 440px; overflow: auto; }
 @media (max-width: 900px) and (min-width: 721px) {
   .settings-layout { grid-template-columns: 176px minmax(0, 1fr); }
   .history-usage-label { display: grid; gap: 0; }
@@ -977,7 +920,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-modal { --settings-icon-size: 32px; --settings-font-size: calc(14px + var(--font-adjust, 0px)); --settings-list-muted: color-mix(in srgb, var(--text-strong) 60%, var(--settings-background)); --settings-font-growth: max(0px, calc(var(--settings-font-size) - 14px)); --settings-control-height: calc(40px + var(--settings-font-growth)); font-size: var(--settings-font-size); line-height: 1.5; }
 .settings-modal :is(.settings-content, .settings-sidebar, .settings-section) :is(p, span, small, label, input, textarea, select, button, summary, dt, dd, li, a, em, code) { font-size: var(--settings-font-size); }
 .settings-modal .settings-content .settings-section :is(input, select), .settings-modal .settings-content .settings-control-row > span:first-child { font-size: var(--settings-font-size); }
-.settings-modal :is(.session-details, .trash-details, .user-row) strong { font-size: var(--settings-font-size); }
 .settings-modal :is(.settings-content, .settings-section) button, .settings-modal .settings-content button.settings-action-button { font-size: var(--settings-font-size); font-weight: 700; line-height: 1.4; }
 .settings-modal .settings-title { font-size: calc(var(--settings-font-size) + 4px); }
 .settings-modal .settings-page-title { font-size: calc(var(--settings-font-size) + 10px); }
@@ -996,10 +938,24 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-modal :is(.settings-content, .settings-section) button.settings-icon-button, .settings-modal .trash-more > summary { width: var(--settings-icon-size); min-width: var(--settings-icon-size); height: var(--settings-icon-size); min-height: var(--settings-icon-size); padding: 0; background: transparent; }
 .settings-modal button.settings-icon-button:not(:disabled):hover, .settings-modal .trash-more > summary:hover, .settings-modal .trash-more > summary:focus-visible { background: var(--button-hover); }
 .settings-modal button.settings-icon-button:not(:disabled):active, .settings-modal .trash-more[open] > summary { background: var(--button-active); }
-/* List metadata stays subordinate to titles at every device font size. */
-.settings-modal .settings-content :is(.session-details, .trash-details, .user-row) strong { color: var(--text-strong); font-size: var(--settings-font-size); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
-.settings-modal .settings-content :is(.session-details > span, .session-details > small, .trash-details > small, .user-row > span > small, .trash-heading small) { color: var(--settings-list-muted); font-size: max(11px, calc(var(--settings-font-size) - 2px)); font-weight: 400; line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
-.settings-modal .settings-content :is(.session-details, .user-row) strong em { flex: 0 0 auto; max-width: 100%; padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--settings-list-muted); background: transparent; font-size: max(10px, calc(var(--settings-font-size) - 3px)); font-weight: 500; line-height: 1.5; }
+/* Shared settings lists: devices, applications, users and the trash tree. */
+.settings-content .settings-list { min-width: 0; display: grid; gap: 0; padding: 0; border: 0; border-radius: 0; }
+.settings-content .settings-list-row { position: relative; min-width: 0; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 10px; margin: 0; padding: 14px 0; border: 0; border-radius: 0; background: transparent; }
+.settings-content .settings-list-row + .settings-list-row, .settings-content .trash-node + .trash-node { border-top: 1px solid var(--border); }
+.settings-content .settings-list > .settings-list-row:first-child, .settings-content .trash-list > .trash-node:first-child > .settings-list-row { padding-top: 0; }
+.settings-content .settings-list > .settings-list-row:last-child, .settings-content .trash-list > .trash-node:last-child > .settings-list-row { padding-bottom: 0; }
+.settings-list-icon { position: relative; width: 28px; height: 20px; display: grid; place-items: start center; align-self: start; color: var(--text-strong); }
+.settings-list-icon > svg { width: 20px; height: 20px; }
+.settings-list-details { min-width: 0; display: grid; align-self: start; gap: 4px; }
+.settings-modal .settings-content .settings-list-details > strong { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: var(--text-strong); font-size: var(--settings-font-size); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.settings-modal .settings-content .settings-list-details > :is(span, small), .settings-modal .settings-content .trash-heading small { color: var(--settings-list-muted); font-size: max(10px, calc(var(--settings-font-size) - 2px)); font-weight: 400; line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
+.settings-modal .settings-content .settings-list-details > strong em { flex: 0 0 auto; max-width: 100%; padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--settings-list-muted); background: transparent; font-size: max(10px, calc(var(--settings-font-size) - 3px)); font-style: normal; font-weight: 500; line-height: 1.5; }
+.settings-list-actions { min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 720px) {
+  .settings-content .settings-list-row { grid-template-columns: 28px minmax(0, 1fr); }
+  .settings-list-actions { grid-column: 2; justify-self: start; justify-content: flex-start; }
+  .settings-content .trash-more > div { right: auto; left: 0; }
+}
 @media (max-width: 720px) {
   .settings-modal { --settings-control-height: calc(42px + var(--settings-font-growth)); --settings-tabs-height: calc(59px + var(--settings-font-growth)); }
   .settings-modal .settings-content .history-usage { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
