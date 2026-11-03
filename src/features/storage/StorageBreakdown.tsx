@@ -3,10 +3,10 @@ import { formatHistoryBytes } from "../history";
 interface StorageCategory {
   label: string;
   bytes: number;
-  tone: "notes" | "attachments" | "history" | "avatar";
+  tone: "notes" | "attachments" | "history" | "avatar" | "trash";
 }
 
-/** Only disjoint categories belong here; subsets such as trash stay outside the chart. */
+/** Categories must be disjoint so every byte occupies exactly one segment. */
 export function StorageBreakdown({ label, totalBytes, categories }: {
   label: string;
   totalBytes: number;

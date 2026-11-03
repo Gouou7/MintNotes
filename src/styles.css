@@ -822,7 +822,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-card progress::-webkit-progress-value { background: var(--accent); border-radius: 99px; }
 .settings-card progress::-moz-progress-bar { background: var(--accent); border-radius: 99px; }
 .storage-quota-progress:is(.warning, .critical, .full) { --accent: var(--warning-text); }
-.storage-server > .storage-quota-progress { margin-top: -8px; height: 4px; }
+.storage-server > .storage-quota-progress { margin-top: -8px; height: 10px; border-radius: 4px; }
 .storage-metrics { display: grid; gap: 12px; margin: 0; font-size: calc(12px + var(--font-adjust)); }
 .storage-metrics > div { min-width: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .storage-metrics dt { color: var(--muted); }
@@ -836,14 +836,13 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .storage-tone-attachments { background: #7c9ed9; }
 .storage-tone-history { background: #ae96cf; }
 .storage-tone-avatar { background: #c3b18c; }
+.storage-tone-trash { background: #8f969d; }
 .storage-categories { display: grid; gap: 10px; margin: 2px 0 0; }
 .storage-count-item { min-width: 0; display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; }
 .storage-count-item dt { min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--muted); }
 .storage-dot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 2px; }
 .storage-count-item dd { margin: 0 0 0 auto; color: var(--text-strong); font-weight: 500; font-variant-numeric: tabular-nums; }
 .storage-server-footer { display: grid; gap: 6px; padding-top: 14px; border-top: 1px solid var(--border); }
-.storage-trash-note { display: flex; align-items: baseline; gap: 8px; margin: 0; color: var(--muted); }
-.storage-trash-note svg { flex: 0 0 auto; align-self: center; }
 .storage-summary { margin: 0; }
 .storage-local-title { min-height: 32px; margin: 0; font-weight: 500; }
 .storage-pending { padding: 14px; gap: 12px; border-radius: 8px; background: var(--settings-sidebar-background); }
@@ -927,7 +926,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 }
 
 /* Settings typography follows the current device preference, including nested dialogs. */
-.settings-modal { --settings-icon-size: var(--settings-action-height); --settings-font-size: calc(14px + var(--font-adjust, 0px)); --settings-list-muted: color-mix(in srgb, var(--text-strong) 60%, var(--settings-background)); --settings-font-growth: max(0px, calc(var(--settings-font-size) - 14px)); --settings-control-height: calc(40px + var(--settings-font-growth)); --settings-action-height: calc(32px + var(--settings-font-growth)); font-size: var(--settings-font-size); line-height: 1.5; }
+.settings-modal { --settings-icon-size: var(--settings-action-height); --settings-font-size: calc(14px + var(--font-adjust, 0px)); --settings-list-muted: color-mix(in srgb, var(--text-strong) 60%, var(--settings-background)); --settings-font-growth: max(0px, calc(var(--settings-font-size) - 14px)); --settings-control-height: var(--settings-action-height); --settings-action-height: calc(32px + var(--settings-font-growth)); font-size: var(--settings-font-size); line-height: 1.5; }
 .settings-modal :is(.settings-content, .settings-sidebar, .settings-section) :is(p, span, small, label, input, textarea, select, button, summary, dt, dd, li, a, em, code) { font-size: var(--settings-font-size); }
 .settings-modal .settings-content .settings-section :is(input, select), .settings-modal .settings-content .settings-control-row > span:first-child { font-size: var(--settings-font-size); }
 .settings-modal :is(.settings-content, .settings-section) button, .settings-modal .settings-content button.settings-action-button { font-size: var(--settings-font-size); font-weight: 700; line-height: 1.4; }
@@ -942,10 +941,11 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-modal .storage-pending-item > strong { font-size: calc(var(--settings-font-size) + 4px); }
 .settings-modal :is(.storage-pending-item > span, .storage-count-item > dt) { max-width: 100%; overflow-wrap: anywhere; }
 .settings-modal .settings-content .storage-local-title { font-size: var(--settings-font-size); font-weight: 500; }
-.settings-modal .settings-content :is(.storage-total > span, .storage-breakdown-label, .storage-trash-note > span, .storage-summary, .storage-pending-item > span) { font-size: max(11px, calc(var(--settings-font-size) - 2px)); }
+.settings-modal .settings-content :is(.storage-total > span, .storage-breakdown-label, .storage-summary, .storage-pending-item > span) { font-size: max(11px, calc(var(--settings-font-size) - 2px)); }
 .settings-modal .settings-content .database-supplement dd:not(.database-metric-help) { color: var(--text-strong); font-size: calc(var(--settings-font-size) + 8px); font-weight: 500; line-height: 1.2; }
 .settings-modal .settings-content :is(.storage-db-state, .database-metric-help) { font-size: max(11px, calc(var(--settings-font-size) - 2px)); }
-.settings-modal .settings-content .settings-section input:not([type="checkbox"]) { height: var(--settings-control-height); }
+.settings-modal :is(.settings-content, .settings-section) input:not([type="checkbox"]) { height: var(--settings-control-height); padding-block: 4px; }
+.settings-modal .settings-section label.trash-search { height: var(--settings-control-height); }
 .settings-modal .settings-content .settings-section select, .settings-modal .settings-section select { height: var(--settings-action-height); padding-block: 4px; }
 .settings-modal .quota-controls { height: var(--settings-action-height); }
 .settings-modal .settings-section .quota-custom input:not([type="checkbox"]) { height: 100%; }
@@ -980,6 +980,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .settings-content .trash-more > div { right: auto; left: 0; }
 }
 @media (max-width: 720px) {
-  .settings-modal { --settings-control-height: calc(42px + var(--settings-font-growth)); --settings-action-height: calc(36px + var(--settings-font-growth)); --settings-tabs-height: calc(53px + var(--settings-font-growth)); }
+  .settings-modal { --settings-action-height: calc(36px + var(--settings-font-growth)); --settings-tabs-height: calc(53px + var(--settings-font-growth)); }
   .settings-modal .storage-total strong { font-size: calc(var(--settings-font-size) + 15px); }
 }

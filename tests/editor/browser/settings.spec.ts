@@ -38,7 +38,9 @@ for (const [name, width] of [["desktop", 1440], ["mobile", 320]] as const) {
     const usage = page.locator(".storage-usage");
     await expect(usage.locator(".storage-total")).toContainText("配额：不限");
     await expect(usage.locator("progress")).toHaveCount(0);
-    await expect(usage.locator(".storage-composition > span")).toHaveCount(2);
+    await expect(usage.locator(".storage-composition > span")).toHaveCount(3);
+    await expect(usage.locator(".storage-categories dt")).toHaveText(["笔记", "附件", "笔记历史", "回收站"]);
+    await expect(usage.locator(".storage-pending > div:last-child dd")).toHaveText("0 篇");
     await expect(usage.locator(".storage-pending-item strong")).toHaveText(["0", "0", "0"]);
     expect(await usage.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await usage.screenshot({ path: info.outputPath(`${name}-storage-zh.png`) });
@@ -165,12 +167,12 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           expect(close.y - modal.y).toBeLessThanOrEqual(10);
         }
         if (title === "Notes and storage") {
-          await expect(content.locator(".storage-categories dt")).toHaveText(["Notes", "Attachments", "Note history", "Avatar"]);
-          await expect(content.locator(".storage-categories dd")).toHaveText(["12.0 MiB", "238.0 MiB", "120.0 MiB", "1.0 MiB"]);
-          await expect(content.locator(".storage-trash-note")).toContainText("Trash uses 15.0 MiB, included above.");
+          await expect(content.locator(".storage-categories dt")).toHaveText(["Notes", "Attachments", "Note history", "Avatar", "Trash"]);
+          await expect(content.locator(".storage-categories dd")).toHaveText(["8.0 MiB", "232.0 MiB", "115.0 MiB", "1.0 MiB", "15.0 MiB"]);
           const categories = content.locator(".storage-categories");
           expect(await categories.locator(".storage-count-item").evaluateAll(items => items.every(item => item.querySelector("dt")!.getBoundingClientRect().right <= item.querySelector("dd")!.getBoundingClientRect().left))).toBe(true);
           const composition = content.locator(".storage-composition");
+          expect((await content.locator(".storage-quota-progress").boundingBox())!.height).toBe((await composition.boundingBox())!.height);
           expect(await composition.evaluate(element => Math.abs([...element.children].reduce((sum, segment) => sum + segment.getBoundingClientRect().width, 0) - element.clientWidth))).toBeLessThanOrEqual(1);
           await expect(content.locator(".history-settings details")).toHaveCount(0);
           await expect(content.getByRole("combobox", { name: "Note history quota", exact: true })).toBeVisible();

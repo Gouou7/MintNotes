@@ -41,8 +41,10 @@ function SettingsFixture() {
     <main className="note-pane"><div className="note-pane-top"><div className="note-toolbar">Note title</div></div></main>
     {open && <Suspense fallback={<SettingsPanelLoading onClose={() => setOpen(false)} />}><SettingsPanel
       storageStatus={{ localReady: true, usage: unlimitedStorage
-        ? { totalBytes: 7065, contentBytes: 5734, noteBytes: 5734, attachmentBytes: 0, historyBytes: 1331, profileBytes: 0, trashBytes: 4096, quotaBytes: null, historyQuotaBytes: null, checkedAt: "2026-11-03T15:46:00Z" }
-        : { totalBytes: 389021696, contentBytes: 262144000, noteBytes: 12582912, attachmentBytes: 249561088, historyBytes: 125829120, profileBytes: 1048576, trashBytes: 15728640, quotaBytes: 2147483648, historyQuotaBytes: 268435456, checkedAt: "2026-10-23T10:30:00Z" },
+        ? { totalBytes: 7065, contentBytes: 5734, noteBytes: 5734, attachmentBytes: 0, historyBytes: 1331, profileBytes: 0, trashBytes: 4096,
+          activeBytes: { noteBytes: 1638, attachmentBytes: 0, historyBytes: 1331 }, quotaBytes: null, historyQuotaBytes: null, checkedAt: "2026-11-03T15:46:00Z" }
+        : { totalBytes: 389021696, contentBytes: 262144000, noteBytes: 12582912, attachmentBytes: 249561088, historyBytes: 125829120, profileBytes: 1048576, trashBytes: 15728640,
+          activeBytes: { noteBytes: 8388608, attachmentBytes: 243269632, historyBytes: 120586240 }, quotaBytes: 2147483648, historyQuotaBytes: 268435456, checkedAt: "2026-10-23T10:30:00Z" },
         local: unlimitedStorage ? { bytes: 5939, objects: 0, attachments: 0, history: 0 } : { bytes: 73400320, objects: 12, attachments: 3, history: 24 }, lastSync: "2026-11-03T15:45:00Z", unsaved: unlimitedStorage ? 0 : 2, estimate: null, persistence: "unsupported", failed: false, refreshing: false, stale: false, refresh: done, requestPersistence: done }}
       user={{ id: "fixture-user", username: "mint", displayName: "Mint Notes", role: "admin" }}
       endpoint={{ id: "fixture-endpoint", remembered: false }} credential={null} serverSessionVerified={!new URLSearchParams(location.search).has("offline")}

@@ -8,6 +8,7 @@ import type { ToastTone } from "../../components/Toast";
 
 export interface AccountStorageUsage {
   totalBytes: number; contentBytes: number; noteBytes: number; attachmentBytes: number; historyBytes: number; profileBytes: number; trashBytes: number;
+  activeBytes?: { noteBytes: number; attachmentBytes: number; historyBytes: number };
   quotaBytes: number | null; historyQuotaBytes: number | null; checkedAt: string;
 }
 export function useStorageStatus(options: { userId: string; endpointId: string; online: boolean; enabled: boolean;

@@ -9,19 +9,31 @@ export function storageUsage(db: AppDatabase, userId: string) {
     COALESCE((SELECT SUM(LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB))) FROM objects WHERE user_id = ?), 0)
     + COALESCE((SELECT SUM(LENGTH(ciphertext) + LENGTH(CAST(nonce AS BLOB))) FROM attachment_chunks WHERE user_id = ?), 0) AS contentBytes,
     COALESCE((SELECT SUM(LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB))) FROM objects WHERE user_id = ? AND object_type != 'attachment'), 0) AS noteBytes,
-    COALESCE((SELECT SUM(LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB))) FROM objects WHERE user_id = ? AND deleted = 1), 0)
+    COALESCE((SELECT SUM(LENGTH(CAST(o.ciphertext AS BLOB)) + LENGTH(CAST(o.nonce AS BLOB))) FROM objects o WHERE o.user_id = ?
+      AND (o.deleted = 1 OR (o.object_type = 'attachment' AND EXISTS (
+        SELECT 1 FROM attachment_owners a JOIN objects n ON n.user_id = a.user_id AND n.object_id = a.note_id
+        WHERE a.user_id = o.user_id AND a.attachment_id = o.object_id AND n.deleted = 1)))), 0)
     + COALESCE((SELECT SUM(LENGTH(c.ciphertext) + LENGTH(CAST(c.nonce AS BLOB))) FROM attachment_chunks c JOIN attachment_owners a ON a.user_id = c.user_id AND a.attachment_id = c.attachment_id
-      WHERE c.user_id = ? AND EXISTS (SELECT 1 FROM objects o WHERE o.user_id = c.user_id AND o.object_id = a.note_id AND o.deleted = 1)), 0)
-    + COALESCE((SELECT SUM(h.byte_size) FROM note_history h JOIN objects o ON o.user_id = h.user_id AND o.object_id = h.note_id WHERE h.user_id = ? AND o.deleted = 1), 0) AS trashBytes,
+      WHERE c.user_id = ? AND EXISTS (SELECT 1 FROM objects o WHERE o.user_id = c.user_id AND o.object_id = a.note_id AND o.deleted = 1)), 0) AS trashContentBytes,
+    COALESCE((SELECT SUM(LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB))) FROM objects WHERE user_id = ? AND deleted = 1 AND object_type != 'attachment'), 0) AS trashNoteBytes,
+    COALESCE((SELECT SUM(h.byte_size) FROM note_history h JOIN objects o ON o.user_id = h.user_id AND o.object_id = h.note_id WHERE h.user_id = ? AND o.deleted = 1), 0) AS trashHistoryBytes,
     COALESCE((SELECT SUM(byte_size) FROM note_history WHERE user_id = ?), 0) AS historyBytes,
     COALESCE((SELECT LENGTH(CAST(ciphertext AS BLOB)) + LENGTH(CAST(nonce AS BLOB)) FROM profile_assets WHERE user_id = ?), 0) AS profileBytes
-  `).get(userId, userId, userId, userId, userId, userId, userId, userId, userId) as { objectCount: number; contentBytes: number; historyBytes: number; profileBytes: number; noteBytes: number; trashBytes: number };
+  `).get(userId, userId, userId, userId, userId, userId, userId, userId, userId, userId) as {
+    objectCount: number; contentBytes: number; historyBytes: number; profileBytes: number; noteBytes: number;
+    trashContentBytes: number; trashNoteBytes: number; trashHistoryBytes: number;
+  };
   const body = db.prepare(`SELECT COALESCE(SUM(LENGTH(CAST(b.ciphertext AS BLOB)) + LENGTH(CAST(b.nonce AS BLOB))), 0) AS bytes,
     COALESCE(SUM(CASE WHEN EXISTS (SELECT 1 FROM objects o WHERE o.user_id = b.user_id AND o.object_id = b.note_id AND o.deleted = 1)
       THEN LENGTH(CAST(b.ciphertext AS BLOB)) + LENGTH(CAST(b.nonce AS BLOB)) ELSE 0 END), 0) AS trash
     FROM note_body_blocks b WHERE b.user_id = ?`).get(userId) as { bytes: number; trash: number };
-  row.contentBytes += body.bytes; row.noteBytes += body.bytes; row.trashBytes += body.trash;
-  return { ...row, attachmentBytes: row.contentBytes - row.noteBytes, totalBytes: row.contentBytes + row.historyBytes + row.profileBytes, ...metadataUsage(db, userId), encryptedBytes: row.contentBytes + row.historyBytes + row.profileBytes };
+  row.contentBytes += body.bytes; row.noteBytes += body.bytes;
+  row.trashContentBytes += body.trash; row.trashNoteBytes += body.trash;
+  const { trashContentBytes, trashNoteBytes, trashHistoryBytes, ...usage } = row;
+  const attachmentBytes = usage.contentBytes - usage.noteBytes;
+  return { ...usage, attachmentBytes, trashBytes: trashContentBytes + trashHistoryBytes,
+    activeBytes: { noteBytes: usage.noteBytes - trashNoteBytes, attachmentBytes: attachmentBytes - (trashContentBytes - trashNoteBytes), historyBytes: usage.historyBytes - trashHistoryBytes },
+    totalBytes: usage.contentBytes + usage.historyBytes + usage.profileBytes, ...metadataUsage(db, userId), encryptedBytes: usage.contentBytes + usage.historyBytes + usage.profileBytes };
 }
 export function physicalStorageUsage(db: AppDatabase) {
   const size = (path: string) => { try { return statSync(path).size; } catch { return 0; } };

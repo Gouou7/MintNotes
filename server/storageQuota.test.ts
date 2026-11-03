@@ -61,6 +61,34 @@ describe("unified user storage quota", () => {
     expect(userQuotas(db, user, config)).toMatchObject({ quotaBytes: null, historyQuotaBytes: null });
     expect(() => db.transaction(() => admitHistoryGrowth(db, user, 10000, config)).immediate()).not.toThrow();
   });
+  it("separates active data from trash including attachment chunks, history and retained body blocks", () => {
+    const { db } = fixture();
+    const user = addUser(db), other = addUser(db), activeNote = randomUUID(), trashedNote = randomUUID();
+    put(db, user, activeNote); put(db, user, trashedNote, 64);
+    put(db, other, randomUUID(), 1000);
+    history(db, user, activeNote, 100); history(db, user, trashedNote, 200);
+    const attach = (noteId: string, bytes: number, chunk: string) => {
+      const id = randomUUID();
+      writeObject(db, { userId: user }, id, { objectType: "attachment", ownerNoteId: noteId, ciphertext: "a".repeat(bytes), nonce: "n".repeat(24),
+        encryptionVersion: 1, idempotencyKey: operationId(), baseRevision: 0, deleted: false }, 2 ** 30);
+      db.prepare("INSERT INTO attachment_chunks VALUES (?,?,0,1,?,'nonce',1,?,'2026-01-01')").run(user, id, Buffer.from(chunk), operationId());
+    };
+    attach(activeNote, 48, "1234"); attach(trashedNote, 64, "123");
+    for (const [note, bytes] of [[activeNote, 100], [trashedNote, 120], [randomUUID(), 140]] as const) {
+      db.prepare("INSERT INTO note_body_blocks VALUES (?, ?, ?, ?, ?)").run(user, note, randomUUID(), "b".repeat(bytes), "n".repeat(16));
+    }
+    db.prepare("INSERT INTO profile_assets VALUES (?, 'avatar', 'nonce', 1, ?)").run(user, new Date().toISOString());
+    const before = storageUsage(db, user);
+    expect(before).toMatchObject({ totalBytes: 1040, trashBytes: 0, noteBytes: 552, attachmentBytes: 177, historyBytes: 300, profileBytes: 11,
+      activeBytes: { noteBytes: 552, attachmentBytes: 177, historyBytes: 300 } });
+    put(db, user, trashedNote, 64, 1, true);
+    const deleted = storageUsage(db, user);
+    expect(deleted).toMatchObject({ totalBytes: before.totalBytes, trashBytes: 520,
+      activeBytes: { noteBytes: 328, attachmentBytes: 81, historyBytes: 100 } });
+    expect(Object.values(deleted.activeBytes).reduce((sum, bytes) => sum + bytes, 0) + deleted.profileBytes + deleted.trashBytes).toBe(deleted.totalBytes);
+    put(db, user, trashedNote, 64, 2, false);
+    expect(storageUsage(db, user)).toMatchObject({ totalBytes: before.totalBytes, trashBytes: 0, activeBytes: before.activeBytes });
+  });
   it("validates capacities and explicit unlimited mode", () => {
     for (const bytes of [0, -1, 1, 1.5 * 1048576, Number.MAX_SAFE_INTEGER + 1]) expect(quotaSetting.safeParse({ mode: "limited", bytes }).success).toBe(false);
     expect(quotaSetting.parse({ mode: "unlimited", bytes: null })).toMatchObject({ mode: "unlimited" });
@@ -92,6 +120,9 @@ describe("unified user storage quota", () => {
       return { user: response.json().user, cookie: (response.headers["set-cookie"] as string[]).map((value) => value.split(";", 1)[0]).join("; ") };
     };
     const admin = await register("administrator"), user = await register("member");
+    const usage = await app.inject({ method: "GET", url: "/api/account/storage", headers: { cookie: user.cookie } });
+    expect(usage.statusCode).toBe(200);
+    expect(usage.json()).toMatchObject({ totalBytes: 0, trashBytes: 0, activeBytes: { noteBytes: 0, attachmentBytes: 0, historyBytes: 0 } });
     const patch = (cookie: string, body: unknown) => app.inject({ method: "PATCH", url: `/api/admin/users/${user.user.id}/storage-quota`, headers: { cookie }, payload: body as object });
     expect((await patch(user.cookie, { mode: "unlimited" })).statusCode).toBe(403);
     expect((await patch(admin.cookie, { mode: "limited", bytes: 0 })).statusCode).toBe(400);

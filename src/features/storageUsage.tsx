@@ -1,6 +1,6 @@
 import { SettingsSection } from "../components/SettingsSection";
 import { SettingsItem } from "../components/SettingsItem";
-import { HardDrive, Laptop, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { HardDrive, Laptop, RefreshCw, ShieldCheck } from "lucide-react";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
 import { useI18n } from "../i18n";
@@ -28,12 +28,16 @@ export function StorageUsage({ status }: { status: StorageStatus }) {
   const usage = status.usage;
   const level = usage ? capacityLevel(usage.totalBytes, usage.quotaBytes) : "normal";
   const limit = (bytes: number | null) => bytes === null ? t("storage.unlimited") : formatHistoryBytes(bytes);
-  // Trash is a subset of these categories, not an additional segment.
+  const active = usage?.activeBytes ?? usage;
+  // Older cached responses cannot split trash by type; keep their remaining data in one category.
   const categories = usage ? [
-    { key: "storage.notes", tone: "notes", bytes: usage.noteBytes },
-    { key: "storage.attachments", tone: "attachments", bytes: usage.attachmentBytes },
-    { key: "settings.history", tone: "history", bytes: usage.historyBytes },
+    ...(usage.activeBytes || usage.trashBytes === 0 ? [
+      { key: "storage.notes", tone: "notes", bytes: active!.noteBytes },
+      { key: "storage.attachments", tone: "attachments", bytes: active!.attachmentBytes },
+      { key: "settings.history", tone: "history", bytes: active!.historyBytes },
+    ] as const : [{ key: "storage.activeData", tone: "notes", bytes: Math.max(0, usage.totalBytes - usage.profileBytes - usage.trashBytes) }] as const),
     ...(usage.profileBytes > 0 ? [{ key: "storage.avatar", tone: "avatar", bytes: usage.profileBytes }] as const : []),
+    { key: "settings.trash", tone: "trash", bytes: usage.trashBytes },
   ] as const : [];
   const refreshButton = <SettingsButton icon={RefreshCw} iconOnly aria-label={t("storage.refresh")} title={t("storage.refresh")} disabled={status.refreshing} onClick={() => void status.refresh()} />;
   return <SettingsSection title={t("storage.logical")} className="storage-usage">
@@ -44,7 +48,6 @@ export function StorageUsage({ status }: { status: StorageStatus }) {
       {level !== "normal" && level !== "unlimited" && <p className={`storage-capacity ${level}`}>{t(`storage.level.${level}`)}</p>}
       <StorageBreakdown label={t("storage.breakdown")} totalBytes={usage.totalBytes} categories={categories.map(({ key, ...category }) => ({ ...category, label: t(key) }))} />
       <div className="storage-server-footer">
-        <p className="storage-trash-note"><AppIcon icon={Trash2} size={14} /><span>{t("storage.trashIncluded", { size: formatHistoryBytes(usage.trashBytes) })}</span></p>
         <p className="settings-help storage-summary">{t(status.stale ? "storage.cachedAt" : "storage.updatedAt", { date: formatDateTime(usage.checkedAt) })}</p>
       </div>
     </> : <div className="settings-card-intro"><p className="settings-help settings-card-description">{t(status.failed ? "storage.unavailable" : "storage.noServerUsage")}</p>{refreshButton}</div>}
