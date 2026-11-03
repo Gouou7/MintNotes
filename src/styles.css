@@ -538,7 +538,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .session-list { display: grid; gap: 8px; }
 .session-row { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .session-row.current { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent-soft) 42%, var(--surface)); }
-.session-device-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 9px; color: var(--accent-text); background: var(--accent-soft); }
+.session-device-icon { width: 28px; height: 28px; display: grid; place-items: center; align-self: start; margin-top: 2px; color: var(--text-strong); }
+.session-device-icon > svg { width: 20px; height: 20px; }
 .session-details { min-width: 0; display: grid; gap: 3px; }
 .session-details strong { min-width: 0; display: flex; align-items: center; gap: 7px; color: var(--text-strong); font-size: 13px; }
 .session-details strong em { padding: 2px 6px; border-radius: 999px; color: var(--accent-text); background: var(--accent-soft); font-size: 10px; font-style: normal; font-weight: 650; }
@@ -824,13 +825,16 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-content .profile-identity strong { font-size: calc(16px + var(--font-adjust)); font-weight: 600; }
 .settings-content .settings-logout-section { margin-top: 0; padding-top: 24px; justify-content: flex-start; }
 .settings-content .session-list, .settings-content .user-list { gap: 0; }
-.settings-content .session-row, .settings-content .user-row { border: 0; border-radius: 0; padding: 16px 0; background: transparent; }
+.settings-content .session-row, .settings-content .user-row { border: 0; border-radius: 0; padding: 14px 0; background: transparent; }
 .settings-content :is(.session-row, .user-row) + :is(.session-row, .user-row) { border-top: 1px solid var(--border); }
 .settings-content .session-row:first-child, .settings-content .user-row:first-child { padding-top: 0; }
 .settings-content .session-row:last-child, .settings-content .user-row:last-child { padding-bottom: 0; }
 .settings-content .session-details strong { flex-wrap: wrap; }
 .settings-content .session-details :is(span, small) { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
-.settings-content .session-details small { font-size: 11px; }
+.settings-content .session-details, .settings-content .trash-details { gap: 4px; }
+.settings-content .trash-list { padding: 0; border: 0; border-radius: 0; }
+.settings-content .trash-list > .trash-node + .trash-node { border-top: 1px solid var(--border); }
+.settings-content .trash-row { margin: 0; padding-block: 12px; }
 .settings-content .about-product { gap: 8px; margin: 0; }
 .settings-content .about-product h3 { font-size: calc(27px + var(--font-adjust)); letter-spacing: -.04em; }
 .settings-content .about-product p { font-size: 12px; }
@@ -848,9 +852,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-content .admin-create { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.2fr); align-items: end; gap: 14px; }
 .settings-content .admin-create > .quota-fields { grid-column: auto; }
 .settings-content .user-row { align-items: center; flex-direction: row; flex-wrap: wrap; gap: 12px; }
-.settings-content .user-row > span { flex: 1 1 160px; gap: 5px; }
+.settings-content .user-row > span { flex: 1 1 160px; gap: 4px; }
 .settings-content .user-row strong { flex-wrap: wrap; font-size: 13px; font-weight: 600; }
-.settings-content .user-row small { font-size: 12px; line-height: 1.6; }
 .settings-content .user-storage { font-variant-numeric: tabular-nums; }
 .settings-content .user-actions { margin-left: auto; justify-content: flex-end; }
 .storage-overview { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
@@ -971,7 +974,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 }
 
 /* Settings typography follows the current device preference, including nested dialogs. */
-.settings-modal { --settings-icon-size: 32px; --settings-font-size: calc(14px + var(--font-adjust, 0px)); --settings-font-growth: max(0px, calc(var(--settings-font-size) - 14px)); --settings-control-height: calc(40px + var(--settings-font-growth)); font-size: var(--settings-font-size); line-height: 1.5; }
+.settings-modal { --settings-icon-size: 32px; --settings-font-size: calc(14px + var(--font-adjust, 0px)); --settings-list-muted: color-mix(in srgb, var(--text-strong) 60%, var(--settings-background)); --settings-font-growth: max(0px, calc(var(--settings-font-size) - 14px)); --settings-control-height: calc(40px + var(--settings-font-growth)); font-size: var(--settings-font-size); line-height: 1.5; }
 .settings-modal :is(.settings-content, .settings-sidebar, .settings-section) :is(p, span, small, label, input, textarea, select, button, summary, dt, dd, li, a, em, code) { font-size: var(--settings-font-size); }
 .settings-modal .settings-content .settings-section :is(input, select), .settings-modal .settings-content .settings-control-row > span:first-child { font-size: var(--settings-font-size); }
 .settings-modal :is(.session-details, .trash-details, .user-row) strong { font-size: var(--settings-font-size); }
@@ -993,6 +996,10 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-modal :is(.settings-content, .settings-section) button.settings-icon-button, .settings-modal .trash-more > summary { width: var(--settings-icon-size); min-width: var(--settings-icon-size); height: var(--settings-icon-size); min-height: var(--settings-icon-size); padding: 0; background: transparent; }
 .settings-modal button.settings-icon-button:not(:disabled):hover, .settings-modal .trash-more > summary:hover, .settings-modal .trash-more > summary:focus-visible { background: var(--button-hover); }
 .settings-modal button.settings-icon-button:not(:disabled):active, .settings-modal .trash-more[open] > summary { background: var(--button-active); }
+/* List metadata stays subordinate to titles at every device font size. */
+.settings-modal .settings-content :is(.session-details, .trash-details, .user-row) strong { color: var(--text-strong); font-size: var(--settings-font-size); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.settings-modal .settings-content :is(.session-details > span, .session-details > small, .trash-details > small, .user-row > span > small, .trash-heading small) { color: var(--settings-list-muted); font-size: max(11px, calc(var(--settings-font-size) - 2px)); font-weight: 400; line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
+.settings-modal .settings-content :is(.session-details, .user-row) strong em { flex: 0 0 auto; max-width: 100%; padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--settings-list-muted); background: transparent; font-size: max(10px, calc(var(--settings-font-size) - 3px)); font-weight: 500; line-height: 1.5; }
 @media (max-width: 720px) {
   .settings-modal { --settings-control-height: calc(42px + var(--settings-font-growth)); --settings-tabs-height: calc(59px + var(--settings-font-growth)); }
   .settings-modal .settings-content .history-usage { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
