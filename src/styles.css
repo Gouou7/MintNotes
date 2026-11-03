@@ -264,7 +264,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .side-footer button { font-size: 12px; }
 
 .note-toolbar { --toolbar-control-height: var(--workspace-button-size); height: var(--note-toolbar-height); flex: 0 0 var(--note-toolbar-height); display: flex; align-items: center; gap: 6px; padding: var(--safe-area-top) max(11px, var(--safe-area-right)) 0 max(16px, var(--safe-area-left)); border-bottom: var(--pane-divider-width) solid var(--border); background: transparent; z-index: 5; }
-.title-input, .empty-title-slot { min-width: 0; height: var(--toolbar-control-height); flex: 1; box-sizing: border-box; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-strong); font-size: 18px; font-weight: 600; }
+.title-input, .empty-title-slot { min-width: 0; height: var(--toolbar-control-height); flex: 1; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text-strong); font-size: 18px; font-weight: 600; }
 .title-input { outline: 0; text-overflow: ellipsis; }
 .empty-title-slot { display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title-input:focus-visible { outline: 0; background: var(--surface-raised); box-shadow: 0 0 0 2px var(--accent); }
