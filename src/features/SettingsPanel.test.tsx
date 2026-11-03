@@ -326,7 +326,7 @@ describe("SettingsPanel", () => {
     expect((container.querySelector("select[aria-label='排序已删除项目']") as HTMLSelectElement).value).toBe("deleted-desc");
     expect(container.querySelectorAll("button[aria-label^='恢复']")).toHaveLength(1);
     expect(button(container, "永久删除")).toBeTruthy();
-    const select = container.querySelector(".trash-settings .settings-control-row select") as HTMLSelectElement;
+    const select = container.querySelector(".trash-settings .settings-item select") as HTMLSelectElement;
     await act(async () => { select.value = "90"; select.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(vi.mocked(api)).toHaveBeenCalledWith("/api/account/trash-retention", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ days: 90 }) }));
   });
@@ -338,7 +338,7 @@ describe("SettingsPanel", () => {
     expect(container.querySelector(".admin-tab")).toBeNull();
   });
 
-  it("orders icon tabs and exposes PIN setup independently from automatic locking", async () => {
+  it("groups PIN and automatic locking under device security while retaining their independent controls", async () => {
     const onNotify = vi.fn();
     const container = await renderSettings(admin, onNotify);
     const tabs = [...container.querySelectorAll(".settings-tabs button")];
@@ -348,7 +348,11 @@ describe("SettingsPanel", () => {
     expect(container.textContent).toContain("管理登录设备并移除失效记录。");
     expect(container.textContent).toContain("已登出和已过期的设备记录将在 30 天后自动移除");
     const headings = [...container.querySelectorAll(".settings-group > h3")].map((entry) => entry.textContent?.trim());
-    expect(headings.slice(0, 5)).toEqual(["本机 PIN", "自动锁定", "登录设备", "应用连接", "账户凭据"]);
+    expect(headings).toEqual(["账户凭据", "本机安全", "登录设备", "应用连接"]);
+    const deviceSection = [...container.querySelectorAll(".settings-group")].find(section => section.querySelector("h3")?.textContent === "本机安全")!;
+    expect([...deviceSection.querySelectorAll(".settings-item-title")].map(item => item.textContent)).toEqual(["本机 PIN", "无操作后自动锁定"]);
+    const lockControl = deviceSection.querySelector("select")!;
+    expect(document.getElementById(lockControl.getAttribute("aria-describedby")!)?.textContent).toContain("需先设置本机 PIN");
     expect(button(container, "设置 PIN")).toBeTruthy();
     expect(container.querySelector("input[placeholder='至少 4 个字符']")).toBeNull();
     await act(async () => button(container, "设置 PIN").click());
@@ -526,7 +530,8 @@ describe("SettingsPanel", () => {
     await act(async () => { await Promise.resolve(); });
     const management = container.querySelector(".admin-user-management");
     expect(management?.previousElementSibling?.textContent).toBe("用户管理");
-    expect([...management!.querySelectorAll(".admin-subsection h4")].map((heading) => heading.textContent)).toEqual(["新增用户", "现有用户"]);
+    expect(management!.querySelector(".admin-subsection > .settings-item .settings-item-title")?.textContent).toBe("新增用户");
+    expect([...management!.querySelectorAll(".admin-subsection h4")].map((heading) => heading.textContent)).toEqual(["现有用户"]);
     expect(container.textContent).not.toContain("创建待激活用户");
     expect(button(container, "禁用").querySelector(".lucide-user-round-x")).toBeTruthy();
     expect(button(container, "删除").querySelector(".lucide-trash-2")).toBeTruthy();

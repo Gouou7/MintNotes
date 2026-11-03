@@ -519,7 +519,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .profile-summary > button { min-height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 13px; }
 .profile-avatar { width: 52px; height: 52px; display: grid; place-items: center; overflow: hidden; flex: 0 0 52px; border-radius: 50%; color: var(--accent-text); background: var(--accent-soft); }
 .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.profile-identity { min-width: 0; display: grid; gap: 3px; }
+.profile-identity { min-width: 0; display: grid; gap: 4px; }
 .profile-identity strong, .profile-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-identity small { color: var(--muted); font-size: calc(12px + var(--font-adjust)); }
 .profile-avatar-editor { min-width: 0; display: grid; grid-template-columns: 1fr; gap: 18px; padding: 20px 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
@@ -765,11 +765,15 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-card-description > .settings-help { margin: 0; }
 .settings-card-intro > .settings-actions { min-width: 0; max-width: 100%; margin-left: auto; }
 .settings-card { min-width: 0; padding: 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--settings-background); }
-.settings-content .settings-section { gap: 16px; }
+.settings-content .settings-section { gap: 20px; }
+.settings-item { min-width: 0; min-height: 40px; display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; }
+.settings-item-copy { flex: 1 1 220px; min-width: 0; display: grid; gap: 4px; }
+.settings-item-control { min-width: 0; max-width: 100%; margin-left: auto; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.settings-item:has(.settings-switch) { flex-wrap: nowrap; }
+.settings-item:has(.settings-switch) > .settings-item-copy { flex-basis: 0; }
+.settings-item:has(.settings-switch) > .settings-item-control { flex-shrink: 0; }
+.settings-section .settings-item-control > :is(input:not([type="checkbox"]), select, .quota-controls) { width: 220px; max-width: 100%; }
 .settings-content .settings-section h3 { margin: 0; color: var(--text-strong); font-size: calc(14px + var(--font-adjust)); font-weight: 650; line-height: 1.5; }
-.settings-content .settings-card > .settings-help { margin-top: -8px; }
-.settings-content .settings-card > .settings-help:first-child { margin-top: 0; }
-.settings-content .settings-help { font-size: calc(12px + var(--font-adjust)); line-height: 1.65; }
 .settings-content .settings-control-row, .settings-content label.settings-control-row { min-height: 46px; grid-template-columns: minmax(0, 1fr) minmax(160px, 220px); align-items: center; gap: 16px; }
 .settings-content .settings-control-row > span:first-child { font-size: calc(13px + var(--font-adjust)); font-weight: 400; }
 .settings-content .settings-control-row:has(.settings-switch) { grid-template-columns: minmax(0, 1fr) auto; }
@@ -788,7 +792,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-content .about-product h3 { font-size: calc(27px + var(--font-adjust)); letter-spacing: -.04em; }
 .settings-content .about-product p { font-size: 12px; }
 .settings-content .about-credits { gap: 0; }
-.settings-content .about-credits li { grid-template-columns: minmax(100px, 1fr) minmax(0, 1.5fr); align-items: baseline; padding: 14px 0; gap: 20px; border-bottom: 1px solid var(--border); }
+.settings-content .about-credits li { grid-template-columns: minmax(0, 1fr); padding: 14px 0; gap: 4px; border-bottom: 1px solid var(--border); }
 .settings-content .about-credits li:last-child { border: 0; padding-bottom: 0; }
 .settings-content .about-credits a { color: var(--text-strong); font-size: 13px; font-weight: 500; }
 .settings-content .about-credits span { font-size: 12px; }
@@ -798,7 +802,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-content .admin-subsection + .admin-subsection { padding-top: 24px; border-top: 1px solid var(--border); }
 .settings-content .admin-subsection h4 { font-size: 13px; font-weight: 500; }
 .settings-section-heading, .admin-create-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-.settings-content .admin-create { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.2fr); align-items: end; gap: 14px; }
+.settings-content .admin-create { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.settings-content .application-form { gap: 20px; }
 .settings-content .admin-create > .quota-fields { grid-column: auto; }
 .settings-content .user-storage { font-variant-numeric: tabular-nums; }
 .storage-overview { min-width: 0; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 32px; }
@@ -806,8 +811,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .storage-server { padding-right: 32px; border-right: 1px solid var(--border); }
 .storage-local .storage-metrics > div { flex-wrap: wrap; }
 .storage-local .storage-metrics dd { min-width: 0; }
-.storage-local .storage-persistence { flex-wrap: wrap; }
-.storage-persistence > button { margin-left: auto; }
 .storage-heading { min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .storage-heading > button { flex: 0 0 auto; margin-left: auto; }
 .storage-section-label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
@@ -857,7 +860,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .storage-details > summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 400; }
 .storage-details[open] > summary { margin-bottom: 16px; }
 .storage-details > .settings-help { margin-bottom: 14px; }
-.storage-persistence { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.storage-persistence { margin-top: 16px; }
 .database-heading { flex-wrap: wrap; }
 .database-actions { margin-left: auto; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .storage-db-state { display: flex; align-items: center; gap: 6px; color: var(--muted); }
@@ -872,8 +875,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .database-supplement dd { margin: 0; font-variant-numeric: tabular-nums; }
 .database-metric-help { color: var(--muted); }
 .database-storage .storage-details > .settings-help:last-child { margin: 12px 0 0; }
-.quota-fields { display: grid; gap: 8px; min-width: 0; }
-.quota-fields > label { min-width: 0; }
 .quota-controls { display: flex; flex-wrap: nowrap; gap: 8px; height: 40px; min-width: 0; }
 .settings-section .quota-controls > select { flex: 1; width: 0; min-width: 0; height: 100%; }
 .settings-content .settings-section .quota-controls > select { height: 100%; }
@@ -881,9 +882,6 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .quota-custom:focus-within { outline: 2px solid var(--settings-focus-ring); outline-offset: 2px; }
 .settings-section .quota-custom input, .settings-content .settings-section .quota-custom input:not([type="checkbox"]) { width: 100%; min-width: 0; height: 100%; padding: 0 4px 0 10px; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; }
 .quota-custom > span { padding: 0 10px 0 4px; color: var(--muted); font-size: 12px; }
-.history-budget > .quota-fields { grid-template-columns: minmax(0, 1fr) minmax(160px, 220px); align-items: center; gap: 16px; }
-.history-budget > .quota-fields > label { font-weight: 400; }
-.history-budget .quota-custom { flex-basis: 96px; }
 .quota-dialog { max-width: min(480px, calc(100vw - 32px)); }
 .settings-section label.quota-confirm { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; font-size: 12px; font-weight: 400; line-height: 1.6; }
 .quota-confirm input { flex: 0 0 auto; width: auto; margin-top: 4px; }
@@ -926,15 +924,7 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
   .storage-metrics dd { overflow-wrap: anywhere; }
   .storage-persistence { flex-wrap: wrap; }
   .quota-controls { height: 42px; }
-  .history-budget > .quota-fields { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .history-budget .quota-custom { flex-basis: 66px; }
-  .history-budget .quota-custom > span { padding-right: 4px; padding-left: 2px; }
-  .settings-content .history-budget .quota-controls > select { padding-inline: 4px; }
-  .settings-content .history-budget .quota-custom input:not([type="checkbox"]) { padding-left: 6px; padding-right: 0; appearance: textfield; }
-  .history-budget .quota-custom input::-webkit-inner-spin-button, .history-budget .quota-custom input::-webkit-outer-spin-button { appearance: none; margin: 0; }
   .settings-content .admin-subsection + .admin-subsection { padding-top: 20px; }
-  .settings-content .admin-create { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .settings-content .admin-create > .quota-fields { grid-column: 1 / -1; }
 }
 
 /* Settings typography follows the current device preference, including nested dialogs. */
@@ -944,7 +934,8 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-modal :is(.settings-content, .settings-section) button, .settings-modal .settings-content button.settings-action-button { font-size: var(--settings-font-size); font-weight: 700; line-height: 1.4; }
 .settings-modal .settings-title { font-size: calc(var(--settings-font-size) + 4px); }
 .settings-modal .settings-page-title { font-size: calc(var(--settings-font-size) + 10px); }
-.settings-modal .settings-content :is(h3, h4) { font-size: calc(var(--settings-font-size) + 2px); font-weight: 650; }
+.settings-modal .settings-content h3 { font-size: calc(var(--settings-font-size) + 2px); font-weight: 650; }
+.settings-modal .settings-content h4 { font-size: var(--settings-font-size); font-weight: 500; }
 .settings-modal .danger-confirm > header h3 { font-size: calc(var(--settings-font-size) + 6px); }
 .settings-modal .settings-content .about-product h3 { font-size: calc(var(--settings-font-size) + 14px); }
 .settings-modal .profile-identity strong { font-size: calc(var(--settings-font-size) + 4px); }
@@ -958,7 +949,13 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .settings-modal .settings-content .settings-section :is(input:not([type="checkbox"]), select), .settings-modal .quota-controls { height: var(--settings-control-height); }
 .settings-modal .settings-section .quota-custom input:not([type="checkbox"]) { height: 100%; }
 .settings-modal .settings-content button.settings-action-button { min-height: var(--settings-control-height); max-width: 100%; height: auto; }
-.settings-modal .history-settings .settings-help { font-size: max(11px, calc(var(--settings-font-size) - 1px)); font-weight: 400; }
+.settings-modal :is(.settings-content, .settings-section) .settings-item-title { display: block; margin: 0; color: var(--text-strong); font-size: var(--settings-font-size); font-weight: 400; line-height: 1.5; }
+.settings-modal :is(.settings-content, .settings-section) .settings-help,
+.settings-modal .settings-content :is(.about-product p, .about-credits span, .profile-identity small) { color: var(--settings-list-muted); font-size: max(10px, calc(var(--settings-font-size) - 2px)); font-weight: 400; line-height: 1.6; }
+.settings-modal :is(.settings-content, .settings-section) .settings-help :where(p, span, small, strong, em) { color: inherit; font-size: inherit; font-weight: inherit; }
+.settings-modal :is(.settings-content, .settings-section) .settings-item-description { margin: 0; }
+.settings-modal :is(.settings-content, .settings-section) .settings-help.warning { color: var(--warning-text); }
+.settings-modal :is(.settings-content, .settings-section) .settings-help.error { color: var(--danger); }
 .settings-modal .settings-content .quota-controls > select { height: 100%; }
 .settings-modal :is(.settings-content, .settings-section) button.settings-icon-button, .settings-modal .trash-more > summary { width: var(--settings-icon-size); min-width: var(--settings-icon-size); height: var(--settings-icon-size); min-height: var(--settings-icon-size); padding: 0; background: transparent; }
 .settings-modal button.settings-icon-button:not(:disabled):hover, .settings-modal .trash-more > summary:hover, .settings-modal .trash-more > summary:focus-visible { background: var(--button-hover); }
@@ -984,5 +981,4 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 @media (max-width: 720px) {
   .settings-modal { --settings-control-height: calc(42px + var(--settings-font-growth)); --settings-tabs-height: calc(59px + var(--settings-font-growth)); }
   .settings-modal .storage-total strong { font-size: calc(var(--settings-font-size) + 15px); }
-  .settings-modal .history-budget .quota-custom { flex-basis: 76px; }
 }

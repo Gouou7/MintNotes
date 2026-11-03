@@ -1,4 +1,5 @@
 import { SettingsSection } from "../components/SettingsSection";
+import { SettingsItem } from "../components/SettingsItem";
 import { HardDrive, Laptop, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
@@ -53,8 +54,8 @@ export function StorageUsage({ status }: { status: StorageStatus }) {
     </dl><PendingStorage status={status} />
     <details className="storage-details"><summary>{t("storage.browserStorage")}</summary>
     <dl className="storage-metrics"><div><dt title={t("storage.estimateHelp")}>{t("storage.siteEstimateLabel")}</dt><dd>{status.estimate?.usage !== undefined ? `${formatHistoryBytes(status.estimate.usage)} / ${status.estimate.quota === undefined ? t("storage.unknown") : formatHistoryBytes(status.estimate.quota)}` : t("storage.unknown")}</dd></div></dl>
-    <div className="storage-persistence"><span className="settings-help" title={t("storage.persistenceHelp")}>{t(`storage.persistence.${status.persistence}`)}</span>
-      <SettingsButton icon={ShieldCheck} disabled={status.persistence === "unsupported" || status.persistence === "granted"} onClick={() => void status.requestPersistence()}>{t("storage.requestPersistence")}</SettingsButton></div></details>
+    <SettingsItem title={t("storage.persistenceLabel")} className="storage-persistence" description={<span title={t("storage.persistenceHelp")}>{t(`storage.persistence.${status.persistence}`)}</span>}>
+      <SettingsButton icon={ShieldCheck} disabled={status.persistence === "unsupported" || status.persistence === "granted"} onClick={() => void status.requestPersistence()}>{t("storage.requestPersistence")}</SettingsButton></SettingsItem></details>
     </div></div>
   </SettingsSection>;
 }

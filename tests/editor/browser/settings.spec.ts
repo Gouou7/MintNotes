@@ -30,6 +30,10 @@ for (const [name, width] of [["desktop", 1440], ["mobile", 320]] as const) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/settings.html?unlimited&language=zh-CN");
     await page.getByRole("combobox", { name: "字体大小", exact: true }).selectOption("17");
+    await page.locator(".settings-tabs").getByRole("button", { name: "用户和安全", exact: true }).click();
+    const deviceSecurity = page.locator(".settings-group").filter({ has: page.getByRole("heading", { name: "本机安全", exact: true }) });
+    await expect(deviceSecurity.locator(".settings-item-title")).toHaveText(["本机 PIN", "无操作后自动锁定"]);
+    await deviceSecurity.screenshot({ path: info.outputPath(`${name}-device-security-zh.png`) });
     await page.locator(".settings-tabs").getByRole("button", { name: "笔记和存储", exact: true }).click();
     const usage = page.locator(".storage-usage");
     await expect(usage.locator(".storage-total")).toContainText("配额：不限");
@@ -66,7 +70,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
       for (const size of ["11", "17", "14"]) {
         await fontSize.selectOption(size); await expect(fontSize).toHaveValue(size);
         await expect(fontSize).toHaveCSS("font-size", `${size}px`);
-        await expect(content.locator(".settings-control-row > span").first()).toHaveCSS("font-size", `${size}px`);
+        await expect(content.locator(".settings-item-title").first()).toHaveCSS("font-size", `${size}px`);
         await expect(page.locator(".settings-tabs button").first()).toHaveCSS("font-size", `${size}px`);
         await expect(page.locator(".settings-tabs button").first()).toHaveCSS("font-weight", "700");
         await expect(content.locator("h3").first()).toHaveCSS("font-size", `${Number(size) + 2}px`);
@@ -87,11 +91,12 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
         if (title === "General") await expect(content.locator(".profile-summary")).toHaveCount(0);
         if (title === "Account and security") {
           await expect(content.locator(".security-settings > .profile-summary").first()).toContainText("Mint Notes");
-          const pin = content.locator(".settings-card-intro").filter({ has: page.getByRole("button", { name: "Set PIN", exact: true }) });
+          const pin = content.locator(".settings-item").filter({ has: page.getByRole("button", { name: "Set PIN", exact: true }) });
+          await expect(content.locator(".security-settings > .settings-group > h3")).toHaveText(["Account credentials", "Device security", "Login devices", "Application connections"]);
           const row = (await pin.boundingBox())!, action = (await pin.getByRole("button", { name: "Set PIN", exact: true }).boundingBox())!;
           expect(Math.abs(row.x + row.width - action.x - action.width)).toBeLessThanOrEqual(1);
           if (name === "desktop") {
-            const description = (await pin.locator(".settings-card-description").boundingBox())!;
+            const description = (await pin.locator(".settings-item-copy").boundingBox())!;
             expect(description.x + description.width).toBeLessThanOrEqual(action.x);
             expect(Math.abs(description.y + description.height / 2 - action.y - action.height / 2)).toBeLessThanOrEqual(1);
           }
@@ -135,6 +140,16 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
         expect(await content.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
         // Individual cards must stay within the scroll surface, including forms and counts.
         expect(await content.locator(".settings-card").evaluateAll(cards => cards.every(card => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
+        // Every setting has a name. Supporting text shares one smaller, muted style and spacing.
+        expect(await content.locator(".settings-item").evaluateAll(items => items.every(item => {
+          const title = item.querySelector(".settings-item-title")!;
+          const copy = item.querySelector(".settings-item-copy")!;
+          const description = item.querySelector(".settings-item-description");
+          return Boolean(title.textContent?.trim()) && (!description || (
+            parseFloat(getComputedStyle(description).fontSize) < parseFloat(getComputedStyle(title).fontSize)
+            && getComputedStyle(description).color !== getComputedStyle(title).color
+            && getComputedStyle(copy).rowGap === "4px"));
+        }))).toBe(true);
         for (const action of await content.locator(".settings-action-button").all()) {
           await expect(action.locator(":scope > svg")).toHaveCount(1);
           if ((await action.getAttribute("class"))?.includes("settings-icon-button")) {
@@ -159,8 +174,11 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           expect(await composition.evaluate(element => Math.abs([...element.children].reduce((sum, segment) => sum + segment.getBoundingClientRect().width, 0) - element.clientWidth))).toBeLessThanOrEqual(1);
           await expect(content.locator(".history-settings details")).toHaveCount(0);
           await expect(content.getByRole("combobox", { name: "Note history quota", exact: true })).toBeVisible();
-          await expect(content.locator(".history-settings > .settings-help").first()).toBeVisible();
-          await expect(content.locator(".history-settings > .settings-help").first()).toHaveCSS("font-size", "13px");
+          await expect(content.locator(".history-settings .settings-item-description").first()).toBeVisible();
+          await expect(content.locator(".history-settings .settings-item-description").first()).toHaveCSS("font-size", "12px");
+          const historyEnabled = page.waitForRequest(request => request.url().endsWith("/api/account/note-history-settings") && request.method() === "PATCH" && request.postDataJSON().enabled === true);
+          await content.locator(".history-settings .settings-switch-track").click();
+          await historyEnabled;
           await expect(content.locator(".trash-list")).toHaveCSS("border-top-width", "0px");
           await expect(content.locator(".trash-list")).toHaveCSS("border-radius", "0px");
           for (const row of await content.locator(".trash-row").all()) {
@@ -179,15 +197,15 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           await quotaSaved;
           await expect(content.locator(".history-budget button")).toHaveCount(0);
           const controls = await historyQuota.locator(".quota-controls").boundingBox();
-          await expect(historyQuota.locator(":scope > label")).toHaveCSS("font-weight", "400");
+          await expect(historyQuota.locator(".settings-item-title")).toHaveCSS("font-weight", "400");
           if (name !== "mobile") {
-            const label = (await historyQuota.locator(":scope > label").boundingBox())!;
+            const label = (await historyQuota.locator(".settings-item-copy").boundingBox())!;
             expect(label.x + label.width).toBeLessThanOrEqual(controls!.x);
             expect(Math.abs(label.y + label.height / 2 - controls!.y - controls!.height / 2)).toBeLessThanOrEqual(2);
             expect(controls!.width).toBeLessThanOrEqual(220);
           }
           const usage = content.locator(".history-usage");
-          await expect(usage.locator(".settings-card-description > span")).toHaveText("Note history usage");
+          await expect(usage.locator(".settings-item-title")).toHaveText("Note history usage");
           await expect(usage.locator(".settings-help")).toHaveText("120.0 MiB / 256.0 MiB · 128 versions");
           await expect(usage.locator("progress")).toHaveCount(0);
           await expect(usage).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
@@ -195,7 +213,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           const clear = usage.getByRole("button", { name: "Clear all history", exact: true });
           await expect(clear).toHaveCSS("background-color", await logoutButton.evaluate(element => getComputedStyle(element).backgroundColor));
           await expect(clear).toHaveCSS("color", await logoutButton.evaluate(element => getComputedStyle(element).color));
-          const [summary, clearBounds] = await Promise.all([usage.locator(".settings-card-description").boundingBox(), clear.boundingBox()]);
+          const [summary, clearBounds] = await Promise.all([usage.locator(".settings-item-copy").boundingBox(), clear.boundingBox()]);
           expect(clearBounds!.x >= summary!.x + summary!.width - 1 || clearBounds!.y >= summary!.y + summary!.height - 1).toBe(true);
           if (name === "desktop") {
             expect(clearBounds!.x).toBeGreaterThanOrEqual(summary!.x + summary!.width);
@@ -215,7 +233,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           if (name !== "mobile") {
             const inputs = await form.locator("input, select").all();
             const bounds = await Promise.all(inputs.map(input => input.boundingBox()));
-            expect(Math.max(...bounds.map(box => box!.y)) - Math.min(...bounds.map(box => box!.y))).toBeLessThanOrEqual(2);
+            expect(Math.max(...bounds.map(box => box!.x + box!.width)) - Math.min(...bounds.map(box => box!.x + box!.width))).toBeLessThanOrEqual(2);
             const row = content.locator(".user-row").first();
             const identity = (await row.locator(".settings-list-details").boundingBox())!, actions = (await row.locator(".user-actions").boundingBox())!;
             expect(actions.x).toBeGreaterThanOrEqual(identity.x + identity.width);
@@ -280,7 +298,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
     await page.locator(".admin-create input").nth(0).fill("new-user");
     await page.locator(".admin-create input").nth(1).fill("New User");
     const created = page.waitForRequest(request => request.url().endsWith("/api/admin/account-setups") && request.method() === "POST");
-    await page.locator(".admin-create-heading button").click();
+    await page.locator(".admin-user-management").getByRole("button", { name: "Create activation code", exact: true }).click();
     expect((await created).postDataJSON()).toMatchObject({ username: "new-user", displayName: "New User", storageQuota: { mode: "inherit", bytes: null } });
     await expect(page.locator(".activation-result code")).toHaveText("fixture-activation-code");
     await page.getByRole("button", { name: "Close settings", exact: true }).click();
@@ -315,6 +333,24 @@ test("offline settings retain a visible notice and respect forced colors", async
   for (const selector of [".settings-header", ".settings-sidebar", ".settings-backdrop"]) await expect(page.locator(selector)).toHaveCSS("backdrop-filter", "none");
 });
 
+test("application connection fields retain accessible names and descriptions at wide and narrow widths", async ({ page }, info) => {
+  await page.goto("/settings.html");
+  await page.getByRole("button", { name: "Account and security", exact: true }).click();
+  await page.getByRole("button", { name: "Add application", exact: true }).click();
+  const form = page.locator(".application-form");
+  const fields = form.locator(".settings-item-control > :is(input, select)");
+  await expect(fields).toHaveCount(4);
+  for (const field of await fields.all()) await expect(field).toHaveAccessibleName(/.+/);
+  expect(await fields.evaluateAll(controls => controls.every(control => !control.hasAttribute("aria-describedby") || Boolean(document.getElementById(control.getAttribute("aria-describedby")!))))).toBe(true);
+  await form.locator("select").first().selectOption("read");
+  await expect(form.locator("select").first()).toHaveValue("read");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await form.screenshot({ path: info.outputPath("mobile-application-fields.png") });
+  await form.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(form).toHaveCount(0);
+});
+
 test("settings controls distinguish switch states and keep theme borders and keyboard focus visible", async ({ page, browserName }) => {
   await page.goto("/settings.html?offline");
   const themeSelect = page.getByRole("combobox", { name: "Theme", exact: true });
@@ -337,7 +373,7 @@ test("settings controls distinguish switch states and keep theme borders and key
       const background = rgba(style.backgroundColor);
       return [ratio(background, surface), ratio(rgba(style.borderColor), surface), ratio(rgba(thumb.backgroundColor), background), ratio(rgba(style.outlineColor), surface)];
     }
-    const style = getComputedStyle([...document.querySelectorAll(".settings-content select")].find(element => element.closest("label")?.textContent?.startsWith("Theme"))!);
+    const style = getComputedStyle([...document.querySelectorAll(".settings-content select")].find(element => element.closest(".settings-item")?.querySelector(".settings-item-title")?.textContent === "Theme")!);
     return [ratio(rgba(style.color), rgba(style.backgroundColor)), ratio(rgba(style.outlineColor), surface)];
   }, kind);
   for (const theme of ["light", "dark"]) {
@@ -366,6 +402,8 @@ test("settings controls distinguish switch states and keep theme borders and key
     await expect.poll(thumb).toEqual({ width: "18px", height: "18px", top: "3px", left: "3px", color: "rgb(255, 255, 255)", shadow: "none", transform: "matrix(1, 0, 0, 1, 18, 0)" });
     await toggle.press("Space"); await expect(toggle).not.toBeChecked();
     await expect(track).toHaveCSS("background-color", theme === "light" ? "rgb(215, 215, 215)" : "rgb(54, 54, 54)");
+    await track.click(); await expect(toggle).toBeChecked();
+    await page.getByText("Wrap code blocks", { exact: true }).click(); await expect(toggle).not.toBeChecked();
   }
   await themeSelect.selectOption("light");
   await page.getByRole("button", { name: "Account and security", exact: true }).click();

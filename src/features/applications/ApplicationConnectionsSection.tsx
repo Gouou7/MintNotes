@@ -1,4 +1,5 @@
 import { SettingsSection } from "../../components/SettingsSection";
+import { SettingsItem } from "../../components/SettingsItem";
 import { useState, type FormEvent } from "react";
 import { Copy, KeyRound, Pencil, Plug, Trash2, X } from "lucide-react";
 import type { ApplicationConnection, ApplicationPolicy } from "@mint-notes/application-client";
@@ -45,15 +46,15 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
     try { await navigator.clipboard.writeText(value); onNotify(t("applications.copied"), "info"); }
     catch { onNotify(t("applications.copyFailed"), "warning"); }
   };
-  return <SettingsSection title={t("applications.title")} description={<p className="settings-help">{t("applications.help")}</p>} actions={<SettingsButton icon={Plug} className="primary" disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit("new")}>{t("applications.add")}</SettingsButton>} className="application-connections">
+  return <SettingsSection title={t("applications.title")} className="application-connections">
+    <SettingsItem title={t("applications.authorization")} description={t("applications.help")}><SettingsButton icon={Plug} className="primary" disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit("new")}>{t("applications.add")}</SettingsButton></SettingsItem>
     {!online && <p className="session-gate">{t("notice.onlineSessionRequired")}</p>}
     {controller.error && <p className="error" role="alert">{t("applications.failed")}</p>}
     {editing && online && <form className="compact-form application-form" onSubmit={(event) => void submit(event)}>
-      <label>{t("applications.name")}<input value={name} maxLength={80} required disabled={disabled || controller.retryPending} onChange={(event) => setName(event.target.value)} autoFocus /></label>
-      {editing === "new" && <label>{t("applications.permission")}<select value={access} disabled={disabled || controller.retryPending} onChange={(event) => setAccess(event.target.value as typeof access)}><option value="read-write">{t("applications.readWrite")}</option><option value="read">{t("applications.readOnly")}</option></select></label>}
-      <label>{t("applications.idleExpiry")}<select value={idle ?? "never"} disabled={disabled || controller.retryPending} onChange={(event) => setIdle(event.target.value === "never" ? null : Number(event.target.value) as 7 | 30 | 90)}>{[7, 30, 90].map((days) => <option key={days} value={days}>{t("applications.days", { count: days })}</option>)}<option value="never">{t("applications.never")}</option></select></label>
-      <label>{t("applications.fixedExpiry")}<input type="datetime-local" value={expiry} disabled={disabled || controller.retryPending} onChange={(event) => setExpiry(event.target.value)} /></label>
-      <p className="settings-help">{t("applications.policyHelp")}</p>
+      <SettingsItem title={t("applications.name")}>{(control) => <input {...control} value={name} maxLength={80} required disabled={disabled || controller.retryPending} onChange={(event) => setName(event.target.value)} autoFocus />}</SettingsItem>
+      {editing === "new" && <SettingsItem title={t("applications.permission")} description={t("applications.permissionHelp")}>{(control) => <select {...control} value={access} disabled={disabled || controller.retryPending} onChange={(event) => setAccess(event.target.value as typeof access)}><option value="read-write">{t("applications.readWrite")}</option><option value="read">{t("applications.readOnly")}</option></select>}</SettingsItem>}
+      <SettingsItem title={t("applications.idleExpiry")} description={t("applications.idleHelp")}>{(control) => <select {...control} value={idle ?? "never"} disabled={disabled || controller.retryPending} onChange={(event) => setIdle(event.target.value === "never" ? null : Number(event.target.value) as 7 | 30 | 90)}>{[7, 30, 90].map((days) => <option key={days} value={days}>{t("applications.days", { count: days })}</option>)}<option value="never">{t("applications.never")}</option></select>}</SettingsItem>
+      <SettingsItem title={t("applications.fixedExpiry")}>{(control) => <input {...control} type="datetime-local" value={expiry} disabled={disabled || controller.retryPending} onChange={(event) => setExpiry(event.target.value)} />}</SettingsItem>
       <div className="settings-actions"><SettingsButton icon={X} type="button" disabled={controller.busy} onClick={() => { controller.dismissKey(); setEditing(null); }}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" className="primary" disabled={disabled}>{t(controller.retryPending ? "applications.retry" : editing === "new" ? "applications.generate" : "common.save")}</SettingsButton></div>
     </form>}
     {controller.applicationKey && online && <div className="application-key-card" role="region" aria-label={t("applications.newKey")}>

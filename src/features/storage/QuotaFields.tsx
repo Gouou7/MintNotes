@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { SettingsItem } from "../../components/SettingsItem";
 import { useI18n } from "../../i18n";
 
 const MIB = 1048576;
@@ -14,19 +14,17 @@ export function quotaPayload(draft: QuotaDraft) {
   if (!Number.isSafeInteger(mib) || mib <= 0 || !Number.isSafeInteger(mib * MIB)) throw new Error("Invalid storage quota");
   return { mode: draft.mode, bytes: mib * MIB };
 }
-export function QuotaFields({ value, onChange, defaultBytes, presets = TOTAL_PRESETS, disabled = false, label }: {
+export function QuotaFields({ value, onChange, defaultBytes, presets = TOTAL_PRESETS, disabled = false, label, description }: {
   value: QuotaDraft; onChange: (value: QuotaDraft) => void; defaultBytes?: number;
-  presets?: readonly number[]; disabled?: boolean; label: string;
+  presets?: readonly number[]; disabled?: boolean; label: string; description?: string;
 }) {
   const { t } = useI18n();
-  const id = useId();
   // Existing inherited quotas retain their policy until the user chooses a capacity.
   const mib = value.mode === "inherit" && defaultBytes !== undefined ? String(Math.max(1, Math.ceil(defaultBytes / MIB))) : value.mib;
   const selected = value.mode === "unlimited" ? "unlimited" : value.custom || !presets.includes(Number(mib)) ? "custom" : mib;
-  return <div className="quota-fields">
-    <label htmlFor={id}>{label}</label>
+  return <SettingsItem title={label} description={description} className="quota-fields">{(control) =>
     <div className="quota-controls">
-      <select id={id} disabled={disabled} value={selected} onChange={(event) => {
+      <select {...control} disabled={disabled} value={selected} onChange={(event) => {
         const option = event.target.value;
         onChange(option === "unlimited" ? { ...value, mode: "unlimited", custom: false }
           : { mode: "limited", mib: option === "custom" ? mib : option, custom: option === "custom" });
@@ -39,6 +37,6 @@ export function QuotaFields({ value, onChange, defaultBytes, presets = TOTAL_PRE
         <input type="number" inputMode="numeric" aria-label={t("storage.capacityMiB")} min={1} max={Math.floor(Number.MAX_SAFE_INTEGER / MIB)} step={1} required disabled={disabled} value={mib} onChange={(event) => onChange({ mode: "limited", mib: event.target.value, custom: true })} />
         <span aria-hidden="true">MiB</span>
       </span>}
-    </div>
-  </div>;
+    </div>}
+  </SettingsItem>;
 }

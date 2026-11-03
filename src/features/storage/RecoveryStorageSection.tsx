@@ -1,4 +1,5 @@
 import { SettingsSection } from "../../components/SettingsSection";
+import { SettingsItem } from "../../components/SettingsItem";
 import { useEffect, useRef, useState } from "react";
 import { liveQuery } from "dexie";
 import { Download, RefreshCw } from "lucide-react";
@@ -23,7 +24,8 @@ export function RecoveryStorageSection({ userId, onNotify }: { userId: string; o
   const [busy, setBusy] = useState(false);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   if (!count) return null;
-  return <SettingsSection title={t("storage.recoveryTitle")} description={<p className="settings-help">{t("storage.recoveryHelp", { count })}</p>} actions={<>
+  return <SettingsSection title={t("storage.recoverySection")}>
+    <SettingsItem title={t("storage.recoveryTitle")} description={t("storage.recoveryHelp", { count })}>
       <SettingsButton icon={RefreshCw} disabled={busy} onClick={() => window.dispatchEvent(new CustomEvent("webmd:retry-recoveries"))}>{t("storage.recoveryRetry")}</SettingsButton>
       <SettingsButton icon={Download} disabled={busy} onClick={() => {
         setBusy(true);
@@ -31,6 +33,6 @@ export function RecoveryStorageSection({ userId, onNotify }: { userId: string; o
           if (active.current) onNotify(t("transfer.exportFailed"), "critical");
         }).finally(() => { if (active.current) setBusy(false); });
       }}>{t("storage.recoveryExport")}</SettingsButton>
-    </>}>
+    </SettingsItem>
   </SettingsSection>;
 }

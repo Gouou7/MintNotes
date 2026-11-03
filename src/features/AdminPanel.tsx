@@ -1,4 +1,5 @@
 import { SettingsSection } from "../components/SettingsSection";
+import { SettingsItem } from "../components/SettingsItem";
 import { DatabaseStorageSection } from "./storage/DatabaseStorageSection";
 import { AdminQuotaEditor, type StorageQuotaUser } from "./storage/AdminQuotaEditor";
 import { QuotaFields, quotaDraft, quotaPayload } from "./storage/QuotaFields";
@@ -110,8 +111,12 @@ export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNot
   return <div className="settings-page admin-panel">
     <SettingsSection title={t("admin.userManagement")} className="admin-user-management">
       <div className="admin-subsection">
-        <div className="admin-create-heading"><h4>{t("admin.createPending")}</h4><SettingsButton icon={KeyRound} type="submit" form={createFormId} className="primary compact" disabled={busy}>{t("admin.createCode")}</SettingsButton></div><p className="settings-help">{t("admin.createPendingHelp")}</p>
-        <form id={createFormId} className="admin-create" onSubmit={create}><label>{t("auth.username")}<input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" required /></label><label>{t("auth.displayName")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label><QuotaFields label={t("storage.totalQuota")} defaultBytes={defaultQuotaBytes} value={newQuota} onChange={setNewQuota} disabled={busy} /></form>
+        <SettingsItem title={t("admin.createPending")} description={t("admin.createPendingHelp")}><SettingsButton icon={KeyRound} type="submit" form={createFormId} className="primary compact" disabled={busy}>{t("admin.createCode")}</SettingsButton></SettingsItem>
+        <form id={createFormId} className="admin-create" onSubmit={create}>
+          <SettingsItem title={t("auth.username")}>{(control) => <input {...control} value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" required />}</SettingsItem>
+          <SettingsItem title={t("auth.displayName")}>{(control) => <input {...control} value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />}</SettingsItem>
+          <QuotaFields label={t("storage.totalQuota")} defaultBytes={defaultQuotaBytes} value={newQuota} onChange={setNewQuota} disabled={busy} />
+        </form>
         {activation && <div className="activation-result"><strong>{t("admin.codeShownOnce")}</strong><code>{activation}</code><SettingsButton icon={Copy} onClick={() => navigator.clipboard.writeText(activation)}>{t("common.copy")}</SettingsButton></div>}
         {!!setups.length && <><h4>{t("admin.pending")}</h4><div className="user-list settings-list">{setups.map((entry) => <div className="user-row settings-list-row" key={entry.id}><span className="settings-list-icon"><AppIcon icon={UserRound} size={20} /></span><span className="settings-list-details"><strong>{entry.displayName}</strong><small>@{entry.username} · {t("admin.expires", { date: formatDateTime(entry.expiresAt) })}</small></span><div className="settings-list-actions"><SettingsButton icon={X} disabled={busy} onClick={() => void cancel(entry)}>{t("common.cancel")}</SettingsButton></div></div>)}</div></>}
       </div>

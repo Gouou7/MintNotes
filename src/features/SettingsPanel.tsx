@@ -1,4 +1,5 @@
 import { SettingsSection } from "../components/SettingsSection";
+import { SettingsItem } from "../components/SettingsItem";
 import type { StorageStatus } from "./storage/useStorageStatus";
 import { HistoryStorageSection } from "./storage/HistoryStorageSection";
 import { TrashStorageSection } from "./storage/TrashStorageSection";
@@ -509,18 +510,18 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
             {!serverSessionVerified && <p className="auth-guidance warning">{t("settings.localOnly")}</p>}
             {tab === "general" && <div className="settings-page general-settings">
               <SettingsSection title={t("settings.appearance")}>
-              <label className="settings-control-row"><span>{t("language.label")}</span><LanguageSelect value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} /></label>
-              <label className="settings-control-row"><span>{t("settings.theme")}</span><select value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select></label>
-              <label className="settings-control-row font-size-setting"><span>{t("settings.fontSize")}</span>
-                <select value={normalizeFontSize(preferences.fontSize)} onChange={(event) => onPreferences({ ...preferences, fontSize: normalizeFontSize(Number(event.target.value)) })}>
+              <SettingsItem title={t("language.label")}>{(control) => <LanguageSelect {...control} value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} />}</SettingsItem>
+              <SettingsItem title={t("settings.theme")}>{(control) => <select {...control} value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select>}</SettingsItem>
+              <SettingsItem title={t("settings.fontSize")} className="font-size-setting">{(control) =>
+                <select {...control} value={normalizeFontSize(preferences.fontSize)} onChange={(event) => onPreferences({ ...preferences, fontSize: normalizeFontSize(Number(event.target.value)) })}>
                   {Array.from({ length: MAX_FONT_SIZE - MIN_FONT_SIZE + 1 }, (_, index) => MIN_FONT_SIZE + index).map(size => <option key={size} value={size}>{size === MIN_FONT_SIZE ? t("settings.fontSizeSmall", { size }) : size === DEFAULT_FONT_SIZE ? t("settings.fontSizeDefault", { size }) : size === MAX_FONT_SIZE ? t("settings.fontSizeLarge", { size }) : size}</option>)}
-                </select>
-              </label>
+                </select>}
+              </SettingsItem>
               </SettingsSection><SettingsSection title={t("settings.editor")}>
-              <label className="settings-control-row">
-                <span>{t("settings.wrapCodeBlocks")}</span>
-                <span className="settings-switch">
+              <SettingsItem title={t("settings.wrapCodeBlocks")}>{(control) =>
+                <label className="settings-switch" htmlFor={control.id}>
                   <input
+                    {...control}
                     type="checkbox"
                     role="switch"
                     aria-label={t("settings.wrapCodeBlocks")}
@@ -528,20 +529,24 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
                     onChange={(event) => onPreferences({ ...preferences, wrapCodeBlocks: event.target.checked })}
                   />
                   <span className="settings-switch-track" aria-hidden="true" />
-                </span>
-              </label>
+                </label>}
+              </SettingsItem>
               </SettingsSection>
             </div>}
 
             {tab === "security" && <div className="settings-page security-settings">
               <div className="profile-summary settings-section settings-card"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={30} />}</span><span className="profile-identity"><strong>{user.displayName}</strong><small>@{user.username}</small></span><SettingsButton icon={Pencil} className="primary" disabled={busy || !serverSessionVerified} onClick={openProfileDialog}>{t("settings.editProfile")}</SettingsButton></div>
-              <SettingsSection title={t("settings.devicePin")} actions={<><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</>} description={<p className="settings-help">{t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}</p>} /><SettingsSection title={t("settings.autoLock")}><p className="settings-help">{t("settings.autoLockHelp")}</p>
-              <label className="settings-control-row"><span>{t("settings.autoLockAfter")}</span><select disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select></label>
+              <SettingsSection title={t("settings.accountCredentials")}>
+                <SettingsItem title={t("auth.masterPassword")} description={t("settings.changePasswordHelp")}><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</SettingsButton></SettingsItem>
+                <SettingsItem title={t("settings.recoveryKey")} description={t("settings.recoveryHelp")}><SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}>{t("settings.resetRecovery")}</SettingsButton></SettingsItem>
+              </SettingsSection>
+              <SettingsSection title={t("settings.deviceSecurity")}>
+                <SettingsItem title={t("settings.devicePin")} description={t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</SettingsItem>
+                <SettingsItem title={t("settings.autoLockAfter")} description={t("settings.autoLockHelp")}>{(control) => <select {...control} disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select>}</SettingsItem>
               </SettingsSection><SettingsSection title={t("settings.loginDevices")}><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
               {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
               {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && device.active) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list settings-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row settings-list-row ${device.current ? "current" : ""}`} key={device.id}><span className="settings-list-icon"><AppIcon icon={Laptop} size={20} /></span><span className="session-details settings-list-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && <div className="settings-list-actions">{device.active ? <SettingsButton icon={LogOut} className="session-revoke danger" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}>{t("settings.signOut")}</SettingsButton> : <SettingsButton icon={Trash2} className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}>{t("common.remove")}</SettingsButton>}</div>}</article>)}</div></>}
               </SettingsSection><ApplicationConnectionsSection userId={user.id} online={serverSessionVerified} onNotify={onNotify} />
-              <SettingsSection title={t("settings.accountCredentials")} description={<p className="settings-help">{t("settings.accountCredentialsHelp")}</p>} actions={<><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</SettingsButton><SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}>{t("settings.resetRecovery")}</SettingsButton></>} />
             </div>}
 
             {tab === "storage" && <div className="settings-page note-storage-settings">
