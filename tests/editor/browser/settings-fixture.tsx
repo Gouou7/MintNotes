@@ -6,7 +6,10 @@ import { I18nProvider } from "../../../src/i18n";
 import type { HistorySettings, OpenDocument, UiPreferences } from "../../../src/types";
 import "../../../src/styles.css";
 
-const historySettings: HistorySettings = { enabled: false, intervalMinutes: 10, retentionDays: 90, count: 0, usedBytes: 0, quotaBytes: 256 * 1024 * 1024, clearedBefore: null };
+const params = new URLSearchParams(location.search);
+const unlimitedStorage = params.has("unlimited");
+const locale = params.get("language") === "zh-CN" ? "zh-CN" : "en";
+const historySettings: HistorySettings = { enabled: false, intervalMinutes: 10, retentionDays: 90, count: unlimitedStorage ? 2 : 128, usedBytes: unlimitedStorage ? 1331 : 125829120, quotaBytes: unlimitedStorage ? null : 256 * 1024 * 1024, clearedBefore: null };
 const trashItems: OpenDocument[] = ["folder", "note"].map((kind, index) => ({
   objectId: `trash-${kind}`, kind: kind as "folder" | "note", title: `Deleted ${kind}`, markdown: "",
   parentId: null, tags: [], favorite: false, locked: false, deleted: true,
@@ -27,7 +30,7 @@ const SettingsPanel = lazy(async () => {
 
 function SettingsFixture() {
   const [open, setOpen] = useState(true);
-  const [preferences, setPreferences] = useState<UiPreferences>({ ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES, theme: new URLSearchParams(location.search).get("theme") === "light" ? "light" : "dark", fontSize: 14, wrapCodeBlocks: false, language: "en", sortMode: "alphabetical", treeWidth: 297, outlineWidth: 297, rightPanelTab: "outline" });
+  const [preferences, setPreferences] = useState<UiPreferences>({ ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES, theme: params.get("theme") === "light" ? "light" : "dark", fontSize: 14, wrapCodeBlocks: false, language: locale, sortMode: "alphabetical", treeWidth: 297, outlineWidth: 297, rightPanelTab: "outline" });
   useEffect(() => {
     const theme = preferences.theme === "system" ? "light" : preferences.theme;
     document.documentElement.dataset.theme = theme;
@@ -37,7 +40,10 @@ function SettingsFixture() {
     <aside className="tree-pane"><div className="side-header">Mint Notes</div><button onClick={() => setOpen(true)}>Open settings</button></aside>
     <main className="note-pane"><div className="note-pane-top"><div className="note-toolbar">Note title</div></div></main>
     {open && <Suspense fallback={<SettingsPanelLoading onClose={() => setOpen(false)} />}><SettingsPanel
-      storageStatus={{ localReady: true, usage: { totalBytes: 389021696, contentBytes: 262144000, noteBytes: 12582912, attachmentBytes: 249561088, historyBytes: 125829120, profileBytes: 1048576, trashBytes: 15728640, quotaBytes: 2147483648, historyQuotaBytes: 268435456, checkedAt: "2026-10-23T10:30:00Z" }, local: { bytes: 73400320, objects: 12, attachments: 3, history: 24 }, lastSync: "2026-10-23T10:30:00Z", unsaved: 2, estimate: null, persistence: "unsupported", failed: false, refreshing: false, stale: false, refresh: done, requestPersistence: done }}
+      storageStatus={{ localReady: true, usage: unlimitedStorage
+        ? { totalBytes: 7065, contentBytes: 5734, noteBytes: 5734, attachmentBytes: 0, historyBytes: 1331, profileBytes: 0, trashBytes: 4096, quotaBytes: null, historyQuotaBytes: null, checkedAt: "2026-11-03T15:46:00Z" }
+        : { totalBytes: 389021696, contentBytes: 262144000, noteBytes: 12582912, attachmentBytes: 249561088, historyBytes: 125829120, profileBytes: 1048576, trashBytes: 15728640, quotaBytes: 2147483648, historyQuotaBytes: 268435456, checkedAt: "2026-10-23T10:30:00Z" },
+        local: unlimitedStorage ? { bytes: 5939, objects: 0, attachments: 0, history: 0 } : { bytes: 73400320, objects: 12, attachments: 3, history: 24 }, lastSync: "2026-11-03T15:45:00Z", unsaved: unlimitedStorage ? 0 : 2, estimate: null, persistence: "unsupported", failed: false, refreshing: false, stale: false, refresh: done, requestPersistence: done }}
       user={{ id: "fixture-user", username: "mint", displayName: "Mint Notes", role: "admin" }}
       endpoint={{ id: "fixture-endpoint", remembered: false }} credential={null} serverSessionVerified={!new URLSearchParams(location.search).has("offline")}
       onCredentialChange={noop} preferences={preferences} onPreferences={setPreferences} onClose={() => setOpen(false)} onLogout={done}
@@ -48,5 +54,5 @@ function SettingsFixture() {
   </div>;
 }
 
-localStorage.setItem("webmd-notes-language", "en");
+localStorage.setItem("webmd-notes-language", locale);
 createRoot(document.getElementById("root")!).render(<I18nProvider><SettingsFixture /></I18nProvider>);

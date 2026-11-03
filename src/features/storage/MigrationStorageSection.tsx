@@ -1,3 +1,4 @@
+import { SettingsSection } from "../../components/SettingsSection";
 import { useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { SettingsButton } from "../../components/SettingsButton";
@@ -14,13 +15,11 @@ export function MigrationStorageSection({ onImport, onExport, onNotify }: {
     try { await operation(); } catch { onNotify(t("storage.transferFailed"), "warning"); }
     finally { setBusy(false); }
   };
-  return <section className="settings-section settings-card storage-migration"><h3>{t("storage.migration")}</h3>
-    <p className="settings-help">{t("storage.exportScope")}</p>
+  return <SettingsSection title={t("storage.migration")} className="storage-migration" description={<p className="settings-help">{t("storage.exportScope")}</p>} actions={<><SettingsButton icon={Download} disabled={busy} onClick={() => void run(onExport)}>{t("storage.exportAll")}</SettingsButton>
+      <SettingsButton icon={Upload} disabled={busy} onClick={() => input.current?.click()}>{t("storage.importPackage")}</SettingsButton></>}>
     <input ref={input} type="file" accept=".md,.markdown,.txt,.zip" multiple hidden onChange={(event) => {
       const files = Array.from(event.target.files ?? []); event.target.value = "";
       if (files.length) void run(() => onImport(files));
     }} />
-    <div className="settings-actions"><SettingsButton icon={Download} disabled={busy} onClick={() => void run(onExport)}>{t("storage.exportAll")}</SettingsButton>
-      <SettingsButton icon={Upload} disabled={busy} onClick={() => input.current?.click()}>{t("storage.importPackage")}</SettingsButton></div>
-  </section>;
+  </SettingsSection>;
 }

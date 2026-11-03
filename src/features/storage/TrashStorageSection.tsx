@@ -1,3 +1,4 @@
+import { SettingsSection } from "../../components/SettingsSection";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ChevronsUp, Ellipsis, FileText, Folder, RotateCcw, Search, Trash2 } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
@@ -83,15 +84,16 @@ export function TrashStorageSection({ trashItems, busy, purging, serverSessionVe
     else next.add(objectId);
     return next;
   });
-            return <div className="settings-section settings-card trash-settings">
-              <h3>{t("settings.trash")}</h3><p className="settings-help">{t("settings.trashHelp")}</p>
+            return <><SettingsSection title={t("settings.trash")} className="trash-settings">
+              <p className="settings-help">{t("settings.trashHelp")}</p>
               <label className="settings-control-row"><span>{t("settings.autoDelete")}</span><select disabled={busy || !serverSessionVerified} value={trashRetentionDays === null ? "never" : String(trashRetentionDays)} onChange={(event) => void updateTrashRetention(event.target.value === "never" ? null : Number(event.target.value))}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 30 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></select></label>
-              <div className="trash-heading"><span><h3>{t("settings.deletedItems")}</h3>{trashItems.length > 0 && <small>{trashView.filtering ? t("settings.trashFilterSummary", { count: trashView.matchCount }) : t("settings.trashSummary", { roots: trashView.roots.length, total: trashItems.length })}</small>}</span>{trashItems.length > 0 && <span className="trash-heading-actions">{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton icon={ChevronsUp} className="trash-collapse-all" onClick={() => setExpandedTrashIds(new Set())}>{t("settings.collapseAll")}</SettingsButton>}<SettingsButton icon={Trash2} className="trash-clear danger" disabled={purging} onClick={onClearTrash}>{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></span>}</div>
+            </SettingsSection>
+            <SettingsSection title={t("settings.deletedItems")} description={trashItems.length > 0 && <p className="settings-help">{trashView.filtering ? t("settings.trashFilterSummary", { count: trashView.matchCount }) : t("settings.trashSummary", { roots: trashView.roots.length, total: trashItems.length })}</p>} actions={trashItems.length > 0 && <>{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton icon={ChevronsUp} className="trash-collapse-all" onClick={() => setExpandedTrashIds(new Set())}>{t("settings.collapseAll")}</SettingsButton>}<SettingsButton icon={Trash2} className="trash-clear danger" disabled={purging} onClick={onClearTrash}>{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></>}>
               {trashItems.length > 0 && <div className="trash-toolbar">
                 <label className="trash-search"><AppIcon icon={Search} size={16} /><input type="search" value={trashQuery} onChange={(event) => setTrashQuery(event.target.value)} placeholder={t("settings.searchTrash")} aria-label={t("settings.searchTrash")} /></label>
                 <select value={trashKindFilter} onChange={(event) => setTrashKindFilter(event.target.value as TrashKindFilter)} aria-label={t("settings.trashTypeFilter")}><option value="all">{t("settings.allTypes")}</option><option value="folder">{t("settings.foldersOnly")}</option><option value="note">{t("settings.notesOnly")}</option></select>
                 <select value={trashSortMode} onChange={(event) => setTrashSortMode(event.target.value as TrashSortMode)} aria-label={t("settings.trashSort")}><option value="deleted-desc">{t("settings.deletedNewest")}</option><option value="deleted-asc">{t("settings.deletedOldest")}</option><option value="name">{t("settings.sortByName")}</option></select>
               </div>}
               {visibleTrashRoots.length ? <><div className="trash-list settings-list" role="tree">{visibleTrashRoots.map((item) => <TrashBranch key={item.objectId} item={item} childrenByParent={trashView.childrenByParent} descendantCounts={trashView.descendantCounts} expandedIds={expandedTrashIds} automaticallyExpandedIds={trashView.automaticallyExpandedIds} root restoring={restoringTrashId} purging={purging} onToggle={toggleTrashFolder} onRestore={(entry) => void restoreTrashItem(entry)} onPurge={onPurgeTrash} />)}</div>{visibleTrashRootCount < trashView.roots.length && <SettingsButton icon={ChevronDown} className="trash-load-more" onClick={() => setVisibleTrashRootCount((count) => count + TRASH_PAGE_SIZE)}>{t("settings.showMore", { count: Math.min(TRASH_PAGE_SIZE, trashView.roots.length - visibleTrashRootCount) })}</SettingsButton>}</> : <p className="trash-empty">{trashItems.length ? t("settings.noTrashMatches") : t("settings.trashEmpty")}</p>}
-            </div>;
+            </SettingsSection></>;
 }

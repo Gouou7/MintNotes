@@ -1,6 +1,6 @@
 import { expect, test, type Locator } from "@playwright/test";
 
-const tabs = ["Appearance", "Account and security", "Notes and storage", "Administrator settings", "About"];
+const tabs = ["General", "Account and security", "Notes and storage", "Administrator settings", "About"];
 const database = { databaseBytes: 83886080, walBytes: 4194304, shmBytes: 32768, backupsBytes: 167772160,
   reusableBytes: 1048576, logicalBytes: 52428800, userCount: 1, sqliteVersion: "3.50.0", schemaVersion: 4,
   journalMode: "wal", checkedAt: "2026-10-23T10:30:00Z", available: true };
@@ -25,6 +25,33 @@ test.beforeEach(async ({ page }) => {
   } }));
 });
 
+for (const [name, width] of [["desktop", 1440], ["mobile", 320]] as const) {
+  test(`${name} unlimited storage remains readable in Chinese with large text`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto("/settings.html?unlimited&language=zh-CN");
+    await page.getByRole("combobox", { name: "字体大小", exact: true }).selectOption("17");
+    await page.locator(".settings-tabs").getByRole("button", { name: "笔记和存储", exact: true }).click();
+    const usage = page.locator(".storage-usage");
+    await expect(usage.locator(".storage-total")).toContainText("配额：不限");
+    await expect(usage.locator("progress")).toHaveCount(0);
+    await expect(usage.locator(".storage-composition > span")).toHaveCount(2);
+    await expect(usage.locator(".storage-pending-item strong")).toHaveText(["0", "0", "0"]);
+    expect(await usage.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await usage.screenshot({ path: info.outputPath(`${name}-storage-zh.png`) });
+    const history = page.locator(".history-usage");
+    await expect(history.locator("progress")).toHaveCount(0);
+    await expect(history.locator(".settings-help")).toHaveText("1.3 KiB / 不限 · 2 个版本");
+    await expect(history.getByRole("button", { name: "清空全部历史" })).toBeEnabled();
+    expect(await history.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await history.screenshot({ path: info.outputPath(`${name}-history-zh.png`) });
+    await page.locator(".settings-tabs").getByRole("button", { name: "管理员设置", exact: true }).click();
+    const databaseSection = page.locator(".database-storage");
+    await expect(databaseSection).toContainText("数据库连接正常");
+    expect(await databaseSection.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await databaseSection.screenshot({ path: info.outputPath(`${name}-database-zh.png`) });
+  });
+}
+
 for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 1112], ["mobile", 320, 568]] as const) {
   test(`${name} all settings pages share readable sections and reachable actions in both themes`, async ({ page }, info) => {
     await page.setViewportSize({ width, height });
@@ -32,7 +59,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
     const content = page.locator(".settings-content"), header = page.locator(".settings-header");
     await expect(page.locator(".settings-tabs button")).toHaveText(tabs);
     for (const theme of ["light", "dark"]) {
-      await page.getByRole("button", { name: "Appearance", exact: true }).click();
+      await page.getByRole("button", { name: "General", exact: true }).click();
       await page.getByRole("combobox", { name: "Theme", exact: true }).selectOption(theme);
       const fontSize = page.getByRole("combobox", { name: "Font size", exact: true });
       await expect(fontSize.locator("option")).toHaveText(["11 (Small)", "12", "13", "14 (Default)", "15", "16", "17 (Large)"]);
@@ -57,9 +84,39 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           const sample = document.createElement("span"); sample.style.color = "var(--accent-text)"; element.append(sample);
           const expected = getComputedStyle(sample).color; sample.remove(); return getComputedStyle(element).color === expected;
         })).toBe(true);
-        if (title === "Appearance") await expect(content.locator(".profile-summary")).toHaveCount(0);
-        if (title === "Account and security") await expect(content.locator(".security-settings > .profile-summary").first()).toContainText("Mint Notes");
+        if (title === "General") await expect(content.locator(".profile-summary")).toHaveCount(0);
+        if (title === "Account and security") {
+          await expect(content.locator(".security-settings > .profile-summary").first()).toContainText("Mint Notes");
+          const pin = content.locator(".settings-card-intro").filter({ has: page.getByRole("button", { name: "Set PIN", exact: true }) });
+          const row = (await pin.boundingBox())!, action = (await pin.getByRole("button", { name: "Set PIN", exact: true }).boundingBox())!;
+          expect(Math.abs(row.x + row.width - action.x - action.width)).toBeLessThanOrEqual(1);
+          if (name === "desktop") {
+            const description = (await pin.locator(".settings-card-description").boundingBox())!;
+            expect(description.x + description.width).toBeLessThanOrEqual(action.x);
+            expect(Math.abs(description.y + description.height / 2 - action.y - action.height / 2)).toBeLessThanOrEqual(1);
+          }
+        }
         await expect(content.locator(".settings-page-title")).toHaveText(title);
+        // Section headings are above the rounded card rather than inside its surface.
+        expect(await content.locator(".settings-group").evaluateAll(groups => groups.every(group => {
+          const heading = group.querySelector(":scope > h3")!;
+          const card = group.querySelector(":scope > .settings-card")!;
+          return heading.getBoundingClientRect().bottom <= card.getBoundingClientRect().top;
+        }))).toBe(true);
+        expect(await content.locator("button").evaluateAll(buttons => buttons.every(button => button.closest(".settings-card")))).toBe(true);
+        expect(await content.locator(".settings-card h3").evaluateAll(headings => headings.every(heading => heading.closest(".about-overview")))).toBe(true);
+        const logoutButton = page.locator(".settings-logout-section button");
+        await expect(logoutButton).toBeVisible();
+        const logoutBounds = (await logoutButton.boundingBox())!;
+        const modalBounds = (await page.locator(".settings-modal").boundingBox())!;
+        const contentBounds = (await content.boundingBox())!;
+        if (name === "mobile") {
+          expect(logoutBounds.y).toBeGreaterThanOrEqual(contentBounds.y + contentBounds.height);
+        } else {
+          expect(logoutBounds.x + logoutBounds.width).toBeLessThanOrEqual(contentBounds.x);
+        }
+        expect(logoutBounds.y + logoutBounds.height).toBeLessThanOrEqual(modalBounds.y + modalBounds.height);
+
         // Resolve the shared neutral color through CSS rather than comparing color syntax.
         expect(await nav.evaluate(element => {
           const sample = document.createElement("span"); sample.style.background = "var(--button-hover)"; element.append(sample);
@@ -93,33 +150,28 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           expect(close.y - modal.y).toBeLessThanOrEqual(10);
         }
         if (title === "Notes and storage") {
-          await expect(content.locator(".storage-categories dt")).toHaveText(["Notes", "Attachments", "Note history", "Trash"]);
-          await expect(content.locator(".storage-categories dd")).toHaveText(["12.0 MiB", "238.0 MiB", "120.0 MiB", "15.0 MiB"]);
-          await expect(content.locator(".storage-categories dd").first()).toHaveCSS("font-size", "22px");
+          await expect(content.locator(".storage-categories dt")).toHaveText(["Notes", "Attachments", "Note history", "Avatar"]);
+          await expect(content.locator(".storage-categories dd")).toHaveText(["12.0 MiB", "238.0 MiB", "120.0 MiB", "1.0 MiB"]);
+          await expect(content.locator(".storage-trash-note")).toContainText("Trash uses 15.0 MiB, included above.");
           const categories = content.locator(".storage-categories");
-          await expect(categories).toHaveCSS("border-radius", "8px");
-          await expect(categories).toHaveCSS("background-color", await content.locator(".storage-local .storage-pending").evaluate(element => getComputedStyle(element).backgroundColor));
-          const tiles = await categories.locator(".storage-count-item").evaluateAll(items => items.map(item => { const { x, y } = item.getBoundingClientRect(); return { x, y }; }));
-          expect(tiles[0].y).toBe(tiles[1].y);
-          expect(tiles[2].y).toBe(tiles[3].y);
-          expect(tiles[0].x).toBe(tiles[2].x);
-          expect(tiles[1].x).toBe(tiles[3].x);
-          expect(tiles[2].y).toBeGreaterThan(tiles[0].y);
+          expect(await categories.locator(".storage-count-item").evaluateAll(items => items.every(item => item.querySelector("dt")!.getBoundingClientRect().right <= item.querySelector("dd")!.getBoundingClientRect().left))).toBe(true);
+          const composition = content.locator(".storage-composition");
+          expect(await composition.evaluate(element => Math.abs([...element.children].reduce((sum, segment) => sum + segment.getBoundingClientRect().width, 0) - element.clientWidth))).toBeLessThanOrEqual(1);
           await expect(content.locator(".history-settings details")).toHaveCount(0);
           await expect(content.getByRole("combobox", { name: "Note history quota", exact: true })).toBeVisible();
           await expect(content.locator(".history-settings > .settings-help").first()).toBeVisible();
           await expect(content.locator(".history-settings > .settings-help").first()).toHaveCSS("font-size", "13px");
-          await expect(content.locator(".trash-list")).toHaveCSS("border-top-width", "1px");
-          await expect(content.locator(".trash-list")).toHaveCSS("border-radius", "10px");
+          await expect(content.locator(".trash-list")).toHaveCSS("border-top-width", "0px");
+          await expect(content.locator(".trash-list")).toHaveCSS("border-radius", "0px");
           for (const row of await content.locator(".trash-row").all()) {
             await expect(row).toHaveCSS("border-top-width", "0px");
             expect(await row.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
           }
           const counts = content.locator(".storage-pending-item");
           await expect(counts).toHaveCount(3);
-          expect(await counts.evaluateAll(items => items.every((item, i) => !i || item.getBoundingClientRect().left - items[i - 1].getBoundingClientRect().right >= 15))).toBe(true);
+          expect(await counts.evaluateAll(items => items.every((item, i) => !i || item.getBoundingClientRect().left - items[i - 1].getBoundingClientRect().right >= 11))).toBe(true);
           await expect(counts.locator("strong")).toHaveText(["12", "3", "24"]);
-          await expect(counts.first().locator("span")).toHaveCSS("font-size", "14px");
+          await expect(counts.first().locator("span")).toHaveCSS("font-size", "12px");
           const historyQuota = content.locator(".history-budget .quota-fields");
           await expect(historyQuota.locator("option")).toHaveText(["Unlimited", "100MiB", "200MiB", "500MiB", "Custom"]);
           const quotaSaved = page.waitForRequest(request => request.url().endsWith("/api/account/note-history-settings") && request.method() === "PATCH" && request.postDataJSON().quotaBytes === 200 * 1048576);
@@ -135,16 +187,18 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
             expect(controls!.width).toBeLessThanOrEqual(220);
           }
           const usage = content.locator(".history-usage");
-          await expect(usage.locator("strong")).toHaveText("Note history usage");
+          await expect(usage.locator(".settings-card-description > span")).toHaveText("Note history usage");
+          await expect(usage.locator(".settings-help")).toHaveText("120.0 MiB / 256.0 MiB · 128 versions");
+          await expect(usage.locator("progress")).toHaveCount(0);
+          await expect(usage).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+          await expect(usage).toHaveCSS("padding", "0px");
           const clear = usage.getByRole("button", { name: "Clear all history", exact: true });
-          const [progress, clearBounds] = await Promise.all([usage.locator("progress").boundingBox(), clear.boundingBox()]);
-          expect(clearBounds!.x).toBeGreaterThanOrEqual(progress!.x + progress!.width);
-          const meter = (await usage.locator(".history-usage-meter").boundingBox())!;
-          expect(Math.abs(clearBounds!.y + clearBounds!.height / 2 - meter.y - meter.height / 2)).toBeLessThanOrEqual(2);
+          await expect(clear).toHaveCSS("background-color", await logoutButton.evaluate(element => getComputedStyle(element).backgroundColor));
+          await expect(clear).toHaveCSS("color", await logoutButton.evaluate(element => getComputedStyle(element).color));
+          const [summary, clearBounds] = await Promise.all([usage.locator(".settings-card-description").boundingBox(), clear.boundingBox()]);
+          expect(clearBounds!.x >= summary!.x + summary!.width - 1 || clearBounds!.y >= summary!.y + summary!.height - 1).toBe(true);
           if (name === "desktop") {
-            const label = (await usage.locator(".history-usage-label").boundingBox())!;
-            expect(Math.abs(label.y + label.height / 2 - clearBounds!.y - clearBounds!.height / 2)).toBeLessThanOrEqual(2);
-            expect((await usage.boundingBox())!.height).toBeLessThanOrEqual(64);
+            expect(clearBounds!.x).toBeGreaterThanOrEqual(summary!.x + summary!.width);
           }
           await usage.scrollIntoViewIfNeeded();
           await page.screenshot({ path: info.outputPath(`${name}-${theme}-history-usage.png`) });
@@ -153,13 +207,17 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           await content.evaluate(element => { element.scrollTop = 0; });
         }
         if (title === "Administrator settings") {
+          const databaseSection = content.locator(".database-storage");
+          await expect(databaseSection.locator(".storage-categories dt")).toHaveText(["Main database file", "WAL file", "Shared memory file"]);
+          await expect(databaseSection.locator(".database-supplement")).toContainText("Stored separately");
+          expect(await databaseSection.locator(".storage-composition").evaluate(element => Math.abs([...element.children].reduce((sum, segment) => sum + segment.getBoundingClientRect().width, 0) - element.clientWidth))).toBeLessThanOrEqual(1);
           const form = content.locator(".admin-create");
           if (name !== "mobile") {
             const inputs = await form.locator("input, select").all();
             const bounds = await Promise.all(inputs.map(input => input.boundingBox()));
             expect(Math.max(...bounds.map(box => box!.y)) - Math.min(...bounds.map(box => box!.y))).toBeLessThanOrEqual(2);
             const row = content.locator(".user-row").first();
-            const identity = (await row.locator(":scope > span").boundingBox())!, actions = (await row.locator(".user-actions").boundingBox())!;
+            const identity = (await row.locator(".settings-list-details").boundingBox())!, actions = (await row.locator(".user-actions").boundingBox())!;
             expect(actions.x).toBeGreaterThanOrEqual(identity.x + identity.width);
           }
           const newQuota = content.locator(".admin-create .quota-fields");
@@ -172,9 +230,11 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           await content.evaluate(element => { element.scrollTop = 0; });
         }
         await page.screenshot({ path: info.outputPath(`${name}-${theme}-${title.replaceAll(" ", "-")}.png`) });
+        const footerBefore = await page.locator(".settings-logout-section").boundingBox();
         const chrome = await header.boundingBox(), titleBefore = (await content.locator(".settings-page-title").boundingBox())!;
         await content.evaluate(element => { element.scrollTop = element.scrollHeight; });
         expect(await header.boundingBox()).toEqual(chrome);
+        expect(await page.locator(".settings-logout-section").boundingBox()).toEqual(footerBefore);
         const scrolled = await content.evaluate(element => element.scrollTop);
         expect((await content.locator(".settings-page-title").boundingBox())!.y).toBeCloseTo(titleBefore.y - scrolled, 0);
         const last = content.locator("button:not(:disabled)").last();
@@ -186,13 +246,14 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
         }
       }
     }
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
+    await page.getByRole("button", { name: "General", exact: true }).click();
     await page.getByRole("combobox", { name: "Font size", exact: true }).selectOption("17");
     for (const title of tabs) {
       await page.locator(".settings-tabs").getByRole("button", { name: title, exact: true }).click();
       if (title === "Administrator settings") await expect(page.locator(".database-storage")).toContainText("Database available");
       expect(await content.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
       expect(await content.locator(".settings-card").evaluateAll(cards => cards.every(card => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
+      await expect(page.locator(".settings-logout-section button")).toHaveCSS("font-size", "17px");
       for (const button of await content.locator(".settings-action-button").all()) {
         await expect(button).toHaveCSS("font-size", "17px");
         await expect(button).toHaveCSS("font-weight", "700");
@@ -204,7 +265,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
       }
       await page.screenshot({ path: info.outputPath(`${name}-large-${title.replaceAll(" ", "-")}.png`) });
     }
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
+    await page.getByRole("button", { name: "General", exact: true }).click();
     await page.getByRole("combobox", { name: "Font size", exact: true }).selectOption("14");
     await page.getByRole("button", { name: "Account and security", exact: true }).click();
     await page.getByRole("button", { name: "Edit profile", exact: true }).click();

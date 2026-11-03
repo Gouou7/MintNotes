@@ -1,3 +1,4 @@
+import { SettingsSection } from "../../components/SettingsSection";
 import { useState, type FormEvent } from "react";
 import { Copy, KeyRound, Pencil, Plug, Trash2, X } from "lucide-react";
 import type { ApplicationConnection, ApplicationPolicy } from "@mint-notes/application-client";
@@ -44,11 +45,7 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
     try { await navigator.clipboard.writeText(value); onNotify(t("applications.copied"), "info"); }
     catch { onNotify(t("applications.copyFailed"), "warning"); }
   };
-  return <section className="settings-section settings-card application-connections" aria-label={t("applications.title")}>
-    <div className="settings-section-heading"><h3>{t("applications.title")}</h3>
-      <SettingsButton icon={Plug} className="primary" disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit("new")}>{t("applications.add")}</SettingsButton>
-    </div>
-    <p className="settings-help">{t("applications.help")}</p>
+  return <SettingsSection title={t("applications.title")} description={<p className="settings-help">{t("applications.help")}</p>} actions={<SettingsButton icon={Plug} className="primary" disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit("new")}>{t("applications.add")}</SettingsButton>} className="application-connections">
     {!online && <p className="session-gate">{t("notice.onlineSessionRequired")}</p>}
     {controller.error && <p className="error" role="alert">{t("applications.failed")}</p>}
     {editing && online && <form className="compact-form application-form" onSubmit={(event) => void submit(event)}>
@@ -86,5 +83,5 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
           : <SettingsButton icon={Trash2} className="danger" disabled={disabled || Boolean(controller.applicationKey)} onClick={() => setConfirming(row.connectionId)}>{t("applications.revoke")}</SettingsButton>}
       </div>
     </article>)}</div>
-  </section>;
+  </SettingsSection>;
 }

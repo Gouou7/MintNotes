@@ -39,7 +39,7 @@ it("places Add beside the heading and revokes or removes only the selected conne
   root = createRoot(container);
   await act(async () => root!.render(<I18nProvider><ApplicationConnectionsSection userId="user" online onNotify={vi.fn()} /></I18nProvider>));
   const button = (scope: Element, label: string) => [...scope.querySelectorAll("button")].find(node => node.textContent === label)!;
-  expect(button(container.querySelector(".settings-section-heading")!, "添加应用")).toBeTruthy();
+  expect(button(container.querySelector(".settings-card-intro")!, "添加应用")).toBeTruthy();
   expect(button(container, "刷新")).toBeUndefined();
   expect(button(container, "撤销所有应用")).toBeUndefined();
   const entries = () => [...container.querySelectorAll(".session-row")];

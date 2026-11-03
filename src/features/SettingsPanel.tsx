@@ -1,3 +1,4 @@
+import { SettingsSection } from "../components/SettingsSection";
 import type { StorageStatus } from "./storage/useStorageStatus";
 import { HistoryStorageSection } from "./storage/HistoryStorageSection";
 import { TrashStorageSection } from "./storage/TrashStorageSection";
@@ -5,7 +6,7 @@ import { MigrationStorageSection } from "./storage/MigrationStorageSection";
 import { RecoveryStorageSection } from "./storage/RecoveryStorageSection";
 import { StorageUsage, PendingStorage } from "./storageUsage";
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { Notebook, ChevronDown, ChevronRight, ChevronsUp, Check, Copy, Download, Ellipsis, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, Search, Settings, Palette, UserRoundCog, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
+import { Notebook, ChevronDown, ChevronRight, ChevronsUp, Check, Copy, Download, Ellipsis, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, Search, Settings, SlidersHorizontal, UserRoundCog, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
@@ -494,7 +495,7 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
         <aside className="settings-sidebar">
           <h2 className="settings-title"><AppIcon icon={Settings} size={16} />{t("settings.title")}</h2>
           <nav className="settings-tabs" aria-label={t("settings.title")}>
-            <button className={tab === "general" ? "active" : ""} aria-current={tab === "general" ? "page" : undefined} onClick={() => changeTab("general")}><AppIcon icon={Palette} size={16} />{t("settings.general")}</button>
+            <button className={tab === "general" ? "active" : ""} aria-current={tab === "general" ? "page" : undefined} onClick={() => changeTab("general")}><AppIcon icon={SlidersHorizontal} size={16} />{t("settings.general")}</button>
             <button className={tab === "security" ? "active" : ""} aria-current={tab === "security" ? "page" : undefined} onClick={() => changeTab("security")}><AppIcon icon={UserRoundCog} size={16} />{t("settings.security")}</button>
             <button className={tab === "storage" ? "active" : ""} aria-current={tab === "storage" ? "page" : undefined} onClick={() => changeTab("storage")}><AppIcon icon={Notebook} size={16} />{t("storage.title")}</button>
             {user.role === "admin" && serverSessionVerified && <button className={`admin-tab ${tab === "users" ? "active" : ""}`} aria-current={tab === "users" ? "page" : undefined} onClick={() => changeTab("users")}><AppIcon icon={ShieldCheck} size={16} />{t("settings.admin")}</button>}
@@ -507,7 +508,7 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
             <h2 className="settings-page-title">{pageTitle}</h2>
             {!serverSessionVerified && <p className="auth-guidance warning">{t("settings.localOnly")}</p>}
             {tab === "general" && <div className="settings-page general-settings">
-              <section className="settings-section settings-card"><h3>{t("settings.appearance")}</h3>
+              <SettingsSection title={t("settings.appearance")}>
               <label className="settings-control-row"><span>{t("language.label")}</span><LanguageSelect value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} /></label>
               <label className="settings-control-row"><span>{t("settings.theme")}</span><select value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select></label>
               <label className="settings-control-row font-size-setting"><span>{t("settings.fontSize")}</span>
@@ -515,7 +516,7 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
                   {Array.from({ length: MAX_FONT_SIZE - MIN_FONT_SIZE + 1 }, (_, index) => MIN_FONT_SIZE + index).map(size => <option key={size} value={size}>{size === MIN_FONT_SIZE ? t("settings.fontSizeSmall", { size }) : size === DEFAULT_FONT_SIZE ? t("settings.fontSizeDefault", { size }) : size === MAX_FONT_SIZE ? t("settings.fontSizeLarge", { size }) : size}</option>)}
                 </select>
               </label>
-              </section><section className="settings-section settings-card"><h3>{t("settings.editor")}</h3>
+              </SettingsSection><SettingsSection title={t("settings.editor")}>
               <label className="settings-control-row">
                 <span>{t("settings.wrapCodeBlocks")}</span>
                 <span className="settings-switch">
@@ -529,22 +530,18 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
                   <span className="settings-switch-track" aria-hidden="true" />
                 </span>
               </label>
-              </section>
+              </SettingsSection>
             </div>}
 
             {tab === "security" && <div className="settings-page security-settings">
               <div className="profile-summary settings-section settings-card"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={30} />}</span><span className="profile-identity"><strong>{user.displayName}</strong><small>@{user.username}</small></span><SettingsButton icon={Pencil} className="primary" disabled={busy || !serverSessionVerified} onClick={openProfileDialog}>{t("settings.editProfile")}</SettingsButton></div>
-              <section className="settings-section settings-card"><div className="settings-section-heading"><h3>{t("settings.devicePin")}</h3>
-              <div className="settings-actions"><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</div></div><p className="settings-help">{t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}</p>
-              </section><section className="settings-section settings-card"><h3>{t("settings.autoLock")}</h3><p className="settings-help">{t("settings.autoLockHelp")}</p>
+              <SettingsSection title={t("settings.devicePin")} actions={<><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</>} description={<p className="settings-help">{t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}</p>} /><SettingsSection title={t("settings.autoLock")}><p className="settings-help">{t("settings.autoLockHelp")}</p>
               <label className="settings-control-row"><span>{t("settings.autoLockAfter")}</span><select disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select></label>
-              </section><section className="settings-section settings-card"><h3>{t("settings.loginDevices")}</h3><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
+              </SettingsSection><SettingsSection title={t("settings.loginDevices")}><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
               {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
               {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && device.active) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list settings-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row settings-list-row ${device.current ? "current" : ""}`} key={device.id}><span className="settings-list-icon"><AppIcon icon={Laptop} size={20} /></span><span className="session-details settings-list-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && <div className="settings-list-actions">{device.active ? <SettingsButton icon={LogOut} className="session-revoke danger" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}>{t("settings.signOut")}</SettingsButton> : <SettingsButton icon={Trash2} className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}>{t("common.remove")}</SettingsButton>}</div>}</article>)}</div></>}
-              </section><ApplicationConnectionsSection userId={user.id} online={serverSessionVerified} onNotify={onNotify} />
-              <section className="settings-section settings-card"><h3>{t("settings.accountCredentials")}</h3><p className="settings-help">{t("settings.accountCredentialsHelp")}</p>
-              <div className="settings-actions"><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</SettingsButton><SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}>{t("settings.resetRecovery")}</SettingsButton></div>
-              </section>
+              </SettingsSection><ApplicationConnectionsSection userId={user.id} online={serverSessionVerified} onNotify={onNotify} />
+              <SettingsSection title={t("settings.accountCredentials")} description={<p className="settings-help">{t("settings.accountCredentialsHelp")}</p>} actions={<><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</SettingsButton><SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}>{t("settings.resetRecovery")}</SettingsButton></>} />
             </div>}
 
             {tab === "storage" && <div className="settings-page note-storage-settings">
@@ -563,20 +560,20 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
               <div className="about-introduction">
                 <p>{t("settings.aboutDescription")}</p>
               </div>
-              </section><section className="settings-section settings-card"><h3>{t("settings.acknowledgements")}</h3>
+              </section><SettingsSection title={t("settings.acknowledgements")}>
               <p className="settings-help">{t("settings.aboutHelp")}</p>
               <ul className="about-credits">
                 <li><a href="https://github.com/Yuyz0112/typora-web" target="_blank" rel="noreferrer">typora-web</a><span>{t("settings.editorCoreOrigin")}</span></li>
                 <li><a href="https://katex.org/" target="_blank" rel="noreferrer">KaTeX</a><span>{t("settings.mathFormulaRendering")}</span></li>
                 <li><a href="https://mermaid.js.org/" target="_blank" rel="noreferrer">Mermaid</a><span>{t("settings.diagramRendering")}</span></li>
                 <li><a href="https://lucide.dev" target="_blank" rel="noreferrer">Lucide React</a><span>{t("settings.iconLibrary")}</span></li>
-              </ul></section>
+              </ul></SettingsSection>
             </div>}
             {tab === "users" && user.role === "admin" && serverSessionVerified && <div className="admin-settings"><AdminPanel currentUser={user} onNotify={onNotify} /></div>}
-            {tab === "security" && <div className="settings-logout-section">
-              <SettingsButton icon={LogOut} type="button" className="settings-logout danger" onClick={() => setLogoutConfirming(true)}>{t("app.logout")}</SettingsButton>
-            </div>}
           </div>
+        </div>
+        <div className="settings-logout-section">
+          <SettingsButton icon={LogOut} type="button" className="settings-logout danger" onClick={() => setLogoutConfirming(true)}>{t("app.logout")}</SettingsButton>
         </div>
       </div>
       {profileDialogOpen && <div className="danger-confirm profile-edit-dialog settings-section" role="dialog" aria-modal="true" aria-label={t("settings.editProfile")}>

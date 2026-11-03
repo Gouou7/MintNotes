@@ -1,3 +1,4 @@
+import { SettingsSection } from "../../components/SettingsSection";
 import { Trash2 } from "lucide-react";
 import { SettingsButton } from "../../components/SettingsButton";
 import { useI18n } from "../../i18n";
@@ -11,8 +12,7 @@ export function HistoryStorageSection({ historySettings, busy, serverSessionVeri
 }) {
  const { t } = useI18n();
  const quota = useHistoryQuotaAutoSave(historySettings.quotaBytes, busy, serverSessionVerified, updateHistorySettings);
-            return <div className="settings-section settings-card history-settings">
-              <h3>{t("settings.history")}</h3>
+            return <SettingsSection title={t("settings.history")} className="history-settings">
               <label className="settings-control-row">
                 <span>{t("settings.historyAutomatic")}</span>
                 <span className="settings-switch">
@@ -33,13 +33,12 @@ export function HistoryStorageSection({ historySettings, busy, serverSessionVeri
               <div className="history-budget" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void quota.flush(); }}>
                 <QuotaFields presets={HISTORY_QUOTA_PRESETS} label={t("storage.historyBudget")} value={quota.draft} onChange={quota.change} disabled={busy || quota.saving || !serverSessionVerified} />
               </div><p className="settings-help">{t("storage.historyBudgetHelp")}</p>
-              <div className="history-usage">
-                <span className="history-usage-label"><strong>{t("settings.historyStorage")}</strong><small>{t("settings.historyVersionCount", { count: historySettings.count })}</small></span>
-                <div className="history-usage-meter">
-                  {historySettings.quotaBytes !== null && <progress aria-label={t("settings.historyStorage")} max={historySettings.quotaBytes} value={Math.min(historySettings.usedBytes, historySettings.quotaBytes)} />}
-                  <span>{formatHistoryBytes(historySettings.usedBytes)} / {historySettings.quotaBytes === null ? t("storage.unlimited") : formatHistoryBytes(historySettings.quotaBytes)}</span>
+              <div className="settings-card-intro history-usage">
+                <div className="settings-card-description">
+                  <span>{t("settings.historyStorage")}</span>
+                  <p className="settings-help">{formatHistoryBytes(historySettings.usedBytes)} / {historySettings.quotaBytes === null ? t("storage.unlimited") : formatHistoryBytes(historySettings.quotaBytes)} · {t("settings.historyVersionCount", { count: historySettings.count })}</p>
                 </div>
-                <SettingsButton icon={Trash2} className="danger" disabled={busy || !serverSessionVerified || historySettings.count === 0} onClick={() => void onClearHistory()}>{t("settings.historyClearAll")}</SettingsButton>
+                <div className="settings-actions"><SettingsButton icon={Trash2} className="danger" disabled={busy || !serverSessionVerified || historySettings.count === 0} onClick={() => void onClearHistory()}>{t("settings.historyClearAll")}</SettingsButton></div>
               </div>
-            </div>;
+            </SettingsSection>;
 }

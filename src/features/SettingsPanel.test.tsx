@@ -108,7 +108,7 @@ describe("SettingsPanel", () => {
   it("keeps appearance controls separate from the account profile", async () => {
     const container = await renderSettings();
     expect(container.querySelector(".profile-summary")).toBeNull();
-    expect(container.querySelector(".settings-section > h3")?.textContent).toBe("外观");
+    expect(container.querySelector(".settings-group > h3")?.textContent).toBe("外观");
     expect(container.textContent).toContain("字体大小");
     expect(container.textContent).toContain("编辑器代码块自动换行");
     expect(container.textContent).toContain("语言");
@@ -334,7 +334,7 @@ describe("SettingsPanel", () => {
   it("keeps About last and hides administration for ordinary users", async () => {
     const container = await renderSettings({ ...admin, role: "user" });
     expect([...container.querySelectorAll(".settings-tabs button")].map(entry => entry.textContent?.trim()))
-      .toEqual(["外观", "用户和安全", "笔记和存储", "关于"]);
+      .toEqual(["通用", "用户和安全", "笔记和存储", "关于"]);
     expect(container.querySelector(".admin-tab")).toBeNull();
   });
 
@@ -342,12 +342,12 @@ describe("SettingsPanel", () => {
     const onNotify = vi.fn();
     const container = await renderSettings(admin, onNotify);
     const tabs = [...container.querySelectorAll(".settings-tabs button")];
-    expect(tabs.map((entry) => entry.textContent?.trim())).toEqual(["外观", "用户和安全", "笔记和存储", "管理员设置", "关于"]);
+    expect(tabs.map((entry) => entry.textContent?.trim())).toEqual(["通用", "用户和安全", "笔记和存储", "管理员设置", "关于"]);
     expect(tabs.slice(0, 6).every((entry) => Boolean(entry.querySelector("svg")))).toBe(true);
     await act(async () => button(container, "用户和安全").click());
     expect(container.textContent).toContain("管理登录设备并移除失效记录。");
     expect(container.textContent).toContain("已登出和已过期的设备记录将在 30 天后自动移除");
-    const headings = [...container.querySelectorAll(".settings-section h3")].map((entry) => entry.textContent?.trim());
+    const headings = [...container.querySelectorAll(".settings-group > h3")].map((entry) => entry.textContent?.trim());
     expect(headings.slice(0, 5)).toEqual(["本机 PIN", "自动锁定", "登录设备", "应用连接", "账户凭据"]);
     expect(button(container, "设置 PIN")).toBeTruthy();
     expect(container.querySelector("input[placeholder='至少 4 个字符']")).toBeNull();
@@ -525,13 +525,13 @@ describe("SettingsPanel", () => {
     await act(async () => button(container, "管理员设置").click());
     await act(async () => { await Promise.resolve(); });
     const management = container.querySelector(".admin-user-management");
-    expect(management?.firstElementChild?.textContent).toBe("用户管理");
+    expect(management?.previousElementSibling?.textContent).toBe("用户管理");
     expect([...management!.querySelectorAll(".admin-subsection h4")].map((heading) => heading.textContent)).toEqual(["新增用户", "现有用户"]);
     expect(container.textContent).not.toContain("创建待激活用户");
     expect(button(container, "禁用").querySelector(".lucide-user-round-x")).toBeTruthy();
     expect(button(container, "删除").querySelector(".lucide-trash-2")).toBeTruthy();
     await act(async () => button(container, "笔记和存储").click());
-    expect(container.querySelector(".note-storage-settings > .storage-migration > h3")?.textContent).toBe("笔记迁移");
+    expect(container.querySelector(".storage-migration")?.previousElementSibling?.textContent).toBe("笔记迁移");
     expect([...container.querySelectorAll(".note-storage-settings h3")].map((node) => node.textContent).filter((text) => ["存储用量", "笔记历史", "回收站", "笔记迁移"].includes(text ?? ""))).toEqual(["存储用量", "笔记历史", "回收站", "笔记迁移"]);
     expect(container.textContent).not.toContain("可移植数据");
     expect(container.textContent).not.toContain("密文快照");
@@ -561,18 +561,17 @@ describe("SettingsPanel", () => {
     expect(container.querySelector("a[href='https://lucide.dev']")).toBeTruthy();
   });
 
-  it("shows logout only at the bottom of Account and security and requires confirmation", async () => {
+  it("keeps logout in the settings footer across tabs and requires confirmation", async () => {
     const onLogout = vi.fn();
     const container = await renderSettings(admin, vi.fn(), vi.fn(), onLogout);
-    expect(container.querySelector(".settings-logout-section")).toBeNull();
-    await act(async () => button(container, "用户和安全").click());
     const logoutSection = container.querySelector(".settings-logout-section");
-    expect(logoutSection).toBeTruthy();
-    expect(logoutSection?.parentElement).toBe(container.querySelector(".settings-content"));
-    await act(async () => button(container, "外观").click());
-    expect(container.querySelector(".settings-logout-section")).toBeNull();
-    await act(async () => button(container, "用户和安全").click());
-    await act(async () => (container.querySelector(".settings-logout-section button") as HTMLButtonElement).click());
+    expect(logoutSection?.parentElement).toBe(container.querySelector(".settings-layout"));
+    expect(container.querySelector(".settings-content .settings-logout-section")).toBeNull();
+    for (const label of ["用户和安全", "笔记和存储", "关于", "通用"]) {
+      await act(async () => button(container, label).click());
+      expect(container.querySelector(".settings-logout-section")).toBe(logoutSection);
+    }
+    await act(async () => (logoutSection!.querySelector("button") as HTMLButtonElement).click());
     expect(onLogout).not.toHaveBeenCalled();
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("确认从当前设备登出？");
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
