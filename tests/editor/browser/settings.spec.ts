@@ -325,6 +325,48 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
   });
 }
 
+test("settings rows keep available space and move complete action groups when narrowed", async ({ page }, info) => {
+  await page.goto("/settings.html?language=zh-CN");
+  const content = page.locator(".settings-content");
+  for (const size of ["14", "17"]) {
+    for (const width of [520, 390, 320]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.locator(".settings-tabs").getByRole("button", { name: "通用", exact: true }).click();
+      await page.getByRole("combobox", { name: "字体大小", exact: true }).selectOption(size);
+      for (const row of await content.locator(".general-settings .settings-item:has(select)").all()) {
+        const copy = (await row.locator(".settings-item-copy").boundingBox())!;
+        const control = (await row.locator("select").boundingBox())!;
+        if (width >= 390) expect(Math.abs(copy.y + copy.height / 2 - control.y - control.height / 2)).toBeLessThanOrEqual(1);
+        else expect(control.y).toBeGreaterThanOrEqual(copy.y + copy.height);
+      }
+      await page.locator(".settings-tabs").getByRole("button", { name: "用户和安全", exact: true }).click();
+      const profile = content.locator(".profile-summary");
+      const avatar = (await profile.locator(".profile-avatar").boundingBox())!;
+      const edit = (await profile.getByRole("button").boundingBox())!;
+      if (width >= 390) expect(Math.abs(avatar.y + avatar.height / 2 - edit.y - edit.height / 2)).toBeLessThanOrEqual(1);
+      else expect(edit.y).toBeGreaterThanOrEqual(avatar.y + avatar.height);
+      // A button group moves as a unit; the text and controls never overlap.
+      expect(await content.locator(".settings-item").evaluateAll(rows => rows.every(row => {
+        const copy = row.querySelector(".settings-item-copy")!.getBoundingClientRect();
+        const control = row.querySelector(".settings-item-control")!.getBoundingClientRect();
+        return control.left >= copy.right - 1 || control.top >= copy.bottom - 1;
+      }))).toBe(true);
+      if (size === "14" && width === 520) await page.screenshot({ path: info.outputPath("compact-security-actions.png") });
+      await page.locator(".settings-tabs").getByRole("button", { name: "管理员设置", exact: true }).click();
+      const row = content.locator(".user-row").first();
+      await expect(row).toBeVisible();
+      const details = (await row.locator(".settings-list-details").boundingBox())!;
+      const actions = (await row.locator(".settings-list-actions").boundingBox())!;
+      if (width === 520) expect(actions.x).toBeGreaterThanOrEqual(details.x + details.width - 1);
+      else expect(actions.y).toBeGreaterThanOrEqual(details.y + details.height - 1);
+      const buttons = await row.locator(".settings-list-actions button").all();
+      const bounds = await Promise.all(buttons.map(button => button.boundingBox()));
+      expect(Math.max(...bounds.map(box => box!.y)) - Math.min(...bounds.map(box => box!.y))).toBeLessThanOrEqual(1);
+      expect(await content.locator(".settings-card").evaluateAll(cards => cards.every(card => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
+    }
+  }
+});
+
 test("offline settings retain a visible notice and respect forced colors", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/settings.html?offline");
