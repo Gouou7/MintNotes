@@ -36,8 +36,7 @@ describe("maintenance logging", () => {
         fields: expect.objectContaining({
           event: "maintenance.failed",
           job: "history",
-          errorType: "Error",
-          errorMessage: "controlled maintenance failure"
+          errorType: "Error"
         })
       }),
       expect.objectContaining({
@@ -45,6 +44,7 @@ describe("maintenance logging", () => {
         fields: expect.objectContaining({ event: "maintenance.completed", job: "endpoints", affected: 0 })
       })
     ]));
+    expect(JSON.stringify(records)).not.toContain("controlled maintenance failure");
     controller.stop();
   });
 });

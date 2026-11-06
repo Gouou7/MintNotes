@@ -10,8 +10,13 @@ export function acquireStorageLock(directory: string): () => void {
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     const pid = Number(readFileSync(path, "utf8"));
-    if (!Number.isSafeInteger(pid) || pid < 1) throw new Error("STORAGE_LOCK_INVALID");
-    try { process.kill(pid, 0); throw new Error("STORAGE_IN_USE_STOP_SERVICE_FIRST"); }
+    if (!Number.isSafeInteger(pid) || pid < 1) {
+      throw Object.assign(new Error("STORAGE_LOCK_INVALID"), { code: "STORAGE_LOCK_INVALID" });
+    }
+    try {
+      process.kill(pid, 0);
+      throw Object.assign(new Error("STORAGE_IN_USE_STOP_SERVICE_FIRST"), { code: "STORAGE_IN_USE_STOP_SERVICE_FIRST" });
+    }
     catch (probe) { if ((probe as NodeJS.ErrnoException).code !== "ESRCH") throw probe; }
     unlinkSync(path); fd = openSync(path, "wx");
   }

@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
+import { smokeServerDiagnostics } from "./smoke-server-diagnostics.mjs";
 
 const nativeFetch = globalThis.fetch;
 const leases = new Map();
@@ -645,3 +646,5 @@ try {
   }
   await rm(dataDirectory, { recursive: true, force: true });
 }
+
+await smokeServerDiagnostics(port);

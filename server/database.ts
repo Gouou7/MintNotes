@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { initializeApplicationConnections } from "./applications/service.js";
 import { migrateStorage } from "./storageMigration.js";
 import { migrationBackup } from "./backupStorage.js";
+import type { ReportStartup } from "./logging.js";
 
 export type AppDatabase = Database.Database;
 export type RegistrationRole = "admin" | "user";
@@ -28,9 +29,20 @@ export function runRegistrationTransaction<T>(
   return transaction.immediate();
 }
 
-export function openDatabase(dataDirectory: string): AppDatabase {
+export function openDatabase(dataDirectory: string, reportStartup?: ReportStartup): AppDatabase {
+  reportStartup?.({ phase: "database_open" });
   mkdirSync(dataDirectory, { recursive: true });
   const db = new Database(join(dataDirectory, "notes.sqlite"));
+  try {
+    initializeDatabase(db, dataDirectory, reportStartup);
+    return db;
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+}
+
+function initializeDatabase(db: AppDatabase, dataDirectory: string, reportStartup?: ReportStartup): void {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("busy_timeout = 5000");
@@ -38,17 +50,18 @@ export function openDatabase(dataDirectory: string): AppDatabase {
   const version = Number(db.pragma("user_version", { simple: true }));
   const hasLegacyTables = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get());
   if (version !== 0 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== SCHEMA_VERSION) {
-    db.close();
-    throw new Error(`Unsupported database schema ${version}; Mint Notes requires a fresh schema v${SCHEMA_VERSION} volume`);
+    throw Object.assign(new Error(`Unsupported database schema ${version}`), { code: "SCHEMA_UNSUPPORTED" });
   }
   if (version === 0 && hasLegacyTables) {
-    db.close();
-    throw new Error("Legacy database detected; export and back it up, then deploy Mint Notes v2 with a fresh data volume");
+    throw Object.assign(new Error("Legacy database detected; export and back it up, then deploy Mint Notes v2 with a fresh data volume"), { code: "SCHEMA_UNSUPPORTED" });
   }
 
-  try {
-    if (version > 0 && version < SCHEMA_VERSION) migrationBackup(db, join(dataDirectory, "backups", "pre-schema6.sqlite"));
-  } catch (error) { db.close(); throw error; }
+  if (version > 0 && version < SCHEMA_VERSION) {
+    const schemas = { fromSchema: version, toSchema: SCHEMA_VERSION };
+    reportStartup?.({ phase: "migration_backup", ...schemas });
+    migrationBackup(db, join(dataDirectory, "backups", "pre-schema6.sqlite"));
+    reportStartup?.({ phase: "migration_apply", ...schemas });
+  }
   const initialize = db.transaction(() => {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -342,6 +355,5 @@ export function openDatabase(dataDirectory: string): AppDatabase {
     PRAGMA user_version = 6;
   `);
   });
-  try { initialize.immediate(); } catch (error) { db.close(); throw error; }
-  return db;
+  initialize.immediate();
 }

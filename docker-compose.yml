@@ -46,7 +46,7 @@ services:
     healthcheck:
       # Probe the HTTP server from inside the container without depending on
       # the host port or an external reverse proxy.
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "server-dist/healthcheck.js"]
       interval: 30s
       timeout: 5s
       retries: 3

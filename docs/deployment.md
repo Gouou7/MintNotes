@@ -101,7 +101,7 @@ pnpm prepare:editor
 | `NOTE_BODY_CHUNKING` | `true` | 是否允许旧正文转换为分块格式；关闭后已分块笔记仍可读写。 |
 | `TRUST_PROXY` | 标准部署为 `true` | 高级配置；Compose、`.env.example` 和上面的 pnpm 启动命令均已设置，无须修改。直接运行服务且未设置或留空时为 `false`。 |
 | `BACKUP_DIR` | `/data/backups` | 由备份命令读取的输出目录，须为运行账户可写。Compose 未转发此变量，默认写入容器的 `/data/backups`。 |
-| `LOG_LEVEL` | `info` | `trace` 至 `fatal`、`silent`。 |
+| `LOG_LEVEL` | `info` | `trace` 至 `fatal`、`silent`。致命错误在 `silent` 下仍会输出。 |
 
 Docker 部署在 `.env` 中填写 Compose 已声明的变量；pnpm 部署通过进程管理器注入。`BACKUP_DIR` 仅由备份命令读取，在 `.env` 中单独设置不会改变容器的备份目录；需要调整时须向该命令显式传入环境变量，并确保目标目录可写且已持久化。不要在任何环境文件中保存主密码、恢复密钥或保险库密钥。
 
@@ -117,11 +117,23 @@ Docker 部署在 `.env` 中填写 Compose 已声明的变量；pnpm 部署通过
 
 `APP_ORIGIN` 留空即可自动校验访问来源；仅需固定一个来源时才填写用户访问的 HTTPS 源（含非默认端口）。应用服务会协商压缩文本响应，对带内容哈希的静态资源发送一年不可变缓存，对应用入口和 Service Worker 要求重新验证；反向代理不应覆盖这些响应头。`/api/sync/events` 是服务器发送事件（SSE）长连接，应关闭代理缓冲与缓存并保留较长超时。流中断只会降低同步及时性。
 
-生产日志写入 stdout，使用 JSON。Docker 部署可直接查看：
+生产日志以单行 JSON 写入 stdout。默认级别会记录 `server.starting` 和启动阶段，监听成功后出现 `server.started`。启动失败时，`server.fatal` 中的 `phase`、`code` 和 `hint` 标明失败位置、原因与排查方法。重启循环按 `bootId` 区分每次启动。请求失败时，可用响应的 `X-Request-ID` 查找对应日志，常见会话与同步失败另有 `reasonCode`。
 
-```bash
-docker compose logs --tail=100 notes
-```
+本地运行 `pnpm dev` 时，可在同一终端的 `[api]` 输出中查看启动阶段和错误。需要更多细节时，在启动前将当前终端的 `LOG_LEVEL` 环境变量设为 `debug`。
+
+#### Docker 日志为空或启动失败
+
+1. 在部署所用的 Compose 目录运行 `docker compose ps -a notes`。若没有容器，先核对 Compose 项目与 Docker context，并查看启动命令的错误输出。
+2. 运行 `docker compose logs --timestamps --tail=100 notes` 查看历史日志。追加 `-f` 可继续等待新日志。健康探针成功时不会追加日志。
+3. 如果仍无日志，从第一步取得容器名称，将下列命令中的 `notes-1` 换成实际名称。核对状态、退出码、OOM、重启次数、日志驱动和探针输出。探针使用容器内的 `PORT`，失败时报告拒绝连接、超时或 HTTP 状态。若探针健康但宿主机访问失败，核对端口映射与反向代理。
+
+   ```bash
+   docker inspect --format 'state={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}} driver={{.HostConfig.LogConfig.Type}} health={{json .State.Health}}' notes-1
+   ```
+
+4. 需要更多日志时，在部署的 `.env` 中临时设置 `LOG_LEVEL=debug`，运行 `docker compose up -d --no-deps notes` 使配置生效。排查结束后用相同步骤恢复 `info`。
+
+若报 `STORAGE_IN_USE_STOP_SERVICE_FIRST` 或 `STORAGE_LOCK_INVALID`，先运行 `docker compose stop notes`，确认没有其他容器、宿主机进程或维护任务使用同一数据目录。确认 `.mint-notes.lock` 是旧进程留下的文件后，可在停机状态改名归档，再启动服务。保留数据库、WAL 与备份。
 
 pnpm 部署应由进程管理器收集和轮转 stdout／stderr。Compose默认每份10MiB、保留3份；pnpm部署的日志由进程管理器或主机轮转。允许记录的内容与运维责任见[系统设计](system-design.md#日志与运维责任)。
 

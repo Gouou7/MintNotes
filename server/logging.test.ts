@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "./testSupport";
 import { loadServerConfig } from "./config";
 import { openDatabase } from "./database";
-import { createLoggerOptions, LogReferenceFactory } from "./logging";
+import { createBootLogger, createLoggerOptions, LogReferenceFactory } from "./logging";
 
 const temporaryDirectories: string[] = [];
 
@@ -41,7 +41,23 @@ describe("server logging configuration", () => {
   it("validates LOG_LEVEL and defaults it to info", () => {
     expect(loadServerConfig({ NODE_ENV: "production", APP_ORIGIN: "https://notes.example.test" }).logLevel).toBe("info");
     expect(loadServerConfig({ NODE_ENV: "development", LOG_LEVEL: "debug" }).logLevel).toBe("debug");
-    expect(() => loadServerConfig({ LOG_LEVEL: "verbose" })).toThrow("Invalid LOG_LEVEL: verbose");
+    expect(() => loadServerConfig({ LOG_LEVEL: "verbose" })).toThrow("Invalid LOG_LEVEL");
+  });
+
+  it("emits one sanitized fatal record at the failing step even in silent mode", () => {
+    const lines: string[] = [];
+    const boot = createBootLogger({ LOG_LEVEL: "silent" }, { write: (line) => lines.push(line) });
+    boot.starting();
+    boot.step({ phase: "storage_lock" });
+    const error = Object.assign(new Error("private data directory"), { code: "EROFS", name: "private name" });
+    boot.fatal("startup", error);
+    boot.fatal("shutdown", error);
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({
+      event: "server.fatal", bootId: boot.bootId, phase: "storage_lock",
+      code: "STORAGE_PERMISSION_DENIED", causeCode: "EROFS"
+    });
+    expect(lines[0]).not.toMatch(/private|errorStack/);
   });
 
   it("uses pretty development output and dependency-free production JSON", () => {
@@ -84,6 +100,7 @@ describe("HTTP and business logs", () => {
       config,
       db,
       maintenance: false,
+      bootId: "test-boot",
       logDestination: { write: (message) => lines.push(message) }
     });
     app.get("/api/test/error", async () => {
@@ -114,6 +131,16 @@ describe("HTTP and business logs", () => {
       origin: config.appOrigin,
       cookie: cookieHeader(registration.headers["set-cookie"])
     };
+    const mismatched = await browserInject(app, { url: "/api/auth/me", headers: {
+      ...headers, "x-webmd-session": "session-binding-must-not-be-logged"
+    } });
+    const reauth = await browserInject(app, { method: "POST", url: "/api/auth/session/resume", headers, payload: {
+      id: "00000000-0000-4000-8000-000000000124", secret: "s".repeat(43)
+    } });
+    const oldBrowser = await app.inject({ method: "POST", url: "/api/auth/login", headers, payload: {} });
+    const oldSync = await browserInject(app, { url: "/api/sync/status", headers: {
+      ...headers, "x-webmd-protocol": "old-protocol-must-not-be-logged"
+    } });
     expect((await browserInject(app, {
       method: "POST",
       url: "/api/auth/login",
@@ -145,6 +172,11 @@ describe("HTTP and business logs", () => {
       baseRevision,
       idempotencyKey: newOperationId(),
       deleted: false
+    });
+    const reconcile = await browserInject(app, {
+      method: "PUT", url: `/api/objects/${objectId}`,
+      headers: { ...headers, "x-webmd-sync-lease": "invalid-lease-must-not-be-logged" },
+      payload: writePayload(0, firstCiphertext)
     });
     expect((await browserInject(app, {
       method: "PUT",
@@ -178,9 +210,20 @@ describe("HTTP and business logs", () => {
     expect(completionRecords).toEqual(expect.arrayContaining([
       expect.objectContaining({ route: "/api/auth/register", statusCode: 201, level: 30 }),
       expect.objectContaining({ route: "/api/objects/:objectId", statusCode: 409, level: 40 }),
-      expect.objectContaining({ route: "/api/objects/:objectId", statusCode: 413, level: 40 }),
+      expect.objectContaining({ route: "/api/objects/:objectId", statusCode: 413, level: 40, reasonCode: "CONTENT_QUOTA_EXCEEDED" }),
       expect.objectContaining({ route: "/api/test/error", statusCode: 500, level: 50 })
     ]));
+    for (const [response, statusCode, reasonCode] of [
+      [mismatched, 409, "BROWSER_SESSION_CHANGED"],
+      [reauth, 401, "DEVICE_REAUTH_REQUIRED"],
+      [oldBrowser, 426, "BROWSER_UPGRADE_REQUIRED"],
+      [oldSync, 426, "PROTOCOL_UPGRADE_REQUIRED"],
+      [reconcile, 409, "SYNC_RECONCILE_REQUIRED"]
+    ] as const) {
+      expect(response.statusCode).toBe(statusCode);
+      expect(completionRecords.filter((record) => record.requestId === response.headers["x-request-id"]))
+        .toEqual([expect.objectContaining({ bootId: "test-boot", statusCode, reasonCode })]);
+    }
     expect(records).toEqual(expect.arrayContaining([
       expect.objectContaining({ event: "auth.registered", role: "admin" }),
       expect.objectContaining({ event: "auth.login_failed", reason: "invalid_credentials" }),
@@ -210,6 +253,10 @@ describe("HTTP and business logs", () => {
       firstCiphertext,
       "nonce-value-must-not-be-logged",
       "Private invite",
+      "session-binding-must-not-be-logged",
+      "old-protocol-must-not-be-logged",
+      "invalid-lease-must-not-be-logged",
+      "s".repeat(43),
       "controlled test failure"
     ]) {
       expect(output).not.toContain(forbidden);

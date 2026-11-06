@@ -50,6 +50,7 @@ FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ARG APP_VERSION
 ARG VCS_REF
 ENV NODE_ENV=production
+ENV APP_VERSION=$APP_VERSION
 ENV UV_USE_IO_URING=0
 WORKDIR /app
 LABEL org.opencontainers.image.title="Mint Notes" \

@@ -1,7 +1,6 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
   type FastifyBaseLogger,
-  type FastifyError,
   type FastifyInstance,
   type FastifyLoggerOptions,
   type FastifyRequest
@@ -19,7 +18,7 @@ export const LOG_LEVELS = [
 
 export type LogLevel = typeof LOG_LEVELS[number];
 export interface ServerLoggerOptions extends FastifyLoggerOptions {
-  base?: null;
+  base?: { bootId: string } | null;
   redact?: { paths: string[]; censor: string };
   transport?: {
     target: string;
@@ -38,6 +37,7 @@ export interface LogDestination {
 interface LoggerConfig {
   production: boolean;
   logLevel: LogLevel;
+  bootId?: string;
 }
 
 const REDACTED = "[Redacted]";
@@ -90,15 +90,12 @@ export function createLoggerOptions(
 ): ServerLoggerOptions {
   const common: ServerLoggerOptions = {
     level: config.logLevel,
-    base: null,
+    base: config.bootId ? { bootId: config.bootId } : null,
     redact: { paths: REDACT_PATHS, censor: REDACTED },
     serializers: {
-      err(error: FastifyError) {
-        return {
-          type: error.name,
-          message: REDACTED,
-          stack: REDACTED
-        };
+      err(error) {
+        const { errorType, errorCode } = safeError(error);
+        return { type: errorType, message: REDACTED, stack: REDACTED, errorCode };
       }
     }
   };
@@ -148,36 +145,116 @@ export class LogReferenceFactory {
 }
 
 export interface SafeError {
-  errorType: string;
-  errorMessage: string;
-  errorStack?: string;
+  errorType: "Error" | "UnknownError";
+  errorCode?: string;
 }
+
+const safeErrorCodes = new Set([
+  "INVALID_LOG_LEVEL", "INVALID_HOST", "INVALID_PORT", "INVALID_APP_ORIGIN",
+  "INVALID_ALLOW_REGISTRATION", "INVALID_MAX_ATTACHMENT_SIZE_MB", "INVALID_USER_STORAGE_QUOTA_MB",
+  "INVALID_USER_HISTORY_QUOTA_MB", "INVALID_SESSION_TTL_HOURS", "INVALID_TRUST_PROXY", "INVALID_NOTE_BODY_CHUNKING",
+  "STORAGE_IN_USE_STOP_SERVICE_FIRST", "STORAGE_LOCK_INVALID",
+  "SCHEMA_UNSUPPORTED", "BACKUP_INTEGRITY_FAILED",
+  "EACCES", "EPERM", "EROFS", "ENOSPC", "ENOENT", "ENOTDIR", "EISDIR",
+  "EADDRINUSE", "EADDRNOTAVAIL", "ENOTFOUND", "ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND",
+  "SQLITE_BUSY", "SQLITE_LOCKED", "SQLITE_CANTOPEN", "SQLITE_PERM", "SQLITE_READONLY",
+  "SQLITE_IOERR", "SQLITE_FULL", "SQLITE_CORRUPT", "SQLITE_NOTADB"
+]);
 
 export function safeError(error: unknown): SafeError {
-  if (error instanceof Error) {
-    return {
-      errorType: error.name,
-      errorMessage: error.message,
-      ...(error.stack ? { errorStack: error.stack } : {})
-    };
-  }
-  return { errorType: "UnknownError", errorMessage: "Non-Error value thrown" };
-}
-
-function safeRequestError(error: unknown): { errorType: string; errorCode?: string } {
   if (!(error instanceof Error)) return { errorType: "UnknownError" };
   const code = (error as Error & { code?: unknown }).code;
   return {
-    errorType: error.name,
-    ...(typeof code === "string" && /^[A-Z0-9_]{1,80}$/.test(code) ? { errorCode: code } : {})
+    errorType: "Error",
+    ...(typeof code === "string" && safeErrorCodes.has(code) ? { errorCode: code } : {})
+  };
+}
+
+export type StartupStep =
+  | { phase: "module_load" | "config" | "storage_lock" | "database_open" | "app_setup" | "http_listen" }
+  | { phase: "migration_backup" | "migration_apply"; fromSchema: number; toSchema: number };
+export type ReportStartup = (step: StartupStep) => void;
+type ServerSignal = "SIGINT" | "SIGTERM" | "fatal";
+type FailurePhase = StartupStep["phase"] | "runtime" | "shutdown";
+type FatalSource = "startup" | "uncaughtException" | "unhandledRejection" | "shutdown";
+type FatalDiagnostic = { code: string; hint: string };
+
+const phaseDiagnostics: Record<FailurePhase, FatalDiagnostic> = {
+  module_load: { code: "APP_MODULE_LOAD_FAILED", hint: "Verify that the image or build contains the server and its runtime dependencies." },
+  config: { code: "CONFIG_INVALID", hint: "Check the service environment against the deployment guide." },
+  storage_lock: { code: "STORAGE_LOCK_FAILED", hint: "Check for other services or maintenance jobs using the data directory and verify mount permissions." },
+  database_open: { code: "DATABASE_OPEN_FAILED", hint: "Check the mounted data directory and database permissions. Preserve the database and WAL." },
+  migration_backup: { code: "MIGRATION_BACKUP_FAILED", hint: "Check disk space and backup directory permissions. Preserve any existing migration backup before retrying." },
+  migration_apply: { code: "DATABASE_MIGRATION_FAILED", hint: "Preserve the database and verified upgrade backup. See the deployment guide before retrying." },
+  app_setup: { code: "APP_SETUP_FAILED", hint: "Verify that the deployed build contains matching server and web assets." },
+  http_listen: { code: "HTTP_LISTEN_FAILED", hint: "Check the service's listen address and port." },
+  runtime: { code: "UNEXPECTED_ERROR", hint: "Check the preceding logs for the same boot ID." },
+  shutdown: { code: "SHUTDOWN_FAILED", hint: "Check the preceding logs and confirm the service has stopped before maintenance." }
+};
+
+const knownDiagnostics = new Map<string, FatalDiagnostic>([
+  ["STORAGE_IN_USE_STOP_SERVICE_FIRST", { code: "STORAGE_IN_USE_STOP_SERVICE_FIRST", hint: "Stop all services and maintenance jobs using this data directory before checking the lock file." }],
+  ["STORAGE_LOCK_INVALID", { code: "STORAGE_LOCK_INVALID", hint: "Confirm the data directory is offline before inspecting the lock file. See the deployment guide." }],
+  ["SCHEMA_UNSUPPORTED", { code: "SCHEMA_UNSUPPORTED", hint: "Check the supported upgrade paths in the deployment guide and preserve the original database." }],
+  ["EADDRINUSE", { code: "EADDRINUSE", hint: "Check which process is already listening on the configured port." }]
+]);
+
+const storagePermissionCodes = new Set(["EACCES", "EPERM", "EROFS", "SQLITE_PERM", "SQLITE_READONLY"]);
+const storagePhases = new Set<FailurePhase>(["storage_lock", "database_open", "migration_backup", "migration_apply"]);
+
+function fatalDiagnostic(phase: FailurePhase, error: SafeError): FatalDiagnostic {
+  const code = error.errorCode;
+  if (code && storagePhases.has(phase) && storagePermissionCodes.has(code)) {
+    return { code: "STORAGE_PERMISSION_DENIED", hint: "Check that the service user can write to the data mount and backup directory." };
+  }
+  return (code && knownDiagnostics.get(code)) || phaseDiagnostics[phase];
+}
+
+export function createBootLogger(environment: NodeJS.ProcessEnv = process.env, destination: LogDestination = process.stdout) {
+  const bootId = randomBytes(8).toString("hex");
+  const startedAt = performance.now();
+  const version = environment.APP_VERSION === "development" || /^\d{1,9}\.\d{1,9}\.\d{1,9}$/.test(environment.APP_VERSION ?? "")
+    ? environment.APP_VERSION : "development";
+  const configuredLevel = LOG_LEVELS.find((level) => level === environment.LOG_LEVEL) ?? "info";
+  const includeInfo = LOG_LEVELS.indexOf(configuredLevel) <= LOG_LEVELS.indexOf("info");
+  let phase: FailurePhase = "module_load";
+  let failed = false;
+
+  function write(level: 30 | 60, event: string, msg: string, fields: Record<string, unknown> = {}) {
+    if (level === 30 && !includeInfo) return;
+    destination.write(`${JSON.stringify({ level, time: Date.now(), bootId, event, ...fields, msg })}\n`);
+  }
+
+  return {
+    bootId,
+    starting: () => write(30, "server.starting", "server process starting", { version, logLevel: configuredLevel }),
+    step(step: StartupStep) {
+      phase = step.phase;
+      write(30, "server.startup_step", "server startup step", step);
+    },
+    started(port: number, production: boolean) {
+      phase = "runtime";
+      write(30, "server.started", "server listening", {
+        version, port, mode: production ? "production" : "development", logLevel: configuredLevel,
+        durationMs: Math.round(performance.now() - startedAt)
+      });
+    },
+    stopping: (signal: ServerSignal) => write(30, "server.stopping", "server stopping", { signal }),
+    stopped: (signal: ServerSignal) => write(30, "server.stopped", "server stopped", { signal }),
+    fatal(source: FatalSource, error: unknown) {
+      if (failed) return;
+      failed = true;
+      const failurePhase = source === "shutdown" ? "shutdown" : phase;
+      const safe = safeError(error);
+      const { code, hint } = fatalDiagnostic(failurePhase, safe);
+      write(60, "server.fatal", "server fatal error", {
+        source, phase: failurePhase, errorType: safe.errorType, code, causeCode: safe.errorCode, hint
+      });
+    }
   };
 }
 
 export interface ServerLogEventFields {
-  "server.started": { host: string; port: number; mode: "development" | "production"; logLevel: LogLevel };
-  "server.stopping": { signal: "SIGINT" | "SIGTERM" | "fatal" };
-  "server.stopped": { signal: "SIGINT" | "SIGTERM" | "fatal" };
-  "server.fatal": { source: "startup" | "uncaughtException" | "unhandledRejection" } & SafeError;
   "security.origin_rejected": { reason: "missing" | "mismatch" };
   "application.created": { actorRef: LogReference };
   "application.revoked": { actorRef: LogReference };
@@ -207,10 +284,6 @@ export interface ServerLogEventFields {
 }
 
 const EVENT_MESSAGES: Record<keyof ServerLogEventFields, string> = {
-  "server.started": "server started",
-  "server.stopping": "server stopping",
-  "server.stopped": "server stopped",
-  "server.fatal": "server fatal error",
   "security.origin_rejected": "state-changing request rejected by origin policy",
   "application.created": "application connection created",
   "application.revoked": "application connection revoked",
@@ -257,8 +330,17 @@ function apiRoute(request: FastifyRequest): string {
 }
 
 export function registerHttpLogging(app: FastifyInstance): void {
+  const reasonCodes = new WeakMap<FastifyRequest, string>();
   app.addHook("onRequest", async (request, reply) => {
     reply.header("X-Request-ID", request.id);
+  });
+
+  app.addHook("preSerialization", async (request, reply, payload) => {
+    if (reply.statusCode >= 400 && payload && typeof payload === "object" && Object.hasOwn(payload, "code")) {
+      const code = (payload as { code: unknown }).code;
+      if (typeof code === "string" && responseReasonCodes.has(code)) reasonCodes.set(request, code);
+    }
+    return payload;
   });
 
   app.addHook("onError", async (request, _reply, error) => {
@@ -269,19 +351,21 @@ export function registerHttpLogging(app: FastifyInstance): void {
       requestId: request.id,
       method: request.method,
       route,
-      ...safeRequestError(error)
+      ...safeError(error)
     }, "API request raised an unexpected error");
   });
 
   app.addHook("onResponse", async (request, reply) => {
     const route = apiRoute(request);
-    if (route === "/api/health" || route === "unmatched") return;
+    const reasonCode = reasonCodes.get(request);
+    if (route === "/api/health" || (route === "unmatched" && !reasonCode)) return;
     const fields = {
       event: "http.request_completed",
       requestId: request.id,
       method: request.method,
       route,
       statusCode: reply.statusCode,
+      ...(reasonCode ? { reasonCode } : {}),
       durationMs: Math.round(reply.elapsedTime * 100) / 100
     };
     if (reply.statusCode >= 500) {
@@ -293,6 +377,12 @@ export function registerHttpLogging(app: FastifyInstance): void {
     }
   });
 }
+
+const responseReasonCodes = new Set([
+  "BROWSER_SESSION_INVALID", "BROWSER_SESSION_CHANGED", "BROWSER_UPGRADE_REQUIRED", "DEVICE_REAUTH_REQUIRED",
+  "PROTOCOL_UPGRADE_REQUIRED", "SYNC_RECONCILE_REQUIRED", "OWNERSHIP_INCOMPLETE",
+  "CONTENT_QUOTA_EXCEEDED", "HISTORY_QUOTA_EXCEEDED", "METADATA_QUOTA_EXCEEDED"
+]);
 
 export function serverRequestId(): string {
   return randomUUID();

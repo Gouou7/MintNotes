@@ -30,6 +30,7 @@ import { registerEndpointRoutes } from "./account/endpoints.js";
 import {
   createLoggerOptions,
   type LogDestination,
+  type ReportStartup,
   LogReferenceFactory,
   logEvent,
   registerHttpLogging,
@@ -44,12 +45,14 @@ export interface RouteApplicationOptions {
   syncEvents?: SyncEventHub;
   maintenance?: boolean;
   logDestination?: LogDestination;
+  bootId?: string;
+  reportStartup?: ReportStartup;
 }
 
 export async function createRouteApplication(options: RouteApplicationOptions = {}) {
 const config = options.config ?? loadServerConfig();
 const app = Fastify({
-  logger: createLoggerOptions(config, options.logDestination),
+  logger: createLoggerOptions({ ...config, bootId: options.bootId }, options.logDestination),
   logController: new LogController({
     disableRequestLogging: true,
     requestIdLogLabel: "requestId"
@@ -58,11 +61,13 @@ const app = Fastify({
   trustProxy: config.trustProxy,
   bodyLimit: 2 * 1024 * 1024
 });
+if (!options.db) options.reportStartup?.({ phase: "storage_lock" });
 const releaseStorageLock = options.db ? null : acquireStorageLock(config.dataDirectory);
 let db: AppDatabase;
-try { db = options.db ?? openDatabase(config.dataDirectory); }
+try { db = options.db ?? openDatabase(config.dataDirectory, options.reportStartup); }
 catch (error) { releaseStorageLock?.(); throw error; }
 app.addHook("onClose", async () => { releaseStorageLock?.(); });
+options.reportStartup?.({ phase: "app_setup" });
 const syncEvents = options.syncEvents ?? new SyncEventHub();
 const logRefs = new LogReferenceFactory();
 const ownsDatabase = options.db === undefined;
