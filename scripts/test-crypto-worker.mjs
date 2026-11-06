@@ -443,6 +443,19 @@ for (const tampered of [
   }
   if (!rejected) throw new Error(`History AAD accepted tampered ${Object.keys(tampered)[0]}`);
 }
+const deviceGrant = { userId, endpointId: "endpoint-test", id: "grant-test" };
+const secret = "example-device-recovery-secret";
+const grantEnvelope = await recoveryWorker.call("sealDeviceGrant", { ...deviceGrant, secret });
+const openedGrant = await recoveryWorker.call("openDeviceGrant", { ...deviceGrant, ...grantEnvelope });
+if (openedGrant !== secret) throw new Error("Device recovery credential did not round-trip");
+for (const field of ["userId", "endpointId", "id"]) {
+  let rejected = false;
+  try {
+    await recoveryWorker.call("openDeviceGrant", { ...deviceGrant, ...grantEnvelope, [field]: "different" });
+  } catch { rejected = true; }
+  if (!rejected) throw new Error(`Device recovery credential accepted mismatched ${field}`);
+}
+
 const rotatedRecovery = await recoveryWorker.call("rotateRecoveryKey", { envelopeBinding: registration.envelopeBinding });
 await recoveryWorker.worker.terminate();
 
@@ -493,6 +506,7 @@ console.log(JSON.stringify({
   authenticationAcrossWorkers: true,
   recoveryAcrossWorkers: true,
   deviceUnlockAcrossWorkers: true,
+  deviceGrantBoundToEndpoint: true,
   localPinVerifier: true,
   pinEncryptedDeviceCredential: true,
   wrongPinRejected: true,

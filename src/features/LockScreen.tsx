@@ -1,92 +1,67 @@
 import { type FormEvent, useState } from "react";
-import { LockKeyhole, LogOut, X } from "lucide-react";
-import { api } from "../api";
+import { LockKeyhole, LogOut, UserRoundCog, X } from "lucide-react";
 import { AppIcon } from "../components/AppIcon";
-import { cryptoClient } from "../crypto/client";
-import { hasDevicePin, markEndpointRevocationPending, unlockDeviceWithPin } from "../crypto/deviceUnlock";
 import { translateError, useI18n } from "../i18n";
 import { submitFormOnEnter } from "./formKeyboard";
-import type { DeviceUnlockCredential } from "../storage/database";
-import type { AuthEndpoint, AuthParameters, User } from "../types";
+import type { User } from "../types";
 
 interface Props {
   user: User;
-  endpoint: AuthEndpoint;
-  credential: DeviceUnlockCredential;
-  serverSessionVerified: boolean;
-  onUnlocked: (refreshCredential?: boolean) => Promise<void>;
-  onTrustExhausted: () => Promise<void>;
+  browserOnline: boolean;
+  onPin: (pin: string) => Promise<"ok" | "invalid" | "exhausted" | undefined>;
+  onPasswordLogin: () => void;
+  onSwitch?: () => void;
   onLogout: () => Promise<void>;
 }
 
-export function LockScreen({ user, endpoint, credential, serverSessionVerified, onUnlocked, onTrustExhausted, onLogout }: Props) {
+export function LockScreen({ user, browserOnline, onPin, onPasswordLogin, onSwitch, onLogout }: Props) {
   const { t } = useI18n();
   const [pin, setPin] = useState("");
-  const [password, setPassword] = useState("");
-  const [usePassword, setUsePassword] = useState(!hasDevicePin(credential));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [logoutConfirming, setLogoutConfirming] = useState(false);
 
-  const unlockWithPin = async (event: FormEvent) => {
+  const unlock = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const result = await unlockDeviceWithPin(user.id, endpoint.id, pin);
-      if (result === "exhausted") {
-        await markEndpointRevocationPending(user.id, endpoint.id);
-        await onTrustExhausted();
-        return;
-      }
-      if (result !== "ok") throw new Error(t("lock.invalidPin"));
-      await onUnlocked(false);
-    } catch (value) {
-      setError(translateError(value, t, "lock.cannotUnlock"));
-    } finally {
-      setBusy(false);
-    }
+      if (await onPin(pin) === "invalid") setError(t("lock.invalidPin"));
+    } catch (reason) {
+      setError(translateError(reason, t, "lock.cannotUnlock"));
+    } finally { setBusy(false); }
   };
 
-  const unlockWithPassword = async (event: FormEvent) => {
-    event.preventDefault();
+  const logout = async () => {
     setBusy(true);
-    setError("");
-    try {
-      const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
-      const derived = await cryptoClient.prepareLogin(password, parameters.kdfSalt, parameters.kdfParams);
-      const wrapped = await api<{ wrappedVaultKey: string; wrappedVaultNonce: string }>("/api/auth/reauth", {
-        method: "POST",
-        body: JSON.stringify({ authSecret: derived.authSecret })
-      });
-      await cryptoClient.unlockVault(parameters.envelopeBinding, wrapped.wrappedVaultKey, wrapped.wrappedVaultNonce);
-      await onUnlocked(true);
-    } catch (value) {
-      setError(translateError(value, t, "lock.invalidPassword"));
-    } finally {
-      setBusy(false);
-    }
+    try { await onLogout(); }
+    finally { setBusy(false); }
   };
 
   return <main className="auth-shell">
     <section className="auth-card lock-card">
       <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
       <h1 className="lock-user-name" title={user.displayName}>{user.displayName}</h1>
-      <p className="lock-status"><AppIcon icon={LockKeyhole} size={18} />{t("lock.title")}</p>
-      {!serverSessionVerified && <p className="auth-guidance warning">{t("lock.offline")}</p>}
-      {!usePassword && hasDevicePin(credential) ? <form onSubmit={unlockWithPin}>
+      <p className="lock-status"><AppIcon icon={LockKeyhole} size={16} />{t("lock.title")}</p>
+      {!browserOnline && <p className="auth-guidance warning">{t("lock.offline")}</p>}
+      <form onSubmit={unlock}>
         <label>{t("lock.devicePin")}<input type="password" value={pin} onChange={(event) => setPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" autoFocus required /></label>
-        {error && <p className="error">{error}</p>}
+        {error && <p className="error" role="alert">{error}</p>}
         <button type="submit" className="primary" disabled={busy}>{busy ? t("lock.unlocking") : t("lock.unlockWithPin")}</button>
-        {serverSessionVerified && <button type="button" onClick={() => { setUsePassword(true); setError(""); }}>{t("lock.usePassword")}</button>}
-      </form> : <form onSubmit={unlockWithPassword}>
-        <label>{t("auth.masterPassword")}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete="current-password" enterKeyHint="done" autoFocus required /></label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit" className="primary" disabled={busy}>{busy ? t("lock.verifying") : t("lock.unlockWithPassword")}</button>
-        {hasDevicePin(credential) && <button type="button" onClick={() => { setUsePassword(false); setError(""); }}>{t("lock.backToPin")}</button>}
-      </form>}
-      <button className="danger-text" onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} size={16} />{t("lock.logout")}</button>
+        {browserOnline && <button type="button" disabled={busy} onClick={onPasswordLogin}>{t("lock.usePassword")}</button>}
+      </form>
+      <div className="auth-ghost-actions">
+        <button className="auth-ghost" type="button" disabled={busy} onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} size={16} />{t("lock.logout")}</button>
+        {onSwitch && <button className="auth-ghost" type="button" disabled={busy} onClick={onSwitch}><AppIcon icon={UserRoundCog} size={16} />{t("account.switch")}</button>}
+      </div>
     </section>
-    {logoutConfirming && <div className="danger-confirm logout-confirm settings-section" role="dialog" aria-modal="true" aria-label={t("settings.logoutTitle")}><header><h3>{t("settings.logoutTitle")}</h3><button type="button" onClick={() => setLogoutConfirming(false)} aria-label={t("common.close")}><AppIcon icon={X} /></button></header><p>{t("settings.logoutWarning")}</p><div className="settings-actions"><button type="button" onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</button><button type="button" className="danger danger-solid" onClick={() => void onLogout()}><AppIcon icon={LogOut} size={15} />{t("app.logout")}</button></div></div>}
+    {logoutConfirming && <div className="danger-confirm logout-confirm settings-section" role="dialog" aria-modal="true" aria-label={t("settings.logoutTitle")}>
+      <header><h3>{t("settings.logoutTitle")}</h3><button type="button" disabled={busy} onClick={() => setLogoutConfirming(false)} aria-label={t("common.close")}><AppIcon icon={X} size={16} /></button></header>
+      <p>{t("settings.logoutWarning")}</p>
+      <div className="settings-actions">
+        <button type="button" disabled={busy} onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</button>
+        <button type="button" className="danger danger-solid" disabled={busy} onClick={() => void logout()}><AppIcon icon={LogOut} size={15} />{t("app.logout")}</button>
+      </div>
+    </div>}
   </main>;
 }

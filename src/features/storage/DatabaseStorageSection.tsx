@@ -1,7 +1,7 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { SettingsSection } from "../../components/SettingsSection";
 import { useEffect, useState } from "react";
 import { Archive, CircleAlert, CircleCheck, Database, Files, RefreshCw } from "lucide-react";
-import { api } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
 import { SettingsButton } from "../../components/SettingsButton";
 import { useI18n } from "../../i18n";
@@ -12,6 +12,7 @@ interface DatabaseStatus {
   userCount: number; sqliteVersion: string; schemaVersion: number; journalMode: string; checkedAt: string; available: boolean;
 }
 function useDatabaseStorage() {
+  const { transport: { api } } = useWorkspaceServices();
   const [status, setStatus] = useState<DatabaseStatus | null>(null), [failed, setFailed] = useState(false), [busy, setBusy] = useState(false);
   const [refreshIndex, setRefreshIndex] = useState(0);
   useEffect(() => {

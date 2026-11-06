@@ -1,7 +1,7 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../api";
-import { cryptoClient } from "../../crypto/client";
 import { isLanguagePreference, translateError, type Translate } from "../../i18n";
 import {
   cursorKey,
@@ -45,6 +45,7 @@ interface Options {
 
 /** 本地保险库加载、损坏记录隔离与首次远端校验。 */
 export function useVaultLoad(options: Options) {
+  const { cryptoClient } = useWorkspaceServices();
   const {
     model,
     selection,

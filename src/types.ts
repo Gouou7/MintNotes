@@ -12,6 +12,13 @@ export interface AuthEndpoint {
   remembered: boolean;
 }
 
+export interface BrowserSession {
+  user: User;
+  endpoint: AuthEndpoint;
+  sessionId: string;
+  expiresAt?: string;
+}
+
 export interface TrustedEndpoint {
   id: string;
   deviceName: string;
@@ -24,6 +31,7 @@ export interface TrustedEndpoint {
   revokedAt: string | null;
   current: boolean;
   active: boolean;
+  resumable?: boolean;
 }
 
 export interface TrustedEndpointsResponse {

@@ -21,7 +21,8 @@ interface WorkspaceSidebarProps {
   displayName: string;
   username: string;
   avatarUrl: string | null;
-  onLock: () => void;
+  onLock?: () => void;
+  accountSwitcher?: ReactNode;
   onSettings: () => void;
 }
 
@@ -56,7 +57,8 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
         <span className="sidebar-user-name"><strong>{props.displayName}</strong><small>@{props.username}</small></span>
       </div>
       <div className="side-footer-actions">
-        <button onClick={props.onLock} title={t("app.lock")} aria-label={t("app.lock")}><AppIcon icon={LockKeyhole} size={16} /></button>
+        {props.onLock && <button onClick={props.onLock} title={t("app.lock")} aria-label={t("app.lock")}><AppIcon icon={LockKeyhole} size={16} /></button>}
+        {props.accountSwitcher}
         <button onClick={props.onSettings} title={t("settings.title")} aria-label={t("settings.title")}><AppIcon icon={Settings} size={16} /></button>
       </div>
     </footer>

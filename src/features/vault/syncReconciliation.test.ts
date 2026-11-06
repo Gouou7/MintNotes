@@ -1,3 +1,4 @@
+import { testWorkspaceServices } from "../session/workspaceServices.testSupport";
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { operationId } from "@mint-notes/application-client";
@@ -17,7 +18,7 @@ const local = { key: localKey(userId, id), userId, objectId: id, objectType: "no
 afterEach(async () => { vi.resetAllMocks(); for (const table of localDb.tables) await table.clear(); });
 function dependencies(active = () => true): PullControllerDependencies {
   mocks.decrypt.mockImplementation(async (_u, _id, _type, _rev, ciphertext) => JSON.parse(ciphertext));
-  return { userId, isActive: active, activeObjectId: () => null, hasPendingSave: () => false, flushDocument: vi.fn(),
+  return { services: testWorkspaceServices(), userId, isActive: active, activeObjectId: () => null, hasPendingSave: () => false, flushDocument: vi.fn(),
     preserveConflict: vi.fn(async () => {
       const copyId = crypto.randomUUID(); const key = localKey(userId, copyId);
       await localDb.objects.put({ ...local, key, objectId: copyId, revision: 1 });

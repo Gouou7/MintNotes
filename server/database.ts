@@ -9,7 +9,7 @@ import { migrationBackup } from "./backupStorage.js";
 export type AppDatabase = Database.Database;
 export type RegistrationRole = "admin" | "user";
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 export function runRegistrationTransaction<T>(
   db: AppDatabase,
@@ -37,7 +37,7 @@ export function openDatabase(dataDirectory: string): AppDatabase {
 
   const version = Number(db.pragma("user_version", { simple: true }));
   const hasLegacyTables = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get());
-  if (version !== 0 && version !== 2 && version !== 3 && version !== 4 && version !== SCHEMA_VERSION) {
+  if (version !== 0 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== SCHEMA_VERSION) {
     db.close();
     throw new Error(`Unsupported database schema ${version}; Mint Notes requires a fresh schema v${SCHEMA_VERSION} volume`);
   }
@@ -47,7 +47,7 @@ export function openDatabase(dataDirectory: string): AppDatabase {
   }
 
   try {
-    if (version > 0 && version < SCHEMA_VERSION) migrationBackup(db, join(dataDirectory, "backups", "pre-schema5.sqlite"));
+    if (version > 0 && version < SCHEMA_VERSION) migrationBackup(db, join(dataDirectory, "backups", "pre-schema6.sqlite"));
   } catch (error) { db.close(); throw error; }
   const initialize = db.transaction(() => {
   db.exec(`
@@ -328,6 +328,19 @@ export function openDatabase(dataDirectory: string): AppDatabase {
   `);
   initializeApplicationConnections(db);
   migrateStorage(db, version, dataDirectory);
+  if (version > 0 && version < 6) {
+    db.prepare("UPDATE sessions SET revoked_at = ? WHERE revoked_at IS NULL").run(new Date().toISOString());
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS trusted_endpoints_browser ON trusted_endpoints(endpoint_hash);
+    CREATE TABLE IF NOT EXISTS device_grants (
+      endpoint_id TEXT PRIMARY KEY REFERENCES trusted_endpoints(endpoint_id) ON DELETE CASCADE,
+      grant_id TEXT NOT NULL UNIQUE,
+      secret_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    PRAGMA user_version = 6;
+  `);
   });
   try { initialize.immediate(); } catch (error) { db.close(); throw error; }
   return db;

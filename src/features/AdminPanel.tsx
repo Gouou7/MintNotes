@@ -1,3 +1,4 @@
+import { useWorkspaceServices } from "./session/workspaceServices";
 import { SettingsSection } from "../components/SettingsSection";
 import { SettingsItem } from "../components/SettingsItem";
 import { DatabaseStorageSection } from "./storage/DatabaseStorageSection";
@@ -7,11 +8,9 @@ import { formatHistoryBytes } from "./history";
 import { capacityLevel } from "../storage/storageStatus";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { Copy, HardDrive, KeyRound, Trash2, UserRound, UserRoundCheck, UserRoundX, X } from "lucide-react";
-import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
 import type { ToastTone } from "../components/Toast";
-import { cryptoClient } from "../crypto/client";
 import { translateError, useI18n } from "../i18n";
 import type { KdfParams, User } from "../types";
 
@@ -33,6 +32,7 @@ interface AccountSetup {
 }
 
 export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNotify: (text: string, tone: ToastTone) => void }) {
+  const { transport: { api }, cryptoClient } = useWorkspaceServices();
   const { formatDateTime, t } = useI18n();
   const createFormId = useId();
   const [defaultQuotaBytes, setDefaultQuotaBytes] = useState(2 * 1024 * 1024 * 1024);

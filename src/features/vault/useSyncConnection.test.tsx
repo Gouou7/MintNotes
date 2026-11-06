@@ -11,24 +11,30 @@ vi.mock("../../storage/database", () => ({
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-class MockEventSource extends EventTarget {
-  static OPEN = 1;
-  static instances: MockEventSource[] = [];
-  readyState = 0;
-  onopen: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  close = vi.fn();
-  constructor(readonly url: string) {
-    super();
-    MockEventSource.instances.push(this);
+class MockStream {
+  static instances: MockStream[] = [];
+  private controller!: ReadableStreamDefaultController<Uint8Array>;
+  readonly body = new ReadableStream<Uint8Array>({ start: (controller) => { this.controller = controller; } });
+  readonly close = vi.fn();
+
+  constructor(readonly url: string, signal: AbortSignal) {
+    MockStream.instances.push(this);
+    signal.addEventListener("abort", () => { this.close(); this.fail(); }, { once: true });
   }
+
+  fail() { this.controller.error(new Error("Disconnected")); }
+  changed() { if (!this.close.mock.calls.length) this.controller.enqueue(new TextEncoder().encode("event: changed\ndata: {}\n\n")); }
 }
+
+const stream = vi.fn(async (url: string, signal: AbortSignal) => new MockStream(url, signal));
+vi.mock("../session/workspaceServices", () => ({ useWorkspaceServices: () => services }));
+const services = { transport: { stream } };
 
 const roots: Root[] = [];
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.stubGlobal("EventSource", MockEventSource);
-  MockEventSource.instances = [];
+  stream.mockClear();
+  MockStream.instances = [];
   cursor.mockReset().mockResolvedValue({ value: "42" });
   Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
   Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
@@ -75,9 +81,9 @@ describe("sync connection lifecycle", () => {
   it("synchronizes and listens for changes despite a browser offline hint", async () => {
     const app = await mount();
     expect(app.synchronize).toHaveBeenCalledOnce();
-    const source = MockEventSource.instances[0];
-    expect(source.url).toBe("/api/sync/events?protocol=3&since=42&clientId=client");
-    source.dispatchEvent(new Event("changed"));
+    const source = MockStream.instances[0];
+    expect(source.url).toBe("/api/sync/events?since=42&clientId=client");
+    await act(async () => source.changed());
     expect(app.requestPull).toHaveBeenCalledWith(250);
     await act(async () => vi.advanceTimersByTimeAsync(5 * 60_000));
     expect(app.requestPull).toHaveBeenCalledWith(0);
@@ -92,24 +98,25 @@ describe("sync connection lifecycle", () => {
     expect(app.synchronize).not.toHaveBeenCalled();
     expect(app.requestPull).not.toHaveBeenCalled();
     expect(cursor).not.toHaveBeenCalled();
-    expect(MockEventSource.instances).toHaveLength(0);
+    expect(MockStream.instances).toHaveLength(0);
     await app.verify();
     expect(app.synchronize).toHaveBeenCalledOnce();
-    expect(MockEventSource.instances).toHaveLength(1);
+    expect(MockStream.instances).toHaveLength(1);
   });
 
   it("treats an offline event as a reason to test the server without closing a working SSE", async () => {
     const app = await mount();
-    const source = MockEventSource.instances[0];
+    const source = MockStream.instances[0];
     await act(async () => window.dispatchEvent(new Event("offline")));
     expect(app.synchronize).toHaveBeenCalledTimes(2);
     expect(source.close).not.toHaveBeenCalled();
-    expect(MockEventSource.instances).toHaveLength(1);
+    expect(MockStream.instances).toHaveLength(1);
   });
 
   it("retries a broken connection with backoff while the browser still reports offline", async () => {
     const app = await mount();
-    MockEventSource.instances[0].onerror?.();
+    await act(async () => MockStream.instances[0].fail());
+    stream.mockRejectedValueOnce(new Error("Still disconnected"));
     app.connection().requestFallbackPull();
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(app.requestPull).toHaveBeenCalledTimes(1);
@@ -120,19 +127,18 @@ describe("sync connection lifecycle", () => {
   });
 
   it("cancels fallback retries once SSE connects", async () => {
+    let connect!: (stream: MockStream) => void;
+    stream.mockImplementationOnce(() => new Promise((resolve) => { connect = resolve; }));
     const app = await mount();
-    const source = MockEventSource.instances[0];
-    source.onerror?.();
-    source.readyState = MockEventSource.OPEN;
-    source.onopen?.();
+    app.connection().requestFallbackPull();
+    await act(async () => connect(new MockStream("stream", new AbortController().signal)));
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(app.requestPull).not.toHaveBeenCalled();
   });
 
   it("pauses hidden tabs and synchronizes when they become visible", async () => {
     const app = await mount();
-    const source = MockEventSource.instances[0];
-    source.onerror?.();
+    const source = MockStream.instances[0];
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
     await act(async () => document.dispatchEvent(new Event("visibilitychange")));
     expect(source.close).toHaveBeenCalledOnce();
@@ -142,7 +148,7 @@ describe("sync connection lifecycle", () => {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
     await act(async () => document.dispatchEvent(new Event("visibilitychange")));
     expect(app.synchronize).toHaveBeenCalledTimes(2);
-    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockStream.instances).toHaveLength(2);
   });
 
   it("does not reopen SSE after stopping with an outstanding cursor read", async () => {
@@ -151,17 +157,15 @@ describe("sync connection lifecycle", () => {
     const app = await mount();
     app.connection().stop();
     await act(async () => finishRead({ value: "42" }));
-    expect(MockEventSource.instances).toHaveLength(0);
+    expect(MockStream.instances).toHaveLength(0);
   });
 
   it("stops timers and rejects stale SSE events on lock or logout", async () => {
     const app = await mount();
-    const source = MockEventSource.instances[0];
-    source.onerror?.();
+    const source = MockStream.instances[0];
     app.isActive.mockReturnValue(false);
     app.connection().stop();
-    source.dispatchEvent(new Event("changed"));
-    source.onerror?.();
+    await act(async () => source.changed());
     await act(async () => vi.advanceTimersByTimeAsync(5 * 60_000));
     expect(source.close).toHaveBeenCalledOnce();
     expect(app.requestPull).not.toHaveBeenCalled();

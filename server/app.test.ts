@@ -1,3 +1,4 @@
+import { browserInject } from "./auth/browserInject.testSupport.js";
 import { operationId as newOperationId } from "@mint-notes/application-client";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,7 +45,7 @@ describe("createApp", () => {
     const config = { ...loadServerConfig({ NODE_ENV: "production", LOG_LEVEL: "silent" }), dataDirectory: directory };
     const app = await createApp({ config, db, maintenance: false });
     try {
-      const response = await app.inject({ method: "GET", url: "/api/health" });
+      const response = await browserInject(app, { method: "GET", url: "/api/health" });
       expect(response.statusCode).toBe(200);
       const directives = new Map(String(response.headers["content-security-policy"])
         .split(";").map((directive) => {
@@ -87,7 +88,7 @@ describe("createApp", () => {
         "x-forwarded-proto": "https",
         "x-forwarded-for": "192.0.2.10"
       };
-      const registration = await app.inject({
+      const registration = await browserInject(app, {
         method: "POST", url: "/api/auth/register", headers: proxyHeaders, payload: registrationBody("alpha")
       });
       expect(registration.statusCode).toBe(201);
@@ -98,7 +99,7 @@ describe("createApp", () => {
         expect(cookie).toContain("HttpOnly");
         expect(cookie).toContain("SameSite=Strict");
       }
-      const login = await app.inject({
+      const login = await browserInject(app, {
         method: "POST", url: "/api/auth/login", headers: proxyHeaders,
         payload: { username: "alpha", authSecret: registrationBody("alpha").authSecret }
       });
@@ -110,16 +111,16 @@ describe("createApp", () => {
         objectType: "note", ciphertext: "A".repeat(32), nonce: "z".repeat(24), encryptionVersion: 1,
         baseRevision: 0, idempotencyKey: newOperationId(), deleted: false
       };
-      expect((await app.inject({
+      expect((await browserInject(app, {
         method: "PUT", url: `/api/objects/${objectId}`, headers: { ...headers, origin: "https://evil.example.test" }, payload
       })).statusCode).toBe(403);
-      expect((await app.inject({ method: "PUT", url: `/api/objects/${objectId}`, headers, payload })).statusCode).toBe(200);
-      const pull = await app.inject({ method: "GET", url: "/api/sync?since=0", headers });
+      expect((await browserInject(app, { method: "PUT", url: `/api/objects/${objectId}`, headers, payload })).statusCode).toBe(200);
+      const pull = await browserInject(app, { method: "GET", url: "/api/sync?since=0", headers });
       expect(pull.statusCode).toBe(200);
       expect(pull.json().changes).toEqual([expect.objectContaining({ objectId, ciphertext: payload.ciphertext })]);
 
       // Separate clients behind the same proxy retain separate login rate limits.
-      const invalidLogin = (ip: string) => app.inject({
+      const invalidLogin = (ip: string) => browserInject(app, {
         method: "POST", url: "/api/auth/login", headers: { ...proxyHeaders, "x-forwarded-for": ip },
         payload: { username: "unknown", authSecret: "invalid-client-secret-000001" }
       });
@@ -146,26 +147,26 @@ describe("createApp", () => {
     };
     const app = await createApp({ config, db, maintenance: false });
 
-    expect((await app.inject({ method: "GET", url: "/api/health" })).statusCode).toBe(200);
-    expect((await app.inject({
+    expect((await browserInject(app, { method: "GET", url: "/api/health" })).statusCode).toBe(200);
+    expect((await browserInject(app, {
       method: "POST",
       url: "/api/auth/register",
       payload: registrationBody("missing-origin")
     })).statusCode).toBe(403);
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "POST",
       url: "/api/auth/register",
       headers: { origin: "https://evil.example.test" },
       payload: registrationBody("blocked")
     })).statusCode).toBe(403);
 
-    const alphaRegistration = await app.inject({
+    const alphaRegistration = await browserInject(app, {
       method: "POST",
       url: "/api/auth/register",
       headers: { origin: config.appOrigin },
       payload: registrationBody("alpha")
     });
-    const bravoRegistration = await app.inject({
+    const bravoRegistration = await browserInject(app, {
       method: "POST",
       url: "/api/auth/register",
       headers: { origin: config.appOrigin },
@@ -180,7 +181,7 @@ describe("createApp", () => {
     const alphaCookie = cookieHeader(alphaRegistration.headers["set-cookie"]);
     const bravoCookie = cookieHeader(bravoRegistration.headers["set-cookie"]);
     const objectId = "00000000-0000-4000-8000-000000000123";
-    const write = (cookie: string, ciphertext: string) => app.inject({
+    const write = (cookie: string, ciphertext: string) => browserInject(app, {
       method: "PUT",
       url: `/api/objects/${objectId}`,
       headers: { cookie, origin: config.appOrigin },
@@ -197,8 +198,8 @@ describe("createApp", () => {
     expect((await write(alphaCookie, "A".repeat(32))).statusCode).toBe(200);
     expect((await write(bravoCookie, "B".repeat(32))).statusCode).toBe(200);
 
-    const alphaPull = await app.inject({ method: "GET", url: "/api/sync?since=0", headers: { cookie: alphaCookie } });
-    const bravoPull = await app.inject({ method: "GET", url: "/api/sync?since=0", headers: { cookie: bravoCookie } });
+    const alphaPull = await browserInject(app, { method: "GET", url: "/api/sync?since=0", headers: { cookie: alphaCookie } });
+    const bravoPull = await browserInject(app, { method: "GET", url: "/api/sync?since=0", headers: { cookie: bravoCookie } });
     expect(alphaPull.json().changes).toEqual([expect.objectContaining({ objectId, ciphertext: "A".repeat(32) })]);
     expect(bravoPull.json().changes).toEqual([expect.objectContaining({ objectId, ciphertext: "B".repeat(32) })]);
 
@@ -217,7 +218,7 @@ describe("createApp", () => {
       appOrigin: "https://notes.example.test"
     };
     const app = await createApp({ config, db, maintenance: false });
-    const registration = await app.inject({
+    const registration = await browserInject(app, {
       method: "POST",
       url: "/api/auth/register",
       headers: { origin: config.appOrigin },
@@ -236,8 +237,8 @@ describe("createApp", () => {
       deleted: false
     };
     const objectHeaders = { cookie, origin: config.appOrigin };
-    expect((await app.inject({ method: "PUT", url: `/api/objects/${objectId}`, headers: objectHeaders, payload: objectPayload })).statusCode).toBe(200);
-    expect((await app.inject({
+    expect((await browserInject(app, { method: "PUT", url: `/api/objects/${objectId}`, headers: objectHeaders, payload: objectPayload })).statusCode).toBe(200);
+    expect((await browserInject(app, {
       method: "PUT",
       url: `/api/objects/${objectId}`,
       headers: objectHeaders,
@@ -254,26 +255,26 @@ describe("createApp", () => {
       "x-webmd-encryption-version": "1",
       "x-webmd-idempotency-key": newOperationId()
     };
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "PUT",
       url: `/api/attachments/${attachmentId}/chunks/1`,
       headers: chunkHeaders,
       payload: Buffer.from("ciphertext")
     })).statusCode).toBe(400);
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "PUT",
       url: `/api/attachments/${attachmentId}/chunks/0`,
       headers: chunkHeaders,
       payload: Buffer.from("ciphertext")
     })).statusCode).toBe(200);
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "PUT",
       url: `/api/attachments/${attachmentId}/chunks/0`,
       headers: chunkHeaders,
       payload: Buffer.from("different")
     })).statusCode).toBe(409);
 
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "PUT",
       url: `/api/objects/${attachmentId}`,
       headers: objectHeaders,
@@ -294,26 +295,26 @@ describe("createApp", () => {
       attachmentIds: [crypto.randomUUID()],
       idempotencyKey: historyIdempotencyKey
     };
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "POST",
       url: `/api/notes/${objectId}/history/${historyId}`,
       headers: objectHeaders,
       payload: historyPayload
     })).statusCode).toBe(409);
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "POST",
       url: `/api/notes/${objectId}/history/${historyId}`,
       headers: objectHeaders,
       payload: { ...historyPayload, attachmentIds: [attachmentId] }
     })).statusCode).toBe(201);
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "POST",
       url: `/api/notes/${objectId}/history/${historyId}`,
       headers: objectHeaders,
       payload: { ...historyPayload, attachmentIds: [attachmentId], ciphertext: "x".repeat(32) }
     })).statusCode).toBe(409);
 
-    const reset = await app.inject({ method: "GET", url: "/api/sync?since=999999", headers: { cookie } });
+    const reset = await browserInject(app, { method: "GET", url: "/api/sync?since=999999", headers: { cookie } });
     expect(reset.json()).toMatchObject({ reset: true, hasMore: false });
     await app.close();
     db.close();
@@ -331,16 +332,16 @@ describe("createApp", () => {
       userStorageQuotaBytes: 100
     };
     const app = await createApp({ config, db, maintenance: false });
-    const registration = await app.inject({ method: "POST", url: "/api/auth/register", headers: { origin: config.appOrigin }, payload: registrationBody("quota") });
+    const registration = await browserInject(app, { method: "POST", url: "/api/auth/register", headers: { origin: config.appOrigin }, payload: registrationBody("quota") });
     const headers = { cookie: cookieHeader(registration.headers["set-cookie"]), origin: config.appOrigin };
     const objectId = crypto.randomUUID();
     const payload = (baseRevision: number) => ({
       objectType: "note", ciphertext: "q".repeat(32), nonce: "n".repeat(24), encryptionVersion: 1,
       baseRevision, idempotencyKey: newOperationId(), deleted: false
     });
-    expect((await app.inject({ method: "PUT", url: `/api/objects/${objectId}`, headers, payload: payload(0) })).statusCode).toBe(200);
-    expect((await app.inject({ method: "PUT", url: `/api/objects/${objectId}`, headers, payload: payload(1) })).statusCode).toBe(200);
-    expect((await app.inject({ method: "PUT", url: `/api/objects/${objectId}`, headers, payload: { ...payload(2), ciphertext: "q".repeat(90) } })).statusCode).toBe(413);
+    expect((await browserInject(app, { method: "PUT", url: `/api/objects/${objectId}`, headers, payload: payload(0) })).statusCode).toBe(200);
+    expect((await browserInject(app, { method: "PUT", url: `/api/objects/${objectId}`, headers, payload: payload(1) })).statusCode).toBe(200);
+    expect((await browserInject(app, { method: "PUT", url: `/api/objects/${objectId}`, headers, payload: { ...payload(2), ciphertext: "q".repeat(90) } })).statusCode).toBe(413);
     await app.close();
     db.close();
   });
@@ -358,20 +359,20 @@ describe("createApp", () => {
     const app = await createApp({ config, db, maintenance: false });
     const alpha = registrationBody("alpha");
     const bravo = registrationBody("bravo");
-    const alphaRegistration = await app.inject({
+    const alphaRegistration = await browserInject(app, {
       method: "POST",
       url: "/api/auth/register",
       headers: { origin: config.appOrigin },
       payload: alpha
     });
-    await app.inject({
+    await browserInject(app, {
       method: "POST",
       url: "/api/auth/register",
       headers: { origin: config.appOrigin },
       payload: bravo
     });
     const alphaCookie = cookieHeader(alphaRegistration.headers["set-cookie"]);
-    const otherDeviceLogin = await app.inject({
+    const otherDeviceLogin = await browserInject(app, {
       method: "POST",
       url: "/api/auth/login",
       headers: { origin: config.appOrigin, "user-agent": "Mint Notes other device" },
@@ -390,20 +391,20 @@ describe("createApp", () => {
       recoveryWrappedVaultNonce: "r".repeat(24)
     };
 
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "PATCH",
       url: "/api/account/username",
       headers: { cookie: alphaCookie, origin: config.appOrigin },
       payload: { ...changePayload, username: "bravo" }
     })).statusCode).toBe(409);
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "PATCH",
       url: "/api/account/username",
       headers: { cookie: alphaCookie, origin: config.appOrigin },
       payload: { ...changePayload, currentRecoveryAuthSecret: "incorrect-recovery-secret-value" }
     })).statusCode).toBe(401);
 
-    const changed = await app.inject({
+    const changed = await browserInject(app, {
       method: "PATCH",
       url: "/api/account/username",
       headers: { cookie: alphaCookie, origin: config.appOrigin },
@@ -411,27 +412,27 @@ describe("createApp", () => {
     });
     expect(changed.statusCode).toBe(200);
     expect(changed.json().user.username).toBe("renamed-alpha");
-    expect((await app.inject({ method: "GET", url: "/api/auth/me", headers: { cookie: otherDeviceCookie } })).statusCode).toBe(401);
-    expect((await app.inject({
+    expect((await browserInject(app, { method: "GET", url: "/api/auth/me", headers: { cookie: otherDeviceCookie } })).statusCode).toBe(401);
+    expect((await browserInject(app, {
       method: "PATCH",
       url: "/api/account/username",
       headers: { cookie: alphaCookie, origin: config.appOrigin },
       payload: { ...changePayload, username: "another-alpha", envelopeContext: "different_context_12345" }
     })).statusCode).toBe(400);
-    expect((await app.inject({ method: "GET", url: "/api/auth/parameters/alpha" })).statusCode).toBe(404);
-    const parameters = await app.inject({ method: "GET", url: "/api/auth/parameters/renamed-alpha" });
+    expect((await browserInject(app, { method: "GET", url: "/api/auth/parameters/alpha" })).statusCode).toBe(404);
+    const parameters = await browserInject(app, { method: "GET", url: "/api/auth/parameters/renamed-alpha" });
     expect(parameters.statusCode).toBe(200);
     expect(parameters.json()).toMatchObject({
       envelopeBinding: { version: 2, context: changePayload.envelopeContext },
       recoveryWrappedVaultKey: changePayload.recoveryWrappedVaultKey
     });
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "POST",
       url: "/api/auth/login",
       headers: { origin: config.appOrigin },
       payload: { username: "alpha", authSecret: alpha.authSecret, rememberDevice: false }
     })).statusCode).toBe(401);
-    const renamedLogin = await app.inject({
+    const renamedLogin = await browserInject(app, {
       method: "POST",
       url: "/api/auth/login",
       headers: { origin: config.appOrigin },
@@ -459,7 +460,7 @@ describe("createApp", () => {
     };
     const app = await createApp({ config, db, maintenance: false });
     const account = registrationBody("delta");
-    const registration = await app.inject({
+    const registration = await browserInject(app, {
       method: "POST",
       url: "/api/auth/register",
       headers: { origin: config.appOrigin },
@@ -467,7 +468,7 @@ describe("createApp", () => {
     });
     const cookie = cookieHeader(registration.headers["set-cookie"]);
     const replacementRecoveryAuthSecret = "delta-replacement-recovery-secret-0001";
-    const changed = await app.inject({
+    const changed = await browserInject(app, {
       method: "PATCH",
       url: "/api/account/username",
       headers: { cookie, origin: config.appOrigin },
@@ -484,7 +485,7 @@ describe("createApp", () => {
       }
     });
     expect(changed.statusCode).toBe(200);
-    const recover = (recoveryAuthSecret: string) => app.inject({
+    const recover = (recoveryAuthSecret: string) => browserInject(app, {
       method: "POST",
       url: "/api/auth/recover",
       headers: { origin: config.appOrigin },

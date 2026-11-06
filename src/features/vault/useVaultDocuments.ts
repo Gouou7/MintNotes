@@ -1,3 +1,4 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useRef } from "react";
 import { translateError, type Translate } from "../../i18n";
@@ -60,6 +61,7 @@ interface Options {
 
 /** 笔记创建、编辑、命名、移动、复制及附件归属。 */
 export function useVaultDocuments(options: Options) {
+  const services = useWorkspaceServices();
   const {
     model,
     selection,
@@ -159,13 +161,13 @@ export function useVaultDocuments(options: Options) {
         userId,
         attachment,
         () => !logoutStarted.current,
-        serverSessionVerified
+        serverSessionVerified, undefined, services
       ),
       createAttachment: (ownerNoteId, source, plaintext) => createLocalAttachment(
         userId,
         ownerNoteId,
         new File([plaintext], source.originalName, { type: source.mime }),
-        () => !logoutStarted.current
+        () => !logoutStarted.current, services.cryptoClient
       ),
       persistAttachment: async (attachment) => {
         upsertAttachment(attachment);
@@ -258,7 +260,7 @@ export function useVaultDocuments(options: Options) {
     const editableNote = documentIndexRef.current.get(noteId);
     if (editableNote && isLockedNote(editableNote)) throw new Error(t("notice.noteLockedEdit", { title: editableNote.title }));
     showMessage(t("notice.encryptingAttachment", { name: file.name }), "info");
-    const attachment = await createLocalAttachment(userId, noteId, file, () => !logoutStarted.current);
+    const attachment = await createLocalAttachment(userId, noteId, file, () => !logoutStarted.current, services.cryptoClient);
     upsertAttachment(attachment);
     const note = documentsRef.current.find((entry) => entry.objectId === noteId && entry.kind === "note");
     if (note) patchDocument(note.objectId, { attachmentIds: [...new Set([...note.attachmentIds, attachment.objectId])] }, 0);

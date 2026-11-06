@@ -1,3 +1,4 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { SettingsSection } from "../../components/SettingsSection";
 import { SettingsItem } from "../../components/SettingsItem";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +20,7 @@ function useRecoveries(userId: string) {
   return count;
 }
 export function RecoveryStorageSection({ userId, onNotify }: { userId: string; onNotify: (text: string, tone: ToastTone) => void }) {
+  const services = useWorkspaceServices();
   const { t } = useI18n();
   const count = useRecoveries(userId), active = useRef(true);
   const [busy, setBusy] = useState(false);
@@ -29,7 +31,7 @@ export function RecoveryStorageSection({ userId, onNotify }: { userId: string; o
       <SettingsButton icon={RefreshCw} disabled={busy} onClick={() => window.dispatchEvent(new CustomEvent("webmd:retry-recoveries"))}>{t("storage.recoveryRetry")}</SettingsButton>
       <SettingsButton icon={Download} disabled={busy} onClick={() => {
         setBusy(true);
-        void exportRecoveryCopies(userId, () => active.current).catch(() => {
+        void exportRecoveryCopies(userId, () => active.current, services.cryptoClient).catch(() => {
           if (active.current) onNotify(t("transfer.exportFailed"), "critical");
         }).finally(() => { if (active.current) setBusy(false); });
       }}>{t("storage.recoveryExport")}</SettingsButton>

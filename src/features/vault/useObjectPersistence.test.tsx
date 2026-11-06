@@ -121,3 +121,8 @@ describe("useObjectPersistence", () => {
     expect(current.markdown).toBe("newer edit still inside the debounce window");
   });
 });
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
+});

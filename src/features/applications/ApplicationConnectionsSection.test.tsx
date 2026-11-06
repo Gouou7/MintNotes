@@ -56,3 +56,8 @@ it("names the application access setting and revokes or removes only the selecte
   expect(entries().map(row => row.querySelector("strong")?.textContent)).toHaveLength(2);
   expect(container.textContent).not.toContain("revoked application");
 });
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
+});

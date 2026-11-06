@@ -386,6 +386,19 @@ async function handle(operation: string, payload: any): Promise<any> {
       return decryptAttachmentBytes(payload);
     }
 
+    case "sealDeviceGrant":
+    case "openDeviceGrant": {
+      if (!vaultKey) throw new Error("Vault is locked");
+      const aad = JSON.stringify(["webmd-device-grant", 1, payload.userId, payload.endpointId, payload.id]);
+      if (operation === "sealDeviceGrant") {
+        const bytes = new TextEncoder().encode(payload.secret);
+        try { return await seal(bytes, vaultKey, aad); }
+        finally { bytes.fill(0); }
+      }
+      const bytes = await open(payload.ciphertext, payload.nonce, vaultKey, aad);
+      try { return new TextDecoder().decode(bytes); }
+      finally { bytes.fill(0); }
+    }
     case "lock": {
       if (vaultKey) vaultKey.fill(0);
       if (pendingWrapKey) pendingWrapKey.fill(0);

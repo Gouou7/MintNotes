@@ -1,3 +1,4 @@
+import { testCryptoClient } from "../session/workspaceServices.testSupport";
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localDb, localKey, type RecoveryRecord } from "../../storage/database";
@@ -28,7 +29,7 @@ async function attachmentRecovery() {
 describe("recovery source export", () => {
   it("exports an attachment-only recovery as a visible Markdown note and its exact bytes", async () => {
     const record = await attachmentRecovery();
-    await exportRecoveryCopies(record.userId, () => true);
+    await exportRecoveryCopies(record.userId, () => true, testCryptoClient());
     const [notes, attachments, read] = mocks.zip.mock.calls[0];
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({ kind: "note", title: "original.png", deleted: false });
@@ -41,12 +42,12 @@ describe("recovery source export", () => {
     const record = await attachmentRecovery();
     mocks.attachment.mockRejectedValue(new Error("incomplete attachment"));
     mocks.zip.mockImplementation(async (_notes, attachments, read) => { await read(attachments[0]); });
-    await expect(exportRecoveryCopies(record.userId, () => true)).rejects.toThrow("incomplete attachment");
+    await expect(exportRecoveryCopies(record.userId, () => true, testCryptoClient())).rejects.toThrow("incomplete attachment");
     expect(await localDb.recoveries.get(record.key)).toEqual(record);
   });
   it("does not decrypt or export after the vault becomes inactive", async () => {
     const record = await attachmentRecovery();
-    await expect(exportRecoveryCopies(record.userId, () => false)).rejects.toMatchObject({ name: "AbortError" });
+    await expect(exportRecoveryCopies(record.userId, () => false, testCryptoClient())).rejects.toMatchObject({ name: "AbortError" });
     expect(mocks.decrypt).not.toHaveBeenCalled();
     expect(mocks.zip).not.toHaveBeenCalled();
     expect(await localDb.recoveries.count()).toBe(1);

@@ -3,14 +3,19 @@ import { Check, Copy, Download } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { LanguageSelect } from "../components/LanguageSelect";
-import { cryptoClient, type RegistrationCrypto } from "../crypto/client";
+import type { CryptoClient, RegistrationCrypto } from "../crypto/client";
 import { translateError, useI18n } from "../i18n";
 import { submitFormOnEnter } from "./formKeyboard";
 import { downloadRecoveryKey } from "./recoveryKey";
-import type { AuthEndpoint, AuthParameters, User } from "../types";
+import type { AuthParameters, BrowserSession } from "../types";
 
 interface Props {
-  onUnlocked: (user: User, endpoint: AuthEndpoint) => Promise<void>;
+  onUnlocked: (session: BrowserSession, worker: CryptoClient, authSecret?: string) => Promise<void>;
+  getWorker: () => CryptoClient;
+  runAuthentication: <T>(task: () => Promise<T>) => Promise<T>;
+  initialUsername?: string;
+  initialRememberDevice?: boolean;
+  onBack?: () => void;
   offlineUnavailable?: boolean;
 }
 
@@ -26,21 +31,24 @@ type AuthConfigState =
   | { status: "ready"; value: AuthConfig }
   | { status: "error" };
 
-export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
+export function AuthScreen({
+  onUnlocked, getWorker: worker, runAuthentication: authenticate, initialUsername = "", initialRememberDevice = false, onBack, offlineUnavailable = false
+}: Props) {
+  const open = (session: BrowserSession, authSecret?: string) => onUnlocked(session, worker(), authSecret);
   const { languagePreference, setLanguagePreference, t } = useI18n();
   const [mode, setMode] = useState<Mode>("login");
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(initialUsername);
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [activationCode, setActivationCode] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
-  const [rememberDevice, setRememberDevice] = useState(false);
+  const [rememberDevice, setRememberDevice] = useState(initialRememberDevice);
   const [authConfig, setAuthConfig] = useState<AuthConfigState>({ status: "loading" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(false);
-  const [newRecovery, setNewRecovery] = useState<{ code: string; user: User; endpoint: AuthEndpoint } | null>(null);
+  const [newRecovery, setNewRecovery] = useState<{ code: string; session: BrowserSession } | null>(null);
   const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
   const [recoveryCopyState, setRecoveryCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
@@ -71,21 +79,21 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
 
   const login = async () => {
     const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(username.trim().toLowerCase())}`);
-    const derived = await cryptoClient.prepareLogin(password, parameters.kdfSalt, parameters.kdfParams);
-    const result = await api<{ user: User; endpoint: AuthEndpoint; wrappedVaultKey: string; wrappedVaultNonce: string }>("/api/auth/login", {
+    const derived = await worker().prepareLogin(password, parameters.kdfSalt, parameters.kdfParams);
+    const result = await api<BrowserSession & { wrappedVaultKey: string; wrappedVaultNonce: string }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, authSecret: derived.authSecret, rememberDevice })
     });
-    await cryptoClient.unlockVault(parameters.envelopeBinding, result.wrappedVaultKey, result.wrappedVaultNonce);
-    await onUnlocked(result.user, result.endpoint);
+    await worker().unlockVault(parameters.envelopeBinding, result.wrappedVaultKey, result.wrappedVaultNonce);
+    await open(result, derived.authSecret);
   };
 
   const register = async () => {
     if (password.length < 10) throw new Error(t("auth.passwordMin"));
     if (password !== confirmPassword) throw new Error(t("auth.passwordMismatch"));
     const normalizedUsername = username.trim().toLowerCase();
-    const encrypted: RegistrationCrypto = await cryptoClient.createRegistration(normalizedUsername, password);
-    const result = await api<{ user: User; endpoint: AuthEndpoint }>("/api/auth/register", {
+    const encrypted: RegistrationCrypto = await worker().createRegistration(normalizedUsername, password);
+    const result = await api<BrowserSession>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify({
         username: normalizedUsername,
@@ -96,15 +104,15 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
         recoveryCode: undefined
       })
     });
-    setNewRecovery({ code: encrypted.recoveryCode, user: result.user, endpoint: result.endpoint });
+    setNewRecovery({ code: encrypted.recoveryCode, session: result });
   };
 
   const activate = async () => {
     if (password.length < 10) throw new Error(t("auth.passwordMin"));
     if (password !== confirmPassword) throw new Error(t("auth.passwordMismatch"));
     const normalizedUsername = username.trim().toLowerCase();
-    const encrypted = await cryptoClient.createRegistration(normalizedUsername, password);
-    const result = await api<{ user: User; endpoint: AuthEndpoint }>("/api/auth/activate", {
+    const encrypted = await worker().createRegistration(normalizedUsername, password);
+    const result = await api<BrowserSession>("/api/auth/activate", {
       method: "POST",
       body: JSON.stringify({
         username: normalizedUsername,
@@ -116,7 +124,7 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
         recoveryCode: undefined
       })
     });
-    setNewRecovery({ code: encrypted.recoveryCode, user: result.user, endpoint: result.endpoint });
+    setNewRecovery({ code: encrypted.recoveryCode, session: result });
   };
 
   const recover = async () => {
@@ -124,13 +132,13 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
     if (password !== confirmPassword) throw new Error(t("auth.newPasswordMismatch"));
     const normalizedUsername = username.trim().toLowerCase();
     const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(normalizedUsername)}`);
-    const recovery = await cryptoClient.unlockRecovery(
+    const recovery = await worker().unlockRecovery(
       parameters.envelopeBinding,
       recoveryCode,
       parameters.recoveryWrappedVaultKey,
       parameters.recoveryWrappedVaultNonce
     );
-    const next = await cryptoClient.rewrapPassword(parameters.envelopeBinding, password);
+    const next = await worker().rewrapPassword(parameters.envelopeBinding, password);
     await api("/api/auth/recover", {
       method: "POST",
       body: JSON.stringify({
@@ -143,7 +151,7 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
         newWrappedVaultNonce: next.wrappedVaultNonce
       })
     });
-    await cryptoClient.lock();
+    await worker().lock();
     setMode("login");
     setRecoveryCode("");
     setConfirmPassword("");
@@ -157,13 +165,15 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
     setError("");
     setNotice(false);
     try {
-      if (mode === "login") await login();
-      else if (mode === "register") await register();
-      else if (mode === "activate") await activate();
-      else await recover();
+      await authenticate(async () => {
+        if (mode === "login") await login();
+        else if (mode === "register") await register();
+        else if (mode === "activate") await activate();
+        else await recover();
+      });
     } catch (value) {
       setError(translateError(value, t, "auth.operationFailed"));
-      await cryptoClient.lock().catch(() => undefined);
+      await worker().lock().catch(() => undefined);
     } finally {
       setBusy(false);
     }
@@ -177,6 +187,15 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
     } catch {
       setRecoveryCopyState("failed");
     }
+  };
+
+  const confirmRecovery = async () => {
+    if (!newRecovery || !recoveryConfirmed || busy) return;
+    setBusy(true);
+    setError("");
+    try { await authenticate(() => open(newRecovery.session)); }
+    catch (reason) { setError(translateError(reason, t, "auth.operationFailed")); }
+    finally { setBusy(false); }
   };
 
   if (newRecovery) {
@@ -193,7 +212,7 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
               <AppIcon icon={recoveryCopyState === "copied" ? Check : Copy} size={16} />
               {recoveryCopyState === "copied" ? t("auth.recovery.copied") : t("auth.recovery.copy")}
             </button>
-            <button onClick={() => downloadRecoveryKey(newRecovery.user.username, newRecovery.code)}>
+            <button onClick={() => downloadRecoveryKey(newRecovery.session.user.username, newRecovery.code)}>
               <AppIcon icon={Download} size={16} />
               {t("auth.recovery.download")}
             </button>
@@ -203,7 +222,13 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
             <input type="checkbox" checked={recoveryConfirmed} onChange={(event) => setRecoveryConfirmed(event.target.checked)} />
             <span>{t("auth.recovery.confirm")}</span>
           </label>
-          <button className="primary" disabled={!recoveryConfirmed} onClick={() => void onUnlocked(newRecovery.user, newRecovery.endpoint)}>{t("auth.recovery.saved")}</button>
+          {error && <p className="error recovery-feedback" role="alert">{error}</p>}
+          <button className="primary" disabled={!recoveryConfirmed || busy} onClick={() => void confirmRecovery()}>{t("auth.recovery.saved")}</button>
+          {error && <button className="auth-ghost" type="button" disabled={busy} onClick={() => {
+            setNewRecovery(null);
+            setMode("login");
+            setError("");
+          }}>{t("auth.backToLogin")}</button>}
         </section>
       </main>
     );
@@ -214,6 +239,7 @@ export function AuthScreen({ onUnlocked, offlineUnavailable = false }: Props) {
   return (
     <main className="auth-shell">
       <section className="auth-card">
+        {onBack && <button className="auth-ghost" type="button" disabled={busy} onClick={onBack}>{t("account.back")}</button>}
         <div className="auth-language"><LanguageSelect value={languagePreference} onChange={setLanguagePreference} /></div>
         <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
         <h1>{mode === "login" ? "Mint Notes" : mode === "register" ? t("auth.register.title") : mode === "activate" ? t("auth.activate.title") : t("auth.recover.title")}</h1>

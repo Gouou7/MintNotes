@@ -2,12 +2,15 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api";
-import { cryptoClient } from "../crypto/client";
+import { testCryptoClient } from "./session/workspaceServices.testSupport";
 import { getDeviceUnlock, removeDevicePin, setAutoLockMinutes, setDevicePin } from "../crypto/deviceUnlock";
 import { I18nProvider } from "../i18n";
 import type { HistorySettings, OpenDocument, UiPreferences, User } from "../types";
 import { APP_VERSION } from "../version";
 import { SettingsPanel } from "./SettingsPanel";
+
+
+const cryptoClient = testCryptoClient();
 
 vi.mock("../api", () => ({ api: vi.fn() }));
 vi.mock("../crypto/client", () => ({
@@ -406,7 +409,7 @@ describe("SettingsPanel", () => {
     expect(inputs).toHaveLength(2);
     await act(async () => { setValue(inputs[0]!, "master-password"); setValue(inputs[1]!, "new-pin"); });
     await act(async () => dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
-    expect(setDevicePin).toHaveBeenCalledWith("admin-id", "endpoint", "new-pin");
+    expect(setDevicePin).toHaveBeenCalledWith("admin-id", "endpoint", "new-pin", cryptoClient, undefined);
     expect(unconfigured.querySelector(".pin-change-dialog")).toBeNull();
 
     const configured = await renderSettings(admin, vi.fn(), vi.fn(), vi.fn(), vi.fn(), { version: 3, protection: "pin", autoLockMinutes: 5 } as never);
@@ -423,7 +426,7 @@ describe("SettingsPanel", () => {
     await act(async () => setValue(inputs[0]!, "master-password"));
     await act(async () => dialog.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     expect(setAutoLockMinutes).toHaveBeenCalledWith("admin-id", "endpoint", 0);
-    expect(removeDevicePin).toHaveBeenCalledWith("admin-id", "endpoint");
+    expect(removeDevicePin).toHaveBeenCalledWith("admin-id", "endpoint", cryptoClient);
   });
 
   it("opens separate dialogs for master-password changes and recovery-key resets", async () => {
@@ -650,4 +653,9 @@ describe("SettingsPanel", () => {
     expect(onNotify).toHaveBeenCalledWith("已移除 Firefox · Windows", "info");
     confirm.mockRestore();
   });
+});
+
+vi.mock("./session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("./session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
 });

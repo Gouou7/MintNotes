@@ -1,3 +1,4 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { useStorageStatus } from "../storage/useStorageStatus";
 import {
   Copy,
@@ -23,8 +24,7 @@ import { ToastStack } from "../../components/Toast";
 import { MarkdownEditor } from "../../editor/product/MarkdownEditor";
 import { ReadingEditor } from "../../editor/product/ReadingEditor";
 import { translateError, useI18n } from "../../i18n";
-import { type DeviceUnlockCredential } from "../../storage/database";
-import type { AuthEndpoint, OpenDocument, OutlineItem, User } from "../../types";
+import type { OpenDocument, OutlineItem } from "../../types";
 import { DEFAULT_FONT_SIZE } from "../appearance";
 import { attachmentIdsIn, attachmentMarkdown, decryptAttachmentBlob } from "../attachments";
 import { focusAndSelectName } from "../focusName";
@@ -51,7 +51,9 @@ import { useVaultDocuments } from "./useVaultDocuments";
 import { useVaultHistory } from "./useVaultHistory";
 import { useVaultHistoryActions } from "./useVaultHistoryActions";
 import { useVaultLoad } from "./useVaultLoad";
-import { useVaultLock } from "./useVaultLock";
+import { useWorkspaceClose } from "./useWorkspaceClose";
+import { hasDevicePin } from "../../crypto/deviceUnlock";
+import type { VaultAppProps } from "./VaultApp";
 import { useVaultModel } from "./useVaultModel";
 import { useVaultPreferences } from "./useVaultPreferences";
 import { useVaultProfile } from "./useVaultProfile";
@@ -59,7 +61,7 @@ import { useVaultSync } from "./useVaultSync";
 import { useVaultTrash } from "./useVaultTrash";
 import { useVaultTree } from "./useVaultTree";
 import { useWorkspaceEditorMode } from "./useWorkspaceEditorMode";
-import { useMobileDrawerGestures } from "./useWorkspaceInteractions";
+import { useMobileDrawerGestures, useWorkspaceAutoLock } from "./useWorkspaceInteractions";
 import { useWorkspaceSelection } from "./useWorkspaceSelection";
 import { ContextMenu, draggedDocumentIds, TreeLevel, TreeNoteLock } from "./VaultTree";
 import { WorkspacePanelHeader, WorkspaceSidebar } from "./WorkspaceChrome";
@@ -80,17 +82,12 @@ export function VaultWorkspace({
   onCredentialChange,
   onDisplayNameChange,
   onUsernameChange,
-  onLocked
-}: {
-  user: User;
-  endpoint: AuthEndpoint;
-  credential: DeviceUnlockCredential | null;
-  serverSessionVerified: boolean;
-  onCredentialChange: (credential: DeviceUnlockCredential | null) => void;
-  onDisplayNameChange: (displayName: string) => void;
-  onUsernameChange: (username: string) => void;
-  onLocked: (logout: boolean) => void;
-}) {
+  onLock,
+  onLogout,
+  renderAccountSwitcher,
+  registerClose
+}: VaultAppProps) {
+  const services = useWorkspaceServices();
   const { formatDateTime, languagePreference, setLanguagePreference, t } = useI18n();
 
   const [displayName, setDisplayName] = useState(user.displayName);
@@ -309,6 +306,7 @@ export function VaultWorkspace({
   });
 
   const { pushHistoryPending, pushHistoryMetadataPending } = createHistorySync({
+    services,
     history,
     userId: user.id,
     logoutStarted,
@@ -494,7 +492,6 @@ export function VaultWorkspace({
 
   const attachmentUrls = attachmentUrlController.urls;
 
-  const attachmentUrlCache = attachmentUrlController.cache;
 
   const tree = useVaultTree({
     model,
@@ -537,7 +534,7 @@ export function VaultWorkspace({
     userId: user.id, getDocuments: () => documentsRef.current, getAttachments: () => attachmentsRef.current,
     reservations: nameReservations.current, isActive: () => !logoutStarted.current,
     beforeExport: async () => { if (selection.activeIdRef.current) { if (documentIndexRef.current.get(selection.activeIdRef.current)?.title !== titleDraft && !await commitDocumentTitle(selection.activeIdRef.current, titleDraft)) throw new Error("Export title is not saved"); await flushDocument(selection.activeIdRef.current); } await documentSaveQueue.flushAll(); await objectPersistence.drainAll(); },
-    readAttachment: (attachment, isActive, signal) => decryptAttachmentBlob(user.id, attachment, isActive, serverSessionVerifiedRef.current, signal),
+    readAttachment: (attachment, isActive, signal) => decryptAttachmentBlob(user.id, attachment, isActive, serverSessionVerifiedRef.current, signal, services),
     publish: (document, importedAttachments) => {
       for (const attachment of importedAttachments) upsertAttachment(attachment);
       upsertDocument(document);
@@ -554,22 +551,12 @@ export function VaultWorkspace({
     queueDocument, onRepair: (count) => showMessage(t("transfer.namesRepaired", { count }), "info")
   });
 
-  const { lock, manualLock } = useVaultLock({
-    model,
-    logoutStarted,
-    importExport,
-    finishHistorySession,
-    documentSaveQueue,
-    objectPersistence,
-    showMessage,
-    t,
-    userId: user.id,
-    queueDocument,
-    stopSync,
-    attachmentUrlCache,
-    onLocked,
-    endpoint,
-    credential
+  const closingWorkspace = useWorkspaceClose({
+    logoutStarted, importExport, finishHistorySession, documentSaveQueue, objectPersistence,
+    showMessage, t, stopSync, registerClose
+  });
+  useWorkspaceAutoLock({
+    minutes: credential?.autoLockMinutes, userId: user.id, endpointId: endpoint.id, onLock
   });
 
   useEffect(() => {
@@ -609,7 +596,7 @@ export function VaultWorkspace({
   const statusDetail = syncStatusDetailText(syncStatus, t);
 
   return (
-    <div className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${settingsOpen ? "settings-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
+    <div inert={closingWorkspace} className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${settingsOpen ? "settings-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
       <WorkspaceSidebar
         searchInput={searchInput}
         search={search}
@@ -625,7 +612,8 @@ export function VaultWorkspace({
         displayName={displayName}
         username={user.username}
         avatarUrl={avatarUrl}
-        onLock={manualLock}
+        onLock={hasDevicePin(credential) ? onLock : undefined}
+        accountSwitcher={hasDevicePin(credential) ? undefined : renderAccountSwitcher?.(avatarUrl)}
         onSettings={() => setSettingsOpen(true)}
         pinned={pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>
           <div className="tree-section-label"><AppIcon icon={Pin} size={8} />{t("app.pinned")}</div>
@@ -741,7 +729,7 @@ export function VaultWorkspace({
       {(treeOpen || outlineOpen) && <button className="drawer-scrim" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} aria-label={t("app.closeSidebars")} />}
       {importExport.result && <ImportResultPanel result={importExport.result} onClose={importExport.dismiss} />}
       {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onToggleLock={toggleNoteLock} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
-      {settingsOpen && <Suspense fallback={<SettingsPanelLoading onClose={() => setSettingsOpen(false)} />}><SettingsPanel storageStatus={storageStatus} user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={() => lock(true)} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} /></Suspense>}
+      {settingsOpen && <Suspense fallback={<SettingsPanelLoading onClose={() => setSettingsOpen(false)} />}><SettingsPanel storageStatus={storageStatus} user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={onLogout} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} /></Suspense>}
       <ToastStack notices={notices} onDismiss={dismissMessage} />
     </div>
   );

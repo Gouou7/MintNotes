@@ -1,6 +1,6 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { liveQuery } from "dexie";
 import { useEffect, useRef, useState } from "react";
-import { api } from "../../api";
 import { localDb } from "../../storage/database";
 import { capacityLevel, claimCapacityNotice, lastSyncKey, readLocalStorageStatus, readPendingStorageStatus, type LocalStorageStatus } from "../../storage/storageStatus";
 import { useI18n } from "../../i18n";
@@ -13,6 +13,7 @@ export interface AccountStorageUsage {
 }
 export function useStorageStatus(options: { userId: string; endpointId: string; online: boolean; enabled: boolean;
   detailed?: boolean; getUnsavedCount: () => number; notify: (text: string, tone: ToastTone) => void }) {
+  const { transport: { api } } = useWorkspaceServices();
   const { t } = useI18n();
   const current = useRef(options); current.current = options;
   const [usage, setUsage] = useState<AccountStorageUsage | null>(null);

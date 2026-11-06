@@ -1,7 +1,6 @@
 import { evictDownloadableCaches, pinCache, persistWithCacheRecovery } from "../../storage/cache";
 import { operationId } from "@mint-notes/application-client";
 import type { CryptoClient } from "../../crypto/client";
-import { cryptoClient } from "../../crypto/client";
 import {
   historyKey,
   localDb,
@@ -55,7 +54,7 @@ interface HistoryControllerOptions {
   userId: string;
   nextGeneration: () => number;
   isActive: () => boolean;
-  crypto?: CryptoClient;
+  crypto: CryptoClient;
 }
 
 /** Owns encrypted history persistence so the workspace remains a UI/sync coordinator. */
@@ -69,7 +68,7 @@ export class VaultHistoryController {
     this.userId = options.userId;
     this.nextGeneration = options.nextGeneration;
     this.isActive = options.isActive;
-    this.crypto = options.crypto ?? cryptoClient;
+    this.crypto = options.crypto;
   }
 
   private indexFor(record: HistoryIndexEnvelope | LocalHistorySnapshot, pending = record.pending): LocalHistoryIndex {

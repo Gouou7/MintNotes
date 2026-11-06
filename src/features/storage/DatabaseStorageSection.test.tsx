@@ -47,3 +47,8 @@ describe("database storage presentation", () => {
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Refresh"]')?.disabled).toBe(false);
   });
 });
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
+});

@@ -7,19 +7,29 @@ import Database from "better-sqlite3";
 
 const nativeFetch = globalThis.fetch;
 const leases = new Map();
+const sessions = new Map();
 let attachmentOwner = "";
 async function request(url, init = {}) {
   const headers = new Headers(init.headers);
   headers.set("X-WebMD-Protocol", "3");
+  headers.set("X-WebMD-Browser", "1");
   const cookie = headers.get("Cookie");
+  const context = cookie && sessions.get(cookie.match(/webmd_session=([^;]+)/)?.[1]);
+  if (context) headers.set("X-WebMD-Session", context);
   if (cookie && ["PUT", "POST"].includes(init.method) && /\/api\/(?:objects|attachments)\//.test(String(url))) {
     if (!leases.has(cookie)) {
-      const status = await nativeFetch(`${baseUrl}/api/sync/status`, { headers: { Cookie: cookie, "X-WebMD-Protocol": "3" } });
+      const status = await nativeFetch(`${baseUrl}/api/sync/status`, { headers: { Cookie: cookie, "X-WebMD-Protocol": "3", "X-WebMD-Session": context } });
       if (status.ok) leases.set(cookie, (await status.json()).lease);
     }
     if (leases.has(cookie)) headers.set("X-WebMD-Sync-Lease", leases.get(cookie));
   }
-  return nativeFetch(url, { ...init, headers });
+  const response = await nativeFetch(url, { ...init, headers });
+  const issued = responseCookies(response).webmd_session;
+  if (issued && response.ok) {
+    const { sessionId } = await response.clone().json();
+    if (sessionId) sessions.set(issued, sessionId);
+  }
+  return response;
 }
 
 const dataDirectory = await mkdtemp(join(tmpdir(), "mint-notes-smoke-"));

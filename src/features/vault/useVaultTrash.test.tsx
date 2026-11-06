@@ -50,3 +50,8 @@ describe("scoped permanent clearing", () => {
     });
   });
 });
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
+});

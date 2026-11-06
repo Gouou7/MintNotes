@@ -1,8 +1,3 @@
-const jsonHeaders = { "Content-Type": "application/json" };
-let syncLease = "";
-export function setSyncLease(value: string) { syncLease = value; }
-function protocolHeaders() { return { "X-WebMD-Protocol": "3", ...(syncLease ? { "X-WebMD-Sync-Lease": syncLease } : {}) }; }
-
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -13,53 +8,80 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const timeoutSignal = AbortSignal.timeout(20_000);
-  const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    ...init,
-    signal,
-    headers: { ...protocolHeaders(), ...(init.body ? jsonHeaders : {}), ...init.headers }
-  });
-  const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  const expectedCredentialFailure = ["/api/auth/login", "/api/auth/reauth", "/api/auth/recover", "/api/auth/password", "/api/account/recovery-key"].includes(path)
-    || (init.method === "DELETE" && path.startsWith("/api/admin/users/"));
-  if (response.status === 401 && typeof window !== "undefined" && !expectedCredentialFailure) {
-    window.dispatchEvent(new CustomEvent("webmd:session-invalid"));
+export function createApiClient(options: { signal?: AbortSignal; requireSession?: boolean; onInvalid?: (error: ApiError) => void } = {}) {
+  let sessionId: string | undefined;
+  let syncLease = "";
+  let binding = new AbortController();
+  async function request(path: string, init: RequestInit = {}, timeout?: number) {
+    const expected = sessionId;
+    if (options.requireSession && !expected) throw new DOMException("No verified session", "InvalidStateError");
+    const signals = [options.signal, binding.signal, init.signal, timeout ? AbortSignal.timeout(timeout) : undefined].filter((signal): signal is AbortSignal => !!signal);
+    const headers = new Headers(init.headers);
+    headers.set("X-WebMD-Protocol", "3");
+    headers.set("X-WebMD-Browser", "1");
+    if (expected) headers.set("X-WebMD-Session", expected);
+    if (syncLease) headers.set("X-WebMD-Sync-Lease", syncLease);
+    const response = await fetch(path, {
+      ...init, credentials: "same-origin", cache: "no-store", headers,
+      signal: signals.length ? AbortSignal.any(signals) : undefined
+    });
+    const assertCurrent = () => {
+      options.signal?.throwIfAborted();
+      if (expected !== sessionId) throw new DOMException("Inactive session", "AbortError");
+    };
+    assertCurrent();
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+      const error = new ApiError(String(data.error ?? `Request failed (${response.status})`), response.status, data);
+      if (expected && expected === sessionId && !options.signal?.aborted
+        && (data.code === "BROWSER_SESSION_CHANGED" || data.code === "BROWSER_SESSION_INVALID")) options.onInvalid?.(error);
+      if (response.status === 413) storageRefresh();
+      throw error;
+    }
+    return { response, assertCurrent };
   }
-  if (typeof window !== "undefined" && (response.status === 413 || (response.ok && init.method && init.method !== "GET"
-    && /objects|attachments|history|avatar|storage-quota/.test(path)))) window.dispatchEvent(new CustomEvent("webmd:storage-refresh"));
-  if (!response.ok) throw new ApiError(String(data.error ?? `Request failed (${response.status})`), response.status, data);
-  return data as T;
-}
 
-export async function uploadAttachmentChunk(path: string, ciphertext: ArrayBuffer, headers: Record<string, string>): Promise<void> {
-  const response = await fetch(path, {
-    method: "PUT",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/octet-stream", ...protocolHeaders(), ...headers },
-    body: ciphertext,
-    signal: AbortSignal.timeout(30_000)
-  });
-  if (typeof window !== "undefined" && (response.ok || response.status === 413)) window.dispatchEvent(new CustomEvent("webmd:storage-refresh"));
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({})) as { error?: string };
-    throw new ApiError(data.error ?? `Attachment upload failed (${response.status})`, response.status, data);
-  }
-}
-
-export async function downloadAttachmentChunk(path: string, signal?: AbortSignal): Promise<{ ciphertext: ArrayBuffer; nonce: string; totalChunks: number; encryptionVersion: number }> {
-  const timeout = AbortSignal.timeout(30_000);
-  const response = await fetch(path, { credentials: "same-origin", cache: "no-store", headers: protocolHeaders(), signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({})) as { error?: string };
-    throw new ApiError(data.error ?? `Attachment download failed (${response.status})`, response.status, data);
-  }
   return {
-    ciphertext: await response.arrayBuffer(),
-    nonce: response.headers.get("X-WebMD-Nonce") ?? "",
-    totalChunks: Number(response.headers.get("X-WebMD-Total-Chunks") ?? 0),
-    encryptionVersion: Number(response.headers.get("X-WebMD-Encryption-Version") ?? 1)
+    bindSession(id: string | undefined) {
+      if (id === sessionId) return;
+      binding.abort();
+      binding = new AbortController();
+      syncLease = "";
+      sessionId = id;
+    },
+    setSyncLease(value: string) { syncLease = value; },
+    async api<T>(path: string, init: RequestInit = {}): Promise<T> {
+      const headers = new Headers(init.headers);
+      if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+      const { response, assertCurrent } = await request(path, { ...init, headers }, 20_000);
+      const data = await response.json().catch(() => ({})) as T;
+      assertCurrent();
+      if (init.method && init.method !== "GET" && /objects|attachments|history|avatar|storage-quota/.test(path)) storageRefresh();
+      return data;
+    },
+    async uploadAttachmentChunk(path: string, ciphertext: ArrayBuffer, headers: Record<string, string>) {
+      await request(path, { method: "PUT", headers: { "Content-Type": "application/octet-stream", ...headers }, body: ciphertext }, 30_000);
+      storageRefresh();
+    },
+    async downloadAttachmentChunk(path: string, signal?: AbortSignal) {
+      const { response, assertCurrent } = await request(path, { signal }, 30_000);
+      const ciphertext = await response.arrayBuffer();
+      assertCurrent();
+      return {
+        ciphertext, nonce: response.headers.get("X-WebMD-Nonce") ?? "",
+        totalChunks: Number(response.headers.get("X-WebMD-Total-Chunks") ?? 0),
+        encryptionVersion: Number(response.headers.get("X-WebMD-Encryption-Version") ?? 1)
+      };
+    },
+    async stream(path: string, signal: AbortSignal) {
+      return (await request(path, { signal, headers: { Accept: "text/event-stream" } })).response;
+    }
   };
 }
+
+function storageRefresh() {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("webmd:storage-refresh"));
+}
+
+export type ApiClient = ReturnType<typeof createApiClient>;
+export const api = createApiClient().api;

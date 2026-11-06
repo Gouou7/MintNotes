@@ -1,3 +1,4 @@
+import { browserInject } from "../auth/browserInject.testSupport.js";
 import { operationId as newOperationId } from "@mint-notes/application-client";
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,7 +39,7 @@ async function registerGrant(access: "read" | "read-write" = "read-write") {
   const value = await createApplicationCredential(userId, randomBytes(32));
   const payload = { ...value, name: "OpenClaw", access, idleTimeoutDays: 30, expiresAt: null };
   const { applicationKey: _key, ...body } = payload;
-  const response = await app.inject({ method: "POST", url: "/api/account/application-connections", headers: browser(), payload: body });
+  const response = await browserInject(app, { method: "POST", url: "/api/account/application-connections", headers: browser(), payload: body });
   expect(response.statusCode).toBe(201);
   return { value, body };
 }
@@ -47,13 +48,13 @@ beforeEach(async () => {
   directory = mkdtempSync(join(tmpdir(), "mint-app-test-"));
   db = openDatabase(directory);
   app = await createApp({ config: { ...loadServerConfig({ NODE_ENV: "test", LOG_LEVEL: "silent", APP_ORIGIN: "http://localhost", ALLOW_REGISTRATION: "true" }), dataDirectory: directory }, db, maintenance: false });
-  const response = await app.inject({ method: "POST", url: "/api/auth/register", headers: { origin }, payload: registration("alpha") });
+  const response = await browserInject(app, { method: "POST", url: "/api/auth/register", headers: { origin }, payload: registration("alpha") });
   expect(response.statusCode).toBe(201);
   cookie = (response.headers["set-cookie"] as string[]).map((value) => value.split(";", 1)[0]).join("; ");
   userId = response.json().user.id;
   credential = (await registerGrant()).value;
   bearer = `Bearer ${credential.connectionId}.${credential.authSecret}`;
-  const connection = await app.inject({ method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } });
+  const connection = await browserInject(app, { method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } });
   expect(connection.statusCode).toBe(200);
   bootstrap = connection.json();
   cipher = await VaultCipher.unlock(credential.applicationKey, bootstrap);
@@ -64,7 +65,7 @@ beforeEach(async () => {
     await beforeFetch?.(url.pathname, init);
     if (init.signal?.aborted) throw new DOMException("cancelled", "AbortError");
     const headers = Object.fromEntries(new Headers(init.headers).entries());
-    const response = await app.inject({ method: init.method as "GET" ?? "GET", url: url.pathname + url.search, headers,
+    const response = await browserInject(app, { method: init.method as "GET" ?? "GET", url: url.pathname + url.search, headers,
       ...(init.body ? { payload: typeof init.body === "string" ? init.body : Buffer.from(init.body as ArrayBuffer) } : {}) });
     return new Response(response.rawPayload, { status: response.statusCode, headers: response.headers as Record<string, string> });
   });
@@ -77,7 +78,7 @@ afterEach(async () => {
 async function putNote(title: string, markdown = "body", locked = false) {
   const note = makeDocument([], "note", title, null, markdown); note.locked = locked;
   const sealed = await cipher.encryptObject(note.objectId, "note", 1, note);
-  const result = await app.inject({ method: "PUT", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: bearer },
+  const result = await browserInject(app, { method: "PUT", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: bearer },
     payload: { ...sealed, objectType: "note", baseRevision: 0, deleted: false, idempotencyKey: newOperationId() } });
   expect(result.statusCode).toBe(200); return note;
 }
@@ -94,16 +95,16 @@ describe("application grants and encrypted adapters", () => {
       { method: "GET" as const, url: "/api/apps/v3/sync" },
       { method: "PUT" as const, url: `/api/apps/v3/objects/${crypto.randomUUID()}`, payload: {} }
     ]) {
-      const response = await app.inject({ ...request, headers: { authorization } });
+      const response = await browserInject(app, { ...request, headers: { authorization } });
       expect(response.statusCode).toBe(401);
       expect(response.json().code).toBe("APPLICATION_INVALID");
     }
-    const retry = await app.inject({ method: "POST", url: "/api/account/application-connections",
+    const retry = await browserInject(app, { method: "POST", url: "/api/account/application-connections",
       headers: browser(), payload: { connectionId: credential.connectionId, name: "OpenClaw",
         access: "read-write", idleTimeoutDays: 30, expiresAt: null, authSecret: wrongSecret,
         vaultEnvelope: credential.vaultEnvelope } });
     expect(retry.statusCode).toBe(409);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v3/connection",
+    expect((await browserInject(app, { method: "GET", url: "/api/apps/v3/connection",
       headers: { authorization: `Bearer ${credential.connectionId}.${authSecret}` } })).statusCode).toBe(200);
     expect(db.prepare("SELECT last_used_at FROM application_connections WHERE connection_id = ?")
       .get(credential.connectionId)).toEqual({ last_used_at: null });
@@ -111,29 +112,29 @@ describe("application grants and encrypted adapters", () => {
 
   it("separates credentials, Origin protection, read-only permission and account ownership", async () => {
     const note = await putNote("secret title");
-    const listed = await app.inject({ method: "GET", url: "/api/account/application-connections", headers: browser() });
+    const listed = await browserInject(app, { method: "GET", url: "/api/account/application-connections", headers: browser() });
     expect(JSON.stringify(listed.json())).not.toContain(credential.authSecret);
     expect(JSON.stringify(listed.json())).not.toContain("vaultEnvelope");
-    expect((await app.inject({ method: "GET", url: "/api/auth/me", headers: { authorization: bearer } })).statusCode).toBe(401);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v3/connection", headers: { cookie } })).statusCode).toBe(401);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer, origin: "https://evil.test" } })).statusCode).toBe(403);
+    expect((await browserInject(app, { method: "GET", url: "/api/auth/me", headers: { authorization: bearer } })).statusCode).toBe(401);
+    expect((await browserInject(app, { method: "GET", url: "/api/apps/v3/connection", headers: { cookie } })).statusCode).toBe(401);
+    expect((await browserInject(app, { method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer, origin: "https://evil.test" } })).statusCode).toBe(403);
     const read = await registerGrant("read");
-    expect((await app.inject({ method: "PUT", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: `Bearer ${read.value.connectionId}.${read.value.authSecret}` }, payload: {} })).statusCode).toBe(403);
-    const other = await app.inject({ method: "POST", url: "/api/auth/register", headers: { origin }, payload: registration("beta") });
+    expect((await browserInject(app, { method: "PUT", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: `Bearer ${read.value.connectionId}.${read.value.authSecret}` }, payload: {} })).statusCode).toBe(403);
+    const other = await browserInject(app, { method: "POST", url: "/api/auth/register", headers: { origin }, payload: registration("beta") });
     const otherCookie = (other.headers["set-cookie"] as string[]).map((value) => value.split(";", 1)[0]).join("; ");
-    expect((await app.inject({ method: "DELETE", url: `/api/account/application-connections/${credential.connectionId}`, headers: { origin, cookie: otherCookie } })).statusCode).toBe(404);
-    expect((await app.inject({ method: "GET", url: `/api/objects/${note.objectId}`, headers: { origin, cookie: otherCookie } })).statusCode).toBe(404);
+    expect((await browserInject(app, { method: "DELETE", url: `/api/account/application-connections/${credential.connectionId}`, headers: { origin, cookie: otherCookie } })).statusCode).toBe(404);
+    expect((await browserInject(app, { method: "GET", url: `/api/objects/${note.objectId}`, headers: { origin, cookie: otherCookie } })).statusCode).toBe(404);
     const otherGrant = await createApplicationCredential(other.json().user.id, randomBytes(32));
-    expect((await app.inject({ method: "POST", url: "/api/account/application-connections", headers: { origin, cookie: otherCookie }, payload: {
+    expect((await browserInject(app, { method: "POST", url: "/api/account/application-connections", headers: { origin, cookie: otherCookie }, payload: {
       connectionId: otherGrant.connectionId, authSecret: otherGrant.authSecret, vaultEnvelope: otherGrant.vaultEnvelope,
       name: "other", access: "read", idleTimeoutDays: 30, expiresAt: null
     } })).statusCode).toBe(201);
     const otherBearer = `Bearer ${otherGrant.connectionId}.${otherGrant.authSecret}`;
-    expect((await app.inject({ method: "GET", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: otherBearer } })).statusCode).toBe(404);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v3/sync", headers: { authorization: otherBearer } })).json().changes).toEqual([]);
-    expect((await app.inject({ method: "PATCH", url: `/api/admin/users/${other.json().user.id}`, headers: browser(), payload: { disabled: true } })).statusCode).toBe(200);
-    expect((await app.inject({ method: "PATCH", url: `/api/admin/users/${other.json().user.id}`, headers: browser(), payload: { disabled: false } })).statusCode).toBe(200);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v3/connection", headers: { authorization: otherBearer } })).json().code).toBe("APPLICATION_REVOKED");
+    expect((await browserInject(app, { method: "GET", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: otherBearer } })).statusCode).toBe(404);
+    expect((await browserInject(app, { method: "GET", url: "/api/apps/v3/sync", headers: { authorization: otherBearer } })).json().changes).toEqual([]);
+    expect((await browserInject(app, { method: "PATCH", url: `/api/admin/users/${other.json().user.id}`, headers: browser(), payload: { disabled: true } })).statusCode).toBe(200);
+    expect((await browserInject(app, { method: "PATCH", url: `/api/admin/users/${other.json().user.id}`, headers: browser(), payload: { disabled: false } })).statusCode).toBe(200);
+    expect((await browserInject(app, { method: "GET", url: "/api/apps/v3/connection", headers: { authorization: otherBearer } })).json().code).toBe("APPLICATION_REVOKED");
     const row = db.prepare("SELECT * FROM application_connections WHERE connection_id = ?").get(credential.connectionId) as Record<string, unknown>;
     expect(JSON.stringify(row)).not.toContain(credential.applicationKey);
     expect(row.auth_hash).not.toBe(credential.authSecret);
@@ -143,18 +144,18 @@ describe("application grants and encrypted adapters", () => {
     const note = await putNote("retained note");
     const grant = await registerGrant();
     const recordUrl = `/api/account/application-connections/${grant.value.connectionId}/record`;
-    expect((await app.inject({ method: "DELETE", url: recordUrl, headers: browser() })).statusCode).toBe(409);
-    const revoke = await app.inject({ method: "DELETE", url: `/api/account/application-connections/${grant.value.connectionId}`, headers: browser() });
+    expect((await browserInject(app, { method: "DELETE", url: recordUrl, headers: browser() })).statusCode).toBe(409);
+    const revoke = await browserInject(app, { method: "DELETE", url: `/api/account/application-connections/${grant.value.connectionId}`, headers: browser() });
     expect(revoke.statusCode).toBe(200);
     for (let attempt = 0; attempt < 2; attempt++) {
-      expect((await app.inject({ method: "DELETE", url: recordUrl, headers: browser() })).statusCode).toBe(200);
+      expect((await browserInject(app, { method: "DELETE", url: recordUrl, headers: browser() })).statusCode).toBe(200);
     }
-    const listed = (await app.inject({ method: "GET", url: "/api/account/application-connections", headers: browser() })).json();
+    const listed = (await browserInject(app, { method: "GET", url: "/api/account/application-connections", headers: browser() })).json();
     expect(listed.connections.map((row: { connectionId: string }) => row.connectionId)).toEqual([credential.connectionId]);
-    expect((await app.inject({ method: "GET", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: bearer } })).statusCode).toBe(200);
-    const replay = await app.inject({ method: "POST", url: "/api/account/application-connections", headers: browser(), payload: grant.body });
+    expect((await browserInject(app, { method: "GET", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: bearer } })).statusCode).toBe(200);
+    const replay = await browserInject(app, { method: "POST", url: "/api/account/application-connections", headers: browser(), payload: grant.body });
     expect(replay.statusCode).toBe(409);
-    const oldCredential = await app.inject({ method: "GET", url: "/api/apps/v3/connection", headers: { authorization: `Bearer ${grant.value.connectionId}.${grant.value.authSecret}` } });
+    const oldCredential = await browserInject(app, { method: "GET", url: "/api/apps/v3/connection", headers: { authorization: `Bearer ${grant.value.connectionId}.${grant.value.authSecret}` } });
     expect(oldCredential.statusCode).toBe(401);
     expect(oldCredential.json().code).toBe("APPLICATION_REVOKED");
     expect(db.prepare("SELECT removed_at, revoked_at FROM application_connections WHERE connection_id = ?").get(grant.value.connectionId))
@@ -163,29 +164,29 @@ describe("application grants and encrypted adapters", () => {
 
   it("protects record removal with browser authentication, Origin checks and account ownership", async () => {
     const url = `/api/account/application-connections/${credential.connectionId}/record`;
-    await app.inject({ method: "DELETE", url: `/api/account/application-connections/${credential.connectionId}`, headers: browser() });
-    expect((await app.inject({ method: "DELETE", url, headers: { origin, authorization: bearer } })).statusCode).toBe(401);
-    expect((await app.inject({ method: "DELETE", url, headers: { cookie } })).statusCode).toBe(403);
-    const other = await app.inject({ method: "POST", url: "/api/auth/register", headers: { origin }, payload: registration("beta") });
+    await browserInject(app, { method: "DELETE", url: `/api/account/application-connections/${credential.connectionId}`, headers: browser() });
+    expect((await browserInject(app, { method: "DELETE", url, headers: { origin, authorization: bearer } })).statusCode).toBe(401);
+    expect((await browserInject(app, { method: "DELETE", url, headers: { cookie } })).statusCode).toBe(403);
+    const other = await browserInject(app, { method: "POST", url: "/api/auth/register", headers: { origin }, payload: registration("beta") });
     const otherCookie = (other.headers["set-cookie"] as string[]).map((value) => value.split(";", 1)[0]).join("; ");
-    expect((await app.inject({ method: "DELETE", url, headers: { origin, cookie: otherCookie } })).statusCode).toBe(404);
-    expect((await app.inject({ method: "DELETE", url: "/api/account/application-connections/invalid/record", headers: browser() })).statusCode).toBe(400);
-    expect((await app.inject({ method: "DELETE", url: `/api/account/application-connections/${crypto.randomUUID()}/record`, headers: browser() })).statusCode).toBe(404);
-    const listed = (await app.inject({ method: "GET", url: "/api/account/application-connections", headers: browser() })).json();
+    expect((await browserInject(app, { method: "DELETE", url, headers: { origin, cookie: otherCookie } })).statusCode).toBe(404);
+    expect((await browserInject(app, { method: "DELETE", url: "/api/account/application-connections/invalid/record", headers: browser() })).statusCode).toBe(400);
+    expect((await browserInject(app, { method: "DELETE", url: `/api/account/application-connections/${crypto.randomUUID()}/record`, headers: browser() })).statusCode).toBe(404);
+    const listed = (await browserInject(app, { method: "GET", url: "/api/account/application-connections", headers: browser() })).json();
     expect(listed.connections).toHaveLength(1);
   });
 
   it("makes registration idempotent and status checks unable to prolong idle expiry", async () => {
     const grant = await registerGrant();
-    const retry = await app.inject({ method: "POST", url: "/api/account/application-connections", headers: browser(), payload: grant.body });
+    const retry = await browserInject(app, { method: "POST", url: "/api/account/application-connections", headers: browser(), payload: grant.body });
     expect(retry.json().idempotent).toBe(true);
-    expect((await app.inject({ method: "POST", url: "/api/account/application-connections", headers: browser(), payload: { ...grant.body, name: "changed" } })).statusCode).toBe(409);
+    expect((await browserInject(app, { method: "POST", url: "/api/account/application-connections", headers: browser(), payload: { ...grant.body, name: "changed" } })).statusCode).toBe(409);
     expect(db.prepare("SELECT last_used_at FROM application_connections WHERE connection_id = ?").get(credential.connectionId)).toEqual({ last_used_at: null });
     await client.execute("mint_notes_status");
     expect(db.prepare("SELECT last_used_at FROM application_connections WHERE connection_id = ?").get(credential.connectionId)).toEqual({ last_used_at: null });
     db.prepare("UPDATE application_connections SET created_at = ? WHERE connection_id = ?").run("2000-01-01T00:00:00.000Z", credential.connectionId);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_EXPIRED");
-    expect((await app.inject({ method: "PATCH", url: `/api/account/application-connections/${credential.connectionId}`, headers: browser(), payload: { name: "new", idleTimeoutDays: null, expiresAt: null } })).statusCode).toBe(409);
+    expect((await browserInject(app, { method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_EXPIRED");
+    expect((await browserInject(app, { method: "PATCH", url: `/api/account/application-connections/${credential.connectionId}`, headers: browser(), payload: { name: "new", idleTimeoutDays: null, expiresAt: null } })).statusCode).toBe(409);
   });
 
   it("reads verified ciphertext offline, forbids offline writes and fails closed after revocation", async () => {
@@ -195,7 +196,7 @@ describe("application grants and encrypted adapters", () => {
     expect(await client.execute("mint_notes_get", { noteId: note.objectId })).toMatchObject({ offline: true, markdown: "private Markdown" });
     await expect(client.execute("mint_notes_create", { title: "offline" })).rejects.toMatchObject({ code: "OFFLINE_WRITE_DISABLED" });
     offline = false;
-    await app.inject({ method: "DELETE", url: `/api/account/application-connections/${credential.connectionId}`, headers: browser() });
+    await browserInject(app, { method: "DELETE", url: `/api/account/application-connections/${credential.connectionId}`, headers: browser() });
     await expect(client.execute("mint_notes_get", { noteId: note.objectId })).rejects.toMatchObject({ code: "APPLICATION_REVOKED" });
     offline = true;
     await expect(client.execute("mint_notes_get", { noteId: note.objectId })).rejects.toMatchObject({ code: "APPLICATION_REVOKED" });
@@ -281,7 +282,7 @@ describe("application grants and encrypted adapters", () => {
       if (!raced && path === `/api/apps/v3/objects/${note.objectId}` && init.method === "PUT") {
         raced = true;
         const sealed = await cipher.encryptObject(note.objectId, "note", 2, { ...note, markdown: "server winner" });
-        expect((await app.inject({ method: "PUT", url: path, headers: { authorization: bearer }, payload: { ...sealed, objectType: "note", baseRevision: 1, deleted: false, idempotencyKey: newOperationId() } })).statusCode).toBe(200);
+        expect((await browserInject(app, { method: "PUT", url: path, headers: { authorization: bearer }, payload: { ...sealed, objectType: "note", baseRevision: 1, deleted: false, idempotencyKey: newOperationId() } })).statusCode).toBe(200);
       }
     };
     const args = { noteId: note.objectId, expectedRevision: 1, markdown: "plugin proposal", operationId: newOperationId() };
@@ -299,22 +300,22 @@ describe("application grants and encrypted adapters", () => {
     const image = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]).buffer;
     const attachment = await encryptAttachmentBytes({ userId, attachmentId, ownerNoteId: note.objectId, originalName: "secret.png", mime: "image/png", data: image, chunkSize: 1024 * 1024 });
     for (const chunk of attachment.chunks) {
-      expect((await app.inject({ method: "PUT", url: `/api/apps/v3/attachments/${attachmentId}/chunks/${chunk.chunkIndex}`,
+      expect((await browserInject(app, { method: "PUT", url: `/api/apps/v3/attachments/${attachmentId}/chunks/${chunk.chunkIndex}`,
         headers: { authorization: bearer, "content-type": "application/octet-stream", "x-webmd-nonce": chunk.nonce,
           "x-webmd-total-chunks": String(chunk.totalChunks), "x-webmd-owner-note": note.objectId, "x-webmd-encryption-version": "1", "x-webmd-idempotency-key": newOperationId() },
         payload: Buffer.from(chunk.ciphertext) })).statusCode).toBe(200);
     }
     const sealedAttachment = await cipher.encryptObject(attachmentId, "attachment", 1, attachment.metadata);
-    expect((await app.inject({ method: "PUT", url: `/api/apps/v3/objects/${attachmentId}`, headers: { authorization: bearer }, payload: { ...sealedAttachment, objectType: "attachment", ownerNoteId: note.objectId, baseRevision: 0, deleted: false, idempotencyKey: newOperationId() } })).statusCode).toBe(200);
+    expect((await browserInject(app, { method: "PUT", url: `/api/apps/v3/objects/${attachmentId}`, headers: { authorization: bearer }, payload: { ...sealedAttachment, objectType: "attachment", ownerNoteId: note.objectId, baseRevision: 0, deleted: false, idempotencyKey: newOperationId() } })).statusCode).toBe(200);
     note.markdown = `![image](WEBMD-ATTACHMENT:${attachmentId.toUpperCase()})`; note.attachmentIds = [attachmentId];
     const sealed = await cipher.encryptObject(note.objectId, "note", 1, note);
-    await app.inject({ method: "PUT", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: bearer }, payload: { ...sealed, objectType: "note", baseRevision: 0, deleted: false, idempotencyKey: newOperationId() } });
+    await browserInject(app, { method: "PUT", url: `/api/apps/v3/objects/${note.objectId}`, headers: { authorization: bearer }, payload: { ...sealed, objectType: "note", baseRevision: 0, deleted: false, idempotencyKey: newOperationId() } });
     let raced = false;
     beforeFetch = async (path, init) => {
       if (!raced && path === `/api/apps/v3/objects/${note.objectId}` && init.method === "PUT") {
         raced = true;
         const server = await cipher.encryptObject(note.objectId, "note", 2, { ...note, markdown: note.markdown + "server" });
-        await app.inject({ method: "PUT", url: path, headers: { authorization: bearer }, payload: { ...server, objectType: "note", baseRevision: 1, deleted: false, idempotencyKey: newOperationId() } });
+        await browserInject(app, { method: "PUT", url: path, headers: { authorization: bearer }, payload: { ...server, objectType: "note", baseRevision: 1, deleted: false, idempotencyKey: newOperationId() } });
       }
     };
     const result = await client.execute("mint_notes_append", { noteId: note.objectId, expectedRevision: 1, markdown: "proposed", operationId: newOperationId() }) as { status: string; conflictNoteId: string };
@@ -351,10 +352,10 @@ describe("application grants and encrypted adapters", () => {
     beforeFetch = null;
     if (action === "purged") {
       const deleted = await cipher.encryptObject(note.objectId, "note", 2, { ...note, deleted: true });
-      expect((await app.inject({ method: "PUT", url: `/api/objects/${note.objectId}`, headers: browser(), payload: { ...deleted, objectType: "note", baseRevision: 1, deleted: true, idempotencyKey: newOperationId() } })).statusCode).toBe(200);
-      expect((await app.inject({ method: "POST", url: "/api/objects/purge", headers: browser(), payload: { objects: [{ objectId: note.objectId, baseRevision: 2 }] } })).statusCode).toBe(200);
+      expect((await browserInject(app, { method: "PUT", url: `/api/objects/${note.objectId}`, headers: browser(), payload: { ...deleted, objectType: "note", baseRevision: 1, deleted: true, idempotencyKey: newOperationId() } })).statusCode).toBe(200);
+      expect((await browserInject(app, { method: "POST", url: "/api/objects/purge", headers: browser(), payload: { objects: [{ objectId: note.objectId, baseRevision: 2 }] } })).statusCode).toBe(200);
     } else {
-      expect((await app.inject({ method: "DELETE", url: `/api/notes/${note.objectId}/history`, headers: browser() })).statusCode).toBe(200);
+      expect((await browserInject(app, { method: "DELETE", url: `/api/notes/${note.objectId}/history`, headers: browser() })).statusCode).toBe(200);
     }
     const result = await client.execute("mint_notes_append", args) as { status: string; conflictNoteId?: string };
     expect(result.status).toBe(action === "purged" ? "conflict" : "committed");
@@ -367,22 +368,22 @@ describe("application grants and encrypted adapters", () => {
     const payload = { newAuthSecret: "next-derived-auth-secret-000001", newKdfSalt: "x".repeat(24), newKdfParams: account.kdfParams,
       newWrappedVaultKey: "z".repeat(32), newWrappedVaultNonce: "y".repeat(24),
       ...(action === "password" ? { currentAuthSecret: account.authSecret } : { username: account.username, recoveryAuthSecret: account.recoveryAuthSecret }) };
-    expect((await app.inject({ method: "POST", url: `/api/auth/${action}`, headers: browser(), payload })).statusCode).toBe(200);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_REVOKED");
+    expect((await browserInject(app, { method: "POST", url: `/api/auth/${action}`, headers: browser(), payload })).statusCode).toBe(200);
+    expect((await browserInject(app, { method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_REVOKED");
   });
 
   it("keeps application authorization independent of recovery-key rotation and browser logout", async () => {
     const account = registration("alpha");
-    expect((await app.inject({ method: "POST", url: "/api/account/recovery-key", headers: browser(), payload: {
+    expect((await browserInject(app, { method: "POST", url: "/api/account/recovery-key", headers: browser(), payload: {
       currentAuthSecret: account.authSecret, recoveryAuthSecret: "rotated-recovery-secret-000001", recoveryWrappedVaultKey: "z".repeat(32), recoveryWrappedVaultNonce: "y".repeat(24)
     } })).statusCode).toBe(200);
-    expect((await app.inject({ method: "POST", url: "/api/auth/logout", headers: browser() })).statusCode).toBe(200);
-    expect((await app.inject({ method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } })).statusCode).toBe(200);
+    expect((await browserInject(app, { method: "POST", url: "/api/auth/logout", headers: browser() })).statusCode).toBe(200);
+    expect((await browserInject(app, { method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } })).statusCode).toBe(200);
   });
 
   it("revokes application grants together with account credential invalidation", async () => {
     db.transaction(() => revokeUserCredentials(db, userId))();
-    expect((await app.inject({ method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_REVOKED");
+    expect((await browserInject(app, { method: "GET", url: "/api/apps/v3/connection", headers: { authorization: bearer } })).json().code).toBe("APPLICATION_REVOKED");
   });
 
   it("synchronizes long notes by immutable blocks and preserves both concurrent device edits", async () => {
@@ -391,7 +392,7 @@ describe("application grants and encrypted adapters", () => {
     const created = await client.execute("mint_notes_create", { title: "long", markdown }) as any;
     expect(created.status).toBe("committed");
     const id = created.objectId;
-    const current = (await app.inject({ method: "GET", url: `/api/apps/v3/objects/${id}`, headers: { authorization: bearer } })).json();
+    const current = (await browserInject(app, { method: "GET", url: `/api/apps/v3/objects/${id}`, headers: { authorization: bearer } })).json();
     expect(current.encryptionVersion).toBe(2);
     expect(current.bodyBlockIds.length).toBeGreaterThan(2);
     const second = await ApplicationClient.open({ baseUrl: origin, applicationKey: credential.applicationKey, stateDir: join(directory, "device-two") });
@@ -430,7 +431,7 @@ describe("application grants and encrypted adapters", () => {
     beforeFetch = async (path, init) => {
       if (!lost && /\/objects\//.test(path) && init.method === "PUT") {
         lost = true;
-        const accepted = await app.inject({ method: "PUT", url: path, headers: init.headers as any, payload: init.body as string });
+        const accepted = await browserInject(app, { method: "PUT", url: path, headers: init.headers as any, payload: init.body as string });
         expect(accepted.statusCode).toBe(200);
         throw new TypeError("response lost after commit");
       }
@@ -484,7 +485,7 @@ describe("application grants and encrypted adapters", () => {
         beforeFetch = async (path, init) => {
           if (!lost && path === `/api/apps/v3/objects/${id}` && init.method === "PUT") {
             lost = true;
-            expect((await app.inject({ method: "PUT", url: path, headers: init.headers as any, payload: init.body as string })).statusCode).toBe(200);
+            expect((await browserInject(app, { method: "PUT", url: path, headers: init.headers as any, payload: init.body as string })).statusCode).toBe(200);
             throw new TypeError("seeded accepted response lost");
           }
         };
@@ -528,7 +529,7 @@ describe("application grants and encrypted adapters", () => {
       await expect(reader.execute("mint_notes_get", { noteId: created.objectId })).rejects.toThrow();
       corrupt = false;
       expect((await reader.execute("mint_notes_get", { noteId: created.objectId }) as any).markdown).toBe(markdown);
-      expect((await app.inject({ method: "POST", url: `/api/apps/v3/notes/${created.objectId}/body-blocks/batch`, headers: { authorization: bearer }, payload: { blocks: [] } })).statusCode).toBe(403);
+      expect((await browserInject(app, { method: "POST", url: `/api/apps/v3/notes/${created.objectId}/body-blocks/batch`, headers: { authorization: bearer }, payload: { blocks: [] } })).statusCode).toBe(403);
     } finally { vi.stubGlobal("fetch", fetchImpl); await reader.close(); }
   }, 30_000);
 

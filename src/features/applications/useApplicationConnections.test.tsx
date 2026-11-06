@@ -3,7 +3,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useApplicationConnections } from "./useApplicationConnections";
 import { api } from "../../api";
-import { cryptoClient } from "../../crypto/client";
+import { testCryptoClient } from "../session/workspaceServices.testSupport";
+
+const cryptoClient = testCryptoClient();
+
 vi.mock("../../api", () => ({ api: vi.fn() }));
 vi.mock("../../crypto/client", () => ({ cryptoClient: { createApplicationCredential: vi.fn() } }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -84,4 +87,9 @@ describe("application connection controller", () => {
     await act(async () => { await current.create({ name: "offline", idleTimeoutDays: null, expiresAt: null }, "read"); });
     expect(cryptoClient.createApplicationCredential).toHaveBeenCalledTimes(1);
   });
+});
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
 });

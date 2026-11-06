@@ -1,3 +1,4 @@
+import { browserInject } from "./auth/browserInject.testSupport.js";
 import { operationId as newOperationId } from "@mint-notes/application-client";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -90,14 +91,14 @@ describe("HTTP and business logs", () => {
     });
     app.get("/static-test", async () => ({ ok: true }));
 
-    const health = await app.inject({ method: "GET", url: "/api/health" });
+    const health = await browserInject(app, { method: "GET", url: "/api/health" });
     expect(health.headers["x-request-id"]).toMatch(/^[0-9a-f-]{36}$/);
-    expect((await app.inject({ method: "GET", url: "/static-test" })).statusCode).toBe(200);
+    expect((await browserInject(app, { method: "GET", url: "/static-test" })).statusCode).toBe(200);
     expect(lines).toHaveLength(0);
 
     const secretQuery = "query-value-must-not-be-logged";
     const account = registrationBody("log-private-user");
-    const registration = await app.inject({
+    const registration = await browserInject(app, {
       method: "POST",
       url: `/api/auth/register?diagnostic=${secretQuery}`,
       headers: {
@@ -113,7 +114,7 @@ describe("HTTP and business logs", () => {
       origin: config.appOrigin,
       cookie: cookieHeader(registration.headers["set-cookie"])
     };
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "POST",
       url: "/api/auth/login",
       headers: { origin: config.appOrigin },
@@ -123,7 +124,7 @@ describe("HTTP and business logs", () => {
         rememberDevice: false
       }
     })).statusCode).toBe(401);
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "POST",
       url: "/api/auth/login",
       headers: { origin: config.appOrigin },
@@ -145,32 +146,32 @@ describe("HTTP and business logs", () => {
       idempotencyKey: newOperationId(),
       deleted: false
     });
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "PUT",
       url: `/api/objects/${objectId}`,
       headers,
       payload: writePayload(0, firstCiphertext)
     })).statusCode).toBe(200);
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "PUT",
       url: `/api/objects/${objectId}`,
       headers,
       payload: writePayload(0, "conflict-ciphertext-must-not-be-logged")
     })).statusCode).toBe(409);
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "PUT",
       url: `/api/objects/${objectId}`,
       headers,
       payload: writePayload(1, "quota-ciphertext-must-not-be-logged".repeat(100))
     })).statusCode).toBe(413);
 
-    expect((await app.inject({
+    expect((await browserInject(app, {
       method: "POST",
       url: "/api/admin/account-setups",
       headers,
       payload: { username: "invited-user", displayName: "Private invite", expiresInHours: 24 }
     })).statusCode).toBe(201);
-    expect((await app.inject({ method: "GET", url: "/api/test/error" })).statusCode).toBe(500);
+    expect((await browserInject(app, { method: "GET", url: "/api/test/error" })).statusCode).toBe(500);
 
     const records = lines.flatMap((line) => line.trim() ? [JSON.parse(line)] : []);
     const completionRecords = records.filter((record) => record.event === "http.request_completed");

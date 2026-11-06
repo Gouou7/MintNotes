@@ -35,3 +35,8 @@ describe("storage status controller", () => {
     expect(current().estimate).toEqual({ usage: 20, quota: 100 });
   });
 });
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
+});

@@ -86,3 +86,8 @@ describe("storage usage presentation", () => {
     expect(container.querySelector(".storage-composition")).toBeNull();
   });
 });
+
+vi.mock("./session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("./session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
+});

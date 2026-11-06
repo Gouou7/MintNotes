@@ -1,3 +1,4 @@
+import { useWorkspaceServices } from "./session/workspaceServices";
 import { SettingsSection } from "../components/SettingsSection";
 import { SettingsItem } from "../components/SettingsItem";
 import type { StorageStatus } from "./storage/useStorageStatus";
@@ -8,12 +9,11 @@ import { RecoveryStorageSection } from "./storage/RecoveryStorageSection";
 import { StorageUsage, PendingStorage } from "./storageUsage";
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Notebook, ChevronDown, ChevronRight, ChevronsUp, Check, Copy, Download, Ellipsis, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, Search, Settings, SlidersHorizontal, UserRoundCog, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
-import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
 import { LanguageSelect } from "../components/LanguageSelect";
 import type { ToastTone } from "../components/Toast";
-import { createVaultEnvelopeBinding, cryptoClient, type EncryptedProfileAvatar } from "../crypto/client";
+import { createVaultEnvelopeBinding, type EncryptedProfileAvatar } from "../crypto/client";
 import { getDeviceUnlock, hasDevicePin, removeDevicePin, setAutoLockMinutes, setDevicePin } from "../crypto/deviceUnlock";
 import { translateError, useI18n } from "../i18n";
 import type { DeviceUnlockCredential } from "../storage/database";
@@ -69,6 +69,7 @@ interface Props {
 }
 
 export function SettingsPanel({ storageStatus, user, endpoint, credential, serverSessionVerified, onCredentialChange, preferences, onPreferences, onClose, onLogout, onImport, onExport, onDisplayName, onUsername, avatarUrl, onAvatarChange, trashItems, purging, onRestoreTrash, onPurgeTrash, onClearHistory, onClearTrash, historySettings, onHistorySettings, onRefreshHistorySettings, onNotify }: Props) {
+  const { transport: { api }, cryptoClient, generation } = useWorkspaceServices();
   const { formatDateTime, setLanguagePreference, t } = useI18n();
   const [tab, setTab] = useState<Tab>("general");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -377,7 +378,7 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
     setBusy(true);
     try {
       await verifyMasterPassword();
-      await setDevicePin(user.id, endpoint.id, newPin);
+      await setDevicePin(user.id, endpoint.id, newPin, cryptoClient, generation);
       onCredentialChange(await getDeviceUnlock(user.id, endpoint.id) ?? null);
       closePinDialog();
       onNotify(t("notice.pinSaved"), "info");
@@ -392,7 +393,7 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
     try {
       await verifyMasterPassword();
       await setAutoLockMinutes(user.id, endpoint.id, 0);
-      await removeDevicePin(user.id, endpoint.id);
+      await removeDevicePin(user.id, endpoint.id, cryptoClient);
       onCredentialChange(await getDeviceUnlock(user.id, endpoint.id) ?? null);
       setAutoLock(0);
       closePinDialog();
@@ -545,7 +546,7 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
                 <SettingsItem title={t("settings.autoLockAfter")} description={t("settings.autoLockHelp")}>{(control) => <select {...control} disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select>}</SettingsItem>
               </SettingsSection><SettingsSection title={t("settings.loginDevices")}><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
               {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
-              {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && device.active) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list settings-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row settings-list-row ${device.current ? "current" : ""}`} key={device.id}><span className="settings-list-icon"><AppIcon icon={Laptop} size={20} /></span><span className="session-details settings-list-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && <div className="settings-list-actions">{device.active ? <SettingsButton icon={LogOut} className="session-revoke danger" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}>{t("settings.signOut")}</SettingsButton> : <SettingsButton icon={Trash2} className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}>{t("common.remove")}</SettingsButton>}</div>}</article>)}</div></>}
+              {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && (device.active || device.resumable)) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list settings-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row settings-list-row ${device.current ? "current" : ""}`} key={device.id}><span className="settings-list-icon"><AppIcon icon={Laptop} size={20} /></span><span className="session-details settings-list-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.resumable ? t("account.deviceResumable") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && <div className="settings-list-actions">{device.active || device.resumable ? <SettingsButton icon={LogOut} className="session-revoke danger" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}>{t("settings.signOut")}</SettingsButton> : <SettingsButton icon={Trash2} className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}>{t("common.remove")}</SettingsButton>}</div>}</article>)}</div></>}
               </SettingsSection><ApplicationConnectionsSection userId={user.id} online={serverSessionVerified} onNotify={onNotify} />
             </div>}
 

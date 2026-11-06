@@ -1,5 +1,6 @@
+import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cryptoClient } from "./client";
+import { testCryptoClient } from "../features/session/workspaceServices.testSupport";
 import {
   clearPinRefreshGrant,
   getRememberedOfflineDevice,
@@ -12,11 +13,14 @@ import {
   verifiedSessionForCredential
 } from "./deviceUnlock";
 import {
+
   localDb,
   type DirectDeviceUnlockCredential,
   type LegacyDeviceUnlockCredential,
   type PinProtectedDeviceUnlockCredential
 } from "../storage/database";
+
+const cryptoClient = testCryptoClient();
 
 vi.mock("./client", () => ({
   cryptoClient: {
@@ -166,7 +170,7 @@ describe("PIN-protected device unlock", () => {
       version: 1
     });
 
-    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810");
+    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810", cryptoClient);
 
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
       version: 3,
@@ -182,7 +186,7 @@ describe("PIN-protected device unlock", () => {
   it("does not restore a PIN-protected credential without an explicit refresh grant", async () => {
     vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(protectedCredential);
 
-    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId)).resolves.toBe(false);
+    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, false, cryptoClient)).resolves.toBe(false);
 
     expect(cryptoClient.unlockVaultFromDevice).not.toHaveBeenCalled();
     expect(cryptoClient.unlockVaultFromDeviceWithPin).not.toHaveBeenCalled();
@@ -201,12 +205,12 @@ describe("PIN-protected device unlock", () => {
       nonce: "refresh-nonce",
       version: 1
     });
-    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810");
+    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810", cryptoClient);
 
     vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(protectedCredential);
     vi.mocked(cryptoClient.unlockVaultFromDevice).mockResolvedValue({ unlocked: true });
 
-    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, true)).resolves.toBe(true);
+    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, true, cryptoClient)).resolves.toBe(true);
     expect(cryptoClient.unlockVaultFromDevice).toHaveBeenCalledWith(
       protectedCredential.userId,
       protectedCredential.deviceKey,
@@ -229,11 +233,11 @@ describe("PIN-protected device unlock", () => {
       nonce: "refresh-nonce",
       version: 1
     });
-    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810");
+    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810", cryptoClient);
     clearPinRefreshGrant();
 
     vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(protectedCredential);
-    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, true)).resolves.toBe(false);
+    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, true, cryptoClient)).resolves.toBe(false);
     expect(cryptoClient.unlockVaultFromDevice).not.toHaveBeenCalled();
   });
 
@@ -251,12 +255,12 @@ describe("PIN-protected device unlock", () => {
       nonce: "refresh-nonce",
       version: 1
     });
-    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810");
+    await setDevicePin(directCredential.userId, directCredential.endpointId, "246810", cryptoClient);
 
     now.mockReturnValue(5 * 60 * 1000 + 1_000);
     vi.spyOn(localDb.deviceCredentials, "get").mockResolvedValue(protectedCredential);
 
-    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, true)).resolves.toBe(false);
+    await expect(restoreDeviceUnlock(protectedCredential.userId, protectedCredential.endpointId, true, cryptoClient)).resolves.toBe(false);
     expect(cryptoClient.unlockVaultFromDevice).not.toHaveBeenCalled();
   });
 
@@ -270,7 +274,7 @@ describe("PIN-protected device unlock", () => {
       version: 1
     });
 
-    await expect(unlockDeviceWithPin(protectedCredential.userId, protectedCredential.endpointId, "246810")).resolves.toBe("ok");
+    await expect(unlockDeviceWithPin(protectedCredential.userId, protectedCredential.endpointId, "246810", cryptoClient)).resolves.toBe("ok");
 
     expect(cryptoClient.unlockVaultFromDeviceWithPin).toHaveBeenCalledWith(
       protectedCredential.userId,
@@ -301,7 +305,7 @@ describe("PIN-protected device unlock", () => {
       version: 1
     });
 
-    await expect(unlockDeviceWithPin(legacyCredential.userId, legacyCredential.endpointId, "246810")).resolves.toBe("ok");
+    await expect(unlockDeviceWithPin(legacyCredential.userId, legacyCredential.endpointId, "246810", cryptoClient)).resolves.toBe("ok");
 
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
       version: 3,
@@ -320,7 +324,7 @@ describe("PIN-protected device unlock", () => {
     vi.mocked(cryptoClient.unlockVaultFromDeviceWithPin).mockRejectedValue(new Error("decrypt failed"));
     vi.mocked(cryptoClient.lock).mockResolvedValue({ locked: true });
 
-    await expect(unlockDeviceWithPin(protectedCredential.userId, protectedCredential.endpointId, "wrong")).resolves.toBe("invalid");
+    await expect(unlockDeviceWithPin(protectedCredential.userId, protectedCredential.endpointId, "wrong", cryptoClient)).resolves.toBe("invalid");
 
     expect(cryptoClient.lock).toHaveBeenCalled();
     expect(put).toHaveBeenCalledWith(expect.objectContaining({ failedPinAttempts: 1 }));

@@ -32,7 +32,7 @@ describe("non-destructive browser schema upgrade", () => {
     expect(await localDb.objects.get(object.key)).toEqual(object);
     expect(await localDb.outbox.get(object.key)).toEqual(pending);
     expect(await localDb.meta.get("sync-cursor:user")).toEqual({ key: "sync-cursor:user", value: "42" });
-    expect(localDb.verno).toBe(8);
+    expect(localDb.verno).toBe(9);
     expect(await localDb.bodyBlocks.count()).toBe(0);
     expect(await localDb.recoveries.count()).toBe(0);
   });

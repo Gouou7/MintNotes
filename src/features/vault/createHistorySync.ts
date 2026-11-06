@@ -1,13 +1,13 @@
 import { operationId } from "@mint-notes/application-client";
 import type { RefObject } from "react";
-import { api, ApiError } from "../../api";
-import { cryptoClient } from "../../crypto/client";
+import { ApiError } from "../../api";
 import { type Translate } from "../../i18n";
 import { localDb } from "../../storage/database";
 import type { useToastNotifications } from "./useToastNotifications";
 import type { useVaultHistory } from "./useVaultHistory";
 
 interface Options {
+  services: import("../session/workspaceServices").WorkspaceServices;
   history: ReturnType<typeof useVaultHistory>;
   userId: string;
   logoutStarted: RefObject<boolean>;
@@ -19,6 +19,8 @@ interface Options {
 
 /** 历史正文与元数据发件箱的上传和确认。 */
 export function createHistorySync(options: Options) {
+  const api = options.services.transport.api;
+  const cryptoClient = options.services.cryptoClient;
   const {
     history,
     userId,

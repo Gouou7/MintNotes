@@ -29,6 +29,9 @@ export function cleanupInactiveEndpoints(db: AppDatabase, now = new Date()): num
             AND active_session.revoked_at IS NULL
             AND active_session.expires_at > ?
         )
+        AND NOT EXISTS (
+          SELECT 1 FROM device_grants g WHERE g.endpoint_id = endpoint.endpoint_id AND g.expires_at > ?
+        )
         AND COALESCE((
           SELECT MAX(expired_session.expires_at) FROM sessions expired_session
           WHERE expired_session.endpoint_id = endpoint.endpoint_id
@@ -36,7 +39,7 @@ export function cleanupInactiveEndpoints(db: AppDatabase, now = new Date()): num
         ), endpoint.last_seen_at) <= ?
       )
     )
-  `).run(cutoff, nowIso, cutoff).changes;
+  `).run(cutoff, nowIso, nowIso, cutoff).changes;
 }
 
 export function registerEndpointRoutes(
@@ -62,12 +65,13 @@ export function registerEndpointRoutes(
           SELECT 1 FROM sessions s
           WHERE s.endpoint_id = trusted_endpoints.endpoint_id AND s.user_id = trusted_endpoints.user_id
             AND s.revoked_at IS NULL AND s.expires_at > ?
-        ) AS active
+        ) AS active,
+        EXISTS (SELECT 1 FROM device_grants g WHERE g.endpoint_id = trusted_endpoints.endpoint_id AND g.expires_at > ?) AS resumable
       FROM trusted_endpoints
       WHERE user_id = ?
       ORDER BY last_seen_at DESC
       LIMIT 50
-    `).all(now.toISOString(), user.id) as Array<{
+    `).all(now.toISOString(), now.toISOString(), user.id) as Array<{
       endpoint_id: string;
       device_name: string;
       ip_address: string;
@@ -78,6 +82,7 @@ export function registerEndpointRoutes(
       remembered: number;
       revoked_at: string | null;
       active: number;
+      resumable: number;
     }>;
     return {
       canRevokeOthers,
@@ -94,6 +99,7 @@ export function registerEndpointRoutes(
         remembered: Boolean(row.remembered),
         revokedAt: row.revoked_at,
         current: row.endpoint_id === current.endpointId,
+        resumable: Boolean(row.resumable) && row.revoked_at === null,
         active: Boolean(row.active) && row.revoked_at === null
       }))
     };
@@ -115,13 +121,14 @@ export function registerEndpointRoutes(
           SELECT 1 FROM sessions s
           WHERE s.endpoint_id = endpoint.endpoint_id AND s.user_id = endpoint.user_id
             AND s.revoked_at IS NULL AND s.expires_at > ?
-        ) AS active
+        ) AS active,
+        EXISTS (SELECT 1 FROM device_grants g WHERE g.endpoint_id = endpoint.endpoint_id AND g.expires_at > ?) AS resumable
       FROM trusted_endpoints endpoint
       WHERE endpoint.endpoint_id = ? AND endpoint.user_id = ?
-    `).get(now.toISOString(), endpointId.data, user.id) as { revoked_at: string | null; active: number } | undefined;
+    `).get(now.toISOString(), now.toISOString(), endpointId.data, user.id) as { revoked_at: string | null; active: number; resumable: number } | undefined;
     if (!target) return reply.code(404).send({ error: "Endpoint not found" });
 
-    if (!target.active || target.revoked_at !== null) {
+    if ((!target.active && !target.resumable) || target.revoked_at !== null) {
       db.prepare("DELETE FROM trusted_endpoints WHERE endpoint_id = ? AND user_id = ?")
         .run(endpointId.data, user.id);
       logEvent(request.log, "info", "account.endpoint_changed", {
@@ -138,6 +145,7 @@ export function registerEndpointRoutes(
     }
     const revokedAt = now.toISOString();
     db.transaction(() => {
+      db.prepare("DELETE FROM device_grants WHERE endpoint_id = ?").run(endpointId.data);
       db.prepare("UPDATE trusted_endpoints SET remembered = 0, revoked_at = ? WHERE endpoint_id = ? AND user_id = ?")
         .run(revokedAt, endpointId.data, user.id);
       db.prepare("UPDATE sessions SET revoked_at = ? WHERE endpoint_id = ? AND user_id = ? AND revoked_at IS NULL")

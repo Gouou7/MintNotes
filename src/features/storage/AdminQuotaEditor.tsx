@@ -1,6 +1,6 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { type FormEvent, useState } from "react";
 import { Save, X } from "lucide-react";
-import { api } from "../../api";
 import { AppIcon } from "../../components/AppIcon";
 import { SettingsButton } from "../../components/SettingsButton";
 import type { ToastTone } from "../../components/Toast";
@@ -9,6 +9,7 @@ import { QuotaFields, quotaDraft, quotaPayload, type QuotaDraft } from "./QuotaF
 
 export interface StorageQuotaUser { id: string; displayName: string; totalBytes: number; quotaMode: QuotaDraft["mode"]; quotaBytes: number | null; }
 function useQuotaEditor(user: StorageQuotaUser, defaultBytes: number, onSaved: () => Promise<void>, onClose: () => void, notify: (text: string, tone: ToastTone) => void) {
+  const { transport: { api } } = useWorkspaceServices();
   const { t } = useI18n();
   const [draft, setDraft] = useState(() => quotaDraft(user.quotaMode, user.quotaBytes));
   const [busy, setBusy] = useState(false), [confirmed, setConfirmed] = useState(false);

@@ -1,3 +1,4 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { pinCache } from "../../storage/cache";
 import { useEffect, useRef, useState } from "react";
 import type { OpenAttachment } from "../../types";
@@ -34,6 +35,7 @@ export function useAttachmentUrls(options: {
   allowNetwork: boolean;
   onError: (error: unknown) => void;
 }) {
+  const services = useWorkspaceServices();
   const [urls, setUrls] = useState<Map<string, string>>(new Map());
   const resolutionKey = [
     options.activeDocumentId ?? "",
@@ -70,7 +72,7 @@ export function useAttachmentUrls(options: {
             options.userId,
             attachment,
             options.isActive,
-            options.allowNetwork
+            options.allowNetwork, undefined, services
           );
           const url = URL.createObjectURL(blob);
           if (cancelled) {
@@ -108,5 +110,5 @@ export function useAttachmentUrls(options: {
     cache.current.clear();
   }, []);
 
-  return { urls, cache, loading: resolvedKey !== resolutionKey };
+  return { urls, loading: resolvedKey !== resolutionKey };
 }

@@ -1,8 +1,8 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { ServerConfig } from "../config.js";
 import type { AppDatabase } from "../database.js";
-import { createSessionToken, hashToken } from "../security.js";
+import { createSessionToken, hashToken, verifyOpaqueSecret } from "../security.js";
 import { SyncEventHub } from "../syncEvents.js";
 import type { AuthGuard } from "../types.js";
 
@@ -50,7 +50,12 @@ export function createSessionService(
   const authenticate: AuthGuard = async (request, reply) => {
     const rawToken = request.cookies[sessionCookie];
     if (!rawToken) {
-      await reply.code(401).send({ error: "Authentication required" });
+      await reply.code(401).send({ error: "Authentication required", code: "BROWSER_SESSION_INVALID" });
+      return;
+    }
+    const expected = request.headers["x-webmd-session"];
+    if (!expected) {
+      await reply.code(426).send({ error: "Client upgrade required", code: "BROWSER_UPGRADE_REQUIRED" });
       return;
     }
     const row = db.prepare(`
@@ -79,8 +84,11 @@ export function createSessionService(
         }
       | undefined;
     if (!row || row.disabled) {
-      reply.clearCookie(sessionCookie, { path: "/" });
-      await reply.code(401).send({ error: "Session is no longer valid" });
+      await reply.code(401).send({ error: "Session is no longer valid", code: "BROWSER_SESSION_INVALID" });
+      return;
+    }
+    if (expected !== row.session_id) {
+      await reply.code(409).send({ error: "Browser session changed", code: "BROWSER_SESSION_CHANGED" });
       return;
     }
     request.sessionUser = {
@@ -101,18 +109,13 @@ export function createSessionService(
         ).run(now.toISOString(), request.ip.slice(0, 100), row.endpoint_id, row.id);
       })();
     }
-    if (row.remembered && new Date(row.expires_at).getTime() - now.getTime() < 30 * 24 * 60 * 60 * 1000) {
-      const expires = new Date(now.getTime() + REMEMBERED_COOKIE_MS);
-      db.prepare("UPDATE sessions SET expires_at = ? WHERE session_id = ?")
-        .run(expires.toISOString(), row.session_id);
-      reply.setCookie(sessionCookie, rawToken, sessionCookieOptions(expires));
-    }
     request.sessionContext = {
       id: row.session_id,
       endpointId: row.endpoint_id,
       endpointFirstSeenAt: row.endpoint_first_seen_at,
       remembered: Boolean(row.remembered),
       createdAt: row.session_created_at,
+      expiresAt: row.expires_at,
       lastSeenAt: row.last_seen_at < minuteAgo ? now.toISOString() : row.last_seen_at
     };
   };
@@ -142,10 +145,11 @@ export function createSessionService(
     const endpointHash = hashToken(rawEndpoint);
     const ipAddress = request.ip.slice(0, 100);
     const currentEndpoint = db.prepare(
-      "SELECT endpoint_id FROM trusted_endpoints WHERE user_id = ? AND endpoint_hash = ?"
-    ).get(userId, endpointHash) as { endpoint_id: string } | undefined;
+      "SELECT endpoint_id, revoked_at FROM trusted_endpoints WHERE user_id = ? AND endpoint_hash = ?"
+    ).get(userId, endpointHash) as { endpoint_id: string; revoked_at: string | null } | undefined;
     const endpointId = currentEndpoint?.endpoint_id ?? randomUUID();
-    db.transaction(() => {
+    const sessionId = randomUUID();
+    const retired = db.transaction(() => {
       if (currentEndpoint) {
         db.prepare(`
           UPDATE trusted_endpoints SET device_name = ?, user_agent = ?, ip_address = ?,
@@ -181,9 +185,12 @@ export function createSessionService(
           remembered ? 1 : 0
         );
       }
-      db.prepare(
-        "UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND endpoint_id = ? AND revoked_at IS NULL"
-      ).run(now.toISOString(), userId, endpointId);
+      if (!remembered || currentEndpoint?.revoked_at) db.prepare("DELETE FROM device_grants WHERE endpoint_id = ?").run(endpointId);
+      const retired = db.prepare(`
+        UPDATE sessions SET revoked_at = ? WHERE revoked_at IS NULL AND endpoint_id IN (
+          SELECT endpoint_id FROM trusted_endpoints WHERE endpoint_hash = ?
+        ) RETURNING session_id
+      `).all(now.toISOString(), endpointHash) as Array<{ session_id: string }>;
       db.prepare(`
         INSERT INTO sessions (
           token_hash, session_id, user_id, endpoint_id, remembered, device_name, user_agent,
@@ -191,7 +198,7 @@ export function createSessionService(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         hashToken(rawToken),
-        randomUUID(),
+        sessionId,
         userId,
         endpointId,
         remembered ? 1 : 0,
@@ -202,8 +209,9 @@ export function createSessionService(
         now.toISOString(),
         expires.toISOString()
       );
-    })();
-    syncEvents.closeEndpoint(userId, endpointId);
+      return retired;
+    }).immediate();
+    for (const previous of retired) syncEvents.closeSession(previous.session_id);
     reply.setCookie(endpointCookie, rawEndpoint, {
       path: "/",
       httpOnly: true,
@@ -212,10 +220,112 @@ export function createSessionService(
       expires: new Date(now.getTime() + REMEMBERED_COOKIE_MS)
     });
     reply.setCookie(sessionCookie, rawToken, sessionCookieOptions(remembered ? expires : undefined));
-    return endpointSummary(endpointId, remembered);
+    return { endpoint: endpointSummary(endpointId, remembered), sessionId };
   };
 
+  function enroll(request: FastifyRequest, grant: { id: string; secret: string; authSecret: string }) {
+    const context = request.sessionContext!;
+    if (!context.remembered) return false;
+    const user = db.prepare("SELECT auth_salt, auth_hash FROM users WHERE id = ? AND disabled = 0")
+      .get(request.sessionUser!.id) as { auth_salt: string; auth_hash: string } | undefined;
+    if (!user || !verifyOpaqueSecret(grant.authSecret, user.auth_salt, user.auth_hash)) return false;
+    const secretHash = hashToken(grant.secret);
+    const current = db.prepare("SELECT grant_id, secret_hash FROM device_grants WHERE endpoint_id = ?")
+      .get(context.endpointId) as { grant_id: string; secret_hash: string } | undefined;
+    if (current?.grant_id === grant.id) return current.secret_hash === secretHash;
+    if (db.prepare("SELECT 1 FROM device_grants WHERE grant_id = ?").get(grant.id)) return false;
+    db.prepare(`
+      INSERT INTO device_grants(endpoint_id, grant_id, secret_hash, expires_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(endpoint_id) DO UPDATE SET grant_id = excluded.grant_id,
+        secret_hash = excluded.secret_hash, expires_at = excluded.expires_at
+    `).run(context.endpointId, grant.id, secretHash, new Date(Date.now() + REMEMBERED_COOKIE_MS).toISOString());
+    return true;
+  }
+
+  function resume(request: FastifyRequest, reply: FastifyReply, id: string, secret: string) {
+    const browser = request.cookies[endpointCookie];
+    if (!browser) return;
+    const now = new Date();
+    const grant = db.prepare(`
+      SELECT g.secret_hash, g.expires_at AS grant_expiry, e.endpoint_id, u.id, u.username,
+        u.display_name AS displayName, u.role
+      FROM device_grants g JOIN trusted_endpoints e USING (endpoint_id)
+      JOIN users u ON u.id = e.user_id
+      WHERE g.grant_id = ? AND e.endpoint_hash = ? AND e.revoked_at IS NULL
+        AND e.remembered = 1 AND u.disabled = 0 AND g.expires_at > ?
+    `).get(id, hashToken(browser), now.toISOString()) as {
+      secret_hash: string; grant_expiry: string; endpoint_id: string;
+      id: string; username: string; displayName: string; role: "admin" | "user";
+    } | undefined;
+    if (!grant || !timingSafeEqual(Buffer.from(grant.secret_hash), Buffer.from(hashToken(secret)))) return;
+
+    const cookie = request.cookies[sessionCookie];
+    const active = cookie ? db.prepare(`
+      SELECT session_id, expires_at FROM sessions
+      WHERE token_hash = ? AND endpoint_id = ? AND revoked_at IS NULL AND expires_at > ?
+    `).get(hashToken(cookie), grant.endpoint_id, now.toISOString()) as { session_id: string; expires_at: string } | undefined : undefined;
+    const renewalCutoff = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const expires = new Date(now.getTime() + REMEMBERED_COOKIE_MS);
+    const session = active ? { sessionId: active.session_id, endpoint: endpointSummary(grant.endpoint_id, true) }
+      : setSession(request, reply, grant.id, true);
+    if (active && active.expires_at < renewalCutoff) {
+      db.prepare("UPDATE sessions SET expires_at = ? WHERE session_id = ?").run(expires.toISOString(), active.session_id);
+      reply.setCookie(sessionCookie, cookie!, sessionCookieOptions(expires));
+      reply.setCookie(endpointCookie, browser, sessionCookieOptions(expires));
+    }
+    if (grant.grant_expiry < renewalCutoff) {
+      db.prepare("UPDATE device_grants SET expires_at = ? WHERE grant_id = ?").run(expires.toISOString(), id);
+    }
+    return { ...session, user: { id: grant.id, username: grant.username, displayName: grant.displayName, role: grant.role } };
+  }
+
+  function close(sessionId: string) {
+    db.prepare("UPDATE sessions SET revoked_at = ? WHERE session_id = ? AND revoked_at IS NULL")
+      .run(new Date().toISOString(), sessionId);
+    syncEvents.closeSession(sessionId);
+  }
+
+  function revokeEndpoint(userId: string, endpointId: string) {
+    const now = new Date().toISOString();
+    db.transaction(() => {
+      db.prepare("DELETE FROM device_grants WHERE endpoint_id = ? AND endpoint_id IN (SELECT endpoint_id FROM trusted_endpoints WHERE user_id = ?)").run(endpointId, userId);
+      db.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND endpoint_id = ? AND revoked_at IS NULL").run(now, userId, endpointId);
+      db.prepare("UPDATE trusted_endpoints SET remembered = 0, revoked_at = ? WHERE user_id = ? AND endpoint_id = ?").run(now, userId, endpointId);
+    })();
+    syncEvents.closeEndpoint(userId, endpointId);
+  }
+
+  function revokeBrowserGrant(request: FastifyRequest, target: { endpointId: string; grantId?: string; sessionId?: string }) {
+    const { endpointId, grantId, sessionId } = target;
+    const browser = request.cookies[endpointCookie];
+    if (!browser) return false;
+    const endpoint = db.prepare(`
+      SELECT e.user_id, g.grant_id FROM trusted_endpoints e
+      LEFT JOIN device_grants g USING (endpoint_id)
+      WHERE e.endpoint_id = ? AND e.endpoint_hash = ?
+    `).get(endpointId, hashToken(browser)) as { user_id: string; grant_id: string | null } | undefined;
+    if (!endpoint) return false;
+    if (endpoint.grant_id) {
+      if (endpoint.grant_id === grantId) revokeEndpoint(endpoint.user_id, endpointId);
+      return true;
+    }
+    // Legacy tasks lack an authorization identity. The upgrade already retired those sessions.
+    if (!sessionId || !db.prepare("SELECT 1 FROM sessions WHERE endpoint_id = ? AND session_id = ?").get(endpointId, sessionId)) {
+      return true;
+    }
+    close(sessionId);
+    const active = db.prepare("SELECT 1 FROM sessions WHERE endpoint_id = ? AND revoked_at IS NULL AND expires_at > ?")
+      .get(endpointId, new Date().toISOString());
+    if (!active) revokeEndpoint(endpoint.user_id, endpointId);
+    return true;
+  }
+
   return {
+    enroll,
+    resume,
+    close,
+    revokeEndpoint,
+    revokeBrowserGrant,
     authenticate,
     requireAdmin,
     setSession,

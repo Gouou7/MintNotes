@@ -111,7 +111,19 @@ export type DeviceUnlockCredential =
   | DirectDeviceUnlockCredential
   | PinProtectedDeviceUnlockCredential;
 
+export interface LocalDeviceGrant {
+  userId: string;
+  endpointId: string;
+  id: string;
+  version: 1;
+  ciphertext: string;
+  nonce: string;
+  pending: boolean;
+}
+
 export interface PendingEndpointRevocation {
+  grantId?: string;
+  sessionId?: string;
   endpointId: string;
   userId: string;
   createdAt: string;
@@ -179,6 +191,7 @@ class NotesDatabase extends Dexie {
   attachmentChunks!: EntityTable<LocalAttachmentChunk, "key">;
   attachmentOutbox!: EntityTable<AttachmentOutboxEntry, "key">;
   meta!: EntityTable<LocalMeta, "key">;
+  deviceGrants!: EntityTable<LocalDeviceGrant, "userId">;
   deviceCredentials!: EntityTable<DeviceUnlockCredential, "userId">;
   pendingEndpointRevocations!: EntityTable<PendingEndpointRevocation, "endpointId">;
   historySnapshots!: EntityTable<LocalHistorySnapshot, "key">;
@@ -288,6 +301,7 @@ class NotesDatabase extends Dexie {
       bodyBlocks: "key, userId, [userId+noteId]",
       recoveries: "key, userId, sourceId, copyId"
     });
+    this.version(9).stores({ deviceGrants: "userId" });
   }
 }
 
@@ -321,7 +335,7 @@ export function historySettingsKey(userId: string): string {
   return `note-history-settings:${userId}`;
 }
 
-export async function deleteLocalUserData(userId: string): Promise<void> {
+export async function deleteLocalUserData(userId: string, revocation?: PendingEndpointRevocation): Promise<void> {
   await localDb.transaction(
     "rw",
     [
@@ -330,7 +344,7 @@ export async function deleteLocalUserData(userId: string): Promise<void> {
       localDb.attachmentChunks,
       localDb.attachmentOutbox,
       localDb.meta,
-      localDb.deviceCredentials,
+      localDb.deviceCredentials, localDb.deviceGrants, localDb.pendingEndpointRevocations,
       localDb.historySnapshots,
       localDb.historyIndex,
       localDb.historyOutbox,
@@ -353,6 +367,8 @@ export async function deleteLocalUserData(userId: string): Promise<void> {
       await localDb.meta.where("key").startsWith(`history-invalid:${userId}:`).delete();
       await localDb.meta.where("key").startsWith(`history-verified:${userId}:`).delete();
       await localDb.deviceCredentials.delete(userId);
+      await localDb.deviceGrants.delete(userId);
+      if (revocation) await localDb.pendingEndpointRevocations.put(revocation);
       await localDb.historySnapshots.where("userId").equals(userId).delete();
       await localDb.historyIndex.where("userId").equals(userId).delete();
       await localDb.historyOutbox.where("userId").equals(userId).delete();

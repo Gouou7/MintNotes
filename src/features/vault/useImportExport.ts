@@ -1,3 +1,4 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { useEffect, useRef, useState } from "react";
 import type { OpenAttachment, OpenDocument } from "../../types";
 import type { Translate } from "../../i18n";
@@ -25,6 +26,7 @@ interface Options {
   t: Translate;
 }
 export function useImportExport(options: Options) {
+  const services = useWorkspaceServices();
   const current = useRef(options);
   current.current = options;
   const epoch = useRef(0);
@@ -57,7 +59,7 @@ export function useImportExport(options: Options) {
         let document = makeDocument(dependencies.getDocuments(), kind, title.trim() || t(kind === "note" ? "app.untitled" : "app.newFolder"), parentId, note?.markdown);
         document = dependencies.reservations.reserve(dependencies.getDocuments(), document);
         try {
-          const persisted = await persistImportedDocument(dependencies.userId, document, note, isActive);
+          const persisted = await persistImportedDocument(dependencies.userId, document, note, isActive, services);
           if (isActive()) dependencies.publish(persisted.document, persisted.attachments);
           return { objectId: document.objectId, title: document.title };
         } finally { dependencies.reservations.release(document.objectId); }

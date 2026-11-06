@@ -1,4 +1,4 @@
-import { ApiError, api, uploadAttachmentChunk } from "../../api";
+import { ApiError, type ApiClient } from "../../api";
 import { uploadBodyBlocks } from "../../storage/noteBodies";
 import { localDb, type ObjectUploadAttempt } from "../../storage/database";
 import { ATTACHMENT_TRANSFER_CONCURRENCY } from "../attachments";
@@ -7,6 +7,7 @@ import { packBySerializedSize } from "../syncCoordinator";
 import { shouldSynchronizeWorkspaceObject } from "../workspace";
 
 interface PushControllerDependencies {
+  transport: Pick<ApiClient, "api" | "uploadAttachmentChunk">;
   userId: string;
   clientId: string;
   isActive: () => boolean;
@@ -27,6 +28,7 @@ function payload(entry: ObjectUploadAttempt) {
 
 /** Snapshot dependency graphs together; retain exact requests through response loss and later edits. */
 export async function pushVaultPending(dependencies: PushControllerDependencies): Promise<void> {
+  const { api } = dependencies.transport;
   const { userId, isActive } = dependencies;
   if (!isActive()) return;
   const snapshot = await localDb.transaction("rw", localDb.objects, localDb.outbox, localDb.attachmentOutbox, async () => {
@@ -50,7 +52,7 @@ export async function pushVaultPending(dependencies: PushControllerDependencies)
   });
   await mapWithConcurrency(snapshot.chunks, ATTACHMENT_TRANSFER_CONCURRENCY, async (entry) => {
     if (!isActive()) return;
-    await uploadAttachmentChunk(`/api/attachments/${entry.attachmentId}/chunks/${entry.chunkIndex}`, entry.ciphertext, {
+    await dependencies.transport.uploadAttachmentChunk(`/api/attachments/${entry.attachmentId}/chunks/${entry.chunkIndex}`, entry.ciphertext, {
       "X-WebMD-Nonce": entry.nonce,
       "X-WebMD-Total-Chunks": String(entry.totalChunks),
       "X-WebMD-Encryption-Version": String(entry.encryptionVersion),
@@ -66,7 +68,7 @@ export async function pushVaultPending(dependencies: PushControllerDependencies)
   });
   let conflictDetected = false;
   for (const entry of snapshot.entries) {
-    await uploadBodyBlocks(userId, entry, isActive);
+    await uploadBodyBlocks(userId, entry, isActive, api);
     if (!isActive()) return;
   }
   const conflict = async (entry: ObjectUploadAttempt) => {

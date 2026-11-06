@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { DeviceUnlockCredential } from "../../storage/database";
 import type { AuthEndpoint, User } from "../../types";
 import { VaultWorkspace } from "./VaultWorkspace";
@@ -11,7 +12,10 @@ export interface VaultAppProps {
   onCredentialChange: (credential: DeviceUnlockCredential | null) => void;
   onDisplayNameChange: (displayName: string) => void;
   onUsernameChange: (username: string) => void;
-  onLocked: (logout: boolean) => void;
+  onLock: () => void;
+  onLogout: () => Promise<void>;
+  renderAccountSwitcher?: (avatarUrl: string | null) => ReactNode;
+  registerClose: (handler: ((discard: boolean) => Promise<boolean>) | null) => void;
 }
 
 export function VaultApp(props: VaultAppProps) {

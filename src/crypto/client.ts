@@ -74,6 +74,8 @@ export interface CryptoClient {
   decryptHistoryMetadata(userId: string, noteId: string, historyId: string, capturedAt: string, ciphertext: string, nonce: string): Promise<NoteHistoryMetadataPayload>;
   createAttachment(input: { userId: string; attachmentId: string; ownerNoteId: string; originalName: string; mime: VaultAttachment["mime"]; data: ArrayBuffer; chunkSize: number }): Promise<{ metadata: VaultAttachment; chunks: EncryptedAttachmentChunk[] }>;
   decryptAttachment(userId: string, attachmentId: string, metadata: VaultAttachment, chunks: EncryptedAttachmentChunk[]): Promise<ArrayBuffer>;
+  sealDeviceGrant(userId: string, endpointId: string, id: string, secret: string): Promise<{ ciphertext: string; nonce: string }>;
+  openDeviceGrant(userId: string, endpointId: string, id: string, ciphertext: string, nonce: string): Promise<string>;
   lock(): Promise<unknown>;
   dispose(): void;
 }
@@ -160,11 +162,11 @@ export function createCryptoClient(): CryptoClient {
       { userId, attachmentId, metadata, chunks },
       chunks.map((chunk) => chunk.ciphertext)
     ),
+    sealDeviceGrant: (userId, endpointId, id, secret) => call("sealDeviceGrant", { userId, endpointId, id, secret }),
+    openDeviceGrant: (userId, endpointId, id, ciphertext, nonce) => call("openDeviceGrant", { userId, endpointId, id, ciphertext, nonce }),
     lock: () => call("lock"),
     dispose: () => {
       makeUnavailable("Crypto worker was terminated");
     }
   };
 }
-
-export const cryptoClient = createCryptoClient();

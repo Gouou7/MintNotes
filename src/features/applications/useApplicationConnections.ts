@@ -1,7 +1,6 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { useEffect, useRef, useState } from "react";
 import type { ApplicationConnection, ApplicationCredential, ApplicationPolicy, CreateApplicationConnectionRequest } from "@mint-notes/application-client";
-import { api } from "../../api";
-import { cryptoClient } from "../../crypto/client";
 
 function connectionList(value: { connections: ApplicationConnection[] }): ApplicationConnection[] {
   if (!Array.isArray(value.connections)) throw new Error("Invalid application connection list");
@@ -11,6 +10,7 @@ function connectionList(value: { connections: ApplicationConnection[] }): Applic
 const prefix = "/api/account/application-connections";
 
 export function useApplicationConnections(userId: string, online: boolean) {
+  const { transport: { api }, cryptoClient } = useWorkspaceServices();
   const [connections, setConnections] = useState<ApplicationConnection[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);

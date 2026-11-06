@@ -75,10 +75,15 @@ test("protected history follows a note through trash, restore and permanent clea
     await page.getByRole("button", { name: "Notes and storage", exact: true }).click();
   }
   await expect(page.locator(".settings-page-title")).toHaveText("Notes and storage");
-  await expect(page.locator(".note-storage-settings > .settings-card")).toHaveCount(4);
+  await expect(page.locator(".note-storage-settings > .settings-group > .settings-card")).toHaveCount(4);
   const counts = page.locator(".note-storage-settings .storage-pending-item");
   await expect(counts).toHaveCount(3);
-  expect(await counts.evaluateAll((items) => items.every((item, index) => index === 0 || item.getBoundingClientRect().top > items[index - 1].getBoundingClientRect().top || item.getBoundingClientRect().left - items[index - 1].getBoundingClientRect().right >= 15))).toBe(true);
+  expect(await counts.evaluateAll((items) => {
+    const gap = Number.parseFloat(getComputedStyle(items[0].parentElement).columnGap);
+    const bounds = items.map((item) => item.getBoundingClientRect());
+    return bounds.slice(1).every((item, index) =>
+      item.top > bounds[index].top || item.left - bounds[index].right >= gap - 1);
+  })).toBe(true);
   const content = page.locator(".settings-content");
   expect(await content.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await content.evaluate((element) => element.scrollTo(0, 0));

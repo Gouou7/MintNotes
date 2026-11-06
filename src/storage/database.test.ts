@@ -43,6 +43,7 @@ describe("deleteLocalUserData", () => {
     }
     vi.spyOn(localDb.meta, "where").mockReturnValue({ startsWith: vi.fn().mockReturnValue({ delete: vi.fn().mockResolvedValue(undefined) }) } as never);
     const deleteMeta = vi.spyOn(localDb.meta, "bulkDelete").mockResolvedValue(undefined);
+    const deleteGrant = vi.spyOn(localDb.deviceGrants, "delete").mockResolvedValue(undefined);
     const deleteCredential = vi.spyOn(localDb.deviceCredentials, "delete").mockResolvedValue(undefined);
     vi.spyOn(localDb, "transaction").mockImplementation((...arguments_: unknown[]) => {
       const scope = arguments_.at(-1) as () => Promise<void>;
@@ -64,5 +65,6 @@ describe("deleteLocalUserData", () => {
       historySettingsKey(userId), `sync-state:${userId}`, `sync-lease:${userId}`, `attachment-gc:${userId}`
     ]);
     expect(deleteCredential).toHaveBeenCalledWith(userId);
+    expect(deleteGrant).toHaveBeenCalledWith(userId);
   });
 });

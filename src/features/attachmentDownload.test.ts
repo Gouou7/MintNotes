@@ -35,7 +35,7 @@ afterEach(() => {
 
 describe("attachment download connectivity", () => {
   it("downloads and caches missing chunks for a verified session despite a browser offline hint", async () => {
-    const chunks = await ensureAttachmentChunks("user", attachment, undefined, true);
+    const chunks = await ensureAttachmentChunks("user", attachment, undefined, true, undefined, { downloadAttachmentChunk: mocks.download });
     expect(mocks.download).toHaveBeenCalledWith("/api/attachments/attachment/chunks/0", undefined);
     expect(mocks.bulkPut).toHaveBeenCalledOnce();
     expect(chunks).toHaveLength(1);
@@ -60,7 +60,7 @@ describe("attachment download connectivity", () => {
 
   it("does not cache partial results after a real transport failure", async () => {
     mocks.download.mockRejectedValueOnce(new TypeError("unreachable"));
-    await expect(ensureAttachmentChunks("user", attachment, undefined, true)).rejects.toThrow("unreachable");
+    await expect(ensureAttachmentChunks("user", attachment, undefined, true, undefined, { downloadAttachmentChunk: mocks.download })).rejects.toThrow("unreachable");
     expect(mocks.bulkPut).not.toHaveBeenCalled();
   });
 });

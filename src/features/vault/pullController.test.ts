@@ -1,3 +1,4 @@
+import { testWorkspaceServices } from "../session/workspaceServices.testSupport";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { pullVaultChanges } from "./pullController";
 
@@ -53,6 +54,7 @@ const baseChange = {
 };
 
 const dependencies = {
+  services: testWorkspaceServices(),
   userId: "user-a",
   isActive: () => true,
   activeObjectId: () => null,

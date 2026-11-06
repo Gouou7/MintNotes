@@ -1,10 +1,10 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { persistWithCacheRecovery } from "../../storage/cache";
 import { persistBodyBlocks } from "../../storage/noteBodies";
 import { reserveConflictRecovery } from "./conflictRecovery";
 import { shouldSynchronizeWorkspaceObject } from "../workspace";
 import { operationId } from "@mint-notes/application-client";
 import { useEffect, useRef } from "react";
-import { cryptoClient } from "../../crypto/client";
 import {
   localDb,
   localKey,
@@ -41,6 +41,7 @@ function plainObject(object: PersistableObject): VaultObject {
 }
 
 export function useObjectPersistence(dependencies: ObjectPersistenceDependencies) {
+  const { cryptoClient } = useWorkspaceServices();
   const coordinator = useRef(new ObjectWriteCoordinator());
   const writerId = useRef(crypto.randomUUID());
 

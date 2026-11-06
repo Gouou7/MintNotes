@@ -1,3 +1,4 @@
+import { browserInject } from "./auth/browserInject.testSupport.js";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -106,8 +107,8 @@ describe("unified user storage quota", () => {
     db.pragma("user_version=3"); db.close();
     const upgraded = openDatabase(directory);
     try {
-      expect(upgraded.pragma("user_version", { simple: true })).toBe(5);
-      expect(existsSync(join(directory, "backups", "pre-schema5.sqlite.sha256"))).toBe(true);
+      expect(upgraded.pragma("user_version", { simple: true })).toBe(6);
+      expect(existsSync(join(directory, "backups", "pre-schema6.sqlite.sha256"))).toBe(true);
       expect(storageUsage(upgraded, user).totalBytes).toBe(56);
       expect(upgraded.prepare("SELECT COUNT(*) AS count FROM note_trash_periods").get()).toEqual({ count: 1 });
       expect(userQuotas(upgraded, user, loadServerConfig({})).quotaMode).toBe("inherit");
@@ -116,35 +117,35 @@ describe("unified user storage quota", () => {
   it("enforces administrator-only quota changes, user history budgets and setup inheritance", async () => {
     const { db, config } = fixture(); const app = await createApp({ db, config, maintenance: false }); resources.push(() => app.close());
     const register = async (name: string) => {
-      const response = await app.inject({ method: "POST", url: "/api/auth/register", payload: registration(name) }); expect(response.statusCode).toBe(201);
+      const response = await browserInject(app, { method: "POST", url: "/api/auth/register", payload: registration(name) }); expect(response.statusCode).toBe(201);
       return { user: response.json().user, cookie: (response.headers["set-cookie"] as string[]).map((value) => value.split(";", 1)[0]).join("; ") };
     };
     const admin = await register("administrator"), user = await register("member");
-    const usage = await app.inject({ method: "GET", url: "/api/account/storage", headers: { cookie: user.cookie } });
+    const usage = await browserInject(app, { method: "GET", url: "/api/account/storage", headers: { cookie: user.cookie } });
     expect(usage.statusCode).toBe(200);
     expect(usage.json()).toMatchObject({ totalBytes: 0, trashBytes: 0, activeBytes: { noteBytes: 0, attachmentBytes: 0, historyBytes: 0 } });
-    const patch = (cookie: string, body: unknown) => app.inject({ method: "PATCH", url: `/api/admin/users/${user.user.id}/storage-quota`, headers: { cookie }, payload: body as object });
+    const patch = (cookie: string, body: unknown) => browserInject(app, { method: "PATCH", url: `/api/admin/users/${user.user.id}/storage-quota`, headers: { cookie }, payload: body as object });
     expect((await patch(user.cookie, { mode: "unlimited" })).statusCode).toBe(403);
     expect((await patch(admin.cookie, { mode: "limited", bytes: 0 })).statusCode).toBe(400);
     expect((await patch(admin.cookie, { mode: "limited", bytes: 1048576 })).json().quotaBytes).toBe(1048576);
     expect((await patch(admin.cookie, { mode: "unlimited", bytes: null })).json().quotaBytes).toBeNull();
-    const own = await app.inject({ method: "PATCH", url: `/api/admin/users/${admin.user.id}/storage-quota`, headers: { cookie: admin.cookie }, payload: { mode: "unlimited" } }); expect(own.statusCode).toBe(200);
-    const budget = await app.inject({ method: "PATCH", url: "/api/account/note-history-settings", headers: { cookie: user.cookie }, payload: { quotaBytes: null } }); expect(budget.json().quotaBytes).toBeNull();
-    expect((await app.inject({ method: "GET", url: "/api/admin/storage", headers: { cookie: user.cookie } })).statusCode).toBe(403);
-    expect((await app.inject({ method: "GET", url: "/api/admin/storage", headers: { cookie: admin.cookie } })).json()).toMatchObject({ schemaVersion: 5, available: true, userCount: 2, journalMode: "wal" });
-    const setup = await app.inject({ method: "POST", url: "/api/admin/account-setups", headers: { cookie: admin.cookie }, payload: { username: "invited", displayName: "Invited", storageQuota: { mode: "limited", bytes: 1048576 } } }); expect(setup.statusCode).toBe(201);
-    const activation = await app.inject({ method: "POST", url: "/api/auth/activate", payload: { ...registration("invited"), activationCode: setup.json().activationCode } }); expect(activation.statusCode).toBe(201);
+    const own = await browserInject(app, { method: "PATCH", url: `/api/admin/users/${admin.user.id}/storage-quota`, headers: { cookie: admin.cookie }, payload: { mode: "unlimited" } }); expect(own.statusCode).toBe(200);
+    const budget = await browserInject(app, { method: "PATCH", url: "/api/account/note-history-settings", headers: { cookie: user.cookie }, payload: { quotaBytes: null } }); expect(budget.json().quotaBytes).toBeNull();
+    expect((await browserInject(app, { method: "GET", url: "/api/admin/storage", headers: { cookie: user.cookie } })).statusCode).toBe(403);
+    expect((await browserInject(app, { method: "GET", url: "/api/admin/storage", headers: { cookie: admin.cookie } })).json()).toMatchObject({ schemaVersion: 6, available: true, userCount: 2, journalMode: "wal" });
+    const setup = await browserInject(app, { method: "POST", url: "/api/admin/account-setups", headers: { cookie: admin.cookie }, payload: { username: "invited", displayName: "Invited", storageQuota: { mode: "limited", bytes: 1048576 } } }); expect(setup.statusCode).toBe(201);
+    const activation = await browserInject(app, { method: "POST", url: "/api/auth/activate", payload: { ...registration("invited"), activationCode: setup.json().activationCode } }); expect(activation.statusCode).toBe(201);
     expect(userQuotas(db, activation.json().user.id, config).quotaBytes).toBe(1048576);
   });
   it("applies the combined quota to avatars, history and attachment chunks while preserving existing data", async () => {
     const { db, config } = fixture(); const app = await createApp({ db, config, maintenance: false }); resources.push(() => app.close());
-    const registrationResponse = await app.inject({ method: "POST", url: "/api/auth/register", payload: registration("storageuser") });
+    const registrationResponse = await browserInject(app, { method: "POST", url: "/api/auth/register", payload: registration("storageuser") });
     const user = registrationResponse.json().user.id, note = randomUUID(); put(db, user, note);
     db.prepare("UPDATE users SET storage_quota_mode='limited',storage_quota_bytes=56 WHERE id=?").run(user);
     const cookie = (registrationResponse.headers["set-cookie"] as string[]).map((value) => value.split(";", 1)[0]).join("; ");
-    const avatar = await app.inject({ method: "PUT", url: "/api/account/avatar", headers: { cookie }, payload: { ciphertext: "v".repeat(32), nonce: "n".repeat(24), encryptionVersion: 1 } }); expect(avatar.statusCode).toBe(413);
-    const snapshot = await app.inject({ method: "POST", url: `/api/notes/${note}/history/${randomUUID()}`, headers: { cookie }, payload: { capturedAt: new Date().toISOString(), captureKind: "manual", ciphertext: "v".repeat(32), nonce: "n".repeat(24), encryptionVersion: 1, idempotencyKey: operationId() } }); expect(snapshot.statusCode).toBe(413);
-    const chunk = await app.inject({ method: "PUT", url: `/api/attachments/${randomUUID()}/chunks/0`, headers: { cookie, "content-type": "application/octet-stream", "x-webmd-nonce": "n".repeat(24), "x-webmd-total-chunks": "1", "x-webmd-encryption-version": "1", "x-webmd-idempotency-key": operationId(), "x-webmd-owner-note": note }, payload: Buffer.from("bytes") }); expect(chunk.statusCode).toBe(413);
+    const avatar = await browserInject(app, { method: "PUT", url: "/api/account/avatar", headers: { cookie }, payload: { ciphertext: "v".repeat(32), nonce: "n".repeat(24), encryptionVersion: 1 } }); expect(avatar.statusCode).toBe(413);
+    const snapshot = await browserInject(app, { method: "POST", url: `/api/notes/${note}/history/${randomUUID()}`, headers: { cookie }, payload: { capturedAt: new Date().toISOString(), captureKind: "manual", ciphertext: "v".repeat(32), nonce: "n".repeat(24), encryptionVersion: 1, idempotencyKey: operationId() } }); expect(snapshot.statusCode).toBe(413);
+    const chunk = await browserInject(app, { method: "PUT", url: `/api/attachments/${randomUUID()}/chunks/0`, headers: { cookie, "content-type": "application/octet-stream", "x-webmd-nonce": "n".repeat(24), "x-webmd-total-chunks": "1", "x-webmd-encryption-version": "1", "x-webmd-idempotency-key": operationId(), "x-webmd-owner-note": note }, payload: Buffer.from("bytes") }); expect(chunk.statusCode).toBe(413);
     expect(storageUsage(db, user)).toMatchObject({ totalBytes: 56, historyBytes: 0, profileBytes: 0, attachmentBytes: 0 });
   });
 });

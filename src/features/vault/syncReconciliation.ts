@@ -1,4 +1,3 @@
-import { api, setSyncLease } from "../../api";
 import { operationExpired } from "@mint-notes/application-client";
 import { cursorKey, localDb, localKey } from "../../storage/database";
 import type { SyncChange } from "../../types";
@@ -6,13 +5,14 @@ import { pullVaultChanges, type PullControllerDependencies } from "./pullControl
 
 interface SyncStatus { epoch: string; head: number; floor: number; reconcile: boolean; lease: string; bodyChunkingEnabled?: boolean; }
 export async function prepareVaultSynchronization(dependencies: PullControllerDependencies) {
+  const api = dependencies.services.transport.api;
   const { userId, isActive } = dependencies;
   const stored = await localDb.meta.get(`sync-state:${userId}`);
   const state = stored ? JSON.parse(stored.value) as { epoch: string } : null;
   const cursor = Number((await localDb.meta.get(cursorKey(userId)))?.value ?? 0);
   const previousLease = (await localDb.meta.get(`sync-lease:${userId}`))?.value ?? "";
   if (!isActive()) return false;
-  setSyncLease(previousLease);
+  dependencies.services.transport.setSyncLease(previousLease);
   const status = await api<SyncStatus>(`/api/sync/status?since=${cursor}&epoch=${encodeURIComponent(state?.epoch ?? "")}`);
   if (!isActive()) return false;
   await localDb.meta.put({ key: `body-chunking:${userId}`, value: String(status.bodyChunkingEnabled !== false) });
@@ -78,6 +78,6 @@ export async function prepareVaultSynchronization(dependencies: PullControllerDe
     });
   } else await localDb.meta.put({ key: `sync-lease:${userId}`, value: status.lease });
   if (!isActive()) return false;
-  setSyncLease(status.lease);
+  dependencies.services.transport.setSyncLease(status.lease);
   return true;
 }

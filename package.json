@@ -59,7 +59,7 @@
     "highlight.js": "^11.12.0",
     "jszip": "^3.10.1",
     "katex": "^0.18.1",
-    "lucide-react": "^1.25.0",
+    "lucide-react": "^1.57.0",
     "markdown-it": "^14.1.1",
     "markdown-it-emoji": "^3.0.0",
     "mdast-util-from-markdown": "^2.0.3",

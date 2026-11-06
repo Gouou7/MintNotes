@@ -2,9 +2,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api";
-import { cryptoClient } from "../crypto/client";
+import { testCryptoClient } from "./session/workspaceServices.testSupport";
 import { I18nProvider } from "../i18n";
 import { AuthScreen } from "./AuthScreen";
+
+
+const cryptoClient = testCryptoClient();
 
 vi.mock("../api", () => ({ api: vi.fn() }));
 vi.mock("../crypto/client", () => ({
@@ -33,7 +36,7 @@ async function renderAuth(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => { root.render(<I18nProvider><AuthScreen onUnlocked={vi.fn()} offlineUnavailable={offlineUnavailable} /></I18nProvider>); });
+  await act(async () => { root.render(<I18nProvider><AuthScreen onUnlocked={vi.fn()} getWorker={() => cryptoClient} runAuthentication={(task) => task()} offlineUnavailable={offlineUnavailable} /></I18nProvider>); });
   await act(async () => { await Promise.resolve(); });
   return container;
 }

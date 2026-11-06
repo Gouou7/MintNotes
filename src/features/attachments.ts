@@ -1,7 +1,8 @@
 import { pinCache, evictDownloadableCaches, persistWithCacheRecovery } from "../storage/cache";
 import { operationId } from "@mint-notes/application-client";
-import { downloadAttachmentChunk } from "../api";
-import { cryptoClient } from "../crypto/client";
+import type { ApiClient } from "../api";
+import type { WorkspaceServices } from "./session/workspaceServices";
+import type { CryptoClient } from "../crypto/client";
 import {
   chunkKey,
   localDb,
@@ -31,7 +32,8 @@ export async function prepareLocalAttachment(
   userId: string,
   ownerNoteId: string,
   file: File,
-  continueOperation?: ContinueOperation
+  continueOperation: ContinueOperation | undefined,
+  cryptoClient: CryptoClient
 ) {
   requireActiveOperation(continueOperation);
   if (file.size <= 0) throw new Error("附件为空");
@@ -105,8 +107,8 @@ export async function writePreparedAttachment(prepared: PreparedAttachment): Pro
   await localDb.outbox.put(prepared.objectOutbox);
 }
 
-export async function createLocalAttachment(userId: string, ownerNoteId: string, file: File, continueOperation?: ContinueOperation): Promise<OpenAttachment> {
-  const prepared = await prepareLocalAttachment(userId, ownerNoteId, file, continueOperation);
+export async function createLocalAttachment(userId: string, ownerNoteId: string, file: File, continueOperation: ContinueOperation | undefined, cryptoClient: CryptoClient): Promise<OpenAttachment> {
+  const prepared = await prepareLocalAttachment(userId, ownerNoteId, file, continueOperation, cryptoClient);
   await localDb.transaction("rw", [localDb.objects, localDb.outbox, localDb.attachmentChunks, localDb.attachmentOutbox], async () => {
     requireActiveOperation(continueOperation);
     await writePreparedAttachment(prepared);
@@ -120,7 +122,8 @@ export async function ensureAttachmentChunks(
   attachment: OpenAttachment,
   continueOperation?: ContinueOperation,
   allowNetwork = true,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  transport?: Pick<ApiClient, "downloadAttachmentChunk">
 ): Promise<EncryptedAttachmentChunk[]> {
   requireActiveOperation(continueOperation);
   const stored = await localDb.attachmentChunks.where("[userId+attachmentId]").equals([userId, attachment.objectId]).toArray();
@@ -147,7 +150,8 @@ export async function ensureAttachmentChunks(
     ATTACHMENT_TRANSFER_CONCURRENCY,
     async (index): Promise<LocalAttachmentChunk> => {
       requireActiveOperation(continueOperation);
-      const downloaded = await downloadAttachmentChunk(`/api/attachments/${attachment.objectId}/chunks/${index}`, signal);
+      if (!transport) throw new Error("Remote attachment access is unavailable");
+      const downloaded = await transport.downloadAttachmentChunk(`/api/attachments/${attachment.objectId}/chunks/${index}`, signal);
       requireActiveOperation(continueOperation);
       if (
         downloaded.totalChunks !== attachment.chunkCount
@@ -193,13 +197,14 @@ export async function ensureAttachmentChunks(
 export async function decryptAttachmentBlob(
   userId: string,
   attachment: OpenAttachment,
-  continueOperation?: ContinueOperation,
+  continueOperation: ContinueOperation | undefined,
   allowNetwork = true,
-  signal?: AbortSignal
+  signal: AbortSignal | undefined,
+  services: WorkspaceServices
 ): Promise<Blob> {
-  const chunks = await ensureAttachmentChunks(userId, attachment, continueOperation, allowNetwork, signal);
+  const chunks = await ensureAttachmentChunks(userId, attachment, continueOperation, allowNetwork, signal, services.transport);
   requireActiveOperation(continueOperation);
-  const bytes = await cryptoClient.decryptAttachment(userId, attachment.objectId, attachment, chunks);
+  const bytes = await services.cryptoClient.decryptAttachment(userId, attachment.objectId, attachment, chunks);
   requireActiveOperation(continueOperation);
   return new Blob([bytes], { type: attachment.mime });
 }

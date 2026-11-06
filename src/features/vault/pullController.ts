@@ -1,8 +1,6 @@
-import { api } from "../../api";
 import { ensureBodyBlocks, persistBodyBlocks } from "../../storage/noteBodies";
 import type { EncryptedNoteBodyBlock } from "@mint-notes/application-client";
 import { operationExpired, operationId } from "@mint-notes/application-client";
-import { cryptoClient } from "../../crypto/client";
 import { cursorKey, localDb, localKey, type LocalEncryptedObject, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
 import type { OpenAttachment, OpenDocument, SyncChange, VaultObject } from "../../types";
 import { isAcknowledgedLocalEcho } from "../syncChanges";
@@ -12,6 +10,7 @@ import { hasPendingLocalAuxiliaryData, hasPendingLocalObjectGraph } from "./loca
 import { acknowledgeOutboxEntry, sameOutboxEntry } from "./outboxAcknowledgement";
 
 export interface PullControllerDependencies {
+  services: import("../session/workspaceServices").WorkspaceServices;
   userId: string;
   isActive: () => boolean;
   activeObjectId: () => string | null;
@@ -73,6 +72,8 @@ interface Candidate {
 
 /** Crypto and attachment copies run outside write lanes; only the guarded page commit holds them. */
 export async function pullVaultChanges(dependencies: PullControllerDependencies): Promise<PullControllerResult> {
+  const api = dependencies.services.transport.api;
+  const cryptoClient = dependencies.services.cryptoClient;
   const total = emptyResult();
   const { userId, isActive } = dependencies;
   const coordinate = dependencies.coordinate ?? (async <T,>(_id: string, operation: () => Promise<T>) => operation());
@@ -122,7 +123,7 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
       let bodyBlocks: EncryptedNoteBodyBlock[] = [];
       if (!change.purged && shouldSynchronizeWorkspaceObject(change.objectId)) {
         try {
-          bodyBlocks = await ensureBodyBlocks(userId, change, isActive);
+          bodyBlocks = await ensureBodyBlocks(userId, change, isActive, api);
           decrypted = normalizeVaultObject(await cryptoClient.decryptObject(
             userId, change.objectId, change.objectType, change.revision, change.ciphertext, change.nonce, { ...change, bodyBlocks }
           ));

@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { downloadAttachmentChunk } from "./api";
+import { createApiClient } from "./api";
+const { downloadAttachmentChunk } = createApiClient();
 afterEach(() => vi.unstubAllGlobals());
 it("forwards cancellation to an in-flight attachment download", async () => {
   let received!: AbortSignal;
@@ -13,4 +14,20 @@ it("forwards cancellation to an in-flight attachment download", async () => {
   controller.abort();
   await rejected;
   expect(received.aborted).toBe(true);
+});
+
+
+it("discards a late unauthorized response after rebinding", async () => {
+  let finish!: (response: Response) => void;
+  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  try {
+    const invalidated = vi.fn();
+    const client = createApiClient({ requireSession: true, onInvalid: invalidated });
+    client.bindSession("account-a");
+    const request = client.api("/api/auth/me");
+    client.bindSession("account-b");
+    finish(Response.json({ code: "BROWSER_SESSION_INVALID" }, { status: 401 }));
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(invalidated).not.toHaveBeenCalled();
+  } finally { fetch.mockRestore(); }
 });

@@ -1,299 +1,124 @@
+import "fake-indexeddb/auto";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DeviceUnlockCredential, VerifiedDeviceSession } from "../../storage/database";
-import type { AuthEndpoint, User } from "../../types";
-import { ApiError, api } from "../../api";
-import { cryptoClient } from "../../crypto/client";
-import {
-  forgetDeviceUnlock,
-  getDeviceUnlock,
-  getRememberedOfflineDevice,
-  hasDevicePin,
-  markEndpointRevocationPending,
-  restoreDeviceUnlock,
-  updateVerifiedDeviceSession
-} from "../../crypto/deviceUnlock";
-import { deleteLocalUserData } from "../../storage/database";
+import { localDb, type DeviceUnlockCredential } from "../../storage/database";
+import { writeSelection } from "./browserCoordinator";
 import { useSessionController } from "./useSessionController";
 
-vi.mock("../../api", () => ({
-  ApiError: class ApiError extends Error {
-    constructor(message: string, public status: number) {
-      super(message);
-    }
-  },
-  api: vi.fn()
-}));
+const mocks = vi.hoisted(() => ({ dispose: vi.fn(), unlock: vi.fn(), unlockPin: vi.fn() }));
 vi.mock("../../crypto/client", () => ({
-  cryptoClient: { lock: vi.fn() }
+  createCryptoClient: () => ({ dispose: mocks.dispose, unlockVaultFromDevice: mocks.unlock, unlockVaultFromDeviceWithPin: mocks.unlockPin,
+    lock: vi.fn().mockResolvedValue(undefined), wrapVaultForDevice: vi.fn().mockResolvedValue({ ciphertext: "refresh", nonce: "nonce" }) })
 }));
-vi.mock("../../crypto/deviceUnlock", () => ({
-  broadcastAccountLogout: vi.fn(),
-  clearCurrentBrowserSessionGrant: vi.fn(),
-  clearPendingEndpointRevocation: vi.fn(),
-  forgetDeviceUnlock: vi.fn().mockResolvedValue(undefined),
-  flushPendingEndpointRevocations: vi.fn().mockResolvedValue(undefined),
-  getDeviceUnlock: vi.fn(),
-  getRememberedOfflineDevice: vi.fn(),
-  grantCurrentBrowserSession: vi.fn(),
-  hasCurrentBrowserSessionGrant: vi.fn().mockReturnValue(true),
-  hasDevicePin: vi.fn(),
-  listenForBrowserSessionGrantRequests: vi.fn().mockReturnValue(() => undefined),
-  markEndpointRevocationPending: vi.fn().mockResolvedValue(undefined),
-  rememberDeviceUnlock: vi.fn(),
-  requestBrowserSessionGrant: vi.fn().mockResolvedValue(false),
-  restoreDeviceUnlock: vi.fn(),
-  updateVerifiedDeviceSession: vi.fn()
-}));
-vi.mock("../../storage/database", async () => {
-  const actual = await vi.importActual<typeof import("../../storage/database")>("../../storage/database");
-  return {
-    ...actual,
-    deleteLocalUserData: vi.fn(),
-    localDb: {
-      deviceCredentials: { toArray: vi.fn().mockResolvedValue([]) }
-    }
-  };
-});
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-const user: User = { id: "user-id", username: "user", displayName: "User", role: "user" };
-const endpoint: AuthEndpoint = { id: "endpoint-id", remembered: true };
-const verifiedSession: VerifiedDeviceSession = {
-  version: 1,
-  user,
-  endpoint,
-  verifiedAt: "2026-07-29T00:00:00.000Z"
-};
-const directCredential: DeviceUnlockCredential = {
-  userId: user.id,
-  endpointId: endpoint.id,
-  mode: "remembered",
-  deviceKey: {} as CryptoKey,
-  version: 3,
-  protection: "device",
-  ciphertext: "ciphertext",
-  nonce: "nonce",
-  verifiedSession,
-  failedPinAttempts: 0,
-  autoLockMinutes: 0,
-  updatedAt: verifiedSession.verifiedAt
-};
-const pinCredential: DeviceUnlockCredential = {
-  ...directCredential,
-  protection: "pin",
-  pinKdfVersion: 1,
-  pinSalt: "salt",
-  pinCiphertext: "pin-ciphertext",
-  pinNonce: "pin-nonce"
-};
-
-type Controller = ReturnType<typeof useSessionController>;
-const roots: Root[] = [];
-let latest: Controller | null = null;
-
+let root: Root;
+let controller: ReturnType<typeof useSessionController>;
 function Harness() {
-  latest = useSessionController();
+  controller = useSessionController();
   return null;
 }
-
-async function renderController(online: boolean) {
-  Object.defineProperty(navigator, "onLine", { configurable: true, value: online });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
+async function seed(id: string, pin = false) {
+  const user = { id, username: id, displayName: id, role: "user" as const };
+  const endpoint = { id: `endpoint-${id}`, remembered: true };
+  const base = {
+    version: 3 as const, userId: id, endpointId: endpoint.id, mode: "remembered" as const, deviceKey: {} as CryptoKey,
+    verifiedSession: { version: 1 as const, user, endpoint, verifiedAt: new Date().toISOString() },
+    failedPinAttempts: 0, autoLockMinutes: 0, updatedAt: new Date().toISOString()
+  };
+  const credential: DeviceUnlockCredential = pin
+    ? { ...base, protection: "pin", pinKdfVersion: 1, pinSalt: "salt", pinCiphertext: "pin", pinNonce: "nonce" }
+    : { ...base, protection: "device", ciphertext: "device", nonce: "nonce" };
+  await localDb.deviceCredentials.put(credential);
+  return { user, endpoint, credential };
+}
+async function boot() {
   await act(async () => root.render(<Harness />));
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  return () => latest!;
+  await act(async () => { await vi.waitFor(() => expect(controller.restoring).toBe(false)); });
 }
 
-beforeEach(() => {
-  vi.mocked(api).mockReset().mockRejectedValue(new TypeError("unreachable"));
+beforeEach(async () => {
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  await localDb.delete();
+  await localDb.open();
+  const host = document.createElement("div");
+  document.body.append(host);
+  root = createRoot(host);
+  mocks.unlock.mockResolvedValue(undefined);
+  mocks.unlockPin.mockResolvedValue(undefined);
 });
-
 afterEach(async () => {
-  for (const root of roots.splice(0)) await act(async () => root.unmount());
+  await act(async () => root.unmount());
+  await localDb.delete();
   document.body.replaceChildren();
-  latest = null;
+  sessionStorage.clear();
   vi.clearAllMocks();
-  vi.useRealTimers();
-  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
-  vi.mocked(cryptoClient.lock).mockResolvedValue({ locked: true });
+  vi.restoreAllMocks();
 });
 
-describe("offline remembered-session restoration", () => {
-  it("opens a remembered direct credential while background verification cannot reach the server", async () => {
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
-    vi.mocked(hasDevicePin).mockReturnValue(false);
-    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
-
-    const controller = await renderController(false);
-
-    expect(controller().restoringDevice).toBe(false);
-    expect(controller().user).toEqual(user);
-    expect(controller().serverSessionVerified).toBe(false);
-    expect(api).toHaveBeenCalledWith("/api/auth/me");
+describe("account lifecycle", () => {
+  it("restores the selected account offline and asks for its own PIN on switch", async () => {
+    const a = await seed("alpha");
+    const b = await seed("beta", true);
+    await writeSelection({ userId: a.user.id, generation: "old" });
+    await boot();
+    expect(controller.workspace?.account.user.id).toBe(a.user.id);
+    expect(controller.online).toBe(false);
+    const close = vi.fn().mockResolvedValue(true);
+    controller.registerClose(close);
+    await act(async () => controller.choose(b));
+    expect(close).toHaveBeenCalledWith(false);
+    expect(controller.workspace).toBeNull();
+    expect(controller.locked?.user.id).toBe(b.user.id);
+    expect(mocks.unlockPin).not.toHaveBeenCalled();
+    await act(async () => { await controller.unlock("beta-pin"); });
+    expect(controller.workspace?.account.user.id).toBe(b.user.id);
+    expect(mocks.unlockPin.mock.calls[0]?.slice(0, 4)).toEqual([b.user.id, b.endpoint.id, {}, "beta-pin"]);
+    expect(await localDb.deviceCredentials.get(a.user.id)).toEqual(a.credential);
   });
 
-  it("routes a remembered PIN credential to the offline lock screen", async () => {
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: pinCredential, session: verifiedSession });
-    vi.mocked(hasDevicePin).mockReturnValue(true);
-
-    const controller = await renderController(false);
-
-    expect(controller().user).toBeNull();
-    expect(controller().session).toEqual({ user, endpoint });
-    expect(controller().credential).toEqual(pinCredential);
-    expect(restoreDeviceUnlock).not.toHaveBeenCalled();
+  it("keeps the original instance if a pending save fails", async () => {
+    const a = await seed("alpha");
+    const b = await seed("beta");
+    await writeSelection({ userId: a.user.id, generation: "old" });
+    await boot();
+    const workspaceId = controller.workspace?.id;
+    controller.registerClose(vi.fn().mockResolvedValue(false));
+    await act(async () => controller.choose(b));
+    expect(controller.workspace?.id).toBe(workspaceId);
+    expect(controller.error).toBe("switchFailed");
+    expect(mocks.dispose).not.toHaveBeenCalled();
   });
 
-  it("reports that offline access is unavailable without an eligible remembered credential", async () => {
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue(null);
-
-    const controller = await renderController(false);
-
-    expect(controller().offlineUnavailable).toBe(true);
-    expect(controller().session).toBeNull();
-  });
-
-  it("uses a local remembered credential after a transport failure", async () => {
-    vi.mocked(api).mockRejectedValueOnce(new TypeError("offline"));
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
-    vi.mocked(hasDevicePin).mockReturnValue(false);
-    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
-
-    const controller = await renderController(true);
-
-    expect(controller().user).toEqual(user);
-    expect(controller().serverSessionVerified).toBe(false);
-  });
-
-  it("never falls back to local trust after an authoritative 401", async () => {
-    vi.mocked(api).mockRejectedValueOnce(new ApiError("invalid", 401));
-
-    const controller = await renderController(true);
-
-    expect(controller().user).toBeNull();
-    expect(getRememberedOfflineDevice).not.toHaveBeenCalled();
-  });
-
-  it("verifies a reachable server even while the browser continues reporting offline", async () => {
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
-    vi.mocked(hasDevicePin).mockReturnValue(false);
-    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
-    vi.mocked(api).mockResolvedValueOnce({ user, endpoint });
-    vi.mocked(getDeviceUnlock).mockResolvedValue(directCredential);
-    vi.mocked(updateVerifiedDeviceSession).mockResolvedValue(directCredential);
-    const controller = await renderController(false);
-
-    expect(api).toHaveBeenCalledWith("/api/auth/me");
-    await vi.waitFor(() => expect(controller().serverSessionVerified).toBe(true));
-    expect(navigator.onLine).toBe(false);
-    expect(controller().user).toEqual(user);
-  });
-
-  it("restores a reachable server session without cached offline trust when the browser reports offline", async () => {
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue(null);
-    vi.mocked(api).mockResolvedValueOnce({ user, endpoint });
-    vi.mocked(getDeviceUnlock).mockResolvedValue(directCredential);
-    vi.mocked(updateVerifiedDeviceSession).mockResolvedValue(directCredential);
-    vi.mocked(hasDevicePin).mockReturnValue(false);
-    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
-
-    const controller = await renderController(false);
-
-    expect(controller().serverSessionVerified).toBe(true);
-    expect(controller().offlineUnavailable).toBe(false);
-    expect(controller().user).toEqual(user);
-  });
-
-  it("retries failed verification without needing a browser online event", async () => {
-    vi.useFakeTimers();
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
-    vi.mocked(hasDevicePin).mockReturnValue(false);
-    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
-    const controller = await renderController(false);
-    expect(controller().serverSessionVerified).toBe(false);
-
-    vi.mocked(api).mockResolvedValueOnce({ user, endpoint });
-    vi.mocked(getDeviceUnlock).mockResolvedValue(directCredential);
-    vi.mocked(updateVerifiedDeviceSession).mockResolvedValue(directCredential);
-    await act(async () => vi.advanceTimersByTimeAsync(30_000));
-
-    expect(navigator.onLine).toBe(false);
-    expect(controller().serverSessionVerified).toBe(true);
-    expect(api).toHaveBeenCalledTimes(2);
-  });
-
-  it.each([
-    { user: { ...user, id: "other-user" }, endpoint },
-    { user, endpoint: { ...endpoint, id: "other-endpoint" } },
-    { user, endpoint: { ...endpoint, remembered: false } }
-  ])("rejects a reachable session that does not match local remembered trust: %j", async (remote) => {
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
-    vi.mocked(hasDevicePin).mockReturnValue(false);
-    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
-    vi.mocked(api).mockResolvedValueOnce(remote);
-    const controller = await renderController(false);
-
-    expect(controller().serverSessionVerified).toBe(false);
-    expect(controller().session).toBeNull();
-    expect(forgetDeviceUnlock).toHaveBeenCalledWith(user.id);
-    expect(deleteLocalUserData).not.toHaveBeenCalled();
-  });
-
-  it("deduplicates concurrent reconnect verification attempts", async () => {
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
-    vi.mocked(hasDevicePin).mockReturnValue(false);
-    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
-    let resolveVerification!: (value: { user: User; endpoint: AuthEndpoint }) => void;
-    vi.mocked(api).mockImplementationOnce(() => new Promise((resolve) => {
-      resolveVerification = resolve as typeof resolveVerification;
-    }));
-    vi.mocked(getDeviceUnlock).mockResolvedValue(directCredential);
-    vi.mocked(updateVerifiedDeviceSession).mockResolvedValue(directCredential);
-    await renderController(false);
-
-    Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  it("retries a pending device revocation on reconnect while signed out", async () => {
+    const target = { endpointId: "endpoint-a", grantId: "grant-a" };
+    await localDb.pendingEndpointRevocations.put({ ...target, userId: "alpha", createdAt: new Date().toISOString() });
+    await boot();
+    expect(controller.workspace).toBeNull();
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(target));
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
     await act(async () => {
       window.dispatchEvent(new Event("online"));
-      window.dispatchEvent(new Event("online"));
+      await vi.waitFor(async () => expect(await localDb.pendingEndpointRevocations.get(target.endpointId)).toBeUndefined());
     });
-
-    expect(api).toHaveBeenCalledTimes(1);
-    await act(async () => resolveVerification({ user, endpoint }));
+    expect(fetch).toHaveBeenCalledWith("/api/auth/device-grant/revoke", expect.objectContaining({
+      method: "POST", body: JSON.stringify(target)
+    }));
   });
 
-  it("clears local trust but preserves encrypted account data after reconnect receives 401", async () => {
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: directCredential, session: verifiedSession });
-    vi.mocked(hasDevicePin).mockReturnValue(false);
-    vi.mocked(restoreDeviceUnlock).mockResolvedValue(true);
-    vi.mocked(api).mockRejectedValueOnce(new ApiError("invalid", 401));
-    const controller = await renderController(false);
-
-    Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
-    await act(async () => window.dispatchEvent(new Event("online")));
-    await vi.waitFor(() => expect(controller().session).toBeNull());
-
-    expect(forgetDeviceUnlock).toHaveBeenCalledWith(user.id);
-    expect(deleteLocalUserData).not.toHaveBeenCalled();
-  });
-
-  it("retains an endpoint revocation request when locked logout cannot reach the server", async () => {
-    vi.mocked(getRememberedOfflineDevice).mockResolvedValue({ credential: pinCredential, session: verifiedSession });
-    vi.mocked(hasDevicePin).mockReturnValue(true);
-    vi.mocked(api).mockRejectedValueOnce(new TypeError("offline"));
-    const controller = await renderController(false);
-
-    await act(async () => controller().logoutLockedSession());
-
-    expect(deleteLocalUserData).toHaveBeenCalledWith(user.id);
-    expect(markEndpointRevocationPending).toHaveBeenCalledWith(user.id, endpoint.id);
+  it("exhausts only the selected account's PIN trust", async () => {
+    const a = await seed("alpha");
+    const b = await seed("beta", true);
+    await writeSelection({ userId: b.user.id, generation: "old" });
+    await boot();
+    expect(controller.locked?.user.id).toBe(b.user.id);
+    mocks.unlockPin.mockRejectedValue(new Error("Invalid PIN"));
+    for (let index = 0; index < 5; index++) {
+      await act(async () => { await controller.unlock("wrong"); });
+    }
+    expect(await localDb.deviceCredentials.get(b.user.id)).toBeUndefined();
+    expect(await localDb.deviceCredentials.get(a.user.id)).toEqual(a.credential);
+    expect(await localDb.pendingEndpointRevocations.get(b.endpoint.id)).toMatchObject({ userId: b.user.id });
   });
 });

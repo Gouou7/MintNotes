@@ -1,6 +1,6 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useState } from "react";
-import { api } from "../../api";
 import { translateError, type Translate } from "../../i18n";
 import type { OpenDocument } from "../../types";
 import { NameReservations } from "../siblingNames";
@@ -32,6 +32,7 @@ interface Options {
 
 /** 回收站、附件墓碑与永久清除。 */
 export function useVaultTrash(options: Options) {
+  const { transport: { api } } = useWorkspaceServices();
   const {
     model,
     selection,

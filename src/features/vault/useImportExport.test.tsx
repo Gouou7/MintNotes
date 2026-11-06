@@ -90,3 +90,8 @@ it('finishes local persistence before confirming export and stops on failure', a
   expect(confirm).not.toHaveBeenCalled();
   expect(state.notify).toHaveBeenCalledWith('transfer.exportFailed', 'critical');
 });
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
+});

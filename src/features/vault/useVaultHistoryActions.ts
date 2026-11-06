@@ -1,5 +1,5 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, SetStateAction } from "react";
-import { api } from "../../api";
 import { translateError, type Translate } from "../../i18n";
 import { historyKey, localDb } from "../../storage/database";
 import type { HistoryListItem, OpenDocument } from "../../types";
@@ -37,6 +37,7 @@ interface Options {
 
 /** 手动快照、保护、清理和恢复操作。 */
 export function useVaultHistoryActions(options: Options) {
+  const { transport: { api } } = useWorkspaceServices();
   const {
     model,
     selection,

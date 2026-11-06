@@ -139,13 +139,13 @@ describe("storage lifecycle v3", () => {
     const receipts = db.prepare("SELECT * FROM sync_receipts").all();
     db.exec(`PRAGMA user_version = ${version}`); db.close();
     const migrated = openDatabase(directory); resources.find((r) => r.directory === directory)!.db = migrated;
-    expect(migrated.pragma("user_version", { simple: true })).toBe(5);
+    expect(migrated.pragma("user_version", { simple: true })).toBe(6);
     expect(migrated.prepare("SELECT * FROM objects").all()).toEqual(before.map((row) => ({ ...row, body_block_ids: "[]" })));
     expect(migrated.prepare("SELECT * FROM users").all()).toEqual(users);
     expect(migrated.prepare("SELECT * FROM sync_receipts").all()).toEqual(receipts);
     expect(migrated.prepare("SELECT COUNT(*) AS count FROM object_revisions").get()).toEqual({ count: 1 });
     expect(migrated.prepare("SELECT is_protected FROM note_history").get()).toEqual({ is_protected: 1 });
-    expect(readdirSync(join(directory, "backups"))).toContain("pre-schema5.sqlite");
+    expect(readdirSync(join(directory, "backups"))).toContain("pre-schema6.sqlite");
     migrated.close();
   });
   it("does not publish a manifest with missing or cross-note body blocks and retains unreferenced blocks", () => {

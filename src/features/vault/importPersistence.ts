@@ -1,13 +1,12 @@
 import { operationId } from "@mint-notes/application-client";
 import { persistBodyBlocks } from "../../storage/noteBodies";
-import { cryptoClient } from "../../crypto/client";
 import { localDb, localKey, type LocalEncryptedObject, type OutboxEntry } from "../../storage/database";
 import type { OpenDocument } from "../../types";
 import { prepareLocalAttachment, writePreparedAttachment, type PreparedAttachment } from "../attachments";
 import { rewriteMarkdownImages, type MarkdownImage } from "../markdownImages";
 import type { ImportNote } from "../importPlan";
 
-export async function persistImportedDocument(userId: string, document: OpenDocument, input: ImportNote | undefined, isActive: () => boolean) {
+export async function persistImportedDocument(userId: string, document: OpenDocument, input: ImportNote | undefined, isActive: () => boolean, services: import("../session/workspaceServices").WorkspaceServices) {
   const check = () => { if (!isActive()) throw new DOMException("Import cancelled", "AbortError"); };
   check();
   const attachments = new Map<string, PreparedAttachment>();
@@ -16,14 +15,14 @@ export async function persistImportedDocument(userId: string, document: OpenDocu
     check();
     let prepared = attachments.get(image.key);
     if (!prepared) {
-      prepared = await prepareLocalAttachment(userId, document.objectId, image.file, isActive);
+      prepared = await prepareLocalAttachment(userId, document.objectId, image.file, isActive, services.cryptoClient);
       attachments.set(image.key, prepared);
     }
     replacements.set(reference, `webmd-attachment:${prepared.attachment.objectId}`);
   }
   const next: OpenDocument = { ...document, markdown: rewriteMarkdownImages(document.markdown, replacements), attachmentIds: [...attachments.values()].map((entry) => entry.attachment.objectId) };
   const { objectId, dirty: _dirty, serverRevision: _revision, ...plain } = next;
-  const encrypted = await cryptoClient.encryptObject(userId, objectId, next.kind, 1, plain);
+  const encrypted = await services.cryptoClient.encryptObject(userId, objectId, next.kind, 1, plain);
   check();
   const object: LocalEncryptedObject = {
     key: localKey(userId, objectId), userId, objectId, objectType: next.kind,

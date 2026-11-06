@@ -13,6 +13,7 @@ export interface SessionContext {
   endpointFirstSeenAt: string;
   remembered: boolean;
   createdAt: string;
+  expiresAt: string;
   lastSeenAt: string;
 }
 

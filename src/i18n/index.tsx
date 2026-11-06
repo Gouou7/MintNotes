@@ -303,6 +303,14 @@ const messages = {
   "lock.verifying": { en: "Verifying…", "zh-CN": "正在验证…", "zh-TW": "正在驗證…" },
   "lock.unlockWithPassword": { en: "Unlock with master password", "zh-CN": "使用主密码解锁", "zh-TW": "使用主密碼解鎖" },
   "lock.backToPin": { en: "Back to PIN unlock", "zh-CN": "返回 PIN 解锁", "zh-TW": "返回 PIN 解鎖" },
+  "account.switch": { en: "Switch account", "zh-CN": "切换用户", "zh-TW": "切換使用者" },
+  "account.current": { en: "Current", "zh-CN": "当前账号", "zh-TW": "目前帳號" },
+  "account.back": { en: "Back", "zh-CN": "返回", "zh-TW": "返回" },
+  "account.otherLogin": { en: "Sign in to another account", "zh-CN": "登录其他账号", "zh-TW": "登入其他帳號" },
+  "account.rememberFailed": { en: "This device could not be remembered. Sign in again to retry.", "zh-CN": "未能记住此设备。请重新登录后重试。", "zh-TW": "未能記住此裝置。請重新登入後重試。" },
+  "account.reauth": { en: "Sign in again to use this account online.", "zh-CN": "请重新登录以在线使用此账号。", "zh-TW": "請重新登入以連線使用此帳號。" },
+  "account.switchFailed": { en: "The account change could not be completed. Check other Mint Notes windows and try again.", "zh-CN": "未能完成账号操作。请检查其他 Mint Notes 窗口后重试。", "zh-TW": "未能完成帳號操作。請檢查其他 Mint Notes 視窗後重試。" },
+  "account.deviceResumable": { en: "Can resume sign-in", "zh-CN": "可恢复登录", "zh-TW": "可恢復登入" },
   "lock.logout": { en: "Log out", "zh-CN": "退出登录", "zh-TW": "登出" },
   "lock.invalidPin": { en: "Incorrect PIN", "zh-CN": "PIN 不正确", "zh-TW": "PIN 不正確" },
   "lock.cannotUnlock": { en: "Unable to unlock", "zh-CN": "无法解锁", "zh-TW": "無法解鎖" },
@@ -468,7 +476,7 @@ const messages = {
     "zh-CN": "首次登录：{first} · 最近登录：{last} · 共 {count} 次 · IP {ip} · {status}",
     "zh-TW": "首次登入：{first} · 最近登入：{last} · 共 {count} 次 · IP {ip} · {status}"
   },
-  "settings.deviceActive": { en: "Active", "zh-CN": "有效", "zh-TW": "有效" },
+  "settings.deviceActive": { en: "Active session", "zh-CN": "会话有效", "zh-TW": "工作階段有效" },
   "settings.deviceSignedOut": { en: "Signed out", "zh-CN": "已登出", "zh-TW": "已登出" },
   "settings.deviceExpired": { en: "Expired", "zh-CN": "已过期", "zh-TW": "已過期" },
   "settings.signOut": { en: "Sign out", "zh-CN": "登出", "zh-TW": "登出" },
@@ -1023,6 +1031,11 @@ export function translateCurrent(key: MessageKey, values?: TranslationValues): s
 
 const errorMessages: Record<string, MessageKey> = {
   "HISTORY_LOCAL_BUDGET_EXCEEDED": "notice.historyQuotaReached",
+  "Browser account change blocked": "account.switchFailed",
+  "Browser session unavailable": "account.reauth",
+  "Browser session changed": "account.switchFailed",
+  "Device authorization unavailable": "account.rememberFailed",
+  "Device verification required": "account.reauth",
   "PIN 至少需要 4 个字符": "error.pinMin",
   "当前设备没有可用的本机解锁凭据": "error.deviceCredentialMissing",
   "不支持的自动锁定时间": "error.autoLockUnsupported",
@@ -1096,7 +1109,7 @@ const errorMessages: Record<string, MessageKey> = {
 export function translateError(error: unknown, t: Translate, fallback: MessageKey): string {
   if (!(error instanceof Error)) return t(fallback);
   const code = (error as Error & { data?: { code?: string } }).data?.code;
-  if (code === "PROTOCOL_UPGRADE_REQUIRED") return t("notice.syncUpgradeRequired");
+  if (code === "PROTOCOL_UPGRADE_REQUIRED" || code === "BROWSER_UPGRADE_REQUIRED") return t("notice.syncUpgradeRequired");
   if (code === "METADATA_QUOTA_EXCEEDED") return t("notice.metadataQuotaReached");
   if (code === "OPERATION_EXPIRED") return t("notice.operationExpired");
   if (code === "OWNERSHIP_INCOMPLETE") return t("notice.ownershipIncomplete");

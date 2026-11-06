@@ -53,7 +53,7 @@ async function mount() {
   await act(async () => root.render(<StrictMode><I18nProvider><VaultWorkspace
     user={{ id: userId, username: "reader", displayName: "Reader", role: "user" }}
     endpoint={{ id: "endpoint", remembered: true }} credential={null} serverSessionVerified={false}
-    onCredentialChange={vi.fn()} onDisplayNameChange={vi.fn()} onUsernameChange={vi.fn()} onLocked={vi.fn()}
+    onCredentialChange={vi.fn()} onDisplayNameChange={vi.fn()} onUsernameChange={vi.fn()} onLock={vi.fn()} onLogout={vi.fn()} registerClose={vi.fn()}
   /></I18nProvider></StrictMode>));
   await settle(() => host.querySelector<HTMLTextAreaElement>('[aria-label="test-editor"]')?.value === "First body");
 }
@@ -157,4 +157,9 @@ describe("vault feature composition", () => {
     expect(JSON.parse((await localDb.objects.get(localKey(userId, firstId)))!.ciphertext).markdown).toBe("First body");
     expect(mocks.api).not.toHaveBeenCalled();
   });
+});
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
 });

@@ -1,6 +1,6 @@
 import { operationId } from "@mint-notes/application-client";
 import { persistBodyBlocks } from "../../storage/noteBodies";
-import { cryptoClient } from "../../crypto/client";
+import type { CryptoClient } from "../../crypto/client";
 import { localDb, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
 import type { VaultObject } from "../../types";
 
@@ -10,8 +10,8 @@ export type OutboxAcknowledgement =
   | { status: "rebased"; entry: OutboxEntry; object: VaultObject };
 
 interface OutboxCryptoPort {
-  decryptObject: typeof cryptoClient.decryptObject;
-  encryptObject: typeof cryptoClient.encryptObject;
+  decryptObject: CryptoClient["decryptObject"];
+  encryptObject: CryptoClient["encryptObject"];
 }
 
 export function sameOutboxEntry(left: OutboxEntry | undefined, right: OutboxEntry | undefined): boolean {
@@ -29,7 +29,7 @@ export async function acknowledgeOutboxEntry(
   sent: ObjectUploadAttempt,
   acceptedRevision: number,
   nextGeneration: () => number,
-  crypto: OutboxCryptoPort = cryptoClient,
+  crypto: OutboxCryptoPort,
   isActive: () => boolean = () => true
 ): Promise<OutboxAcknowledgement> {
   if (acceptedRevision !== sent.revision) throw new Error("Unexpected accepted object revision");

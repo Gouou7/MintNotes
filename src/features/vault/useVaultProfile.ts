@@ -1,6 +1,6 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { useEffect, useRef, useState } from "react";
-import { api } from "../../api";
-import { cryptoClient, type EncryptedProfileAvatar } from "../../crypto/client";
+import { type EncryptedProfileAvatar } from "../../crypto/client";
 
 interface Options {
   serverSessionVerified: boolean;
@@ -9,6 +9,7 @@ interface Options {
 
 /** 账户头像的解密与临时 URL 生命周期。 */
 export function useVaultProfile(options: Options) {
+  const { transport: { api }, cryptoClient } = useWorkspaceServices();
   const { serverSessionVerified, userId } = options;
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);

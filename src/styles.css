@@ -207,7 +207,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .search-box input::placeholder, input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .tree-actions { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 var(--workspace-spacing) 11px; }
 .settings-section button { min-height: 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); cursor: pointer; }
-.tree-actions button, .tree-sort-action, .side-footer-actions button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 var(--workspace-button-size); cursor: pointer; }
+.tree-actions button, .tree-sort-action, .side-footer-actions > button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 var(--workspace-button-size); cursor: pointer; }
 .tree-view-actions { display: inline-flex; align-items: center; gap: 6px; }
 .tree-sort-action { position: relative; }
 .tree-sort-action select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
@@ -252,7 +252,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .tree-children { margin-left: 9px; border-left: var(--pane-divider-width) solid var(--border); padding-left: 14px; }
 .empty-tree, .outline-empty { padding: 24px 16px; color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center; }
-.side-footer { min-height: calc(var(--workspace-header-height) + var(--safe-area-bottom)); flex: 0 0 auto; padding: 8px max(11px, var(--safe-area-right)) calc(8px + var(--safe-area-bottom)) max(13px, var(--safe-area-left)); display: flex; align-items: center; gap: 8px; border-top: var(--pane-divider-width) solid var(--border); background: var(--chrome-background); }
+.side-footer { position: relative; min-height: calc(var(--workspace-header-height) + var(--safe-area-bottom)); flex: 0 0 auto; padding: 8px max(11px, var(--safe-area-right)) calc(8px + var(--safe-area-bottom)) max(13px, var(--safe-area-left)); display: flex; align-items: center; gap: 8px; border-top: var(--pane-divider-width) solid var(--border); background: var(--chrome-background); }
 .sidebar-user { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; }
 .sidebar-avatar { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; color: var(--text); background: var(--button-active); font-size: 12px; font-weight: 600; }
 .sidebar-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -261,7 +261,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sidebar-user-name strong { color: var(--text); font-size: 14px; font-weight: 600; }
 .sidebar-user-name small { color: var(--muted); font-size: 12px; }
 .side-footer-actions { display: flex; gap: 6px; }
-.side-footer button { font-size: 12px; }
+.side-footer-actions > button { font-size: 12px; }
 
 .note-toolbar { --toolbar-control-height: var(--workspace-button-size); height: var(--note-toolbar-height); flex: 0 0 var(--note-toolbar-height); display: flex; align-items: center; gap: 6px; padding: var(--safe-area-top) max(11px, var(--safe-area-right)) 0 max(16px, var(--safe-area-left)); border-bottom: var(--pane-divider-width) solid var(--border); background: transparent; z-index: 5; }
 .title-input, .empty-title-slot { min-width: 0; height: var(--toolbar-control-height); flex: 1; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text-strong); font-size: 18px; font-weight: 600; }
@@ -309,21 +309,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .right-panel-tabs button { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .right-panel-header > button { margin-left: 0; }
 /* Icon controls share Sketch's transparent, hover and pressed states. */
-:is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button) { width: var(--workspace-button-size); height: var(--workspace-button-size); min-height: var(--workspace-button-size); padding: 0; border: 0; border-radius: var(--workspace-button-radius); background: transparent; color: inherit; transition: background-color 120ms ease; }
+:is(.tree-actions button, .tree-sort-action, .side-footer-actions > button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button) { width: var(--workspace-button-size); height: var(--workspace-button-size); min-height: var(--workspace-button-size); padding: 0; border: 0; border-radius: var(--workspace-button-radius); background: transparent; color: inherit; transition: background-color 120ms ease; }
 :is(.mode-switch button.active, .note-lock-toggle.active, .right-panel-tabs button.active) { color: var(--accent); background: transparent; }
 .mode-switch button.active:disabled { color: var(--muted); }
-:is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):focus-visible { background: var(--button-hover); }
+:is(.tree-actions button, .tree-sort-action, .side-footer-actions > button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):focus-visible { background: var(--button-hover); }
 @media (hover: hover) and (pointer: fine) {
-  :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):not(:disabled):hover, .tree-more:hover { background: var(--button-hover); }
+  :is(.tree-actions button, .tree-sort-action, .side-footer-actions > button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):not(:disabled):hover, .tree-more:hover { background: var(--button-hover); }
 }
-:is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):not(:disabled):active, .tree-more:active { background: var(--button-active); }
+:is(.tree-actions button, .tree-sort-action, .side-footer-actions > button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button):not(:disabled):active, .tree-more:active { background: var(--button-active); }
 @media (hover: none), (pointer: coarse) {
   .tree-main { padding-right: 30px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .app-shell { --pane-motion-duration: 0ms; }
   .toast-notice { animation: none; }
-  :is(.tree-actions button, .tree-sort-action, .side-footer-actions button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button) { transition: none; }
+  :is(.tree-actions button, .tree-sort-action, .side-footer-actions > button, .side-header > button, .toolbar-icon, .pane-toggle, .mode-switch button, .right-panel-tabs button) { transition: none; }
 }
 
 .right-panel-content { min-width: 0; min-height: 0; flex: 1; display: flex; overflow: hidden; }
@@ -397,7 +397,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   --auth-focus-ring: #555555;
   --auth-focus-shadow: rgb(0 0 0 / 7%);
   --auth-card-shadow: rgb(0 0 0 / 8%);
-  --auth-logout-text: var(--danger);
   width: min(430px, 100%); padding: 30px 34px 32px; border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 22px 60px var(--auth-card-shadow), inset 0 1px 0 rgb(255 255 255 / 2%);
 }
 :root[data-theme="dark"] .auth-card {
@@ -410,7 +409,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   --auth-focus-ring: #b5b5b5;
   --auth-focus-shadow: rgb(255 255 255 / 7%);
   --auth-card-shadow: rgb(0 0 0 / 20%);
-  --auth-logout-text: #d89999;
 }
 .auth-language { display: flex; justify-content: flex-end; margin: -10px -12px 10px 0; }
 .auth-language select { width: auto; min-width: 132px; height: 32px; padding: 7px 30px 7px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--auth-control-background); color: var(--auth-secondary-text); font-size: 12px; cursor: pointer; }
@@ -459,7 +457,27 @@ button.primary, .auth-card button.primary { border-color: var(--accent); backgro
 .lock-status { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 11px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; text-align: center; }
 .lock-card form { margin-top: 30px; }
 .lock-card form button:not(.primary) { min-height: 38px; color: var(--auth-secondary-text); background: transparent; font-size: 13px; }
-.auth-card button.danger-text { min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin-top: 21px; border: 0; color: var(--auth-logout-text); background: transparent; font-size: 13px; }
+.auth-ghost-actions { display: flex; align-items: stretch; justify-content: center; gap: 8px; margin-top: 18px; }
+.auth-card button.auth-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 36px; padding: 5px 8px; background: transparent; border: 1px solid transparent; color: var(--auth-secondary-text); font-size: .85rem; white-space: normal; }
+.auth-card button.auth-ghost:hover { border-color: var(--border); }
+.auth-ghost svg { flex: none; }
+.account-picker-list { display: grid; gap: 6px; margin-top: 18px; }
+.account-picker-row { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; padding: 8px 10px; text-align: start; font-weight: 550; }
+.account-picker-row > :is(svg, .account-picker-avatar) { flex: none; }
+.account-picker-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.account-picker-avatar { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+.account-picker-pin { display: flex; flex: none; color: var(--muted); }
+.account-picker-current { flex: none; border-radius: 5px; padding: 2px 6px; background: var(--accent-soft); font-size: .8em; white-space: nowrap; }
+.account-switch-popover { position: absolute; z-index: 2; bottom: calc(100% + 2px); inset-inline: 8px; max-height: min(22rem, calc(var(--workspace-viewport-height, 100dvh) - var(--note-toolbar-height) - var(--safe-area-bottom) - 16px)); overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised); color: var(--text); box-shadow: 0 8px 24px rgb(0 0 0 / 20%); font-size: calc(14px + var(--font-adjust)); line-height: 1.35; }
+.account-switch-popover h2 { margin: 3px 10px 7px; color: var(--muted); font-size: .875em; font-weight: 600; }
+.account-switch-popover .account-picker-list { margin-top: 0; gap: 3px; }
+.account-switch-popover .account-picker-row { min-height: 40px; border: 0; border-radius: 7px; background: transparent; cursor: pointer; }
+.account-switch-popover .account-picker-row[aria-current="true"] { background: var(--button-hover); }
+.account-switch-popover .account-picker-row:not(:disabled):is(:hover, :focus-visible) { background: var(--surface-hover); }
+.account-switch-popover .account-picker-row:focus-visible { outline-offset: -2px; }
+.account-switch-popover .account-picker-row > svg { color: var(--muted); }
+.account-switch-actions { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.account-transition-error { position: fixed; z-index: 100; top: calc(64px + var(--safe-area-top)); pointer-events: none; inset-inline: 16px; margin-inline: auto; width: max-content; max-width: calc(100% - 32px); padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
 .recovery-card textarea { font-family: ui-monospace, monospace; word-break: break-all; resize: none; }
 .spinner { width: 34px; height: 34px; border: 3px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 .loading-shell { align-content: center; gap: 12px; color: var(--muted); }

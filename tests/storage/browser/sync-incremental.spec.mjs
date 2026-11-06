@@ -86,7 +86,7 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
       const db = await open();
       const tables = [];
       for (const name of db.objectStoreNames) {
-        if (["bodyBlocks", "recoveries"].includes(name)) continue;
+        if (["bodyBlocks", "recoveries", "deviceGrants"].includes(name)) continue;
         const store = db.transaction(name).objectStore(name);
         const indexes = Array.from(store.indexNames, (name) => { const index = store.index(name); return { name, keyPath: index.keyPath, unique: index.unique, multiEntry: index.multiEntry }; });
         const rows = await new Promise((resolve, reject) => { const request = store.getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
@@ -107,6 +107,16 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
     await other.goto("/");
     await expect(other.locator(".app-shell")).toBeVisible();
     await expect(await source(other, title)).toHaveValue("# Legacy note\n\nKeep the original text.\n");
+
+    // The legacy device can read its cache. Its first online recovery enrollment requires a password.
+    if (info.project.name === "narrow") await other.getByRole("button", { name: "Open left sidebar", exact: true }).click();
+    await other.getByRole("button", { name: "Switch account", exact: true }).click();
+    await other.getByRole("button", { name: "Sign in to another account", exact: true }).click();
+    await other.getByLabel("Username", { exact: true }).fill(username);
+    await other.getByLabel("Master password", { exact: true }).fill(password);
+    await other.getByRole("checkbox", { name: "Remember this device" }).check();
+    await other.getByRole("button", { name: "Log in", exact: true }).click();
+    await expect(other.locator(".app-shell")).toBeVisible();
 
     // Active notes deliberately defer remote replacement until the user navigates away.
     await source(other, "Welcome");

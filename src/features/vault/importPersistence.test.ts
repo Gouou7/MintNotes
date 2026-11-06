@@ -1,11 +1,14 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localDb } from "../../storage/database";
-import { cryptoClient } from "../../crypto/client";
+import { testCryptoClient } from "../session/workspaceServices.testSupport";
 import { makeDocument } from "./documentFactory";
 import { persistImportedDocument } from "./importPersistence";
 import { markdownImages } from "../markdownImages";
 import type { ImportNote } from "../importPlan";
+
+
+const cryptoClient = testCryptoClient();
 
 vi.mock("../../crypto/client", () => ({ cryptoClient: { createAttachment: vi.fn(), encryptObject: vi.fn() } }));
 const png = new Uint8Array([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]);
@@ -30,7 +33,7 @@ async function counts() {
 describe('atomic imported notes', () => {
   it('commits one attachment per note even for repeated image references', async () => {
     const note=input();
-    const result=await persistImportedDocument('user',makeDocument([],'note','note',null,note.markdown),note,()=>true);
+    const result=await persistImportedDocument('user',makeDocument([],'note','note',null,note.markdown),note,()=>true, { cryptoClient } as import("../session/workspaceServices").WorkspaceServices);
     expect(result.attachments).toHaveLength(1);
     expect(await counts()).toEqual([2,2,1,1]);
     expect(result.document.markdown.match(/webmd-attachment:/g)).toHaveLength(2);
@@ -38,21 +41,21 @@ describe('atomic imported notes', () => {
   });
   it('creates independent identities and keys when another note uses the same image', async () => {
     const note=input();
-    const first=await persistImportedDocument('user',makeDocument([],'note','first',null,note.markdown),note,()=>true);
-    const second=await persistImportedDocument('user',makeDocument([],'note','second',null,note.markdown),note,()=>true);
+    const first=await persistImportedDocument('user',makeDocument([],'note','first',null,note.markdown),note,()=>true, { cryptoClient } as import("../session/workspaceServices").WorkspaceServices);
+    const second=await persistImportedDocument('user',makeDocument([],'note','second',null,note.markdown),note,()=>true, { cryptoClient } as import("../session/workspaceServices").WorkspaceServices);
     expect(first.attachments[0].objectId).not.toBe(second.attachments[0].objectId);
     expect(first.attachments[0].attachmentKey).not.toBe(second.attachments[0].attachmentKey);
   });
   it('writes nothing if note encryption fails after attachments are prepared', async () => {
     vi.mocked(cryptoClient.encryptObject).mockResolvedValueOnce({ciphertext:'encrypted',nonce:'nonce',encryptionVersion:2}).mockRejectedValueOnce(new Error('encryption failed'));
     const note=input();
-    await expect(persistImportedDocument('user',makeDocument([],'note','note',null,note.markdown),note,()=>true)).rejects.toThrow('encryption failed');
+    await expect(persistImportedDocument('user',makeDocument([],'note','note',null,note.markdown),note,()=>true, { cryptoClient } as import("../session/workspaceServices").WorkspaceServices)).rejects.toThrow('encryption failed');
     expect(await counts()).toEqual([0,0,0,0]);
   });
   it('rolls back chunks, manifests and the note when the final outbox write fails', async () => {
     vi.spyOn(localDb.outbox,'add').mockRejectedValueOnce(new Error('disk full'));
     const note=input();
-    await expect(persistImportedDocument('user',makeDocument([],'note','note',null,note.markdown),note,()=>true)).rejects.toThrow('disk full');
+    await expect(persistImportedDocument('user',makeDocument([],'note','note',null,note.markdown),note,()=>true, { cryptoClient } as import("../session/workspaceServices").WorkspaceServices)).rejects.toThrow('disk full');
     expect(await counts()).toEqual([0,0,0,0]);
   });
   it('rolls back if locking starts during the transaction', async () => {
@@ -60,11 +63,11 @@ describe('atomic imported notes', () => {
     const add=localDb.outbox.add.bind(localDb.outbox);
     vi.spyOn(localDb.outbox,'add').mockImplementation((...args) => add(...args).then((key) => { active=false; return key; }));
     const note=input();
-    await expect(persistImportedDocument('user',makeDocument([],'note','note',null,note.markdown),note,()=>active)).rejects.toMatchObject({name:'AbortError'});
+    await expect(persistImportedDocument('user',makeDocument([],'note','note',null,note.markdown),note,()=>active, { cryptoClient } as import("../session/workspaceServices").WorkspaceServices)).rejects.toMatchObject({name:'AbortError'});
     expect(await counts()).toEqual([0,0,0,0]);
   });
   it('does not begin encryption after cancellation', async () => {
-    await expect(persistImportedDocument('user',makeDocument([],'folder','folder',null),undefined,()=>false)).rejects.toMatchObject({name:'AbortError'});
+    await expect(persistImportedDocument('user',makeDocument([],'folder','folder',null),undefined,()=>false, { cryptoClient } as import("../session/workspaceServices").WorkspaceServices)).rejects.toMatchObject({name:'AbortError'});
     expect(cryptoClient.encryptObject).not.toHaveBeenCalled();
     expect(await counts()).toEqual([0,0,0,0]);
   });

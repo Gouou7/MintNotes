@@ -46,3 +46,8 @@ describe("atomic note graph persistence under injected storage failures", () => 
     } finally { await act(async () => root.unmount()); container.remove(); }
   });
 });
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
+});

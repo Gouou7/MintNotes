@@ -1,9 +1,9 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { liveQuery } from "dexie";
 import { pinCache } from "../../storage/cache";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError } from "../../api";
-import { cryptoClient } from "../../crypto/client";
+import { ApiError } from "../../api";
 import { translateError, type Translate } from "../../i18n";
 import { historySettingsKey, localDb, type LocalHistorySnapshot } from "../../storage/database";
 import type {
@@ -48,6 +48,7 @@ interface Options {
 
 /** 历史列表、预览与自动快照会话。 */
 export function useVaultHistory(options: Options) {
+  const { transport: { api }, cryptoClient } = useWorkspaceServices();
   const {
     model,
     selection,
@@ -110,6 +111,7 @@ export function useVaultHistory(options: Options) {
   const historySession = useRef<{ noteId: string; active: boolean } | null>(null);
 
   const historyController = useMemo(() => new VaultHistoryController({
+    crypto: cryptoClient,
     userId,
     nextGeneration: () => Date.now() * 1000 + ++generation.current,
     isActive: () => !logoutStarted.current

@@ -1,5 +1,3 @@
-import { api } from "../../api";
-import { cryptoClient } from "../../crypto/client";
 import { cursorKey, historyKey, localDb } from "../../storage/database";
 import { hasPendingLocalObjectGraph } from "./localPurge";
 import { evictDownloadableCaches } from "../../storage/cache";
@@ -8,7 +6,9 @@ import { attachmentIdsIn } from "../attachments";
 import type { HistoryIndexEnvelope } from "./historyController";
 
 /** No deletion is based on a partial or unauthenticated historical directory. */
-export async function validatedHistoryInventory(userId: string, noteId: string, isActive: () => boolean) {
+export async function validatedHistoryInventory(userId: string, noteId: string, isActive: () => boolean, services: import("../session/workspaceServices").WorkspaceServices) {
+  const api = services.transport.api;
+  const cryptoClient = services.cryptoClient;
   const items: HistoryIndexEnvelope[] = [];
   const references = new Set<string>();
   let cursor: string | null = null;
@@ -53,7 +53,8 @@ export async function validatedHistoryInventory(userId: string, noteId: string, 
   return { references, version: version ?? 0 };
 }
 
-export async function maintainVaultStorage(options: { userId: string; isActive: () => boolean; documents: OpenDocument[]; attachments: OpenAttachment[]; trashOrphan?: (attachment: OpenAttachment) => Promise<unknown>; getDocument?: (id: string) => OpenDocument | undefined; hasPendingSave?: (id: string) => boolean }) {
+export async function maintainVaultStorage(options: { services: import("../session/workspaceServices").WorkspaceServices; userId: string; isActive: () => boolean; documents: OpenDocument[]; attachments: OpenAttachment[]; trashOrphan?: (attachment: OpenAttachment) => Promise<unknown>; getDocument?: (id: string) => OpenDocument | undefined; hasPendingSave?: (id: string) => boolean }) {
+  const api = options.services.transport.api;
   const { userId, isActive, documents, attachments } = options;
   if (!isActive()) return;
   let ownership = await api<{ complete: number; version: number; notes: Array<{ noteId: string; version: number }> }>("/api/attachments/ownership");
@@ -90,7 +91,7 @@ export async function maintainVaultStorage(options: { userId: string; isActive: 
       localDb.meta.get(`history-invalid:${userId}:${note.objectId}`), localDb.meta.get(`history-verified:${userId}:${note.objectId}`)
     ]);
     if (!collect && invalid?.value === verified?.value) continue;
-    const inventory = await validatedHistoryInventory(userId, note.objectId, isActive);
+    const inventory = await validatedHistoryInventory(userId, note.objectId, isActive, options.services);
     const current = options.getDocument?.(note.objectId) ?? note;
     if (current.dirty || current.deleted || current.serverRevision !== note.serverRevision || options.hasPendingSave?.(note.objectId)
       || await hasPendingLocalObjectGraph(userId, new Set([note.objectId]))) continue;

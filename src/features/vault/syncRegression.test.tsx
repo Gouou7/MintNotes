@@ -1,3 +1,4 @@
+import { testWorkspaceServices } from "../session/workspaceServices.testSupport";
 import { operationId } from "@mint-notes/application-client";
 import "fake-indexeddb/auto";
 import { act } from "react";
@@ -6,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localDb, localKey, cursorKey, type OutboxEntry, type ObjectUploadAttempt, type AttachmentOutboxEntry } from "../../storage/database";
 import type { OpenDocument, VaultObject, SyncChange } from "../../types";
 import { ApiError } from "../../api";
-import { cryptoClient } from "../../crypto/client";
+import { testCryptoClient } from "../session/workspaceServices.testSupport";
 import { ObjectWriteCoordinator } from "../objectPersistence";
 import { applyVaultAcknowledgement } from "../syncChanges";
 import { acknowledgeOutboxEntry } from "./outboxAcknowledgement";
@@ -14,7 +15,10 @@ import { pullVaultChanges, type PullControllerDependencies } from "./pullControl
 import { pushVaultPending } from "./pushController";
 import { useObjectPersistence } from "./useObjectPersistence";
 
+
 const mocks = vi.hoisted(() => ({ api: vi.fn(), uploadChunk: vi.fn(), encrypt: vi.fn(), decrypt: vi.fn() }));
+const cryptoClient = testCryptoClient();
+
 vi.mock("../../api", () => ({ api: mocks.api, uploadAttachmentChunk: mocks.uploadChunk,
   ApiError: class extends Error { constructor(message: string, public status: number) { super(message); } }
 }));
@@ -76,6 +80,7 @@ function deferred<T>() {
 }
 function pullDependencies(): PullControllerDependencies {
   return {
+    services: testWorkspaceServices(),
     userId, isActive: () => true, activeObjectId: () => null, hasPendingSave: () => false, flushDocument: vi.fn(),
     preserveConflict: vi.fn(async (source) => {
       const payload = JSON.parse(source.ciphertext) as VaultObject;
@@ -95,9 +100,10 @@ function pullDependencies(): PullControllerDependencies {
 function pushDependencies() {
   const coordinator = new ObjectWriteCoordinator();
   return {
+    transport: { api: mocks.api, uploadAttachmentChunk: mocks.uploadChunk },
     userId, clientId: "test-client", isActive: () => true,
     acknowledge: vi.fn(async (sent: ObjectUploadAttempt, revision: number) => {
-      await coordinator.runExclusive(sent.key, () => acknowledgeOutboxEntry(userId, sent, revision, () => ++generation));
+      await coordinator.runExclusive(sent.key, () => acknowledgeOutboxEntry(userId, sent, revision, () => ++generation, cryptoClient));
     }),
     onConflict: vi.fn(async () => { await localDb.meta.put({ key: cursorKey(userId), value: "0" }); }),
     pushHistory: vi.fn(async () => false), pushHistoryMetadata: vi.fn(async () => false)
@@ -119,7 +125,7 @@ async function mount(initial: OpenDocument) {
   const root = createRoot(host); roots.push(root);
   await act(async () => root.render(<Harness />));
   const acknowledge = async (sent: ObjectUploadAttempt, revision: number) => persistence.coordinate(sent.objectId, async () => {
-    const result = await acknowledgeOutboxEntry(userId, sent, revision, () => ++generation);
+    const result = await acknowledgeOutboxEntry(userId, sent, revision, () => ++generation, cryptoClient);
     if (result.status !== "missing") current = applyVaultAcknowledgement(current, result.object, revision, result.status === "rebased");
   });
   return {
@@ -401,4 +407,9 @@ describe("synchronization race regressions", () => {
     expect(await acknowledgement).toEqual({ status: "missing" });
     expect(await localDb.outbox.get(key)).toEqual(second);
   });
+});
+
+vi.mock("../session/workspaceServices", async () => {
+  const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
+  return { useWorkspaceServices: testWorkspaceServices };
 });

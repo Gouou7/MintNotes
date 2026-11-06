@@ -1,11 +1,11 @@
 import { localDb } from "../../storage/database";
-import { cryptoClient } from "../../crypto/client";
+import type { CryptoClient } from "../../crypto/client";
 import type { OpenDocument, OpenAttachment, EncryptedAttachmentChunk } from "../../types";
 import { exportMarkdownZip } from "../importExport";
 import { makeDocument } from "./documentFactory";
 
 /** Explicit user export; plaintext is created only while unlocked and is never cached. */
-export async function exportRecoveryCopies(userId: string, active: () => boolean) {
+export async function exportRecoveryCopies(userId: string, active: () => boolean, cryptoClient: CryptoClient) {
   const records = await localDb.recoveries.where("userId").equals(userId).toArray();
   const documents: OpenDocument[] = [], attachments = new Map<string, OpenAttachment>();
   const chunks = new Map<string, EncryptedAttachmentChunk[]>();

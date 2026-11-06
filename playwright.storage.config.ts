@@ -4,8 +4,10 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: { ...(process.env.MINT_STORAGE_BROWSER_CHANNEL ? { channel: process.env.MINT_STORAGE_BROWSER_CHANNEL } : {}), baseURL: "http://127.0.0.1:8791", actionTimeout: 15_000, screenshot: "only-on-failure", trace: "retain-on-failure" },
   projects: [
-    { name: "desktop", use: { browserName: "chromium", viewport: { width: 1440, height: 1000 } } },
-    { name: "narrow", use: { browserName: "chromium", viewport: { width: 390, height: 844 } } }
+    // The loopback test server trusts the fixture addresses so each viewport exercises
+    // production rate limits independently against the same temporary database.
+    { name: "desktop", use: { browserName: "chromium", viewport: { width: 1440, height: 1000 }, extraHTTPHeaders: { "X-Forwarded-For": "192.0.2.10" } } },
+    { name: "narrow", use: { browserName: "chromium", viewport: { width: 390, height: 844 }, extraHTTPHeaders: { "X-Forwarded-For": "192.0.2.11" } } }
   ],
   webServer: { command: "node scripts/storage-browser-server.mjs", url: "http://127.0.0.1:8791/api/health", reuseExistingServer: false, timeout: 30_000 }
 });

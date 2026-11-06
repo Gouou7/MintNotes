@@ -1,3 +1,4 @@
+import { useWorkspaceServices } from "../session/workspaceServices";
 import { recordCompleteSync } from "../../storage/storageStatus";
 import { reserveConflictRecovery, completeConflictRecoveries, restoreRecoveryChunks } from "./conflictRecovery";
 import { withVaultSyncLock } from "./syncLock";
@@ -8,8 +9,7 @@ import { operationExpired } from "@mint-notes/application-client";
 import { maintainVaultStorage } from "./storageMaintenance";
 import type { RefObject } from "react";
 import { useEffect, useRef } from "react";
-import { api, ApiError } from "../../api";
-import { cryptoClient } from "../../crypto/client";
+import { ApiError } from "../../api";
 import { translateError, type Translate } from "../../i18n";
 import { cursorKey, localDb, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
 import type { OpenDocument, OpenAttachment } from "../../types";
@@ -61,6 +61,8 @@ interface Options {
 
 /** 保险库同步调度、上传确认、拉取与冲突协调。 */
 export function useVaultSync(options: Options) {
+  const services = useWorkspaceServices();
+  const { cryptoClient } = services;
   const {
     model,
     selection,
@@ -245,7 +247,7 @@ export function useVaultSync(options: Options) {
 
   const recoverAuxiliary = async (objectId: string, onlyExpired = false): Promise<boolean> => {
     const histories = await localDb.historyOutbox.where("[userId+noteId]").equals([userId, objectId]).toArray();
-    const controller = new VaultHistoryController({ userId, isActive: () => !logoutStarted.current,
+    const controller = new VaultHistoryController({ crypto: cryptoClient, userId, isActive: () => !logoutStarted.current,
       nextGeneration: () => Date.now() * 1000 + ++generation.current });
     for (const snapshot of histories.filter((entry) => !onlyExpired || operationExpired(entry.idempotencyKey))) {
       const payload = await cryptoClient.decryptHistory(userId, objectId, snapshot.historyId, snapshot.capturedAt, snapshot.captureKind, snapshot.ciphertext, snapshot.nonce);
@@ -295,6 +297,7 @@ export function useVaultSync(options: Options) {
     return true;
   };
   const pullDependencies = () => ({
+    services,
     userId,
     isActive: () => !logoutStarted.current,
     activeObjectId: () => activeIdRef.current,
@@ -321,6 +324,7 @@ export function useVaultSync(options: Options) {
   const pullChanges = async () => (await pullVaultChanges(pullDependencies())).failedObjectIds;
 
   const pushPending = () => pushVaultPending({
+    transport: services.transport,
     userId,
     clientId: syncClientId.current,
     isActive: () => !logoutStarted.current,
@@ -362,7 +366,7 @@ export function useVaultSync(options: Options) {
       await completeConflictRecoveries(userId, () => !logoutStarted.current);
       result.pending = await countPendingSyncEntries(userId);
       if (logoutStarted.current) return;
-      if (!result.failedObjectIds.size) await maintainVaultStorage({ userId, isActive: () => !logoutStarted.current,
+      if (!result.failedObjectIds.size) await maintainVaultStorage({ services, userId, isActive: () => !logoutStarted.current,
         documents: documentsRef.current, attachments: attachmentsRef.current, getDocument: (id) => documentIndexRef.current.get(id), hasPendingSave: documentSaveQueue.hasPending, trashOrphan: async (attachment) => {
           await objectPersistence.persistObject(attachment); requestPush("structural");
         } });

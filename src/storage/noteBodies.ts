@@ -1,6 +1,6 @@
 import type { EncryptedObject, EncryptedNoteBodyBlock, EncryptedObjectEncoding } from "@mint-notes/application-client";
 import { localDb, localKey, type LocalBodyBlock } from "./database";
-import { api } from "../api";
+import type { ApiClient } from "../api";
 
 export async function bodyBlocksFor(userId: string, noteId: string, ids?: readonly string[]): Promise<LocalBodyBlock[]> {
   if (ids) return (await localDb.bodyBlocks.bulkGet([...new Set(ids)].map((id) => localKey(userId, `${noteId}:${id}`))))
@@ -16,7 +16,7 @@ export async function persistBodyBlocks(userId: string, noteId: string, encoding
     if (!old) await localDb.bodyBlocks.add({ ...block, key, userId, noteId });
   }
 }
-export async function ensureBodyBlocks(userId: string, object: EncryptedObject, active: () => boolean): Promise<EncryptedNoteBodyBlock[]> {
+export async function ensureBodyBlocks(userId: string, object: EncryptedObject, active: () => boolean, api: ApiClient["api"]): Promise<EncryptedNoteBodyBlock[]> {
   if (object.encryptionVersion !== 2) return [];
   const fetched: EncryptedNoteBodyBlock[] = [];
   const ids = object.bodyBlockIds;
@@ -36,7 +36,7 @@ export async function ensureBodyBlocks(userId: string, object: EncryptedObject, 
   }
   return fetched;
 }
-export async function uploadBodyBlocks(userId: string, object: EncryptedObject, active: () => boolean) {
+export async function uploadBodyBlocks(userId: string, object: EncryptedObject, active: () => boolean, api: ApiClient["api"]) {
   if (object.encryptionVersion !== 2) return;
   const cached = new Map((await bodyBlocksFor(userId, object.objectId, object.bodyBlockIds)).map((block) => [block.blockId, block]));
   const pending = (object.bodyBlockIds ?? []).map((id) => {

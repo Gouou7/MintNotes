@@ -11,6 +11,7 @@ import { openDatabase, runRegistrationTransaction, type AppDatabase } from "./da
 import { loadServerConfig, type ServerConfig } from "./config.js";
 import { registerApplicationRoutes } from "./applications/routes.js";
 import { revokeUserCredentials } from "./auth/credentialRevocation.js";
+import { registerBrowserSessionRoutes } from "./auth/browserRoutes.js";
 import { createSessionService } from "./auth/sessionService.js";
 import { registerOriginProtection } from "./auth/originProtection.js";
 import { registerAttachmentRoutes } from "./attachments/routes.js";
@@ -65,13 +66,13 @@ app.addHook("onClose", async () => { releaseStorageLock?.(); });
 const syncEvents = options.syncEvents ?? new SyncEventHub();
 const logRefs = new LogReferenceFactory();
 const ownsDatabase = options.db === undefined;
+const sessionService = createSessionService(db, config, syncEvents);
 const {
   authenticate,
   requireAdmin,
   setSession,
-  endpointSummary,
   sessionCookie
-} = createSessionService(db, config, syncEvents);
+} = sessionService;
 
 await app.register(cookie);
 await app.register(compress, { global: true, globalDecompression: false, threshold: 1024 });
@@ -85,6 +86,14 @@ app.decorateRequest("sessionContext", null);
 app.decorateRequest("applicationPrincipal", null);
 
 registerProtocolGate(app);
+app.addHook("onRequest", async (request, reply) => {
+  const path = request.url.split("?")[0];
+  if (request.method === "POST"
+    && ["/api/auth/login", "/api/auth/register", "/api/auth/activate", "/api/auth/session/resume"].includes(path)
+    && request.headers["x-webmd-browser"] !== "1") {
+    return reply.code(426).send({ error: "Client upgrade required", code: "BROWSER_UPGRADE_REQUIRED" });
+  }
+});
 registerOriginProtection(app, config);
 
 const secretField = z.string().min(20).max(1024);
@@ -169,12 +178,12 @@ app.post(
       if (error instanceof Error && error.message === "USERNAME_UNAVAILABLE") return reply.code(409).send({ error: "Username is unavailable" });
       throw error;
     }
-    const endpoint = setSession(request, reply, registration.id, false);
+    const { endpoint, sessionId } = setSession(request, reply, registration.id, false);
     logEvent(request.log, "info", "auth.registered", {
       actorRef: logRefs.create("user", registration.id),
       role: registration.role
     });
-    return reply.code(201).send({ user: { id: registration.id, username: body.username, displayName: body.displayName, role: registration.role }, endpoint });
+    return reply.code(201).send({ user: { id: registration.id, username: body.username, displayName: body.displayName, role: registration.role }, endpoint, sessionId });
   }
 );
 
@@ -203,11 +212,11 @@ app.post(
       if (error instanceof Error && error.message === "USERNAME_UNAVAILABLE") return reply.code(409).send({ error: "Username is unavailable" });
       throw error;
     }
-    const endpoint = setSession(request, reply, id, false);
+    const { endpoint, sessionId } = setSession(request, reply, id, false);
     logEvent(request.log, "info", "auth.activated", {
       actorRef: logRefs.create("user", id)
     });
-    return reply.code(201).send({ user: { id, username: setup.username, displayName: setup.display_name, role: "user" }, endpoint });
+    return reply.code(201).send({ user: { id, username: setup.username, displayName: setup.display_name, role: "user" }, endpoint, sessionId });
   }
 );
 
@@ -250,7 +259,7 @@ app.post(
       logEvent(request.log, "warn", "auth.login_failed", { reason: "invalid_credentials" });
       return reply.code(401).send({ error: "Invalid credentials" });
     }
-    const endpoint = setSession(request, reply, row.id, parsed.data.rememberDevice);
+    const { endpoint, sessionId } = setSession(request, reply, row.id, parsed.data.rememberDevice);
     logEvent(request.log, "info", "auth.login_succeeded", {
       actorRef: logRefs.create("user", row.id),
       endpointRef: logRefs.create("endpoint", endpoint.id),
@@ -260,34 +269,13 @@ app.post(
       user: { id: row.id, username: row.username, displayName: row.display_name, role: row.role },
       wrappedVaultKey: row.wrapped_vault_key,
       wrappedVaultNonce: row.wrapped_vault_nonce,
+      sessionId,
       endpoint
     };
   }
 );
 
-app.post("/api/auth/logout", { preHandler: authenticate }, async (request, reply) => {
-  const user = request.sessionUser as SessionUser;
-  const endpointId = request.sessionContext!.endpointId;
-  const expected = z.object({ endpointId: z.string().uuid() }).optional().safeParse(request.body);
-  if (!expected.success || (expected.data && expected.data.endpointId !== endpointId)) return reply.code(409).send({ error: "Logout endpoint mismatch" });
-  const now = new Date().toISOString();
-  db.transaction(() => {
-    db.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND endpoint_id = ? AND revoked_at IS NULL").run(now, user.id, endpointId);
-    db.prepare("UPDATE trusted_endpoints SET remembered = 0, revoked_at = ? WHERE user_id = ? AND endpoint_id = ?").run(now, user.id, endpointId);
-  })();
-  syncEvents.closeEndpoint(user.id, endpointId);
-  reply.clearCookie(sessionCookie, { path: "/" });
-  logEvent(request.log, "info", "auth.logged_out", {
-    actorRef: logRefs.create("user", user.id),
-    endpointRef: logRefs.create("endpoint", endpointId)
-  });
-  return { ok: true, endpointId };
-});
-
-app.get("/api/auth/me", { preHandler: authenticate }, async (request) => ({
-  user: request.sessionUser,
-  endpoint: endpointSummary(request.sessionContext!.endpointId, request.sessionContext!.remembered)
-}));
+registerBrowserSessionRoutes(app, sessionService, logRefs);
 
 app.post(
   "/api/auth/reauth",

@@ -2,44 +2,13 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
-import { unlockDeviceWithPin } from "../crypto/deviceUnlock";
-import type { DeviceUnlockCredential } from "../storage/database";
-import type { AuthEndpoint, User } from "../types";
+import type { User } from "../types";
 import { LockScreen } from "./LockScreen";
-
-vi.mock("../api", () => ({ api: vi.fn() }));
-vi.mock("../crypto/client", () => ({ cryptoClient: { prepareLogin: vi.fn(), unlockVault: vi.fn() } }));
-vi.mock("../crypto/deviceUnlock", () => ({
-  hasDevicePin: (credential: DeviceUnlockCredential | null) => Boolean(
-    credential && (
-      (credential.version === 3 && credential.protection === "pin")
-      || (credential.version === 2 && credential.pinVerifier)
-    )
-  ),
-  markEndpointRevocationPending: vi.fn(),
-  unlockDeviceWithPin: vi.fn()
-}));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const roots: ReturnType<typeof createRoot>[] = [];
 
 const user: User = { id: "user-id", username: "user", displayName: "User", role: "user" };
-const endpoint: AuthEndpoint = { id: "endpoint-id", remembered: true };
-const credential: DeviceUnlockCredential = {
-  userId: user.id,
-  endpointId: endpoint.id,
-  mode: "remembered",
-  deviceKey: {} as CryptoKey,
-  ciphertext: "ciphertext",
-  nonce: "nonce",
-  version: 2,
-  pinSalt: "salt",
-  pinVerifier: "verifier",
-  failedPinAttempts: 0,
-  autoLockMinutes: 0,
-  updatedAt: "2026-07-24T00:00:00.000Z"
-};
-
 function button(container: HTMLElement, label: string) {
   const result = [...container.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === label);
   if (!result) throw new Error(`Missing button ${label}`);
@@ -56,14 +25,12 @@ afterEach(async () => {
 describe("LockScreen keyboard submission", () => {
   it.each([true, false])("keeps an incorrect PIN locked and permits retry (online: %s)", async (serverSessionVerified) => {
     localStorage.setItem("webmd-notes-language", "zh-CN");
-    vi.mocked(unlockDeviceWithPin).mockResolvedValueOnce("invalid").mockResolvedValueOnce("ok");
-    const onUnlocked = vi.fn().mockResolvedValue(undefined);
-    const onTrustExhausted = vi.fn();
+    const onPin = vi.fn().mockResolvedValueOnce("invalid").mockResolvedValueOnce("ok");
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onUnlocked={onUnlocked} onTrustExhausted={onTrustExhausted} onLogout={vi.fn()} /></I18nProvider>));
+    await act(async () => root.render(<I18nProvider><LockScreen user={user} browserOnline={serverSessionVerified} onPin={onPin} onPasswordLogin={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
 
     const enterPin = async (value: string) => {
       const input = container.querySelector("input")!;
@@ -75,26 +42,24 @@ describe("LockScreen keyboard submission", () => {
     };
 
     await enterPin("wrong");
-    expect(unlockDeviceWithPin).toHaveBeenLastCalledWith(user.id, endpoint.id, "wrong");
-    expect(onUnlocked).not.toHaveBeenCalled();
-    expect(onTrustExhausted).not.toHaveBeenCalled();
+    expect(onPin).toHaveBeenLastCalledWith("wrong");
     expect(container.querySelector(".error")?.textContent).toBe("PIN 不正确");
     expect(container.querySelector(".lock-status")?.textContent).toContain("笔记已锁定");
     expect(button(container, "使用 PIN 解锁").disabled).toBe(false);
 
     await enterPin("246810");
-    expect(unlockDeviceWithPin).toHaveBeenLastCalledWith(user.id, endpoint.id, "246810");
-    expect(onUnlocked).toHaveBeenCalledExactlyOnceWith(false);
+    expect(onPin).toHaveBeenLastCalledWith("246810");
     expect(container.querySelector(".error")).toBeNull();
   });
 
-  it("submits PIN and master-password unlock with Enter", async () => {
+  it("submits the PIN with Enter and opens the password sign-in entry", async () => {
+    const onPasswordLogin = vi.fn();
     localStorage.setItem("webmd-notes-language", "zh-CN");
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} serverSessionVerified onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
+    await act(async () => root.render(<I18nProvider><LockScreen user={user} browserOnline onPin={vi.fn()} onPasswordLogin={onPasswordLogin} onLogout={vi.fn()} /></I18nProvider>));
 
     expect(container.querySelector(".lock-card h1")?.textContent).toBe(user.displayName);
     expect(container.querySelector(".lock-card h1")?.getAttribute("title")).toBe(user.displayName);
@@ -113,12 +78,7 @@ describe("LockScreen keyboard submission", () => {
     expect(pinRequestSubmit).toHaveBeenCalledWith(pinSubmit);
 
     await act(async () => button(container, "改用主密码").click());
-    const password = container.querySelector("input[type='password']") as HTMLInputElement;
-    const passwordSubmit = button(container, "使用主密码解锁");
-    const passwordRequestSubmit = vi.spyOn(password.form!, "requestSubmit").mockImplementation(() => undefined);
-    await act(async () => password.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
-    expect(password.getAttribute("enterkeyhint")).toBe("done");
-    expect(passwordRequestSubmit).toHaveBeenCalledWith(passwordSubmit);
+    expect(onPasswordLogin).toHaveBeenCalledOnce();
   });
 
   it("requires confirmation before deleting local data on logout", async () => {
@@ -128,7 +88,7 @@ describe("LockScreen keyboard submission", () => {
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} serverSessionVerified onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={onLogout} /></I18nProvider>));
+    await act(async () => root.render(<I18nProvider><LockScreen user={user} browserOnline onPin={vi.fn()} onPasswordLogin={vi.fn()} onLogout={onLogout} /></I18nProvider>));
 
     await act(async () => button(container, "退出登录").click());
     expect(onLogout).not.toHaveBeenCalled();
@@ -143,7 +103,7 @@ describe("LockScreen keyboard submission", () => {
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    await act(async () => root.render(<I18nProvider><LockScreen user={user} endpoint={endpoint} credential={credential} serverSessionVerified={false} onUnlocked={vi.fn()} onTrustExhausted={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
+    await act(async () => root.render(<I18nProvider><LockScreen user={user} browserOnline={false} onPin={vi.fn()} onPasswordLogin={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
 
     expect(container.textContent).toContain("离线 · 暂无法使用主密码解锁");
     expect(button(container, "使用 PIN 解锁")).toBeTruthy();
