@@ -1,3 +1,6 @@
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ArrowLeft, LockKeyhole, UserRound, UserRoundPlus } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
 import { hasDevicePin } from "../../crypto/deviceUnlock";
@@ -27,16 +30,19 @@ export function AccountList({ accounts, currentId, currentAvatarUrl, busy, onCho
   return <div className="account-picker-list">
     {sortedAccounts.map((account) => {
       const isCurrent = account.user.id === currentId;
-      return <button key={account.user.id} className="account-picker-row" type="button"
+      return <Button key={account.user.id} className="account-picker-row" type="button"
         aria-current={isCurrent || undefined} disabled={busy} onClick={() => onChoose(account)}>
         {isCurrent && currentAvatarUrl
-          ? <img className="account-picker-avatar" src={currentAvatarUrl} alt="" />
+          ? <Avatar className="account-picker-avatar">
+              <AvatarImage src={currentAvatarUrl} alt="" />
+              <AvatarFallback><AppIcon icon={UserRound} /></AvatarFallback>
+            </Avatar>
           : <AppIcon icon={UserRound} />}
         <span className="account-picker-name">{account.user.displayName}</span>
         {hasDevicePin(account.credential) && <span className="account-picker-pin" role="img"
           aria-label={t("lock.devicePin")} title={t("lock.devicePin")}><AppIcon icon={LockKeyhole} size={14} /></span>}
         {isCurrent && <small className="account-picker-current">{t("account.current")}</small>}
-      </button>;
+      </Button>;
     })}
   </div>;
 }
@@ -52,10 +58,10 @@ export function AccountChooser({ accounts, currentId, busy, error, onChoose, onL
       <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
       <h1 id="account-picker-title">{t("account.switch")}</h1>
       <AccountList accounts={accounts} currentId={currentId} busy={busy} onChoose={onChoose} />
-      {error && <p className="error" role="alert">{t(error === "reauth" ? "account.reauth" : "account.switchFailed")}</p>}
+      {error && <Alert className="error" variant="destructive">{t(error === "reauth" ? "account.reauth" : "account.switchFailed")}</Alert>}
       <div className="auth-ghost-actions">
-        {onBack && <button type="button" className="auth-ghost" disabled={busy} onClick={onBack}><AppIcon icon={ArrowLeft} size={16} />{t("account.back")}</button>}
-        <button type="button" className="auth-ghost" disabled={busy} onClick={onLogin}><AppIcon icon={UserRoundPlus} size={16} />{t("account.otherLogin")}</button>
+        {onBack && <Button type="button" className="auth-ghost" disabled={busy} onClick={onBack}><AppIcon icon={ArrowLeft} size={16} />{t("account.back")}</Button>}
+        <Button type="button" className="auth-ghost" disabled={busy} onClick={onLogin}><AppIcon icon={UserRoundPlus} size={16} />{t("account.otherLogin")}</Button>
       </div>
     </section>
   </main>;

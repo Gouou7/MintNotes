@@ -7,6 +7,7 @@ import type { useToastNotifications } from "./useToastNotifications";
 
 export interface WorkspaceCloseOptions {
   logoutStarted: RefObject<boolean>;
+  cancelConfirmation?: () => void;
   importExport: Pick<ReturnType<typeof useImportExport>, "cancel" | "resume">;
   finishHistorySession: (capture?: boolean) => Promise<void>;
   documentSaveQueue: Pick<ReturnType<typeof useDocumentSaveQueue>, "flushAll" | "cancelAll">;
@@ -26,9 +27,10 @@ export function useWorkspaceClose(options: WorkspaceCloseOptions) {
     register(async (discard) => {
       const {
         importExport, finishHistorySession, documentSaveQueue, objectPersistence,
-        logoutStarted, showMessage, t, stopSync
+        logoutStarted, showMessage, t, stopSync, cancelConfirmation
       } = latest.current;
       setClosing(true);
+      cancelConfirmation?.();
       try {
         await importExport.cancel();
         if (discard) documentSaveQueue.cancelAll();

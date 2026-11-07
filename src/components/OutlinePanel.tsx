@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { revealScrollRect } from "../editor/product/viewport";
@@ -33,11 +34,11 @@ const OutlineBranch = memo(function OutlineBranch(props: Omit<OutlineLevelProps,
   const groupId = `${props.groupPrefix}-${node.item.id}`;
   return <li className="outline-node" data-outline-id={node.item.id} data-outline-level={node.level} key={node.key}>
     <div className={`outline-row ${selected ? "active" : ""}`}>
-      {hasChildren ? <button className="outline-toggle" aria-expanded={expanded} aria-controls={groupId}
+      {hasChildren ? <Button className="outline-toggle" aria-expanded={expanded} aria-controls={groupId}
         aria-label={t(expanded ? "outline.collapseHeading" : "outline.expandHeading", { title: node.item.text })}
-        onClick={() => props.onToggle(node.key)}><AppIcon icon={expanded ? ChevronDown : ChevronRight} size={16} /></button>
+        onClick={() => props.onToggle(node.key)}><AppIcon icon={expanded ? ChevronDown : ChevronRight} size={16} /></Button>
         : <span className="outline-spacer" aria-hidden="true" />}
-      <button className="outline-title" aria-current={selected ? "location" : undefined} onClick={() => props.onSelect(node)}>{node.item.text}</button>
+      <Button className="outline-title" aria-current={selected ? "location" : undefined} onClick={() => props.onSelect(node)}>{node.item.text}</Button>
     </div>
     {hasChildren && <ul className="outline-children" id={groupId} hidden={!expanded}>
       <OutlineLevel {...props} nodes={node.children} activePath={childPath.length ? childPath : EMPTY_PATH} />

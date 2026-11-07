@@ -1,6 +1,10 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
+import { Alert } from "@/components/ui/alert";
 import { UserRoundPlus, UsersRoundCollaboration } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
+import { overlayFont } from "../../components/overlayFont";
 import { useI18n } from "../../i18n";
 import { AccountList, type AccountOption } from "./AccountChooser";
 
@@ -18,66 +22,35 @@ export function SidebarAccountSwitcher({ accounts, current, currentAvatarUrl, bu
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const panelId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    panel.current?.focus();
-
-    const dismissOutside = (event: Event) => {
-      if (event.target instanceof Node && !trigger.current?.contains(event.target) && !panel.current?.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-    const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      setOpen(false);
-      trigger.current?.focus();
-    };
-    document.addEventListener("pointerdown", dismissOutside);
-    document.addEventListener("focusin", dismissOutside);
-    document.addEventListener("keydown", dismissOnEscape, true);
-    return () => {
-      document.removeEventListener("pointerdown", dismissOutside);
-      document.removeEventListener("focusin", dismissOutside);
-      document.removeEventListener("keydown", dismissOnEscape, true);
-    };
-  }, [open]);
-
-  const toggle = () => {
-    setOpen(!open);
-    if (!open) {
+  const [font, setFont] = useState<ReturnType<typeof overlayFont>>();
+  const changeOpen = (next: boolean, { event }: { event: Event }) => {
+    setOpen(next);
+    if (next) {
+      setFont(overlayFont(event.target));
       setLoadFailed(false);
       void onOpen().catch(() => setLoadFailed(true));
     }
   };
 
-  return <>
-    <button ref={trigger} type="button" title={t("account.switch")} aria-label={t("account.switch")}
-      aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} disabled={busy} onClick={toggle}>
-      <AppIcon icon={UsersRoundCollaboration} size={16} />
-    </button>
-    {open && <div ref={panel} id={panelId} className="account-switch-popover" role="dialog"
-      aria-labelledby={panelId + "-title"} aria-busy={busy} tabIndex={-1}>
-      <h2 id={panelId + "-title"}>{t("account.switch")}</h2>
+  return <Popover open={open} onOpenChange={changeOpen}>
+    <PopoverTrigger render={<Button variant="ghost" size="icon" type="button" title={t("account.switch")} aria-label={t("account.switch")} disabled={busy}>
+      <AppIcon icon={UsersRoundCollaboration} />
+    </Button>} />
+    <PopoverContent className="account-switch-popover" style={font} align="end" side="top" aria-busy={busy}>
+      <PopoverTitle render={<h2 />}>{t("account.switch")}</PopoverTitle>
       <AccountList accounts={[current, ...accounts.filter((account) => account.user.id !== current.user.id)]}
         currentId={current.user.id} currentAvatarUrl={currentAvatarUrl} busy={busy} onChoose={(account) => {
           if (account.user.id === current.user.id) {
             setOpen(false);
-            trigger.current?.focus();
           } else onChoose(account);
         }} />
-      {loadFailed && <p className="error" role="alert">{t("account.switchFailed")}</p>}
+      {loadFailed && <Alert className="error" variant="destructive">{t("account.switchFailed")}</Alert>}
       <div className="account-switch-actions">
-        <button type="button" className="account-picker-row" disabled={busy} onClick={() => {
+        <Button type="button" className="account-picker-row" disabled={busy} onClick={() => {
           setOpen(false);
           onLogin();
-        }}><AppIcon icon={UserRoundPlus} /><span className="account-picker-name">{t("account.otherLogin")}</span></button>
+        }}><AppIcon icon={UserRoundPlus} /><span className="account-picker-name">{t("account.otherLogin")}</span></Button>
       </div>
-    </div>}
-  </>;
+    </PopoverContent>
+  </Popover>;
 }

@@ -21,9 +21,10 @@ async function settleLayout(page: Page) {
 for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 1112], ["mobile", 320, 844]] as const) {
   test(`${name} outline follows the heading tree design and separates folding from navigation`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/workspace.html?outline&language=zh-CN");
     if (width <= 1100) await page.locator(".right-pane-toggle").click();
-    await expect(page.locator(".outline-pane")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+    await expect(page.locator(".outline-pane")).toBeVisible();
     const outline = page.locator(".outline-list");
     const parent = outline.getByRole("button", { name: "前言", exact: true });
     const child = outline.getByRole("button", { name: "实时模式通用编辑逻辑", exact: true });
@@ -34,11 +35,12 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
       const parentBox = (await parent.boundingBox())!, childBox = (await child.boundingBox())!;
       const branchBox = (await branch.boundingBox())!, deepBox = (await deepChild.boundingBox())!;
-      expect(childBox.x - parentBox.x).toBeCloseTo(23.5, 1);
-      expect(deepBox.x - branchBox.x).toBeCloseTo(23.5, 1);
+      // Firefox rounds the half-pixel branch border to a CSS pixel.
+      expect(Math.abs(childBox.x - parentBox.x - 23.5)).toBeLessThanOrEqual(0.6);
+      expect(Math.abs(deepBox.x - branchBox.x - 23.5)).toBeLessThanOrEqual(0.6);
       expect(branchBox.height).toBeGreaterThan(30);
       await expect(parent).toHaveCSS("font-weight", "400");
-      await expect(outline.locator(".outline-children").first()).toHaveCSS("border-left-width", "0.5px");
+      await expect(outline.locator(".outline-children").first()).toHaveCSS("border-left-width", /^(0\.5|1)px$/);
       await expect(outline.locator(".outline-children").first()).toHaveCSS("border-left-color", theme === "dark" ? "rgb(51, 51, 51)" : "rgb(226, 226, 226)");
       expect(await outline.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
       await outline.screenshot({ path: testInfo.outputPath(`outline-${theme}.png`) });
@@ -57,7 +59,7 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
     }
 
     await deepChild.click();
-    if (width <= 1100) await expect(page.locator(".outline-pane")).toHaveCSS("visibility", "hidden");
+    if (width <= 1100) await expect(page.locator(".outline-pane")).toBeHidden();
     const target = page.locator(".ProseMirror > h6").filter({ hasText: "连续的空白行" });
     await expect.poll(async () => {
       const targetBox = (await target.boundingBox())!, editorBox = (await page.locator(".editor-area").boundingBox())!;
@@ -70,6 +72,7 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
 test("outline compresses missing levels without changing the source heading targets", async ({ page }) => {
   await page.setViewportSize({ width: 1445, height: 956 });
   await page.goto("/workspace.html?outline");
+  await expect(page.locator(".ProseMirror")).toBeVisible();
   for (const levels of [[2, 2], [2, 4], [1, 3]]) {
     const markdown = levels.map((level, index) => `${"#".repeat(level)} Heading ${index}`).join("\n\n");
     await page.evaluate(text => window.mintWorkspaceFixture.loadMarkdown(text), markdown);
@@ -116,6 +119,7 @@ test("outline follows forward and backward scrolling, retains folded branches an
 test("a long outline uses cached geometry during scrolling and pauses while hidden", async ({ page }) => {
   await page.setViewportSize({ width: 1445, height: 700 });
   await page.goto("/workspace.html?outline");
+  await expect(page.locator(".ProseMirror")).toBeVisible();
   const markdown = Array.from({ length: 300 }, (_, index) => `## Section ${index}\n\n${"Paragraph with some text.\n\n".repeat(6)}`).join("\n\n");
   await page.evaluate(text => window.mintWorkspaceFixture.loadMarkdown(text), markdown);
   await expect(page.locator(".outline-node")).toHaveCount(300);
@@ -163,6 +167,7 @@ test("a long outline uses cached geometry during scrolling and pauses while hidd
 test("source mode tracks wrapped source positions and stays in sync after returning to rendered mode", async ({ page }) => {
   await page.setViewportSize({ width: 1445, height: 700 });
   await page.goto("/workspace.html?outline");
+  await expect(page.locator(".ProseMirror")).toBeVisible();
   const markdown = Array.from({ length: 20 }, (_, index) => `## Section ${index}\n\n${"A long source line that wraps across several visual lines. ".repeat(20)}`).join("\n\n");
   await page.evaluate(text => window.mintWorkspaceFixture.loadMarkdown(text), markdown);
   await page.getByRole("button", { name: "Source", exact: true }).click();

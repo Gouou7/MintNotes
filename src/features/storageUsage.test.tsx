@@ -39,7 +39,7 @@ describe("storage usage presentation", () => {
     expect([...container.querySelectorAll<HTMLElement>(".storage-composition > span")].map(node => node.style.width)).toEqual(["20%", "10%", "10%", "10%", "50%"]);
     expect(container.querySelector(".storage-server-footer")?.textContent).not.toContain("Trash");
     expect(container.querySelector(".storage-total")?.textContent).toContain("Quota: Unlimited");
-    expect(container.querySelector("progress")).toBeNull();
+    expect(container.querySelector('[role="progressbar"]')).toBeNull();
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Refresh"]')!.click());
     expect(status.refresh).toHaveBeenCalledOnce();
   });
@@ -73,7 +73,7 @@ describe("storage usage presentation", () => {
   it("retains cached timestamps and quota warnings when usage exceeds a finite quota", async () => {
     const { container } = await render({ stale: true, usage: { totalBytes: 2048, contentBytes: 2048, noteBytes: 2048, attachmentBytes: 0, historyBytes: 0, profileBytes: 0, trashBytes: 0, quotaBytes: 1024, historyQuotaBytes: null, checkedAt: "2026-11-03T10:00:00Z" } });
     expect(container.querySelector(".storage-total strong")?.textContent).toBe("2.0 KiB");
-    expect(container.querySelector<HTMLProgressElement>("progress")?.value).toBe(1024);
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1024");
     expect(container.querySelector(".storage-capacity.full")?.textContent).toContain("Quota reached");
     expect(container.querySelector(".storage-summary")?.textContent).toContain("Cached");
   });

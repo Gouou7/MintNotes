@@ -1,7 +1,8 @@
+import { AppDialog } from "../../components/AppDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useWorkspaceServices } from "../session/workspaceServices";
 import { type FormEvent, useState } from "react";
 import { Save, X } from "lucide-react";
-import { AppIcon } from "../../components/AppIcon";
 import { SettingsButton } from "../../components/SettingsButton";
 import type { ToastTone } from "../../components/Toast";
 import { translateError, useI18n } from "../../i18n";
@@ -32,12 +33,11 @@ export function AdminQuotaEditor({ user, defaultBytes, onSaved, onClose, onNotif
 }) {
   const { t } = useI18n();
   const controller = useQuotaEditor(user, defaultBytes, onSaved, onClose, onNotify);
-  return <div className="danger-confirm quota-dialog settings-section" role="dialog" aria-modal="true" aria-label={t("storage.editQuota")}>
-    <header><h3>{t("storage.userQuota", { name: user.displayName })}</h3><button disabled={controller.busy} onClick={onClose} aria-label={t("common.close")}><AppIcon icon={X} /></button></header>
+  return <AppDialog className="danger-confirm quota-dialog settings-section" title={t("storage.userQuota", { name: user.displayName })} onClose={onClose} dismissible={!controller.busy}>
     <form onSubmit={(event) => void controller.submit(event)}>
       <QuotaFields label={t("storage.totalQuota")} defaultBytes={defaultBytes} value={controller.draft} onChange={(value) => { controller.setDraft(value); controller.setConfirmed(false); }} disabled={controller.busy} />
-      {controller.belowUsage && <label className="quota-confirm"><input type="checkbox" checked={controller.confirmed} onChange={(event) => controller.setConfirmed(event.target.checked)} />{t("storage.lowerQuotaWarning")}</label>}
-      <div className="settings-actions"><SettingsButton icon={X} type="button" disabled={controller.busy} onClick={onClose}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Save} disabled={controller.busy || controller.belowUsage && !controller.confirmed}>{t("storage.saveQuota")}</SettingsButton></div>
+      {controller.belowUsage && <label className="quota-confirm"><Checkbox  checked={controller.confirmed} onCheckedChange={(checked) => controller.setConfirmed(checked)} />{t("storage.lowerQuotaWarning")}</label>}
+      <div className="settings-actions"><SettingsButton icon={X} type="button" disabled={controller.busy} onClick={onClose}>{t("common.cancel")}</SettingsButton><SettingsButton type="submit" icon={Save} disabled={controller.busy || controller.belowUsage && !controller.confirmed}>{t("storage.saveQuota")}</SettingsButton></div>
     </form>
-  </div>;
+  </AppDialog>;
 }

@@ -1,3 +1,19 @@
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AppDialog } from "../components/AppDialog";
+import { Confirmation, useConfirmation } from "../components/Confirmation";
+import { DialogClose, DialogTitle } from "../components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+import { SettingsDialog } from "./SettingsDialog";
+import { useMediaQuery } from "./useMediaQuery";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { NativeSelect } from "@/components/ui/native-select";
 import { useWorkspaceServices } from "./session/workspaceServices";
 import { SettingsSection } from "../components/SettingsSection";
 import { SettingsItem } from "../components/SettingsItem";
@@ -40,6 +56,7 @@ interface PendingUsernameRecoveryReset {
 }
 
 interface Props {
+  confirmationDialog?: ReactNode;
   storageStatus: StorageStatus;
   user: User;
   endpoint: AuthEndpoint;
@@ -68,9 +85,11 @@ interface Props {
   onNotify: (text: string, tone: ToastTone) => void;
 }
 
-export function SettingsPanel({ storageStatus, user, endpoint, credential, serverSessionVerified, onCredentialChange, preferences, onPreferences, onClose, onLogout, onImport, onExport, onDisplayName, onUsername, avatarUrl, onAvatarChange, trashItems, purging, onRestoreTrash, onPurgeTrash, onClearHistory, onClearTrash, historySettings, onHistorySettings, onRefreshHistorySettings, onNotify }: Props) {
+export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoint, credential, serverSessionVerified, onCredentialChange, preferences, onPreferences, onClose, onLogout, onImport, onExport, onDisplayName, onUsername, avatarUrl, onAvatarChange, trashItems, purging, onRestoreTrash, onPurgeTrash, onClearHistory, onClearTrash, historySettings, onHistorySettings, onRefreshHistorySettings, onNotify }: Props) {
   const { transport: { api }, cryptoClient, generation } = useWorkspaceServices();
   const { formatDateTime, setLanguagePreference, t } = useI18n();
+  const confirmation = useConfirmation();
+  const compactTabs = useMediaQuery("(max-width: 720px)");
   const [tab, setTab] = useState<Tab>("general");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -97,6 +116,8 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
   const [newRecoveryConfirmed, setNewRecoveryConfirmed] = useState(false);
   const [accountCredentialDialogMode, setAccountCredentialDialogMode] = useState<AccountCredentialDialogMode | null>(null);
   const [logoutConfirming, setLogoutConfirming] = useState(false);
+  const currentDevices = useRef({ serverSessionVerified, deviceEndpoints, revokingSessionId });
+  currentDevices.current = { serverSessionVerified, deviceEndpoints, revokingSessionId };
   const avatarInput = useRef<HTMLInputElement>(null);
   const requireServerSession = () => {
     if (serverSessionVerified) return true;
@@ -325,7 +346,11 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
 
   const revokeDeviceEndpoint = async (endpointId: string, deviceName: string) => {
     if (!requireServerSession()) return;
-    if (!window.confirm(t("notice.signOutDeviceConfirm", { device: deviceName }))) return;
+    const action = t("settings.signOut");
+    if (!await confirmation.request({ title: action, message: t("notice.signOutDeviceConfirm", { device: deviceName }), action, destructive: true })) return;
+    const latest = currentDevices.current;
+    const device = latest.deviceEndpoints?.endpoints.find((entry) => entry.id === endpointId);
+    if (!latest.serverSessionVerified || latest.revokingSessionId === endpointId || !latest.deviceEndpoints?.canRevokeOthers || !device || device.current || !(device.active || device.resumable)) return;
     setRevokingSessionId(endpointId);
     try {
       await api(`/api/account/endpoints/${endpointId}`, { method: "DELETE" });
@@ -337,7 +362,11 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
 
   const removeDeviceEndpoint = async (endpointId: string, deviceName: string) => {
     if (!requireServerSession()) return;
-    if (!window.confirm(t("notice.removeDeviceConfirm", { device: deviceName }))) return;
+    const action = t("common.remove");
+    if (!await confirmation.request({ title: action, message: t("notice.removeDeviceConfirm", { device: deviceName }), action, destructive: true })) return;
+    const latest = currentDevices.current;
+    const device = latest.deviceEndpoints?.endpoints.find((entry) => entry.id === endpointId);
+    if (!latest.serverSessionVerified || latest.revokingSessionId === endpointId || !device || device.current || device.active || device.resumable) return;
     setRevokingSessionId(endpointId);
     try {
       await api(`/api/account/endpoints/${endpointId}`, { method: "DELETE" });
@@ -483,82 +512,69 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
   };
   const pageTitle = t(({ general: "settings.general", security: "settings.security", storage: "storage.title", about: "settings.about", users: "settings.admin" } as const)[tab]);
 
-  return <div
-    className="modal-backdrop settings-backdrop"
-    role="dialog"
-    aria-modal="true"
-    aria-label={t("settings.title")}
-    onClick={(event) => {
-      if (event.target === event.currentTarget && !newRecoveryKey) onClose();
-    }}
-  >
-    <section className="modal settings-modal" style={{ "--settings-font-size": `${normalizeFontSize(preferences.fontSize)}px` } as CSSProperties}>
-      <div className="settings-layout">
+  return <SettingsDialog onClose={onClose} dismissible={!newRecoveryKey}
+    style={{ "--settings-font-size": `${normalizeFontSize(preferences.fontSize)}px` } as CSSProperties}>
+      <Tabs value={tab} onValueChange={(value) => changeTab(value as Tab)} orientation={compactTabs ? "horizontal" : "vertical"} className="settings-layout">
         <aside className="settings-sidebar">
-          <h2 className="settings-title"><AppIcon icon={Settings} size={16} />{t("settings.title")}</h2>
-          <nav className="settings-tabs" aria-label={t("settings.title")}>
-            <button className={tab === "general" ? "active" : ""} aria-current={tab === "general" ? "page" : undefined} onClick={() => changeTab("general")}><AppIcon icon={SlidersHorizontal} size={16} />{t("settings.general")}</button>
-            <button className={tab === "security" ? "active" : ""} aria-current={tab === "security" ? "page" : undefined} onClick={() => changeTab("security")}><AppIcon icon={UserRoundCog} size={16} />{t("settings.security")}</button>
-            <button className={tab === "storage" ? "active" : ""} aria-current={tab === "storage" ? "page" : undefined} onClick={() => changeTab("storage")}><AppIcon icon={Notebook} size={16} />{t("storage.title")}</button>
-            {user.role === "admin" && serverSessionVerified && <button className={`admin-tab ${tab === "users" ? "active" : ""}`} aria-current={tab === "users" ? "page" : undefined} onClick={() => changeTab("users")}><AppIcon icon={ShieldCheck} size={16} />{t("settings.admin")}</button>}
-            <button className={tab === "about" ? "active" : ""} aria-current={tab === "about" ? "page" : undefined} onClick={() => changeTab("about")}><AppIcon icon={Info} size={16} />{t("settings.about")}</button>
-          </nav>
+          <DialogTitle className="settings-title"><AppIcon icon={Settings} size={16} />{t("settings.title")}</DialogTitle>
+          <TabsList className="settings-tabs" variant="line" aria-label={t("settings.title")}>
+            <TabsTrigger value="general"><AppIcon icon={SlidersHorizontal} size={16} />{t("settings.general")}</TabsTrigger>
+            <TabsTrigger value="security"><AppIcon icon={UserRoundCog} size={16} />{t("settings.security")}</TabsTrigger>
+            <TabsTrigger value="storage"><AppIcon icon={Notebook} size={16} />{t("storage.title")}</TabsTrigger>
+            {user.role === "admin" && serverSessionVerified && <TabsTrigger value="users" className="admin-tab"><AppIcon icon={ShieldCheck} size={16} />{t("settings.admin")}</TabsTrigger>}
+            <TabsTrigger value="about"><AppIcon icon={Info} size={16} />{t("settings.about")}</TabsTrigger>
+          </TabsList>
         </aside>
         <div className="settings-main">
-          <header className="settings-header"><button disabled={Boolean(newRecoveryKey)} onClick={onClose} aria-label={t("settings.close")}><AppIcon icon={X} size={16} /></button></header>
+          <header className="settings-header"><DialogClose render={<Button variant="ghost" size="icon" disabled={Boolean(newRecoveryKey)} aria-label={t("settings.close")} />}><AppIcon icon={X} /></DialogClose></header>
           <div className="settings-content" ref={contentRef}>
             <h2 className="settings-page-title">{pageTitle}</h2>
             {!serverSessionVerified && <p className="auth-guidance warning">{t("settings.localOnly")}</p>}
-            {tab === "general" && <div className="settings-page general-settings">
+            <TabsContent value="general" className="settings-page general-settings">
               <SettingsSection title={t("settings.appearance")}>
               <SettingsItem title={t("language.label")}>{(control) => <LanguageSelect {...control} value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} />}</SettingsItem>
-              <SettingsItem title={t("settings.theme")}>{(control) => <select {...control} value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></select>}</SettingsItem>
+              <SettingsItem title={t("settings.theme")}>{(control) => <NativeSelect {...control} value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></NativeSelect>}</SettingsItem>
               <SettingsItem title={t("settings.fontSize")} className="font-size-setting">{(control) =>
-                <select {...control} value={normalizeFontSize(preferences.fontSize)} onChange={(event) => onPreferences({ ...preferences, fontSize: normalizeFontSize(Number(event.target.value)) })}>
+                <NativeSelect {...control} value={normalizeFontSize(preferences.fontSize)} onChange={(event) => onPreferences({ ...preferences, fontSize: normalizeFontSize(Number(event.target.value)) })}>
                   {Array.from({ length: MAX_FONT_SIZE - MIN_FONT_SIZE + 1 }, (_, index) => MIN_FONT_SIZE + index).map(size => <option key={size} value={size}>{size === MIN_FONT_SIZE ? t("settings.fontSizeSmall", { size }) : size === DEFAULT_FONT_SIZE ? t("settings.fontSizeDefault", { size }) : size === MAX_FONT_SIZE ? t("settings.fontSizeLarge", { size }) : size}</option>)}
-                </select>}
+                </NativeSelect>}
               </SettingsItem>
               </SettingsSection><SettingsSection title={t("settings.editor")}>
               <SettingsItem title={t("settings.wrapCodeBlocks")}>{(control) =>
-                <label className="settings-switch" htmlFor={control.id}>
-                  <input
+                <Switch className="settings-switch"
                     {...control}
-                    type="checkbox"
-                    role="switch"
                     aria-label={t("settings.wrapCodeBlocks")}
                     checked={preferences.wrapCodeBlocks}
-                    onChange={(event) => onPreferences({ ...preferences, wrapCodeBlocks: event.target.checked })}
-                  />
-                  <span className="settings-switch-track" aria-hidden="true" />
-                </label>}
+                    onCheckedChange={(checked) => onPreferences({ ...preferences, wrapCodeBlocks: checked })}
+                />}
               </SettingsItem>
               </SettingsSection>
-            </div>}
+            </TabsContent>
 
-            {tab === "security" && <div className="settings-page security-settings">
-              <div className="profile-summary settings-section settings-card"><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={30} />}</span><span className="profile-identity"><strong>{user.displayName}</strong><small>@{user.username}</small></span><SettingsButton icon={Pencil} className="primary" disabled={busy || !serverSessionVerified} onClick={openProfileDialog}>{t("settings.editProfile")}</SettingsButton></div>
+            <TabsContent value="security" className="settings-page security-settings">
+              <div className="profile-summary settings-section settings-card"><Avatar className="profile-avatar">{avatarUrl && <AvatarImage src={avatarUrl} alt={t("settings.currentAvatar")} />}<AvatarFallback><AppIcon icon={UserRound} size={30} /></AvatarFallback></Avatar><span className="profile-identity"><strong>{user.displayName}</strong><small>@{user.username}</small></span><SettingsButton icon={Pencil} variant="default" className="primary" disabled={busy || !serverSessionVerified} onClick={openProfileDialog}>{t("settings.editProfile")}</SettingsButton></div>
               <SettingsSection title={t("settings.accountCredentials")}>
-                <SettingsItem title={t("auth.masterPassword")} description={t("settings.changePasswordHelp")}><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</SettingsButton></SettingsItem>
+                <SettingsItem title={t("auth.masterPassword")} description={t("settings.changePasswordHelp")}><SettingsButton icon={KeyRound} type="button" variant="default" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("password")}>{t("settings.changePassword")}</SettingsButton></SettingsItem>
                 <SettingsItem title={t("settings.recoveryKey")} description={t("settings.recoveryHelp")}><SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openAccountCredentialDialog("recovery")}>{t("settings.resetRecovery")}</SettingsButton></SettingsItem>
               </SettingsSection>
               <SettingsSection title={t("settings.deviceSecurity")}>
-                <SettingsItem title={t("settings.devicePin")} description={t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}><SettingsButton icon={KeyRound} type="button" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</SettingsItem>
-                <SettingsItem title={t("settings.autoLockAfter")} description={t("settings.autoLockHelp")}>{(control) => <select {...control} disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</select>}</SettingsItem>
+                <SettingsItem title={t("settings.devicePin")} description={t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}><SettingsButton icon={KeyRound} type="button" variant="default" className="primary compact" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</SettingsItem>
+                <SettingsItem title={t("settings.autoLockAfter")} description={t("settings.autoLockHelp")}>{(control) => <NativeSelect {...control} disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</NativeSelect>}</SettingsItem>
               </SettingsSection><SettingsSection title={t("settings.loginDevices")}><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
               {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
-              {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && (device.active || device.resumable)) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list settings-list">{deviceEndpoints.endpoints.map((device) => <article className={`session-row settings-list-row ${device.current ? "current" : ""}`} key={device.id}><span className="settings-list-icon"><AppIcon icon={Laptop} size={20} /></span><span className="session-details settings-list-details"><strong>{device.deviceName}{device.current && <em>{t("settings.currentDevice")}</em>}{device.remembered && <em>{t("settings.remembered")}</em>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.resumable ? t("account.deviceResumable") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></span>{!device.current && <div className="settings-list-actions">{device.active || device.resumable ? <SettingsButton icon={LogOut} className="session-revoke danger" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}>{t("settings.signOut")}</SettingsButton> : <SettingsButton icon={Trash2} className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}>{t("common.remove")}</SettingsButton>}</div>}</article>)}</div></>}
+              {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && (device.active || device.resumable)) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list settings-list">{deviceEndpoints.endpoints.map((device) => <Item className={`session-row settings-list-row ${device.current ? "current" : ""}`} key={device.id} render={<article />}><ItemMedia className="settings-list-icon"><AppIcon icon={Laptop} size={20} /></ItemMedia><ItemContent className="session-details settings-list-details"><strong>{device.deviceName}{device.current && <Badge variant="outline" render={<em />}>{t("settings.currentDevice")}</Badge>}{device.remembered && <Badge variant="outline" render={<em />}>{t("settings.remembered")}</Badge>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.resumable ? t("account.deviceResumable") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></ItemContent>{!device.current && <div className="settings-list-actions">{device.active || device.resumable ? <SettingsButton icon={LogOut} variant="destructive" className="session-revoke danger" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}>{t("settings.signOut")}</SettingsButton> : <SettingsButton icon={Trash2} className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}>{t("common.remove")}</SettingsButton>}</div>}</Item>)}</div></>}
               </SettingsSection><ApplicationConnectionsSection userId={user.id} online={serverSessionVerified} onNotify={onNotify} />
-            </div>}
+            </TabsContent>
 
-            {tab === "storage" && <div className="settings-page note-storage-settings">
+            <TabsContent value="storage" className="settings-page note-storage-settings">
               <StorageUsage status={storageStatus} />
               <RecoveryStorageSection userId={user.id} onNotify={onNotify} />
               <HistoryStorageSection historySettings={historySettings} busy={busy} serverSessionVerified={serverSessionVerified} updateHistorySettings={updateHistorySettings} onClearHistory={onClearHistory} />
               <TrashStorageSection trashItems={trashItems} busy={busy} purging={purging} serverSessionVerified={serverSessionVerified} trashRetentionDays={trashRetentionDays} updateTrashRetention={updateTrashRetention} onRestoreTrash={onRestoreTrash} onPurgeTrash={onPurgeTrash} onClearTrash={onClearTrash} onNotify={onNotify} />
               <MigrationStorageSection onImport={onImport} onExport={onExport} onNotify={onNotify} />
-            </div>}
+            </TabsContent>
 
-            {tab === "about" && <div className="settings-page about-settings">
+            <TabsContent value="about" className="settings-page about-settings">
               <section className="settings-section settings-card about-overview"><div className="about-product">
                 <h3>Mint Notes</h3>
                 <p>{t("settings.version")} {APP_VERSION}</p>
@@ -572,45 +588,43 @@ export function SettingsPanel({ storageStatus, user, endpoint, credential, serve
                 <li><a href="https://github.com/Yuyz0112/typora-web" target="_blank" rel="noreferrer">typora-web</a><span>{t("settings.editorCoreOrigin")}</span></li>
                 <li><a href="https://katex.org/" target="_blank" rel="noreferrer">KaTeX</a><span>{t("settings.mathFormulaRendering")}</span></li>
                 <li><a href="https://mermaid.js.org/" target="_blank" rel="noreferrer">Mermaid</a><span>{t("settings.diagramRendering")}</span></li>
+                <li><a href="https://ui.shadcn.com/" target="_blank" rel="noreferrer">shadcn/ui</a><span>{t("settings.uiComponentLibrary")}</span></li>
                 <li><a href="https://lucide.dev" target="_blank" rel="noreferrer">Lucide React</a><span>{t("settings.iconLibrary")}</span></li>
               </ul></SettingsSection>
-            </div>}
-            {tab === "users" && user.role === "admin" && serverSessionVerified && <div className="admin-settings"><AdminPanel currentUser={user} onNotify={onNotify} /></div>}
+            </TabsContent>
+            {user.role === "admin" && serverSessionVerified && <TabsContent value="users" className="admin-settings"><AdminPanel currentUser={user} onNotify={onNotify} /></TabsContent>}
           </div>
         </div>
         <div className="settings-logout-section">
-          <SettingsButton icon={LogOut} type="button" className="settings-logout danger" onClick={() => setLogoutConfirming(true)}>{t("app.logout")}</SettingsButton>
+          <SettingsButton icon={LogOut} type="button" variant="destructive" className="settings-logout danger" onClick={() => setLogoutConfirming(true)}>{t("app.logout")}</SettingsButton>
         </div>
-      </div>
-      {profileDialogOpen && <div className="danger-confirm profile-edit-dialog settings-section" role="dialog" aria-modal="true" aria-label={t("settings.editProfile")}>
-        <header><h3>{t("settings.editProfile")}</h3><button type="button" onClick={closeProfileDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button></header>
-        <div className="profile-avatar-editor"><strong>{t("settings.avatar")}</strong><span className="profile-avatar">{avatarUrl ? <img src={avatarUrl} alt={t("settings.currentAvatar")} /> : <AppIcon icon={UserRound} size={44} />}</span><input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => { void uploadAvatar(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><SettingsButton icon={Upload} type="button" className="profile-action-button" disabled={busy || !serverSessionVerified} onClick={() => avatarInput.current?.click()}>{t(avatarUrl ? "settings.changeAvatar" : "settings.uploadAvatar")}</SettingsButton>{avatarUrl && <SettingsButton icon={Trash2} type="button" className="danger profile-action-button" disabled={busy || !serverSessionVerified} onClick={() => void removeAvatar()}>{t("settings.removeAvatar")}</SettingsButton>}</div></div>
-        <form className="compact-form profile-field-form" onSubmit={saveDisplayName}><label>{t("settings.name")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoFocus required /></label><SettingsButton icon={Pencil} className="primary profile-action-button" disabled={busy || displayName === user.displayName}>{t("settings.changeDisplayName")}</SettingsButton></form>
-        <form className="compact-form profile-field-form" onSubmit={beginUsernameChange}><label>{t("auth.username")}<input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" autoComplete="username" required /></label><p className="settings-help">{t("settings.changeUsernameHelp")}</p><SettingsButton icon={Pencil} className="primary profile-action-button" disabled={busy || normalizedUsername() === user.username}>{t("settings.changeUsername")}</SettingsButton></form>
+      </Tabs>
+      {profileDialogOpen && <AppDialog className="danger-confirm profile-edit-dialog settings-section" title={t("settings.editProfile")} onClose={closeProfileDialog} dismissible={!busy}>
+        <div className="profile-avatar-editor"><strong>{t("settings.avatar")}</strong><Avatar className="profile-avatar">{avatarUrl && <AvatarImage src={avatarUrl} alt={t("settings.currentAvatar")} />}<AvatarFallback><AppIcon icon={UserRound} size={44} /></AvatarFallback></Avatar><input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => { void uploadAvatar(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><SettingsButton icon={Upload} type="button" className="profile-action-button" disabled={busy || !serverSessionVerified} onClick={() => avatarInput.current?.click()}>{t(avatarUrl ? "settings.changeAvatar" : "settings.uploadAvatar")}</SettingsButton>{avatarUrl && <SettingsButton icon={Trash2} type="button" variant="destructive" className="danger profile-action-button" disabled={busy || !serverSessionVerified} onClick={() => void removeAvatar()}>{t("settings.removeAvatar")}</SettingsButton>}</div></div>
+        <form className="compact-form profile-field-form" onSubmit={saveDisplayName}><Field><FieldLabel>{t("settings.name")}<Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoFocus required /></FieldLabel></Field><SettingsButton type="submit" icon={Pencil} variant="default" className="primary profile-action-button" disabled={busy || displayName === user.displayName}>{t("settings.changeDisplayName")}</SettingsButton></form>
+        <form className="compact-form profile-field-form" onSubmit={beginUsernameChange}><Field><FieldLabel>{t("auth.username")}<Input value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" autoComplete="username" required /></FieldLabel></Field><p className="settings-help">{t("settings.changeUsernameHelp")}</p><SettingsButton type="submit" icon={Pencil} variant="default" className="primary profile-action-button" disabled={busy || normalizedUsername() === user.username}>{t("settings.changeUsername")}</SettingsButton></form>
         <div className="settings-actions profile-dialog-footer"><SettingsButton icon={X} type="button" className="profile-action-button" disabled={busy} onClick={closeProfileDialog}>{t("common.close")}</SettingsButton></div>
-      </div>}
+      </AppDialog>}
 
-      {usernameDialogOpen && <div className="danger-confirm username-change-dialog settings-section" role="dialog" aria-modal="true" aria-label={t("settings.changeUsername")}>
-        <header><h3>{pendingUsernameRecoveryReset ? t("settings.saveReplacementRecovery") : t("settings.verifyUsernameChange")}</h3><button type="button" onClick={closeUsernameDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button></header>
+      {usernameDialogOpen && <AppDialog className="danger-confirm username-change-dialog settings-section" title={pendingUsernameRecoveryReset ? t("settings.saveReplacementRecovery") : t("settings.verifyUsernameChange")} onClose={closeUsernameDialog} dismissible={!busy}>
         {!pendingUsernameRecoveryReset ? <>
           <p>{t("settings.usernameVerificationHelp")}</p>
-          <form className="compact-form" onSubmit={saveUsername}><label>{t("auth.currentPassword")}<input type="password" value={usernamePassword} onChange={(event) => setUsernamePassword(event.target.value)} autoComplete="current-password" autoFocus required /></label><label>{t("auth.recoveryKey")}<input type="password" value={usernameRecoveryKey} onChange={(event) => setUsernameRecoveryKey(event.target.value)} autoComplete="off" required /></label><div className="settings-actions"><SettingsButton icon={KeyRound} type="button" disabled={busy || !usernamePassword} onClick={() => void prepareUsernameRecoveryReset()}>{t("settings.resetRecoveryAndContinue")}</SettingsButton><SettingsButton icon={Check} className="primary" disabled={busy}>{t("settings.confirmUsernameChange")}</SettingsButton></div></form>
+          <form className="compact-form" onSubmit={saveUsername}><Field><FieldLabel>{t("auth.currentPassword")}<Input type="password" value={usernamePassword} onChange={(event) => setUsernamePassword(event.target.value)} autoComplete="current-password" autoFocus required /></FieldLabel></Field><Field><FieldLabel>{t("auth.recoveryKey")}<Input type="password" value={usernameRecoveryKey} onChange={(event) => setUsernameRecoveryKey(event.target.value)} autoComplete="off" required /></FieldLabel></Field><div className="settings-actions"><SettingsButton icon={KeyRound} type="button" disabled={busy || !usernamePassword} onClick={() => void prepareUsernameRecoveryReset()}>{t("settings.resetRecoveryAndContinue")}</SettingsButton><SettingsButton type="submit" icon={Check} variant="default" className="primary" disabled={busy}>{t("settings.confirmUsernameChange")}</SettingsButton></div></form>
         </> : <>
           <p>{t("settings.replacementRecoveryHelp")}</p>
-          <div className="recovery-result"><textarea readOnly rows={3} value={pendingUsernameRecoveryReset.recoveryCode} /><div className="settings-actions"><SettingsButton icon={Copy} type="button" onClick={() => void navigator.clipboard.writeText(pendingUsernameRecoveryReset.recoveryCode)}>{t("common.copy")}</SettingsButton><SettingsButton icon={Download} type="button" onClick={() => downloadRecoveryKey(normalizedUsername(), pendingUsernameRecoveryReset.recoveryCode)}>{t("common.download")}</SettingsButton></div><label className="recovery-confirm"><input type="checkbox" checked={usernameRecoveryConfirmed} onChange={(event) => setUsernameRecoveryConfirmed(event.target.checked)} /><span>{t("auth.recovery.confirm")}</span></label></div>
-          <div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closeUsernameDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Check} type="button" className="primary" disabled={busy || !usernameRecoveryConfirmed} onClick={() => void saveUsernameWithRecoveryReset()}>{t("settings.finishUsernameChange")}</SettingsButton></div>
+          <div className="recovery-result"><Textarea readOnly rows={3} value={pendingUsernameRecoveryReset.recoveryCode} /><div className="settings-actions"><SettingsButton icon={Copy} type="button" onClick={() => void navigator.clipboard.writeText(pendingUsernameRecoveryReset.recoveryCode)}>{t("common.copy")}</SettingsButton><SettingsButton icon={Download} type="button" onClick={() => downloadRecoveryKey(normalizedUsername(), pendingUsernameRecoveryReset.recoveryCode)}>{t("common.download")}</SettingsButton></div><label className="recovery-confirm"><Checkbox  checked={usernameRecoveryConfirmed} onCheckedChange={(checked) => setUsernameRecoveryConfirmed(checked)} /><span>{t("auth.recovery.confirm")}</span></label></div>
+          <div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closeUsernameDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Check} type="button" variant="default" className="primary" disabled={busy || !usernameRecoveryConfirmed} onClick={() => void saveUsernameWithRecoveryReset()}>{t("settings.finishUsernameChange")}</SettingsButton></div>
         </>}
-      </div>}
-      {pinDialogMode && <div className="danger-confirm pin-change-dialog settings-section" role="dialog" aria-modal="true" aria-label={t(pinDialogMode === "save" ? (hasDevicePin(credential) ? "settings.changePin" : "settings.setPin") : "settings.removePin")}>
-        <header><h3>{t(pinDialogMode === "save" ? (hasDevicePin(credential) ? "settings.changePin" : "settings.setPin") : "settings.removePin")}</h3><button type="button" onClick={closePinDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button></header>
+      </AppDialog>}
+      {pinDialogMode && <AppDialog className="danger-confirm pin-change-dialog settings-section" title={t(pinDialogMode === "save" ? (hasDevicePin(credential) ? "settings.changePin" : "settings.setPin") : "settings.removePin")} onClose={closePinDialog} dismissible={!busy}>
         <p>{t(pinDialogMode === "save" ? "settings.pinVerificationHelp" : "settings.removePinHelp")}</p>
-        {pinDialogMode === "save" ? <form className="compact-form" onSubmit={savePin}><label>{t("auth.masterPassword")}<input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" autoFocus required /></label><label>{t("settings.newPin")}<input type="password" minLength={4} value={newPin} onChange={(event) => setNewPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" placeholder={t("settings.pinMin")} required /></label><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closePinDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" className="primary" disabled={busy}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton></div></form> : <form className="compact-form" onSubmit={removePin}><label>{t("auth.masterPassword")}<input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} autoFocus required /></label><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closePinDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" className="danger" disabled={busy}>{t("settings.removePin")}</SettingsButton></div></form>}
-      </div>}
-      {accountCredentialDialogMode && <div className="danger-confirm account-credential-dialog settings-section" role="dialog" aria-modal="true" aria-label={t(accountCredentialDialogMode === "password" ? "settings.changePassword" : "settings.resetRecovery")}>
-        <header><h3>{t(accountCredentialDialogMode === "password" ? "settings.changePassword" : "settings.resetRecovery")}</h3>{!newRecoveryKey && <button type="button" onClick={closeAccountCredentialDialog} aria-label={t("common.close")}><AppIcon icon={X} /></button>}</header>
-        {accountCredentialDialogMode === "password" ? <><p>{t("settings.changePasswordHelp")}</p><form className="compact-form" onSubmit={changePassword}><label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" autoFocus required /></label><label>{t("auth.newMasterPassword")}<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" required /></label><label>{t("auth.confirmNewPassword")}<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" required /></label><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closeAccountCredentialDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" className="primary" disabled={busy}>{t("settings.changePassword")}</SettingsButton></div></form></> : !newRecoveryKey ? <><p>{t("settings.recoveryHelp")}</p><form className="compact-form" onSubmit={resetRecoveryKey}><label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={recoveryPassword} onChange={(event) => setRecoveryPassword(event.target.value)} autoFocus required /></label><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closeAccountCredentialDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" className="primary" disabled={busy}>{t("settings.resetRecovery")}</SettingsButton></div></form></> : <><p>{t("settings.recoveryHelp")}</p><div className="recovery-result"><strong>{t("settings.recoveryShownOnce")}</strong><textarea readOnly rows={3} value={newRecoveryKey} /><div className="settings-actions"><SettingsButton icon={Copy} type="button" onClick={() => void navigator.clipboard.writeText(newRecoveryKey)}>{t("common.copy")}</SettingsButton><SettingsButton icon={Download} type="button" onClick={() => downloadRecoveryKey(user.username, newRecoveryKey)}>{t("common.download")}</SettingsButton></div><label className="recovery-confirm"><input type="checkbox" checked={newRecoveryConfirmed} onChange={(event) => setNewRecoveryConfirmed(event.target.checked)} /><span>{t("auth.recovery.confirm")}</span></label><div className="settings-actions"><SettingsButton icon={Check} type="button" className="primary" disabled={!newRecoveryConfirmed} onClick={closeAccountCredentialDialog}>{t("settings.savedRecovery")}</SettingsButton></div></div></>}
-      </div>}
-      {logoutConfirming && <div className="danger-confirm logout-confirm settings-section" role="dialog" aria-modal="true" aria-label={t("settings.logoutTitle")}><header><h3>{t("settings.logoutTitle")}</h3><button type="button" onClick={() => setLogoutConfirming(false)} aria-label={t("common.close")}><AppIcon icon={X} /></button></header><p>{t("settings.logoutWarning")}</p><PendingStorage status={storageStatus} /><div className="settings-actions"><SettingsButton icon={X} type="button" onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</SettingsButton><SettingsButton type="button" icon={Download} onClick={() => void onExport()}>{t("storage.exportAll")}</SettingsButton><SettingsButton icon={LogOut} type="button" className="danger" onClick={() => void onLogout()}>{t("app.logout")}</SettingsButton></div></div>}
-    </section>
-  </div>;
+        {pinDialogMode === "save" ? <form className="compact-form" onSubmit={savePin}><Field><FieldLabel>{t("auth.masterPassword")}<Input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" autoFocus required /></FieldLabel></Field><Field><FieldLabel>{t("settings.newPin")}<Input type="password" minLength={4} value={newPin} onChange={(event) => setNewPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" placeholder={t("settings.pinMin")} required /></FieldLabel></Field><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closePinDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" variant="default" className="primary" disabled={busy}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton></div></form> : <form className="compact-form" onSubmit={removePin}><Field><FieldLabel>{t("auth.masterPassword")}<Input type="password" autoComplete="current-password" value={pinPassword} onChange={(event) => setPinPassword(event.target.value)} autoFocus required /></FieldLabel></Field><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closePinDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" variant="destructive" className="danger" disabled={busy}>{t("settings.removePin")}</SettingsButton></div></form>}
+      </AppDialog>}
+      {accountCredentialDialogMode && <AppDialog className="danger-confirm account-credential-dialog settings-section" title={t(accountCredentialDialogMode === "password" ? "settings.changePassword" : "settings.resetRecovery")} onClose={closeAccountCredentialDialog} dismissible={!busy && !newRecoveryKey}>
+        {accountCredentialDialogMode === "password" ? <><p>{t("settings.changePasswordHelp")}</p><form className="compact-form" onSubmit={changePassword}><Field><FieldLabel>{t("auth.currentPassword")}<Input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" autoFocus required /></FieldLabel></Field><Field><FieldLabel>{t("auth.newMasterPassword")}<Input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="next" required /></FieldLabel></Field><Field><FieldLabel>{t("auth.confirmNewPassword")}<Input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" required /></FieldLabel></Field><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closeAccountCredentialDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" variant="default" className="primary" disabled={busy}>{t("settings.changePassword")}</SettingsButton></div></form></> : !newRecoveryKey ? <><p>{t("settings.recoveryHelp")}</p><form className="compact-form" onSubmit={resetRecoveryKey}><Field><FieldLabel>{t("auth.currentPassword")}<Input type="password" autoComplete="current-password" value={recoveryPassword} onChange={(event) => setRecoveryPassword(event.target.value)} autoFocus required /></FieldLabel></Field><div className="settings-actions"><SettingsButton icon={X} type="button" disabled={busy} onClick={closeAccountCredentialDialog}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" variant="default" className="primary" disabled={busy}>{t("settings.resetRecovery")}</SettingsButton></div></form></> : <><p>{t("settings.recoveryHelp")}</p><div className="recovery-result"><strong>{t("settings.recoveryShownOnce")}</strong><Textarea readOnly rows={3} value={newRecoveryKey} /><div className="settings-actions"><SettingsButton icon={Copy} type="button" onClick={() => void navigator.clipboard.writeText(newRecoveryKey)}>{t("common.copy")}</SettingsButton><SettingsButton icon={Download} type="button" onClick={() => downloadRecoveryKey(user.username, newRecoveryKey)}>{t("common.download")}</SettingsButton></div><label className="recovery-confirm"><Checkbox  checked={newRecoveryConfirmed} onCheckedChange={(checked) => setNewRecoveryConfirmed(checked)} /><span>{t("auth.recovery.confirm")}</span></label><div className="settings-actions"><SettingsButton icon={Check} type="button" variant="default" className="primary" disabled={!newRecoveryConfirmed} onClick={closeAccountCredentialDialog}>{t("settings.savedRecovery")}</SettingsButton></div></div></>}
+      </AppDialog>}
+      {logoutConfirming && <AppDialog className="danger-confirm logout-confirm settings-section" title={t("settings.logoutTitle")} onClose={() => setLogoutConfirming(false)} dismissible={true}><p>{t("settings.logoutWarning")}</p><PendingStorage status={storageStatus} /><div className="settings-actions"><SettingsButton icon={X} type="button" onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</SettingsButton><SettingsButton type="button" icon={Download} onClick={() => void onExport()}>{t("storage.exportAll")}</SettingsButton><SettingsButton icon={LogOut} type="button" variant="destructive" className="danger" onClick={() => void onLogout()}>{t("app.logout")}</SettingsButton></div>{confirmationDialog}</AppDialog>}
+      <Confirmation current={confirmation.current} />
+      {!logoutConfirming && confirmationDialog}
+  </SettingsDialog>;
 }

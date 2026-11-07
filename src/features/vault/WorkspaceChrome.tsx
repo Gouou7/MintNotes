@@ -1,3 +1,8 @@
+import { Button } from "@/components/ui/button";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { NativeSelect } from "@/components/ui/native-select";
 import type { ReactNode, RefObject } from "react";
 import { ArrowDownToDot, ChevronsDownUp, FolderPlus, History, List, ListOrdered, LockKeyhole, PanelLeftClose, PanelRightClose, Search, Settings, SquarePen, X } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
@@ -32,52 +37,59 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     <header className="side-header">
       <img className="brand-small" src="/icon.svg" alt="" aria-hidden="true" />
       <strong>Mint Notes</strong>
-      <button className="tree-pane-collapse" onClick={props.onCollapse} title={t("app.collapseDirectory")} aria-label={t("app.collapseDirectory")}><AppIcon icon={PanelLeftClose} size={16} /></button>
-      <button className="mobile-tree-close" onClick={props.onClose} title={t("app.closeDirectory")} aria-label={t("app.closeDirectory")}><AppIcon icon={PanelLeftClose} size={16} /></button>
+      <Button className="tree-pane-collapse" onClick={props.onCollapse} title={t("app.collapseDirectory")} aria-label={t("app.collapseDirectory")}><AppIcon icon={PanelLeftClose} size={16} /></Button>
+      <Button className="mobile-tree-close" onClick={props.onClose} title={t("app.closeDirectory")} aria-label={t("app.closeDirectory")}><AppIcon icon={PanelLeftClose} size={16} /></Button>
     </header>
-    <div className="search-box">
-      <AppIcon icon={Search} size={20} />
-      <input ref={props.searchInput} value={props.search} onChange={event => props.onSearchChange(event.target.value)} placeholder={t("app.search")} aria-label={t("app.search")} />
-      {props.search && <button className="search-clear" onClick={() => { props.onSearchChange(""); props.searchInput.current?.focus(); }} title={t("app.clearSearch")} aria-label={t("app.clearSearch")}><AppIcon icon={X} size={16} /></button>}
-    </div>
+    <InputGroup className="search-box">
+      <InputGroupAddon><AppIcon icon={Search} size={20} /></InputGroupAddon>
+      <InputGroupInput ref={props.searchInput} value={props.search} onChange={event => props.onSearchChange(event.target.value)} placeholder={t("app.search")} aria-label={t("app.search")} />
+      {props.search && <InputGroupAddon align="inline-end"><InputGroupButton className="search-clear" size="icon-xs" onClick={() => { props.onSearchChange(""); props.searchInput.current?.focus(); }} title={t("app.clearSearch")} aria-label={t("app.clearSearch")}><AppIcon icon={X} /></InputGroupButton></InputGroupAddon>}
+    </InputGroup>
     <nav className="tree-actions" aria-label={t("app.noteActions")}>
-      <button onClick={() => props.onCreate("note")} title={t("app.newNote")} aria-label={t("app.newNote")}><AppIcon icon={SquarePen} size={16} /></button>
-      <button onClick={() => props.onCreate("folder")} title={t("app.createFolder")} aria-label={t("app.createFolder")}><AppIcon icon={FolderPlus} size={16} /></button>
+      <Button onClick={() => props.onCreate("note")} title={t("app.newNote")} aria-label={t("app.newNote")}><AppIcon icon={SquarePen} size={16} /></Button>
+      <Button onClick={() => props.onCreate("folder")} title={t("app.createFolder")} aria-label={t("app.createFolder")}><AppIcon icon={FolderPlus} size={16} /></Button>
       <span className="tree-view-actions">
-        <label className="tree-sort-action" title={t("app.sort")}><AppIcon icon={ListOrdered} size={16} /><select value={props.sortMode} onChange={event => props.onSortChange(event.target.value as UiPreferences["sortMode"])} aria-label={t("app.sort")}><option value="alphabetical">A–Z</option><option value="created">{t("app.sortCreated")}</option><option value="updated">{t("app.sortUpdated")}</option><option value="manual">{t("app.sortManual")}</option></select></label>
-        <button disabled={!props.canLocate} onClick={props.onLocate} title={t("app.locateCurrent")} aria-label={t("app.locateCurrent")}><AppIcon icon={ArrowDownToDot} size={16} /></button>
-        <button onClick={props.onCollapseAll} title={t("app.collapseAll")} aria-label={t("app.collapseAll")}><AppIcon icon={ChevronsDownUp} size={16} /></button>
+        <label className="tree-sort-action" title={t("app.sort")}><AppIcon icon={ListOrdered} size={16} /><NativeSelect value={props.sortMode} onChange={event => props.onSortChange(event.target.value as UiPreferences["sortMode"])} aria-label={t("app.sort")}><option value="alphabetical">A–Z</option><option value="created">{t("app.sortCreated")}</option><option value="updated">{t("app.sortUpdated")}</option><option value="manual">{t("app.sortManual")}</option></NativeSelect></label>
+        <Button disabled={!props.canLocate} onClick={props.onLocate} title={t("app.locateCurrent")} aria-label={t("app.locateCurrent")}><AppIcon icon={ArrowDownToDot} size={16} /></Button>
+        <Button onClick={props.onCollapseAll} title={t("app.collapseAll")} aria-label={t("app.collapseAll")}><AppIcon icon={ChevronsDownUp} size={16} /></Button>
       </span>
     </nav>
     {props.pinned}
     {props.children}
     <footer className="side-footer">
       <div className="sidebar-user" title={`@${props.username}`}>
-        <span className="sidebar-avatar" aria-hidden="true">{props.avatarUrl ? <img src={props.avatarUrl} alt="" /> : (props.displayName.trim().charAt(0).toLocaleUpperCase() || props.username.charAt(0).toLocaleUpperCase())}</span>
+        <Avatar className="sidebar-avatar" aria-hidden="true">
+          {props.avatarUrl && <AvatarImage src={props.avatarUrl} alt="" />}
+          <AvatarFallback>{props.displayName.trim().charAt(0).toLocaleUpperCase() || props.username.charAt(0).toLocaleUpperCase()}</AvatarFallback>
+        </Avatar>
         <span className="sidebar-user-name"><strong>{props.displayName}</strong><small>@{props.username}</small></span>
       </div>
       <div className="side-footer-actions">
-        {props.onLock && <button onClick={props.onLock} title={t("app.lock")} aria-label={t("app.lock")}><AppIcon icon={LockKeyhole} size={16} /></button>}
+        {props.onLock && <Button onClick={props.onLock} title={t("app.lock")} aria-label={t("app.lock")}><AppIcon icon={LockKeyhole} size={16} /></Button>}
         {props.accountSwitcher}
-        <button onClick={props.onSettings} title={t("settings.title")} aria-label={t("settings.title")}><AppIcon icon={Settings} size={16} /></button>
+        <Button onClick={props.onSettings} title={t("settings.title")} aria-label={t("settings.title")}><AppIcon icon={Settings} size={16} /></Button>
       </div>
     </footer>
   </aside>;
 }
 
-export function WorkspacePanelHeader({ tab, onTabChange, onCollapse, onClose }: {
+export function WorkspacePanelHeader({ tab, onTabChange, onCollapse, onClose, children }: {
   tab: UiPreferences["rightPanelTab"];
   onTabChange: (tab: UiPreferences["rightPanelTab"]) => void;
   onCollapse: () => void;
   onClose: () => void;
+  children?: ReactNode;
 }) {
   const { t } = useI18n();
-  return <header className="side-header right-panel-header">
-    <nav className="right-panel-tabs" aria-label={t("app.rightPanel")}>
-      <button className={tab === "outline" ? "active" : ""} aria-current={tab === "outline" ? "page" : undefined} onClick={() => onTabChange("outline")} title={t("app.outline")} aria-label={t("app.outline")}><AppIcon icon={List} size={16} /></button>
-      <button className={tab === "history" ? "active" : ""} aria-current={tab === "history" ? "page" : undefined} onClick={() => onTabChange("history")} title={t("history.title")} aria-label={t("history.title")}><AppIcon icon={History} size={16} /></button>
-    </nav>
-    <button className="right-pane-collapse" onClick={onCollapse} title={t("app.collapseRight")} aria-label={t("app.collapseRight")}><AppIcon icon={PanelRightClose} size={16} /></button>
-    <button className="mobile-outline-close" onClick={onClose} title={t("app.closeRight")} aria-label={t("app.closeRight")}><AppIcon icon={PanelRightClose} size={16} /></button>
-  </header>;
+  return <Tabs value={tab} onValueChange={(value) => onTabChange(value as UiPreferences["rightPanelTab"])} className="workspace-panel-tabs">
+    <header className="side-header right-panel-header">
+    <TabsList className="right-panel-tabs" variant="line" aria-label={t("app.rightPanel")}>
+      <TabsTrigger value="outline" title={t("app.outline")} aria-label={t("app.outline")}><AppIcon icon={List} /></TabsTrigger>
+      <TabsTrigger value="history" title={t("history.title")} aria-label={t("history.title")}><AppIcon icon={History} /></TabsTrigger>
+    </TabsList>
+    <Button className="right-pane-collapse" onClick={onCollapse} title={t("app.collapseRight")} aria-label={t("app.collapseRight")}><AppIcon icon={PanelRightClose} size={16} /></Button>
+    <Button className="mobile-outline-close" onClick={onClose} title={t("app.closeRight")} aria-label={t("app.closeRight")}><AppIcon icon={PanelRightClose} size={16} /></Button>
+    </header>
+    <TabsContent key={tab} value={tab} className="right-panel-content">{children}</TabsContent>
+  </Tabs>;
 }

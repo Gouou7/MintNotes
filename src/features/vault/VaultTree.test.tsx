@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../i18n";
 import type { OpenDocument } from "../../types";
-import { ContextMenu, TreeLevel, type TreeDropTarget } from "./VaultTree";
+import { TreeRowMenu, TreeLevel, type TreeDropTarget } from "./VaultTree";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -105,25 +105,26 @@ describe("VaultTree context menu", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    await act(async () => root.render(<I18nProvider><ContextMenu
+    await act(async () => root.render(<I18nProvider><TreeRowMenu
       document={note}
-      selection={[note]}
-      documents={[note]}
-      position={{ x: 20, y: 20 }}
-      onClose={vi.fn()}
-      onSelect={vi.fn()}
-      onRename={vi.fn()}
-      onToggleLock={vi.fn(async () => undefined)}
-      onCreate={vi.fn(async () => "new-object")}
-      onDuplicate={vi.fn(async () => undefined)}
-      onExport={vi.fn(async () => undefined)}
-      onPin={vi.fn(async () => undefined)}
-      onDelete={vi.fn(async () => undefined)}
-      onRestore={vi.fn(async () => undefined)}
-      onPurge={vi.fn()}
+      row={(more) => <div>{more}</div>}
+      onOpen={vi.fn()}
+      actions={{ selection: () => [note], documents: [note],
+        onSelect: vi.fn(),
+        onRename: vi.fn(),
+        onToggleLock: vi.fn(async () => undefined),
+        onCreate: vi.fn(async () => "new-object"),
+        onDuplicate: vi.fn(async () => undefined),
+        onExport: vi.fn(async () => undefined),
+        onPin: vi.fn(async () => undefined),
+        onDelete: vi.fn(async () => undefined),
+        onRestore: vi.fn(async () => undefined),
+        onPurge: vi.fn(),
+      }}
     /></I18nProvider>));
 
-    const actions = [...container.querySelectorAll<HTMLElement>(".context-menu button")];
+    await act(async () => (container.querySelector(".tree-more") as HTMLButtonElement).click());
+    const actions = [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitem]")];
     expect(actions.length).toBeGreaterThan(0);
     expect(actions.every((action) => action.querySelector("svg"))).toBe(true);
     expect(actions.every((action) => action.textContent?.trim() !== "Move to")).toBe(true);

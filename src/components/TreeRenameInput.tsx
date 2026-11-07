@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { focusAndSelectName } from "../features/focusName";
 
@@ -16,7 +17,7 @@ export function TreeRenameInput({ initialValue, label, onCommit, onCancel, class
 
   useEffect(() => { focusAndSelectName(input.current); }, []);
 
-  return <input
+  return <Input
     ref={input}
     className={className}
     value={value}

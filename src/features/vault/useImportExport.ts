@@ -1,3 +1,4 @@
+import type { RequestConfirmation } from "../../components/Confirmation";
 import { useWorkspaceServices } from "../session/workspaceServices";
 import { useEffect, useRef, useState } from "react";
 import type { OpenAttachment, OpenDocument } from "../../types";
@@ -12,6 +13,7 @@ import { makeDocument } from "./documentFactory";
 import { persistImportedDocument } from "./importPersistence";
 
 interface Options {
+  confirm: RequestConfirmation;
   userId: string;
   getDocuments: () => OpenDocument[];
   getAttachments: () => OpenAttachment[];
@@ -104,12 +106,18 @@ export function useImportExport(options: Options) {
     if (ids && !roots.length) return;
     const root = roots.length === 1 ? documents.find((entry) => entry.objectId === roots[0]) : undefined;
     const prompt = roots.length > 1 ? t("notice.exportSelectionConfirm", { count: roots.length }) : t("notice.exportConfirm", { label: root ? `“${root.title}”` : t("notice.allNotes") });
-    if (!window.confirm(prompt) || !isActive()) return;
+    const action = t("storage.exportNotes");
+    if (!await current.current.confirm({ title: action, message: prompt, action }, signal) || !isActive()) return;
+    const latestDocuments = current.current.getDocuments();
+    const latestRoots = ids ? selectionRoots(latestDocuments, ids) : [];
+    if (latestRoots.length !== roots.length || roots.some((id) => !latestRoots.includes(id))) return;
+    const latestRoot = root && latestDocuments.find((entry) => entry.objectId === root.objectId);
+    if (root && (!latestRoot || latestRoot.title !== root.title || latestRoot.deleted !== root.deleted)) return;
     try {
-      if (root?.kind === "note" && !markdownImages(root.markdown).some((image) => imageAttachmentId(image.url))) {
-        exportSingleMarkdown(root);
+      if (latestRoot?.kind === "note" && !markdownImages(latestRoot.markdown).some((image) => imageAttachmentId(image.url))) {
+        exportSingleMarkdown(latestRoot);
       } else {
-        await exportMarkdownZip(documents, current.current.getAttachments(), (attachment) => current.current.readAttachment(attachment, isActive, signal), ids ? roots : null, isActive);
+        await exportMarkdownZip(latestDocuments, current.current.getAttachments(), (attachment) => current.current.readAttachment(attachment, isActive, signal), ids ? roots : null, isActive);
       }
     } catch {
       if (isActive()) notify(t("transfer.exportFailed"), "critical");

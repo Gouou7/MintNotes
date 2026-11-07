@@ -8,16 +8,20 @@ test.use({
 for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 1112], ["mobile", 320, 844]] as const) {
   test(`${name} workspace matches theme tokens and keeps pane and mode controls usable`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/workspace.html");
     const source = page.getByRole("button", { name: "Source", exact: true }), reading = page.getByRole("button", { name: "Read-only", exact: true });
+    const hairline = /^(0\.5|1)px$/;
     for (const theme of ["dark", "light"]) {
       await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
       await expect(page.locator(".note-toolbar")).toHaveCSS("height", "48px");
+      if (name === "mobile") await page.getByRole("button", { name: "Open left sidebar" }).click();
       await expect(page.locator(".tree-pane")).toHaveCSS("background-color", theme === "dark" ? "rgb(30, 30, 30)" : "rgb(232, 233, 233)");
       await expect(page.locator(".side-header").first()).toHaveCSS("border-bottom-color", theme === "dark" ? "rgb(51, 51, 51)" : "rgb(226, 226, 226)");
-      await expect(page.locator(".side-header").first()).toHaveCSS("border-bottom-width", "0.5px");
-      await expect(page.locator(".note-toolbar")).toHaveCSS("border-bottom-width", "0.5px");
-      await expect(page.locator(".status-bar")).toHaveCSS("border-top-width", "0.5px");
+      await expect(page.locator(".side-header").first()).toHaveCSS("border-bottom-width", hairline);
+      if (name === "mobile") await page.getByRole("button", { name: "Close directory" }).click();
+      await expect(page.locator(".note-toolbar")).toHaveCSS("border-bottom-width", hairline);
+      await expect(page.locator(".status-bar")).toHaveCSS("border-top-width", hairline);
       for (const divider of await page.locator(".pane-resizer:visible").all()) expect((await divider.boundingBox())!.width).toBe(0.5);
       const codeOutline = await page.locator(".ProseMirror pre").evaluate(element => getComputedStyle(element, "::after").backgroundColor);
       expect(codeOutline).toBe(theme === "dark" ? "rgb(51, 51, 51)" : "rgb(226, 226, 226)");
@@ -47,7 +51,8 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await expect(reading).toBeDisabled(); await expect(reading).toHaveAttribute("aria-pressed", "true");
       await expect(page.getByRole("button", { name: "Unlock note", exact: true })).toHaveAttribute("aria-pressed", "true");
       await source.click(); await expect(source).toBeEnabled(); await expect(textarea).toHaveJSProperty("readOnly", true);
-      await textarea.press("ControlOrMeta+/"); await expect(source).toHaveAttribute("aria-pressed", "false");
+      await textarea.focus(); await expect(textarea).toBeFocused();
+      await page.keyboard.press("ControlOrMeta+/"); await expect(source).toHaveAttribute("aria-pressed", "false");
       await source.click(); await expect(source).toHaveAttribute("aria-pressed", "true");
       await page.getByRole("button", { name: "Unlock note", exact: true }).click();
       await expect(reading).toBeEnabled(); await expect(reading).toHaveAttribute("aria-pressed", "false");
@@ -65,11 +70,12 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       const buttons = page.locator(".note-toolbar button:visible");
       for (const button of await buttons.all()) {
         const bounds = (await button.boundingBox())!;
+        expect(bounds.width).toBeCloseTo(bounds.height, 2);
         expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
       }
       if (name === "mobile") {
         await page.getByRole("button", { name: "Open left sidebar" }).click();
-        await expect(page.locator(".tree-pane")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+        await expect(page.locator(".tree-pane")).toBeVisible();
       }
       await expect(page.locator(".search-box")).toBeVisible();
       await expect(page.locator(".tree-pane .side-header button:visible")).toHaveCount(1);
@@ -112,8 +118,9 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await page.getByRole("button", { name: "Settings", exact: true }).click();
       for (const label of ["Save", "Cancel", "Delete"]) {
         const action = page.getByRole("button", { name: label, exact: true });
-        await expect(action).toHaveCSS("height", "30px"); await expect(action).toHaveCSS("border-radius", "8px");
-        await expect(action.locator("svg")).toHaveAttribute("width", "16");
+        await expect(action).toHaveCSS("height", name === "mobile" ? "36px" : "32px");
+        await expect(action).toHaveCSS("border-radius", "7px");
+        await expect(action.locator("svg")).toHaveCSS("width", "16px");
         await expect(action.locator("svg > *").first()).toHaveCSS("stroke-width", "1.5px");
         await expect(action.locator("svg > *").first()).toHaveCSS("vector-effect", "non-scaling-stroke");
       }
@@ -131,15 +138,22 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
     await page.getByRole("button", { name: "Open right sidebar" }).click();
     await expect(page.locator(".right-panel-header")).toBeVisible();
     await expect(page.locator(".right-panel-header > button:visible")).toHaveCount(1);
-    const outline = page.getByRole("button", { name: "Outline", exact: true }), history = page.getByRole("button", { name: "History", exact: true });
+    const rightPanelButtons = page.locator(".right-panel-header button:visible");
+    await expect(rightPanelButtons).toHaveCount(3);
+    for (const button of await rightPanelButtons.all()) {
+      const bounds = (await button.boundingBox())!;
+      expect(bounds.width).toBeCloseTo(30, 2);
+      expect(bounds.height).toBeCloseTo(30, 2);
+    }
+    const outline = page.getByRole("tab", { name: "Outline", exact: true }), history = page.getByRole("tab", { name: "History", exact: true });
     for (const theme of ["dark", "light"]) {
       await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
       for (const [active, inactive] of [[outline, history], [history, outline]]) {
         await active.click();
         await page.mouse.move(width - 10, height - 10);
         await active.blur();
-        await expect(active).toHaveAttribute("aria-current", "page");
-        await expect(inactive).not.toHaveAttribute("aria-current", "page");
+        await expect(active).toHaveAttribute("aria-selected", "true");
+        await expect(inactive).not.toHaveAttribute("aria-selected", "true");
         await expect(active).toHaveCSS("color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
         await expect(inactive).not.toHaveCSS("color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
         await expect(active).toHaveCSS("border-top-width", "0px");
@@ -150,3 +164,78 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
     if (name !== "desktop") await page.getByRole("button", { name: "Close right sidebar" }).click();
   });
 }
+
+test("tree menus support keyboard navigation and preserve the folder drop payload", async ({ page, browserName }) => {
+  await page.setViewportSize({ width: 1445, height: 956 });
+  await page.goto("/workspace.html");
+  const note = page.getByRole("button", { name: "Note one", exact: true });
+  await note.click({ button: "right" });
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await menu.press("Home");
+  await expect(menu.getByRole("menuitem", { name: "Open", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitem", { name: "Rename", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+
+  const more = page.getByRole("button", { name: "Open menu for Note one" });
+  await more.focus();
+  await page.keyboard.press("Enter");
+  await expect(menu.getByRole("menuitem", { name: "Open", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(more).toBeFocused();
+  await expect(menu).toBeHidden();
+
+  if (browserName === "webkit") {
+    // This Windows WebKit runtime loses custom MIME types during a native drag.
+    // Carry the actual dragstart payload through the same row handlers explicitly.
+    const transfer = await page.evaluateHandle(() => new DataTransfer());
+    const row = page.locator('.document-tree [data-object-id="note"]');
+    const folder = page.locator('.document-tree [data-object-id="folder-one"]');
+    const bounds = (await folder.boundingBox())!;
+    const event = { dataTransfer: transfer, clientX: bounds.x + bounds.width / 2, clientY: bounds.y + bounds.height / 2 };
+    try {
+      await row.dispatchEvent("dragstart", { dataTransfer: transfer });
+      await folder.dispatchEvent("dragover", event);
+      await folder.dispatchEvent("drop", event);
+      await row.dispatchEvent("dragend", { dataTransfer: transfer });
+    } finally {
+      await transfer.dispose();
+    }
+  } else {
+    await note.dragTo(page.getByRole("button", { name: "Folder one", exact: true }));
+  }
+  await expect.poll(() => page.evaluate(() => window.mintWorkspaceFixture.lastMove())).toEqual({ ids: ["note"], parentId: "folder-one" });
+});
+
+test("mobile edge gestures open either sheet and Escape restores keyboard focus", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/workspace.html");
+  const trigger = page.locator(".pane-toggle");
+  const sheet = page.getByRole("dialog", { name: "Directory", exact: true });
+  await trigger.focus();
+  await trigger.press("Enter");
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  for (const [from, to, name] of [[4, 76, "Directory"], [386, 314, "Right panel"]] as const) {
+    await page.evaluate(({ from, to }) => {
+      for (const [type, touches] of [
+        ["touchstart", [{ identifier: 1, clientX: from, clientY: 200 }]],
+        ["touchmove", [{ identifier: 1, clientX: to, clientY: 200 }]],
+        ["touchend", []]
+      ] as const) {
+        const event = new Event(type, { cancelable: true });
+        Object.defineProperty(event, "touches", { value: touches });
+        window.dispatchEvent(event);
+      }
+    }, { from, to });
+    const drawer = page.getByRole("dialog", { name, exact: true });
+    await expect(drawer).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+  }
+});

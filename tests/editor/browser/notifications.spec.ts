@@ -19,7 +19,7 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       window.mintWorkspaceFixture.notify("This warning is longer and wraps to another line without widening the notification.", "warning");
       window.mintWorkspaceFixture.notify("Save failed.\nYour note is still available locally.\nPlease check the connection.", "critical");
     });
-    const stack = page.locator(".toast-stack"), notices = stack.locator(".toast-notice");
+    const stack = page.locator(".toast-stack"), notices = stack.locator(".toast-notice:not([data-ending-style])");
     await expect(notices).toHaveCount(3);
     for (const theme of ["dark", "light"]) {
       await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
@@ -73,3 +73,30 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
     await expect(notices.first()).toHaveCSS("backdrop-filter", "none");
   });
 }
+
+test("info and warning expire at their own deadlines and critical notices stay until dismissed", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/workspace.html");
+  await expect(page.locator(".ProseMirror h1")).toHaveText("Main page");
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  await page.evaluate(() => {
+    window.mintWorkspaceFixture.notify("Info", "info");
+    window.mintWorkspaceFixture.notify("Warning", "warning");
+    window.mintWorkspaceFixture.notify("Critical", "critical");
+  });
+  const notices = page.locator(".toast-notice:not([data-ending-style])");
+  await expect(notices).toHaveText(["Info", "Warning", "Critical"]);
+  await page.clock.runFor(3900);
+  await expect(notices).toHaveCount(3);
+  await page.clock.runFor(200);
+  await expect(notices).toHaveText(["Warning", "Critical"]);
+  await page.clock.runFor(2800);
+  await expect(notices).toHaveCount(2);
+  await page.clock.runFor(200);
+  await expect(notices).toHaveText(["Critical"]);
+  await page.clock.runFor(10000);
+  await expect(notices).toHaveCount(1);
+  await notices.getByRole("button", { name: "Close notification" }).click();
+  await expect(notices).toHaveCount(0);
+});

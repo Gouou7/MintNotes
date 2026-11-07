@@ -1,8 +1,13 @@
+import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SettingsSection } from "../../components/SettingsSection";
 import { SettingsItem } from "../../components/SettingsItem";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ChevronsUp, Ellipsis, FileText, Folder, RotateCcw, Search, Trash2 } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
+import { RowActionMenu } from "../../components/RowActionMenu";
 import { SettingsButton } from "../../components/SettingsButton";
 import { translateError, useI18n } from "../../i18n";
 import type { ToastTone } from "../../components/Toast";
@@ -30,17 +35,24 @@ function TrashBranch({ item, childrenByParent, descendantCounts, expandedIds, au
   const expanded = children.length > 0 && (forceExpanded || expandedIds.has(item.objectId));
   const title = item.title || t("settings.untitled");
   return <div className="trash-node" role="treeitem" aria-expanded={children.length ? expanded : undefined}>
-    <div className="trash-row settings-list-row">
-      <span className="trash-item-icon settings-list-icon">
+    <Item className="trash-row settings-list-row">
+      <ItemMedia className="trash-item-icon settings-list-icon">
         {children.length ? (forceExpanded
           ? <span className="trash-disclosure forced" aria-hidden="true"><AppIcon icon={ChevronDown} size={15} /></span>
-          : <button className="trash-disclosure" onClick={() => onToggle(item.objectId)} title={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })} aria-label={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })}><AppIcon icon={expanded ? ChevronDown : ChevronRight} size={15} /></button>)
+          : <Button className="trash-disclosure" onClick={() => onToggle(item.objectId)} title={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })} aria-label={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })}><AppIcon icon={expanded ? ChevronDown : ChevronRight} size={15} /></Button>)
           : null}
         <AppIcon icon={item.kind === "folder" ? Folder : FileText} size={20} />
-      </span>
-      <span className="trash-details settings-list-details"><strong>{title}</strong><small>{item.kind === "folder" ? t("settings.folder") : t("settings.note")}{item.kind === "folder" && descendantCount > 0 ? ` · ${t("settings.containsItems", { count: descendantCount })}` : ""} · {t("settings.deletedAt", { date: formatDateTime(item.serverTrashedAt ?? item.updatedAt) })}</small></span>
-      {root && <span className="trash-actions settings-list-actions"><SettingsButton icon={RotateCcw} iconOnly disabled={restoring === item.objectId || purging} onClick={() => onRestore(item)} title={t("settings.restore")} aria-label={t("settings.restoreItem", { title })} /><details className="trash-more"><summary title={t("settings.moreActions")} aria-label={t("settings.moreActionsFor", { title })}><AppIcon icon={Ellipsis} size={17} /></summary><div><SettingsButton icon={Trash2} className="danger" disabled={purging} onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); onPurge(item.objectId); }}>{t("settings.permanentDelete")}</SettingsButton></div></details></span>}
-    </div>
+      </ItemMedia>
+      <ItemContent className="trash-details settings-list-details"><strong>{title}</strong><small>{item.kind === "folder" ? t("settings.folder") : t("settings.note")}{item.kind === "folder" && descendantCount > 0 ? ` · ${t("settings.containsItems", { count: descendantCount })}` : ""} · {t("settings.deletedAt", { date: formatDateTime(item.serverTrashedAt ?? item.updatedAt) })}</small></ItemContent>
+      {root && <RowActionMenu contextDisabled
+        row={(more) => <span className="trash-actions settings-list-actions">
+          <SettingsButton icon={RotateCcw} iconOnly disabled={restoring === item.objectId || purging} onClick={() => onRestore(item)} title={t("settings.restore")} aria-label={t("settings.restoreItem", { title })} />
+          {more}
+        </span>}
+        trigger={<Button variant="ghost" size="icon" className="trash-more" title={t("settings.moreActions")} aria-label={t("settings.moreActionsFor", { title })}><AppIcon icon={Ellipsis} /></Button>}
+        items={(MenuItem) => <MenuItem variant="destructive" disabled={purging} onClick={() => onPurge(item.objectId)}><AppIcon icon={Trash2} />{t("settings.permanentDelete")}</MenuItem>}
+      />}
+    </Item>
     {expanded && <div className="trash-children" role="group">{children.map((child) => <TrashBranch key={child.objectId} item={child} childrenByParent={childrenByParent} descendantCounts={descendantCounts} expandedIds={expandedIds} automaticallyExpandedIds={automaticallyExpandedIds} root={false} restoring={restoring} purging={purging} onToggle={onToggle} onRestore={onRestore} onPurge={onPurge} />)}</div>}
   </div>;
 }
@@ -86,14 +98,14 @@ export function TrashStorageSection({ trashItems, busy, purging, serverSessionVe
     return next;
   });
             return <SettingsSection title={t("settings.trash")} className="trash-settings">
-              <SettingsItem title={t("settings.autoDelete")} description={t("settings.trashHelp")}>{(control) => <select {...control} disabled={busy || !serverSessionVerified} value={trashRetentionDays === null ? "never" : String(trashRetentionDays)} onChange={(event) => void updateTrashRetention(event.target.value === "never" ? null : Number(event.target.value))}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 30 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></select>}</SettingsItem>
+              <SettingsItem title={t("settings.autoDelete")} description={t("settings.trashHelp")}>{(control) => <NativeSelect {...control} disabled={busy || !serverSessionVerified} value={trashRetentionDays === null ? "never" : String(trashRetentionDays)} onChange={(event) => void updateTrashRetention(event.target.value === "never" ? null : Number(event.target.value))}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 30 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></NativeSelect>}</SettingsItem>
               <SettingsItem title={t("settings.deletedItems")} description={trashItems.length > 0 ? (trashView.filtering ? t("settings.trashFilterSummary", { count: trashView.matchCount }) : t("settings.trashSummary", { roots: trashView.roots.length, total: trashItems.length })) : undefined}>
-                {trashItems.length > 0 && <>{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton icon={ChevronsUp} className="trash-collapse-all" onClick={() => setExpandedTrashIds(new Set())}>{t("settings.collapseAll")}</SettingsButton>}<SettingsButton icon={Trash2} className="trash-clear danger" disabled={purging} onClick={onClearTrash}>{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></>}
+                {trashItems.length > 0 && <>{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton icon={ChevronsUp} className="trash-collapse-all" onClick={() => setExpandedTrashIds(new Set())}>{t("settings.collapseAll")}</SettingsButton>}<SettingsButton icon={Trash2} variant="destructive" className="trash-clear danger" disabled={purging} onClick={onClearTrash}>{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></>}
               </SettingsItem>
               {trashItems.length > 0 && <div className="trash-toolbar">
-                <label className="trash-search"><AppIcon icon={Search} size={16} /><input type="search" value={trashQuery} onChange={(event) => setTrashQuery(event.target.value)} placeholder={t("settings.searchTrash")} aria-label={t("settings.searchTrash")} /></label>
-                <select value={trashKindFilter} onChange={(event) => setTrashKindFilter(event.target.value as TrashKindFilter)} aria-label={t("settings.trashTypeFilter")}><option value="all">{t("settings.allTypes")}</option><option value="folder">{t("settings.foldersOnly")}</option><option value="note">{t("settings.notesOnly")}</option></select>
-                <select value={trashSortMode} onChange={(event) => setTrashSortMode(event.target.value as TrashSortMode)} aria-label={t("settings.trashSort")}><option value="deleted-desc">{t("settings.deletedNewest")}</option><option value="deleted-asc">{t("settings.deletedOldest")}</option><option value="name">{t("settings.sortByName")}</option></select>
+                <label className="trash-search"><AppIcon icon={Search} size={16} /><Input type="search" value={trashQuery} onChange={(event) => setTrashQuery(event.target.value)} placeholder={t("settings.searchTrash")} aria-label={t("settings.searchTrash")} /></label>
+                <NativeSelect value={trashKindFilter} onChange={(event) => setTrashKindFilter(event.target.value as TrashKindFilter)} aria-label={t("settings.trashTypeFilter")}><option value="all">{t("settings.allTypes")}</option><option value="folder">{t("settings.foldersOnly")}</option><option value="note">{t("settings.notesOnly")}</option></NativeSelect>
+                <NativeSelect value={trashSortMode} onChange={(event) => setTrashSortMode(event.target.value as TrashSortMode)} aria-label={t("settings.trashSort")}><option value="deleted-desc">{t("settings.deletedNewest")}</option><option value="deleted-asc">{t("settings.deletedOldest")}</option><option value="name">{t("settings.sortByName")}</option></NativeSelect>
               </div>}
               {visibleTrashRoots.length ? <><div className="trash-list settings-list" role="tree">{visibleTrashRoots.map((item) => <TrashBranch key={item.objectId} item={item} childrenByParent={trashView.childrenByParent} descendantCounts={trashView.descendantCounts} expandedIds={expandedTrashIds} automaticallyExpandedIds={trashView.automaticallyExpandedIds} root restoring={restoringTrashId} purging={purging} onToggle={toggleTrashFolder} onRestore={(entry) => void restoreTrashItem(entry)} onPurge={onPurgeTrash} />)}</div>{visibleTrashRootCount < trashView.roots.length && <SettingsButton icon={ChevronDown} className="trash-load-more" onClick={() => setVisibleTrashRootCount((count) => count + TRASH_PAGE_SIZE)}>{t("settings.showMore", { count: Math.min(TRASH_PAGE_SIZE, trashView.roots.length - visibleTrashRootCount) })}</SettingsButton>}</> : <p className="trash-empty">{trashItems.length ? t("settings.noTrashMatches") : t("settings.trashEmpty")}</p>}
             </SettingsSection>;

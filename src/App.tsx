@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/spinner";
 import { lazy, Suspense } from "react";
 import { AuthScreen } from "./features/AuthScreen";
 import { LockScreen } from "./features/LockScreen";
@@ -16,7 +17,7 @@ export default function App() {
   const session = useSessionController();
   const { workspace, locked } = session;
   if (databaseBlocked) return <main className="loading-shell"><p role="status">{t("storage.upgradeBlocked")}</p></main>;
-  if (session.restoring) return <main className="loading-shell"><div className="spinner" /><p>{t("lock.restoring")}</p></main>;
+  if (session.restoring) return <main className="loading-shell"><Spinner className="spinner" aria-hidden="true" /><p>{t("lock.restoring")}</p></main>;
 
   const selection = session.chooser && <AccountChooser
     accounts={session.accounts} currentId={session.selectedId} busy={session.busy} error={session.error}
@@ -26,8 +27,8 @@ export default function App() {
   return <>
     {workspace && <div hidden={session.chooser || session.login}>
       <WorkspaceServicesContext.Provider value={workspace}>
-        <Suspense fallback={<main className="loading-shell"><div className="spinner" /><p>{t("app.loadingNotes")}</p></main>}>
-          <VaultApp key={workspace.id} {...workspace.account} serverSessionVerified={session.online}
+        <Suspense fallback={<main className="loading-shell"><Spinner className="spinner" aria-hidden="true" /><p>{t("app.loadingNotes")}</p></main>}>
+          <VaultApp key={workspace.id} {...workspace.account} serverSessionVerified={session.online} visible={!session.chooser && !session.login}
             onCredentialChange={(credential) => session.updateAccount(credential, true)}
             onDisplayNameChange={(displayName) => session.updateAccount({ displayName })}
             onUsernameChange={(username) => session.updateAccount({ username })}

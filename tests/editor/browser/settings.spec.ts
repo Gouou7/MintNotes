@@ -30,14 +30,14 @@ for (const [name, width] of [["desktop", 1440], ["mobile", 320]] as const) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/settings.html?unlimited&language=zh-CN");
     await page.getByRole("combobox", { name: "字体大小", exact: true }).selectOption("17");
-    await page.locator(".settings-tabs").getByRole("button", { name: "用户和安全", exact: true }).click();
+    await page.locator(".settings-tabs").getByRole("tab", { name: "用户和安全", exact: true }).click();
     const deviceSecurity = page.locator(".settings-group").filter({ has: page.getByRole("heading", { name: "本机安全", exact: true }) });
     await expect(deviceSecurity.locator(".settings-item-title")).toHaveText(["本机 PIN", "无操作后自动锁定"]);
     await deviceSecurity.screenshot({ path: info.outputPath(`${name}-device-security-zh.png`) });
-    await page.locator(".settings-tabs").getByRole("button", { name: "笔记和存储", exact: true }).click();
+    await page.locator(".settings-tabs").getByRole("tab", { name: "笔记和存储", exact: true }).click();
     const usage = page.locator(".storage-usage");
     await expect(usage.locator(".storage-total")).toContainText("配额：不限");
-    await expect(usage.locator("progress")).toHaveCount(0);
+    await expect(usage.getByRole("progressbar")).toHaveCount(0);
     await expect(usage.locator(".storage-composition > span")).toHaveCount(3);
     await expect(usage.locator(".storage-categories dt")).toHaveText(["笔记", "附件", "笔记历史", "回收站"]);
     await expect(usage.locator(".storage-pending > div:last-child dd")).toHaveText("0 篇");
@@ -45,12 +45,12 @@ for (const [name, width] of [["desktop", 1440], ["mobile", 320]] as const) {
     expect(await usage.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await usage.screenshot({ path: info.outputPath(`${name}-storage-zh.png`) });
     const history = page.locator(".history-usage");
-    await expect(history.locator("progress")).toHaveCount(0);
+    await expect(history.getByRole("progressbar")).toHaveCount(0);
     await expect(history.locator(".settings-help")).toHaveText("1.3 KiB / 不限 · 2 个版本");
     await expect(history.getByRole("button", { name: "清空全部历史" })).toBeEnabled();
     expect(await history.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await history.screenshot({ path: info.outputPath(`${name}-history-zh.png`) });
-    await page.locator(".settings-tabs").getByRole("button", { name: "管理员设置", exact: true }).click();
+    await page.locator(".settings-tabs").getByRole("tab", { name: "管理员设置", exact: true }).click();
     const databaseSection = page.locator(".database-storage");
     await expect(databaseSection).toContainText("数据库连接正常");
     expect(await databaseSection.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
@@ -64,8 +64,15 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
     await page.goto("/settings.html");
     const content = page.locator(".settings-content"), header = page.locator(".settings-header");
     await expect(page.locator(".settings-tabs button")).toHaveText(tabs);
+    await expect(page.locator(".settings-tabs")).toHaveAttribute("data-orientation", width <= 720 ? "horizontal" : "vertical");
+    if (width > 720) {
+      for (const button of await page.locator(".settings-tabs button").all()) {
+        await expect(button).toBeInViewport();
+        expect((await button.boundingBox())!.height).toBeLessThanOrEqual(64);
+      }
+    }
     for (const theme of ["light", "dark"]) {
-      await page.getByRole("button", { name: "General", exact: true }).click();
+      await page.getByRole("tab", { name: "General", exact: true }).click();
       await page.getByRole("combobox", { name: "Theme", exact: true }).selectOption(theme);
       const fontSize = page.getByRole("combobox", { name: "Font size", exact: true });
       await expect(fontSize.locator("option")).toHaveText(["11 (Small)", "12", "13", "14 (Default)", "15", "16", "17 (Large)"]);
@@ -79,11 +86,11 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
         await expect(content.locator(".settings-page-title")).toHaveCSS("font-size", `${Number(size) + 10}px`);
       }
       for (const title of tabs) {
-        const nav = page.locator(".settings-tabs").getByRole("button", { name: title, exact: true });
+        const nav = page.locator(".settings-tabs").getByRole("tab", { name: title, exact: true });
         await nav.click();
-        await expect(nav).toHaveAttribute("aria-current", "page");
+        await expect(nav).toHaveAttribute("aria-selected", "true");
         await expect(nav).toHaveCSS("font-weight", "700");
-        for (const inactive of await page.locator(".settings-tabs button:not(.active)").all()) {
+        for (const inactive of await page.locator(".settings-tabs button:not([aria-selected=true])").all()) {
           await expect(inactive).toHaveCSS("font-weight", "400");
         }
         expect(await nav.evaluate(element => {
@@ -158,7 +165,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
             await expect(action).toHaveText("");
             await expect(action).toHaveAccessibleName(/.+/);
             const bounds = (await action.boundingBox())!;
-            expect(bounds.width).toBe(bounds.height);
+            expect(bounds.width).toBeCloseTo(bounds.height, 2);
           } else expect((await action.textContent())?.trim()).toBeTruthy();
         }
         if (name !== "mobile") {
@@ -179,7 +186,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           await expect(content.locator(".history-settings .settings-item-description").first()).toBeVisible();
           await expect(content.locator(".history-settings .settings-item-description").first()).toHaveCSS("font-size", "12px");
           const historyEnabled = page.waitForRequest(request => request.url().endsWith("/api/account/note-history-settings") && request.method() === "PATCH" && request.postDataJSON().enabled === true);
-          await content.locator(".history-settings .settings-switch-track").click();
+          await content.locator(".history-settings [data-slot=switch]").click();
           await historyEnabled;
           await expect(content.locator(".trash-list")).toHaveCSS("border-top-width", "0px");
           await expect(content.locator(".trash-list")).toHaveCSS("border-radius", "0px");
@@ -209,7 +216,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           const usage = content.locator(".history-usage");
           await expect(usage.locator(".settings-item-title")).toHaveText("Note history usage");
           await expect(usage.locator(".settings-help")).toHaveText("120.0 MiB / 256.0 MiB · 128 versions");
-          await expect(usage.locator("progress")).toHaveCount(0);
+          await expect(usage.getByRole("progressbar")).toHaveCount(0);
           await expect(usage).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
           await expect(usage).toHaveCSS("padding", "0px");
           const clear = usage.getByRole("button", { name: "Clear all history", exact: true });
@@ -266,18 +273,18 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
         }
       }
     }
-    await page.getByRole("button", { name: "General", exact: true }).click();
+    await page.getByRole("tab", { name: "General", exact: true }).click();
     await page.getByRole("combobox", { name: "Font size", exact: true }).selectOption("17");
     for (const title of tabs) {
-      await page.locator(".settings-tabs").getByRole("button", { name: title, exact: true }).click();
+      await page.locator(".settings-tabs").getByRole("tab", { name: title, exact: true }).click();
       if (title === "Administrator settings") await expect(page.locator(".database-storage")).toContainText("Database available");
       expect(await content.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
       expect(await content.locator(".settings-card").evaluateAll(cards => cards.every(card => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
       await expect(page.locator(".settings-logout-section button")).toHaveCSS("font-size", "17px");
-      for (const button of await content.locator(".settings-action-button").all()) {
-        await expect(button).toHaveCSS("font-size", "17px");
-        await expect(button).toHaveCSS("font-weight", "700");
-      }
+      await expect.poll(() => content.locator(".settings-action-button").evaluateAll(buttons => buttons.flatMap(button => {
+        const { fontSize, fontWeight } = getComputedStyle(button);
+        return fontSize === "17px" && fontWeight === "700" ? [] : [button.textContent];
+      }))).toEqual([]);
       if (title === "Notes and storage") {
         const labels = content.locator(".storage-pending-item > span");
         expect(await labels.evaluateAll(items => items.every(label => label.getBoundingClientRect().right <= label.parentElement!.getBoundingClientRect().right + 1))).toBe(true);
@@ -285,9 +292,9 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
       }
       await page.screenshot({ path: info.outputPath(`${name}-large-${title.replaceAll(" ", "-")}.png`) });
     }
-    await page.getByRole("button", { name: "General", exact: true }).click();
+    await page.getByRole("tab", { name: "General", exact: true }).click();
     await page.getByRole("combobox", { name: "Font size", exact: true }).selectOption("14");
-    await page.getByRole("button", { name: "Account and security", exact: true }).click();
+    await page.getByRole("tab", { name: "Account and security", exact: true }).click();
     await page.getByRole("button", { name: "Edit profile", exact: true }).click();
     const profile = page.getByRole("dialog", { name: "Edit profile", exact: true });
     await expect(profile.getByRole("button", { name: "Upload avatar", exact: true })).toBeVisible();
@@ -296,7 +303,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
     const logout = page.getByRole("dialog", { name: "Log out of this device?", exact: true });
     await expect(logout.locator(".storage-pending-item strong")).toHaveText(["12", "3", "24"]);
     await logout.getByRole("button", { name: "Cancel", exact: true }).click();
-    await page.locator(".settings-tabs").getByRole("button", { name: "Administrator settings", exact: true }).click();
+    await page.locator(".settings-tabs").getByRole("tab", { name: "Administrator settings", exact: true }).click();
     await page.locator(".admin-create input").nth(0).fill("new-user");
     await page.locator(".admin-create input").nth(1).fill("New User");
     const created = page.waitForRequest(request => request.url().endsWith("/api/admin/account-setups") && request.method() === "POST");
@@ -331,7 +338,7 @@ test("settings rows keep available space and move complete action groups when na
   for (const size of ["14", "17"]) {
     for (const width of [520, 390, 320]) {
       await page.setViewportSize({ width, height: 1000 });
-      await page.locator(".settings-tabs").getByRole("button", { name: "通用", exact: true }).click();
+      await page.locator(".settings-tabs").getByRole("tab", { name: "通用", exact: true }).click();
       await page.getByRole("combobox", { name: "字体大小", exact: true }).selectOption(size);
       for (const row of await content.locator(".general-settings .settings-item:has(select)").all()) {
         const copy = (await row.locator(".settings-item-copy").boundingBox())!;
@@ -339,7 +346,7 @@ test("settings rows keep available space and move complete action groups when na
         if (width >= 390) expect(Math.abs(copy.y + copy.height / 2 - control.y - control.height / 2)).toBeLessThanOrEqual(1);
         else expect(control.y).toBeGreaterThanOrEqual(copy.y + copy.height);
       }
-      await page.locator(".settings-tabs").getByRole("button", { name: "用户和安全", exact: true }).click();
+      await page.locator(".settings-tabs").getByRole("tab", { name: "用户和安全", exact: true }).click();
       const profile = content.locator(".profile-summary");
       const avatar = (await profile.locator(".profile-avatar").boundingBox())!;
       const edit = (await profile.getByRole("button").boundingBox())!;
@@ -352,7 +359,7 @@ test("settings rows keep available space and move complete action groups when na
         return control.left >= copy.right - 1 || control.top >= copy.bottom - 1;
       }))).toBe(true);
       if (size === "14" && width === 520) await page.screenshot({ path: info.outputPath("compact-security-actions.png") });
-      await page.locator(".settings-tabs").getByRole("button", { name: "管理员设置", exact: true }).click();
+      await page.locator(".settings-tabs").getByRole("tab", { name: "管理员设置", exact: true }).click();
       const row = content.locator(".user-row").first();
       await expect(row).toBeVisible();
       const details = (await row.locator(".settings-list-details").boundingBox())!;
@@ -379,10 +386,10 @@ test("offline settings retain a visible notice and respect forced colors", async
 
 test("application connection fields retain accessible names and descriptions at wide and narrow widths", async ({ page }, info) => {
   await page.goto("/settings.html");
-  await page.getByRole("button", { name: "Account and security", exact: true }).click();
+  await page.getByRole("tab", { name: "Account and security", exact: true }).click();
   await page.getByRole("button", { name: "Add application", exact: true }).click();
   const form = page.locator(".application-form");
-  const fields = form.locator(".settings-item-control > :is(input, select)");
+  const fields = form.locator(".settings-item-control :is(input, select)");
   await expect(fields).toHaveCount(4);
   for (const field of await fields.all()) await expect(field).toHaveAccessibleName(/.+/);
   expect(await fields.evaluateAll(controls => controls.every(control => !control.hasAttribute("aria-describedby") || Boolean(document.getElementById(control.getAttribute("aria-describedby")!))))).toBe(true);
@@ -399,7 +406,7 @@ test("settings controls distinguish switch states and keep theme borders and key
   await page.goto("/settings.html?offline");
   const themeSelect = page.getByRole("combobox", { name: "Theme", exact: true });
   const toggle = page.getByRole("switch", { name: "Wrap code blocks", exact: true });
-  const track = page.locator(".settings-switch-track");
+  const track = page.locator("[data-slot=switch]");
   const tabKey = browserName === "webkit" ? "Alt+Tab" : "Tab", backTabKey = browserName === "webkit" ? "Alt+Shift+Tab" : "Shift+Tab";
   const contrast = async (kind: "switch" | "select") => page.evaluate(kind => {
     const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
@@ -412,8 +419,8 @@ test("settings controls distinguish switch states and keep theme borders and key
     const ratio = (first: number[], second: number[]) => (Math.max(luminance(first), luminance(second)) + .05) / (Math.min(luminance(first), luminance(second)) + .05);
     const surface = rgba(getComputedStyle(document.querySelector(".settings-modal")!).backgroundColor);
     if (kind === "switch") {
-      const track = document.querySelector(".settings-switch-track")!;
-      const style = getComputedStyle(track), thumb = getComputedStyle(track, "::after");
+      const track = document.querySelector("[data-slot=switch]")!;
+      const style = getComputedStyle(track), thumb = getComputedStyle(track.querySelector("[data-slot=switch-thumb]")!);
       const background = rgba(style.backgroundColor);
       return [ratio(background, surface), ratio(rgba(style.borderColor), surface), ratio(rgba(thumb.backgroundColor), background), ratio(rgba(style.outlineColor), surface)];
     }
@@ -436,9 +443,10 @@ test("settings controls distinguish switch states and keep theme borders and key
     expect(switchFocus).toBeGreaterThanOrEqual(3);
     await expect(track).toHaveCSS("width", "42px"); await expect(track).toHaveCSS("height", "24px");
     await expect(track).toHaveCSS("border-width", "0px");
-    const thumb = () => track.evaluate(element => {
-      const style = getComputedStyle(element, "::after");
-      return { width: style.width, height: style.height, top: style.top, left: style.left, color: style.backgroundColor, shadow: style.boxShadow, transform: style.transform };
+    const thumb = () => track.locator("[data-slot=switch-thumb]").evaluate(element => {
+      const style = getComputedStyle(element);
+      const { offsetTop, offsetLeft } = element as HTMLElement;
+      return { width: style.width, height: style.height, top: `${offsetTop}px`, left: `${offsetLeft}px`, color: style.backgroundColor, shadow: style.boxShadow, transform: style.transform };
     });
     expect(await thumb()).toEqual({ width: "18px", height: "18px", top: "3px", left: "3px", color: "rgb(255, 255, 255)", shadow: "none", transform: "none" });
     await toggle.press("Space"); await expect(toggle).toBeChecked();
@@ -450,7 +458,7 @@ test("settings controls distinguish switch states and keep theme borders and key
     await page.getByText("Wrap code blocks", { exact: true }).click(); await expect(toggle).not.toBeChecked();
   }
   await themeSelect.selectOption("light");
-  await page.getByRole("button", { name: "Account and security", exact: true }).click();
+  await page.getByRole("tab", { name: "Account and security", exact: true }).click();
   const logout = page.getByRole("button", { name: "Log out", exact: true });
   await logout.focus(); await page.keyboard.press(backTabKey); await page.keyboard.press(tabKey);
   await expect(logout).toBeFocused(); await expect(logout).toHaveCSS("outline-width", "2px");

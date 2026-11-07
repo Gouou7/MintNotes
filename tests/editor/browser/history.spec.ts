@@ -3,9 +3,10 @@ import { expect, test } from "@playwright/test";
 for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 1112], ["mobile", 320, 844]] as const) {
   test(`${name} snapshot panel follows the design and preserves inline rename layout`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/workspace.html?history&language=zh-CN");
     if (width <= 1100) await page.locator(".right-pane-toggle").click();
-    await expect(page.locator(".outline-pane")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+    await expect(page.locator(".outline-pane")).toBeVisible();
     const panel = page.locator(".history-panel"), row = panel.locator(".history-row").first();
     const title = row.locator("strong"), details = row.locator("small"), shield = row.locator(".history-protection > svg");
     const actions = row.locator(".history-actions");
@@ -17,15 +18,15 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await expect(panel.getByRole("button", { name: "清空历史", exact: true })).toHaveCSS("height", "30px");
       await expect(panel.locator(".history-panel-actions button").first()).toHaveCSS("border-radius", "8px");
       await expect(panel.locator(".history-day h3")).toHaveText("2000-01-01");
-      await expect(details).toHaveText("00:00 · 自动保存");
+      await expect(details).toHaveText("00:00 · 自动保存 · 需联网下载");
       await expect(title).toHaveCSS("font-size", "14px");
       await expect(title).toHaveCSS("font-weight", "400");
       await expect(row).toHaveCSS("height", "44px");
       await expect(shield).toHaveCSS("opacity", "1");
       await expect(actions).toHaveCSS("opacity", "0");
 
-      const panelBox = (await panel.boundingBox())!, titleBox = (await title.boundingBox())!, detailsBox = (await details.boundingBox())!;
-      expect(titleBox.x - panelBox.x).toBeCloseTo(31, 0);
+      await expect.poll(async () => (await title.boundingBox())!.x - (await panel.boundingBox())!.x).toBeCloseTo(31, 0);
+      const titleBox = (await title.boundingBox())!, detailsBox = (await details.boundingBox())!;
       expect(detailsBox.y - titleBox.y - titleBox.height).toBeGreaterThanOrEqual(4);
       const shieldBox = (await shield.boundingBox())!, dotsBox = (await actions.locator("svg").boundingBox())!;
       expect(shieldBox.x + shieldBox.width / 2).toBeCloseTo(dotsBox.x + dotsBox.width / 2, 1);
@@ -42,7 +43,7 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       const menuBox = (await menu.boundingBox())!;
       expect(menuBox.x).toBeGreaterThanOrEqual(0);
       expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(width);
-      await menu.getByRole("button", { name: "重命名", exact: true }).click();
+      await menu.getByRole("menuitem", { name: "重命名", exact: true }).click();
       const input = row.locator(".history-rename-input");
       await expect(input).toBeFocused();
       await expect(input).toHaveCSS("font-size", "14px");
@@ -54,14 +55,19 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       expect(await details.boundingBox()).toEqual(detailsBox);
       for (const adjustment of [0, 10]) {
         await page.locator(".app-shell").evaluate((element, value) => (element as HTMLElement).style.setProperty("--font-adjust", `${value}px`), adjustment);
-        const renamed = (await input.boundingBox())!, metadata = (await details.boundingBox())!, rowBox = (await row.boundingBox())!;
-        const focusExtent = await input.evaluate(element => {
-          const style = getComputedStyle(element);
-          return parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+        const bounds = await row.evaluate(element => {
+          const input = element.querySelector(".history-rename-input")!;
+          const style = getComputedStyle(input);
+          const focusExtent = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+          const renamed = input.getBoundingClientRect();
+          const metadata = element.querySelector("small")!.getBoundingClientRect();
+          const rowBox = element.getBoundingClientRect();
+          return { inputTop: renamed.top - focusExtent, inputBottom: renamed.bottom + focusExtent,
+            detailsTop: metadata.top, detailsBottom: metadata.bottom, rowTop: rowBox.top, rowBottom: rowBox.bottom };
         });
-        expect(renamed.y - focusExtent).toBeGreaterThanOrEqual(rowBox.y);
-        expect(renamed.y + renamed.height + focusExtent).toBeLessThan(metadata.y);
-        expect(metadata.y + metadata.height).toBeLessThanOrEqual(rowBox.y + rowBox.height);
+        expect(bounds.inputTop).toBeGreaterThanOrEqual(bounds.rowTop);
+        expect(bounds.inputBottom).toBeLessThan(bounds.detailsTop);
+        expect(bounds.detailsBottom).toBeLessThanOrEqual(bounds.rowBottom);
       }
       await page.locator(".app-shell").evaluate(element => (element as HTMLElement).style.setProperty("--font-adjust", "0px"));
       await panel.screenshot({ path: testInfo.outputPath(`snapshot-rename-${theme}.png`) });
@@ -89,7 +95,7 @@ test("touch snapshot actions stay visible and usable in a narrow drawer", async 
     await expect(row.locator(".history-protection > svg")).toHaveCSS("opacity", "0");
     await row.locator(".history-actions").tap();
     await expect(page.locator(".history-context-menu")).toBeVisible();
-    await page.locator(".history-context-menu").getByRole("button", { name: "取消保护", exact: true }).tap();
+    await page.locator(".history-context-menu").getByRole("menuitem", { name: "取消保护", exact: true }).tap();
     await expect(row.locator(".history-protection")).toHaveCount(0);
     await page.getByRole("button", { name: "创建快照", exact: true }).tap();
     await expect(page.locator(".history-row")).toHaveCount(4);

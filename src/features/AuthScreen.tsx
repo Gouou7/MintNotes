@@ -1,3 +1,8 @@
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { type FormEvent, useEffect, useState } from "react";
 import { Check, Copy, Download } from "lucide-react";
 import { api } from "../api";
@@ -206,29 +211,29 @@ export function AuthScreen({
           <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
           <h1>{t("auth.recovery.title")}</h1>
           <p>{t("auth.recovery.description")}</p>
-          <textarea readOnly value={newRecovery.code} rows={3} />
+          <Textarea readOnly value={newRecovery.code} rows={3} />
           <div className="recovery-actions">
-            <button onClick={() => void copyRecoveryKey()}>
+            <Button onClick={() => void copyRecoveryKey()}>
               <AppIcon icon={recoveryCopyState === "copied" ? Check : Copy} size={16} />
               {recoveryCopyState === "copied" ? t("auth.recovery.copied") : t("auth.recovery.copy")}
-            </button>
-            <button onClick={() => downloadRecoveryKey(newRecovery.session.user.username, newRecovery.code)}>
+            </Button>
+            <Button onClick={() => downloadRecoveryKey(newRecovery.session.user.username, newRecovery.code)}>
               <AppIcon icon={Download} size={16} />
               {t("auth.recovery.download")}
-            </button>
+            </Button>
           </div>
           {recoveryCopyState === "failed" && <p className="error recovery-feedback" role="alert">{t("auth.recovery.copyFailed")}</p>}
           <label className="recovery-confirm">
-            <input type="checkbox" checked={recoveryConfirmed} onChange={(event) => setRecoveryConfirmed(event.target.checked)} />
+            <Checkbox  checked={recoveryConfirmed} onCheckedChange={(checked) => setRecoveryConfirmed(checked)} />
             <span>{t("auth.recovery.confirm")}</span>
           </label>
           {error && <p className="error recovery-feedback" role="alert">{error}</p>}
-          <button className="primary" disabled={!recoveryConfirmed || busy} onClick={() => void confirmRecovery()}>{t("auth.recovery.saved")}</button>
-          {error && <button className="auth-ghost" type="button" disabled={busy} onClick={() => {
+          <Button className="primary" disabled={!recoveryConfirmed || busy} onClick={() => void confirmRecovery()}>{t("auth.recovery.saved")}</Button>
+          {error && <Button className="auth-ghost" type="button" disabled={busy} onClick={() => {
             setNewRecovery(null);
             setMode("login");
             setError("");
-          }}>{t("auth.backToLogin")}</button>}
+          }}>{t("auth.backToLogin")}</Button>}
         </section>
       </main>
     );
@@ -239,7 +244,7 @@ export function AuthScreen({
   return (
     <main className="auth-shell">
       <section className="auth-card">
-        {onBack && <button className="auth-ghost" type="button" disabled={busy} onClick={onBack}>{t("account.back")}</button>}
+        {onBack && <Button className="auth-ghost" type="button" disabled={busy} onClick={onBack}>{t("account.back")}</Button>}
         <div className="auth-language"><LanguageSelect value={languagePreference} onChange={setLanguagePreference} /></div>
         <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
         <h1>{mode === "login" ? "Mint Notes" : mode === "register" ? t("auth.register.title") : mode === "activate" ? t("auth.activate.title") : t("auth.recover.title")}</h1>
@@ -249,24 +254,24 @@ export function AuthScreen({
             <p className="auth-guidance">{t("auth.recover.guidance")}</p>
           )}
         <form onSubmit={submit}>
-          <label>{t("auth.username")}<input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required /></label>
-          {mode === "register" && <label>{t("auth.displayName")}<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>}
-          {mode === "activate" && <label>{t("auth.activationCode")}<textarea value={activationCode} onChange={(event) => setActivationCode(event.target.value)} rows={2} required /></label>}
-          {mode === "recover" && <label>{t("auth.recoveryKey")}<textarea value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value)} rows={3} required /></label>}
-          <label>{mode === "recover" ? t("auth.newMasterPassword") : t("auth.masterPassword")}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete={mode === "login" ? "current-password" : "new-password"} enterKeyHint={mode === "login" ? "done" : "next"} required /></label>
-          {mode === "login" && <label className="remember-device"><input type="checkbox" checked={rememberDevice} onChange={(event) => setRememberDevice(event.target.checked)} />{t("auth.rememberDevice")}</label>}
-          {mode !== "login" && <label>{t("auth.confirmPassword")}<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete="new-password" enterKeyHint="done" required /></label>}
+          <Field><FieldLabel>{t("auth.username")}<Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required /></FieldLabel></Field>
+          {mode === "register" && <Field><FieldLabel>{t("auth.displayName")}<Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></FieldLabel></Field>}
+          {mode === "activate" && <Field><FieldLabel>{t("auth.activationCode")}<Textarea value={activationCode} onChange={(event) => setActivationCode(event.target.value)} rows={2} required /></FieldLabel></Field>}
+          {mode === "recover" && <Field><FieldLabel>{t("auth.recoveryKey")}<Textarea value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value)} rows={3} required /></FieldLabel></Field>}
+          <Field><FieldLabel>{mode === "recover" ? t("auth.newMasterPassword") : t("auth.masterPassword")}<Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete={mode === "login" ? "current-password" : "new-password"} enterKeyHint={mode === "login" ? "done" : "next"} required /></FieldLabel></Field>
+          {mode === "login" && <label className="remember-device"><Checkbox  checked={rememberDevice} onCheckedChange={(checked) => setRememberDevice(checked)} />{t("auth.rememberDevice")}</label>}
+          {mode !== "login" && <Field><FieldLabel>{t("auth.confirmPassword")}<Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete="new-password" enterKeyHint="done" required /></FieldLabel></Field>}
           {error && <p className={notice ? "notice" : "error"}>{error}</p>}
-          <button type="submit" className="primary" disabled={busy}>{busy ? t("auth.processingKeys") : mode === "login" ? t("auth.login") : mode === "register" ? t("auth.createAccount") : mode === "activate" ? t("auth.activateCreate") : t("auth.resetPassword")}</button>
+          <Button type="submit" className="primary" disabled={busy}>{busy ? t("auth.processingKeys") : mode === "login" ? t("auth.login") : mode === "register" ? t("auth.createAccount") : mode === "activate" ? t("auth.activateCreate") : t("auth.resetPassword")}</Button>
         </form>
         {mode === "login" && offlineUnavailable && <p className="auth-config-error">{t("auth.offlineUnavailable")}</p>}
         {mode === "login" && !offlineUnavailable && authConfig.status === "error" && <p className="auth-config-error">{t("auth.configError")}</p>}
         <div className="auth-actions">
-          {mode !== "login" && <button onClick={() => setMode("login")}>{t("auth.backToLogin")}</button>}
-          {mode === "login" && <button disabled={authConfig.status === "loading"} onClick={() => void openRegistration()}>{t("auth.register")}</button>}
-          {mode === "login" && <button onClick={() => setMode("recover")}>{t("auth.forgotPassword")}</button>}
-          {mode === "register" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <button onClick={() => setMode("activate")}>{t("auth.activate.title")}</button>}
-          {mode === "activate" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <button onClick={() => setMode("register")}>{t("auth.normalRegistration")}</button>}
+          {mode !== "login" && <Button onClick={() => setMode("login")}>{t("auth.backToLogin")}</Button>}
+          {mode === "login" && <Button disabled={authConfig.status === "loading"} onClick={() => void openRegistration()}>{t("auth.register")}</Button>}
+          {mode === "login" && <Button onClick={() => setMode("recover")}>{t("auth.forgotPassword")}</Button>}
+          {mode === "register" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button onClick={() => setMode("activate")}>{t("auth.activate.title")}</Button>}
+          {mode === "activate" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button onClick={() => setMode("register")}>{t("auth.normalRegistration")}</Button>}
         </div>
       </section>
     </main>

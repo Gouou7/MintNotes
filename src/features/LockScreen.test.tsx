@@ -92,8 +92,8 @@ describe("LockScreen keyboard submission", () => {
 
     await act(async () => button(container, "退出登录").click());
     expect(onLogout).not.toHaveBeenCalled();
-    expect(container.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
-    await act(async () => button(container, "登出").click());
+    expect(document.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
+    await act(async () => button(document.body, "登出").click());
     expect(onLogout).toHaveBeenCalledOnce();
   });
 

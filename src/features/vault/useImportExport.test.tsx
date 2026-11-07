@@ -15,11 +15,12 @@ async function harness(readAttachment: Parameters<typeof useImportExport>[0]['re
   const attachments: import('../../types').OpenAttachment[] = [];
   const publish=vi.fn((document:OpenDocument)=>{documents.push(document);});
   const onImported=vi.fn();const notify=vi.fn();const onResult=vi.fn();
+  const confirm = vi.fn<Parameters<typeof useImportExport>[0]["confirm"]>().mockResolvedValue(true);
   let controller!:ReturnType<typeof useImportExport>;
   const container=document.createElement('div');document.body.append(container);root=createRoot(container);
-  function Harness(){controller=useImportExport({userId:'user',getDocuments:()=>documents,getAttachments:()=>attachments,reservations:new NameReservations(),isActive:()=>true,readAttachment,publish,onImported,onResult,notify,beforeExport,t:(key)=>key});return null;}
+  function Harness(){controller=useImportExport({confirm,userId:'user',getDocuments:()=>documents,getAttachments:()=>attachments,reservations:new NameReservations(),isActive:()=>true,readAttachment,publish,onImported,onResult,notify,beforeExport,t:(key)=>key});return null;}
   await act(async()=>root.render(<Harness/>));
-  return {get controller(){return controller;},documents,attachments,publish,onImported,notify,onResult};
+  return {get controller(){return controller;},documents,attachments,publish,onImported,notify,onResult,confirm};
 }
 describe('import/export controller',()=>{
   it('publishes only committed notes and activates the first note once',async()=>{
@@ -53,7 +54,7 @@ describe('import/export controller',()=>{
   it('reports export failures instead of rejecting a UI event promise',async()=>{
     const state=await harness();
     state.documents.push({objectId:'1',kind:'note',title:'note',parentId:null,markdown:'![a](webmd-attachment:11111111-1111-4111-8111-111111111111)',deleted:false} as OpenDocument);
-    vi.spyOn(window,'confirm').mockReturnValue(true);
+
     await act(async()=>state.controller.exportRoot('1'));
     expect(state.notify).toHaveBeenCalledWith('transfer.exportFailed','critical');
   });
@@ -73,7 +74,7 @@ it('aborts an in-flight export download when locking and suppresses late failure
   // The hook snapshot needs a manifest in order to start the remote read.
   // Use the returned mutable attachment list so the same controller remains mounted.
   state.attachments.push({objectId:id,mime:'image/png',ownerNoteId:'1',originalName:'a.png',deleted:false} as import('../../types').OpenAttachment);
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
+
   let exporting!: Promise<void>;
   await act(async () => { exporting = state.controller.exportRoot('1'); await ready; });
   await act(async () => { await state.controller.cancel(); await exporting; });
@@ -84,11 +85,26 @@ it('aborts an in-flight export download when locking and suppresses late failure
 it('finishes local persistence before confirming export and stops on failure', async () => {
   const beforeExport = vi.fn().mockRejectedValue(new Error('local save failed'));
   const state = await harness(undefined, beforeExport);
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
   await act(async () => state.controller.exportRoot());
   expect(beforeExport).toHaveBeenCalledOnce();
-  expect(confirm).not.toHaveBeenCalled();
+  expect(state.confirm).not.toHaveBeenCalled();
   expect(state.notify).toHaveBeenCalledWith('transfer.exportFailed', 'critical');
+});
+
+it("cancels a pending export confirmation before locking drains the workspace", async () => {
+  const state = await harness();
+  const opened = Promise.withResolvers<AbortSignal>();
+  state.confirm.mockImplementationOnce((_options, signal) => new Promise((resolve) => {
+    signal!.addEventListener("abort", () => resolve(false), { once: true });
+    opened.resolve(signal!);
+  }));
+  const exporting = state.controller.exportRoot();
+  const signal = await opened.promise;
+  await act(async () => state.controller.cancel());
+  await exporting;
+  expect(signal.aborted).toBe(true);
+  expect(state.notify).not.toHaveBeenCalled();
 });
 
 vi.mock("../session/workspaceServices", async () => {

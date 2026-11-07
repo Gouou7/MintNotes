@@ -1,3 +1,6 @@
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlignLeft,
   Braces,
@@ -111,7 +114,7 @@ function PropertyRow({
       <span className="property-type-icon" title={property.kind}><AppIcon icon={Icon} size={18} /></span>
       {editable && property.kind !== "complex"
         ? <span className="property-key-editor">
-          <input
+          <Input
             value={keyDraft}
             onChange={(event) => { setKeyDraft(event.target.value); setKeyError(""); }}
             onBlur={commitKey}
@@ -135,11 +138,10 @@ function PropertyRow({
           </span>
           : property.kind === "boolean"
           ? <label className="property-checkbox">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={Boolean(property.value)}
               disabled={!editable}
-              onChange={(event) => emit(setFrontmatterProperty(markdown, property.key, event.target.checked))}
+              onCheckedChange={(checked) => emit(setFrontmatterProperty(markdown, property.key, checked))}
             />
             <span>{String(Boolean(property.value))}</span>
           </label>
@@ -147,13 +149,13 @@ function PropertyRow({
           ? <div className="property-list-editor">
             {values.map((value, index) => <span className="property-chip" key={`${value}:${index}`}>
               {value || t("properties.noValue")}
-              {editable && <button
+              {editable && <Button
                 type="button"
                 onClick={() => emit(setFrontmatterProperty(markdown, property.key, values.filter((_, itemIndex) => itemIndex !== index)))}
                 aria-label={t("properties.removeListValue", { value })}
-              ><AppIcon icon={X} size={12} /></button>}
+              ><AppIcon icon={X} size={12} /></Button>}
             </span>)}
-            {editable && <input
+            {editable && <Input
               value={listDraft}
               onChange={(event) => setListDraft(event.target.value)}
               onBlur={addListValue}
@@ -169,7 +171,7 @@ function PropertyRow({
             {!editable && !values.length && <span className="property-empty">{t("properties.noValue")}</span>}
           </div>
           : editable
-          ? <input
+          ? <Input
             className="property-scalar-input"
             type={property.kind === "date" && (property.value === null || isIsoDateValue(property.value)) ? "date" : property.kind === "number" ? "number" : "text"}
             value={valueDraft}
@@ -188,13 +190,13 @@ function PropertyRow({
             {property.value === null || property.value === "" ? t("properties.noValue") : String(property.value)}
           </span>}
       </div>
-      {editable && property.kind !== "complex" && <button
+      {editable && property.kind !== "complex" && <Button
         className="property-remove"
         type="button"
         onClick={remove}
         title={t("properties.remove")}
         aria-label={t("properties.removeNamed", { key: property.key })}
-      ><AppIcon icon={Trash2} size={15} /></button>}
+      ><AppIcon icon={Trash2} size={15} /></Button>}
     </div>
   );
 }
@@ -235,9 +237,9 @@ export function FrontmatterProperties({ markdown, editable = false, onChange }: 
           onChange={onChange}
         />)}
       </div>
-      {editable && <button className="property-add" type="button" onClick={addProperty}>
+      {editable && <Button className="property-add" type="button" onClick={addProperty}>
         <AppIcon icon={Plus} size={18} />{t("properties.add")}
-      </button>}
+      </Button>}
       {parsed.properties.some((property) => property.kind === "complex") && <small className="properties-complex-hint">
         {t("properties.complexHint")}
       </small>}

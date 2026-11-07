@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPwaUpdatePrompt, UPDATE_PROMPT_COOLDOWN_MS } from "./pwaUpdate";
+import { createPwaUpdatePrompt, UPDATE_PROMPT_COOLDOWN_MS, waitForPwaUpdateSurface } from "./pwaUpdate";
 
 function memoryStorage(): Pick<Storage, "getItem" | "setItem"> {
   const values = new Map<string, string>();
@@ -79,14 +79,51 @@ describe("PWA update prompting", () => {
 
   it("activates the waiting worker after confirmation", async () => {
     const applyUpdate = vi.fn(async () => undefined);
-    await createPwaUpdatePrompt({
+    let accept!: (confirmed: boolean) => void;
+    const confirmUpdate = vi.fn(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+    const prompt = createPwaUpdatePrompt({
       message: "update",
       applyUpdate,
-      confirmUpdate: () => true,
+      confirmUpdate,
       fingerprint: async () => "build-a",
       storage: memoryStorage()
-    })();
+    });
+    const pending = prompt();
+    await prompt();
+    expect(confirmUpdate).toHaveBeenCalledTimes(1);
+    expect(applyUpdate).not.toHaveBeenCalled();
+    accept(true);
+    await pending;
 
     expect(applyUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for an open Base UI dialog to close and skips mounted hidden sheets", async () => {
+    const visibility = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    document.body.append(dialog);
+    const controller = new AbortController();
+    const confirmUpdate = vi.fn(() => false);
+    const applyUpdate = vi.fn(async () => undefined);
+    const waitForSurface = vi.fn(() => waitForPwaUpdateSurface(controller.signal));
+    const prompt = createPwaUpdatePrompt({
+      message: "update", confirmUpdate, applyUpdate, waitForSurface,
+      fingerprint: async () => "build-a", storage: memoryStorage()
+    });
+    try {
+      const pending = prompt();
+      await prompt();
+      expect(waitForSurface).toHaveBeenCalledTimes(1);
+      expect(confirmUpdate).not.toHaveBeenCalled();
+      dialog.hidden = true;
+      await pending;
+      expect(confirmUpdate).toHaveBeenCalledTimes(1);
+      expect(applyUpdate).not.toHaveBeenCalled();
+    } finally {
+      controller.abort();
+      dialog.remove();
+      visibility.mockRestore();
+    }
   });
 });

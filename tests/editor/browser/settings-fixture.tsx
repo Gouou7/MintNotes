@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { createApiClient } from "../../../src/api";
+import { createCryptoClient } from "../../../src/crypto/client";
 import { SettingsPanelLoading } from "../../../src/features/SettingsPanelLoading";
+import { WorkspaceServicesContext } from "../../../src/features/session/workspaceServices";
 import { DEFAULT_DEVICE_WORKSPACE_PREFERENCES } from "../../../src/features/workspace";
 import { I18nProvider } from "../../../src/i18n";
 import type { HistorySettings, OpenDocument, UiPreferences } from "../../../src/types";
@@ -18,6 +21,7 @@ const trashItems: OpenDocument[] = ["folder", "note"].map((kind, index) => ({
 }));
 const noop = () => {};
 const done = async () => {};
+const services = { transport: createApiClient(), cryptoClient: createCryptoClient() };
 
 declare global { interface Window { mintSettingsFixture: { finishLoading(): void } } }
 let finishLoading = () => {};
@@ -57,4 +61,4 @@ function SettingsFixture() {
 }
 
 localStorage.setItem("webmd-notes-language", locale);
-createRoot(document.getElementById("root")!).render(<I18nProvider><SettingsFixture /></I18nProvider>);
+createRoot(document.getElementById("root")!).render(<I18nProvider><WorkspaceServicesContext.Provider value={services}><SettingsFixture /></WorkspaceServicesContext.Provider></I18nProvider>);

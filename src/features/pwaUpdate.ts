@@ -9,7 +9,8 @@ interface UpdatePromptRecord {
 interface UpdatePromptOptions {
   message: string | (() => string);
   applyUpdate: () => Promise<void>;
-  confirmUpdate?: (message: string) => boolean;
+  confirmUpdate: (message: string) => boolean | Promise<boolean>;
+  waitForSurface?: () => Promise<boolean>;
   fingerprint?: () => Promise<string | null>;
   storage?: Pick<Storage, "getItem" | "setItem"> | null;
   now?: () => number;
@@ -65,10 +66,35 @@ export async function deployedServiceWorkerFingerprint(): Promise<string | null>
   }
 }
 
+export function waitForPwaUpdateSurface(signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    const blockingSurfaces = '[role="dialog"], [role="alertdialog"], .app-shell[inert], .loading-shell, .recovery-result, .recovery-card';
+    const observer = new MutationObserver(check);
+    const finish = (ready: boolean) => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", check);
+      signal.removeEventListener("abort", abort);
+      resolve(ready);
+    };
+    const abort = () => finish(false);
+    function check() {
+      if (!document.hidden && !Array.from(document.querySelectorAll(blockingSurfaces)).some((element) => !element.closest("[hidden]"))) {
+        finish(true);
+      }
+    }
+    if (signal.aborted) return abort();
+    signal.addEventListener("abort", abort, { once: true });
+    document.addEventListener("visibilitychange", check);
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "inert"] });
+    check();
+  });
+}
+
 export function createPwaUpdatePrompt({
   message,
   applyUpdate,
-  confirmUpdate = window.confirm.bind(window),
+  confirmUpdate,
+  waitForSurface,
   fingerprint = deployedServiceWorkerFingerprint,
   storage = browserStorage(),
   now = Date.now
@@ -81,29 +107,18 @@ export function createPwaUpdatePrompt({
     handling = true;
     try {
       const currentFingerprint = await fingerprint();
-      if (currentFingerprint) {
-        const prior = storage ? readPromptRecord(storage) : null;
-        if (
-          prior?.fingerprint === currentFingerprint
-          && now() - prior.promptedAt < UPDATE_PROMPT_COOLDOWN_MS
-        ) return;
-        if (storage) {
-          writePromptRecord(storage, {
-            fingerprint: currentFingerprint,
-            promptedAt: now()
-          });
-        } else if (promptedWithoutRecord) {
-          return;
-        } else {
-          promptedWithoutRecord = true;
-        }
-      } else if (promptedWithoutRecord) {
-        return;
+      const prior = currentFingerprint && storage ? readPromptRecord(storage) : null;
+      if (prior && prior.fingerprint === currentFingerprint && now() - prior.promptedAt < UPDATE_PROMPT_COOLDOWN_MS) return;
+      if ((!currentFingerprint || !storage) && promptedWithoutRecord) return;
+      if (waitForSurface && !await waitForSurface()) return;
+
+      if (currentFingerprint && storage) {
+        writePromptRecord(storage, { fingerprint: currentFingerprint, promptedAt: now() });
       } else {
         promptedWithoutRecord = true;
       }
 
-      if (confirmUpdate(typeof message === "function" ? message() : message)) await applyUpdate();
+      if (await confirmUpdate(typeof message === "function" ? message() : message)) await applyUpdate();
     } finally {
       handling = false;
     }

@@ -27,8 +27,8 @@ test("protected history follows a note through trash, restore and permanent clea
   await source.fill("# Lifecycle\n\nKeep this encrypted content.\n");
   await source.press("Tab");
   const openHistory = async () => {
-    if (!await page.getByRole("button", { name: "History", exact: true }).isVisible()) await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
-    await page.getByRole("button", { name: "History", exact: true }).click();
+    if (!await page.getByRole("tab", { name: "History", exact: true }).isVisible()) await page.getByRole("button", { name: "Open right sidebar", exact: true }).click();
+    await page.getByRole("tab", { name: "History", exact: true }).click();
   };
   await openHistory();
   await page.getByRole("button", { name: "Create snapshot", exact: true }).click();
@@ -44,7 +44,7 @@ test("protected history follows a note through trash, restore and permanent clea
     await page.getByRole("button", { name: "Open menu for Lifecycle sample", exact: true }).click();
     const deletionAccepted = page.waitForResponse(response => response.url().endsWith("/api/objects/batch")
       && response.request().method() === "POST" && response.request().postDataJSON()?.objects?.some(object => object.deleted));
-    await page.getByRole("button", { name: "Move to trash", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Move to trash", exact: true }).click();
     const result = await (await deletionAccepted).json();
     expect(result.results.every(object => ["accepted", "idempotent"].includes(object.status))).toBe(true);
     await expect(page.locator(".status-synced")).toBeVisible();
@@ -52,7 +52,7 @@ test("protected history follows a note through trash, restore and permanent clea
   const openTrash = async () => {
     await sidebar();
     await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("button", { name: "Notes and storage", exact: true }).click();
+    await page.getByRole("tab", { name: "Notes and storage", exact: true }).click();
     await expect(page.locator(".note-storage-settings .storage-pending-item strong")).toHaveText(["0", "0", "0"]);
   };
   await trashNote(); await openTrash();
@@ -64,7 +64,7 @@ test("protected history follows a note through trash, restore and permanent clea
   await page.locator(".history-budget select").press("Tab");
   expect((await (await budgetSaved).json()).quotaBytes).toBeNull();
   if (info.project.name === "desktop") {
-    await page.getByRole("button", { name: "Administrator settings", exact: true }).click();
+    await page.getByRole("tab", { name: "Administrator settings", exact: true }).click();
     await expect(page.locator(".database-storage")).toContainText("Database available");
     await page.getByRole("button", { name: "Edit quota", exact: true }).first().click();
     await page.locator(".quota-dialog select").selectOption("custom");
@@ -72,7 +72,7 @@ test("protected history follows a note through trash, restore and permanent clea
     const quotaSaved = page.waitForResponse((response) => response.url().endsWith("/storage-quota") && response.request().method() === "PATCH");
     await page.locator(".quota-dialog").getByRole("button", { name: "Save quota", exact: true }).click();
     expect((await (await quotaSaved).json()).quotaBytes).toBe(1048576);
-    await page.getByRole("button", { name: "Notes and storage", exact: true }).click();
+    await page.getByRole("tab", { name: "Notes and storage", exact: true }).click();
   }
   await expect(page.locator(".settings-page-title")).toHaveText("Notes and storage");
   await expect(page.locator(".note-storage-settings > .settings-group > .settings-card")).toHaveCount(4);
@@ -98,8 +98,10 @@ test("protected history follows a note through trash, restore and permanent clea
   await expect(page.locator(".history-row .history-protection")).not.toHaveCount(0);
   if (info.project.name === "narrow") await page.getByRole("button", { name: "Close right sidebar", exact: true }).click();
   await trashNote(); await openTrash();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Clear trash", exact: true }).click();
+  const confirmation = page.getByRole("alertdialog", { name: "Clear trash", exact: true });
+  await expect(confirmation.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await confirmation.getByRole("button", { name: "Clear trash", exact: true }).click();
   await expect(page.locator(".trash-row")).toHaveCount(0);
   await page.getByRole("button", { name: "Close settings", exact: true }).click();
   await sidebar();

@@ -1,8 +1,13 @@
+import { ToastProvider } from "../../components/ui/toast";
+import { Spinner } from "../../components/ui/spinner";
+import { WorkspaceDrawer } from "./WorkspaceDrawer";
+import { useMediaQuery } from "../useMediaQuery";
+import { Button } from "@/components/ui/button";
+import { Confirmation, useConfirmation } from "../../components/Confirmation";
 import { useWorkspaceServices } from "../session/workspaceServices";
 import { useStorageStatus } from "../storage/useStorageStatus";
 import {
   Copy,
-  Ellipsis,
   History as HistoryIcon,
   Pin,
   RotateCcw,
@@ -63,7 +68,7 @@ import { useVaultTree } from "./useVaultTree";
 import { useWorkspaceEditorMode } from "./useWorkspaceEditorMode";
 import { useMobileDrawerGestures, useWorkspaceAutoLock } from "./useWorkspaceInteractions";
 import { useWorkspaceSelection } from "./useWorkspaceSelection";
-import { ContextMenu, draggedDocumentIds, TreeLevel, TreeNoteLock } from "./VaultTree";
+import { draggedDocumentIds, TreeLevel, TreeNoteLock, TreeRowMenu, type TreeMenuActions } from "./VaultTree";
 import { WorkspacePanelHeader, WorkspaceSidebar } from "./WorkspaceChrome";
 import { WorkspaceOutline } from "./WorkspaceOutline";
 
@@ -74,7 +79,11 @@ const TREE_WIDTH_MAX = 420;
 const OUTLINE_WIDTH_MIN = 200;
 const OUTLINE_WIDTH_MAX = 420;
 
-export function VaultWorkspace({
+export function VaultWorkspace(props: VaultAppProps) {
+  return <ToastProvider limit={Infinity}><Workspace {...props} /></ToastProvider>;
+}
+
+function Workspace({
   user,
   endpoint,
   credential,
@@ -85,9 +94,21 @@ export function VaultWorkspace({
   onLock,
   onLogout,
   renderAccountSwitcher,
+  visible = true,
   registerClose
 }: VaultAppProps) {
   const services = useWorkspaceServices();
+  const confirmation = useConfirmation();
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const requestConfirmation: typeof confirmation.request = (options, signal) =>
+    visibleRef.current ? confirmation.request(options, signal) : Promise.resolve(false);
+  const shell = useRef<HTMLDivElement>(null);
+  const compactTree = useMediaQuery("(max-width: 720px)");
+  const compactRight = useMediaQuery("(max-width: 1100px)");
+  useEffect(() => {
+    if (!visible) confirmation.cancel();
+  }, [visible, confirmation.cancel]);
   const { formatDateTime, languagePreference, setLanguagePreference, t } = useI18n();
 
   const [displayName, setDisplayName] = useState(user.displayName);
@@ -150,7 +171,7 @@ export function VaultWorkspace({
     markLocalSuccess
   } = useSyncStatus(serverSessionVerified);
 
-  const { notices, showMessage, dismissMessage } = useToastNotifications();
+  const { showMessage } = useToastNotifications();
 
   useEffect(() => {
     serverSessionVerifiedRef.current = serverSessionVerified;
@@ -389,6 +410,8 @@ export function VaultWorkspace({
     restoreHistoryAsCurrent,
     restoreHistoryAsCopy
   } = useVaultHistoryActions({
+    confirm: requestConfirmation,
+    sessionVerified: () => visibleRef.current && !logoutStarted.current && serverSessionVerifiedRef.current,
     model,
     selection,
     history,
@@ -409,6 +432,7 @@ export function VaultWorkspace({
   });
 
   const { purging, setDeletedMany, requestPurgeDocuments, requestClearTrash } = useVaultTrash({
+    confirm: requestConfirmation,
     model,
     selection,
     showMessage,
@@ -517,8 +541,6 @@ export function VaultWorkspace({
     setTreeDropTarget,
     renamingDocumentId,
     setRenamingDocumentId,
-    contextMenu,
-    setContextMenu,
     documentTree,
     selectDocument,
     selectPinnedEntry,
@@ -531,6 +553,7 @@ export function VaultWorkspace({
   } = tree;
 
   const importExport = useImportExport({
+    confirm: requestConfirmation,
     userId: user.id, getDocuments: () => documentsRef.current, getAttachments: () => attachmentsRef.current,
     reservations: nameReservations.current, isActive: () => !logoutStarted.current,
     beforeExport: async () => { if (selection.activeIdRef.current) { if (documentIndexRef.current.get(selection.activeIdRef.current)?.title !== titleDraft && !await commitDocumentTitle(selection.activeIdRef.current, titleDraft)) throw new Error("Export title is not saved"); await flushDocument(selection.activeIdRef.current); } await documentSaveQueue.flushAll(); await objectPersistence.drainAll(); },
@@ -552,6 +575,7 @@ export function VaultWorkspace({
   });
 
   const closingWorkspace = useWorkspaceClose({
+    cancelConfirmation: confirmation.cancel,
     logoutStarted, importExport, finishHistorySession, documentSaveQueue, objectPersistence,
     showMessage, t, stopSync, registerClose
   });
@@ -559,12 +583,6 @@ export function VaultWorkspace({
     minutes: credential?.autoLockMinutes, userId: user.id, endpointId: endpoint.id, onLock
   });
 
-  useEffect(() => {
-    const close = () => setContextMenu(null);
-    window.addEventListener("pointerdown", close);
-    window.addEventListener("blur", close);
-    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("blur", close); };
-  }, []);
 
   useMobileDrawerGestures({ treeOpen, outlineOpen, settingsOpen, setTreeOpen, setOutlineOpen });
 
@@ -573,15 +591,16 @@ export function VaultWorkspace({
     setOutlineOpen(false);
   };
 
-  if (loading) return <main className="loading-shell"><div className="spinner" /><p>{t("app.loadingNotes")}</p></main>;
+  if (loading) return <main className="loading-shell"><Spinner className="spinner" aria-hidden="true" /><p>{t("app.loadingNotes")}</p></main>;
 
   if (loadFailure) return <main className="loading-shell" role="alert"><p>{loadFailure}</p></main>;
 
-  const contextDocument = contextMenu ? documentIndexRef.current.get(contextMenu.objectId) ?? null : null;
-
-  const contextDocuments = contextDocument
-    ? documents.filter((entry) => selectedIds.has(contextDocument.objectId) ? selectedIds.has(entry.objectId) : entry.objectId === contextDocument.objectId)
-    : [];
+  const menuActions: TreeMenuActions = {
+    selection: (entry) => selectedIds.has(entry.objectId) ? documents.filter((document) => selectedIds.has(document.objectId)) : [entry],
+    documents, onSelect: selectDocument, onRename: renameDocument, onToggleLock: toggleNoteLock,
+    onCreate: createNewDocument, onDuplicate: duplicateDocuments, onExport: exportDocuments, onPin: pinDocuments,
+    onDelete: (ids) => setDeletedMany(ids, true), onRestore: (ids) => setDeletedMany(ids, false), onPurge: requestPurgeDocuments
+  };
 
   const layoutStyle = {
     "--tree-width": `${preferences.treeWidth}px`,
@@ -595,8 +614,26 @@ export function VaultWorkspace({
 
   const statusDetail = syncStatusDetailText(syncStatus, t);
 
+  const inTreeDrawer = compactTree && treeOpen;
+  const inRightDrawer = compactRight && outlineOpen;
+  const confirmDialog = visible && <Confirmation current={confirmation.current} />;
+  const settingsDialog = settingsOpen && visible && !closingWorkspace && (
+    <Suspense fallback={<SettingsPanelLoading onClose={() => setSettingsOpen(false)} />}>
+      <SettingsPanel confirmationDialog={confirmDialog} storageStatus={storageStatus} user={{ ...user, displayName }}
+        endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange}
+        preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={onLogout}
+        onImport={handleImport} onExport={() => exportRoot(null)}
+        onDisplayName={(name) => { setDisplayName(name); onDisplayNameChange(name); }} onUsername={onUsernameChange}
+        avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging}
+        onRestoreTrash={(id) => setDeletedMany([id], false)} onPurgeTrash={(id) => requestPurgeDocuments([id])} onClearTrash={requestClearTrash}
+        historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings}
+        onClearHistory={clearAllHistory} onNotify={showMessage} />
+    </Suspense>
+  );
+
   return (
-    <div inert={closingWorkspace} className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${settingsOpen ? "settings-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
+    <div ref={shell} inert={closingWorkspace} className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${settingsOpen ? "settings-open" : ""} ${preferences.treeCollapsed ? "tree-collapsed" : ""} ${preferences.outlineCollapsed ? "outline-collapsed" : ""}`} style={layoutStyle}>
+      <WorkspaceDrawer compact={compactTree} open={visible && !closingWorkspace && treeOpen} side="left" title={t("app.openLeft")} container={shell} onClose={() => setTreeOpen(false)}>
       <WorkspaceSidebar
         searchInput={searchInput}
         search={search}
@@ -617,17 +654,19 @@ export function VaultWorkspace({
         onSettings={() => setSettingsOpen(true)}
         pinned={pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>
           <div className="tree-section-label"><AppIcon icon={Pin} size={8} />{t("app.pinned")}</div>
-          {pinned.map((entry) => <div className={`tree-row pinned-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""}`} key={`pinned-${entry.objectId}`} role="treeitem" aria-selected={selectedIds.has(entry.objectId)} onContextMenu={(event) => { event.preventDefault(); openTreeContext(entry, event.clientX, event.clientY); }}>
-            <button className="tree-main" onClick={(event) => selectPinnedEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><span className="tree-title">{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}<TreeNoteLock document={entry} /></button>
-            <button className="tree-more" onClick={(event) => { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); openTreeContext(entry, rect.right, rect.bottom); }} aria-label={t("app.openMenu", { title: entry.title })}><AppIcon icon={Ellipsis} size={16} /></button>
-          </div>)}
+          {pinned.map((entry) => <TreeRowMenu key={`pinned-${entry.objectId}`} document={entry} actions={menuActions} onOpen={() => openTreeContext(entry)} row={(more) => <div className={`tree-row pinned-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""}`} role="treeitem" aria-selected={selectedIds.has(entry.objectId)}>
+            <Button className="tree-main" onClick={(event) => selectPinnedEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><span className="tree-title">{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}<TreeNoteLock document={entry} /></Button>
+            {more}
+          </div>} />)}
         </div>}
       >
         <div ref={documentTree} className="document-tree" role="tree" aria-multiselectable="true" onClick={(event) => { if (event.target === event.currentTarget) { setSelectedIds(new Set()); selectionAnchor.current = null; } }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTreeDropTarget(null); }} onDrop={(event) => { setTreeDropTarget(null); setTreeDraggingIds(new Set()); const ids = draggedDocumentIds(event.dataTransfer); if (ids.length) void moveDocuments(ids, null); }}>
-          <TreeLevel childrenByParent={treeChildren} parentId={null} activeId={activeId} selectedIds={selectedIds} expanded={expanded} draggingIds={treeDraggingIds} dropTarget={treeDropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={updateTreeDropTarget} onSelect={selectTreeEntry} onContext={openTreeContext} onDragSelection={beginTreeDrag} onDragFinish={() => setTreeDraggingIds(new Set())} onMove={moveDocuments} onRenameCommit={commitTreeRename} onRenameCancel={() => setRenamingDocumentId(null)} />
+          <TreeLevel menuActions={menuActions} childrenByParent={treeChildren} parentId={null} activeId={activeId} selectedIds={selectedIds} expanded={expanded} draggingIds={treeDraggingIds} dropTarget={treeDropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={updateTreeDropTarget} onSelect={selectTreeEntry} onContext={openTreeContext} onDragSelection={beginTreeDrag} onDragFinish={() => setTreeDraggingIds(new Set())} onMove={moveDocuments} onRenameCommit={commitTreeRename} onRenameCancel={() => setRenamingDocumentId(null)} />
           {!searched.length && <p className="empty-tree">{t("app.noMatches")}</p>}
         </div>
       </WorkspaceSidebar>
+      {inTreeDrawer && (settingsDialog || confirmDialog)}
+      </WorkspaceDrawer>
 
       <PaneResizer label={t("app.resizeLeft")} side="left" value={preferences.treeWidth} min={TREE_WIDTH_MIN} max={TREE_WIDTH_MAX} onResize={(treeWidth) => setPreferences((current) => ({ ...current, treeWidth }))} />
 
@@ -643,7 +682,7 @@ export function VaultWorkspace({
           historyPreview={Boolean(historyPreview)}
           sourceMode={editorMode.sourceMode}
           readOnly={editorMode.readOnly}
-          onOpenLeft={() => preferences.treeCollapsed ? setPreferences({ ...preferences, treeCollapsed: false }) : setTreeOpen(true)}
+          onOpenLeft={() => compactTree ? setTreeOpen(true) : setPreferences({ ...preferences, treeCollapsed: false })}
           onTitleChange={(event) => setTitleDraft(event.target.value)}
           onTitleBlur={(event) => {
             if (historyPreview || editorMode.readOnly) return;
@@ -658,7 +697,7 @@ export function VaultWorkspace({
           onToggleReadOnly={editorMode.toggleReadOnly}
           onToggleLock={() => void toggleActiveNoteLock()}
           onAddImage={() => attachmentInput.current?.click()}
-          onOpenRight={() => preferences.outlineCollapsed ? setPreferences({ ...preferences, outlineCollapsed: false }) : setOutlineOpen(true)}
+          onOpenRight={() => compactRight ? setOutlineOpen(true) : setPreferences({ ...preferences, outlineCollapsed: false })}
         />
         <input ref={attachmentInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => {
             const file = event.target.files?.[0];
@@ -673,10 +712,10 @@ export function VaultWorkspace({
         historyBanner={historyPreview && <div className="history-preview-banner">
           <span><AppIcon icon={HistoryIcon} size={16} /><strong>{t("history.preview")}</strong><small>{formatNoteTime(historyPreview.item.capturedAt)}</small></span>
           <div>
-            <button onClick={() => setHistoryPreview(null)}>{t("history.exitPreview")}</button>
-            <button onClick={() => void restoreHistoryAsCopy()}><AppIcon icon={Copy} size={14} />{t("history.restoreCopy")}</button>
-            <button className="primary" disabled={activeDocumentLocked} onClick={() => void restoreHistoryAsCurrent()} title={activeDocumentLocked ? t("app.unlockToEdit") : undefined}><AppIcon icon={RotateCcw} size={14} />{t("history.restoreCurrent")}</button>
-            <button className="danger" disabled={!canDeleteHistory(historyPreview.item)} onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={historyPreview.item.protected ? t("history.protectedDeleteHint") : t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} size={14} /></button>
+            <Button onClick={() => setHistoryPreview(null)}>{t("history.exitPreview")}</Button>
+            <Button onClick={() => void restoreHistoryAsCopy()}><AppIcon icon={Copy} size={14} />{t("history.restoreCopy")}</Button>
+            <Button className="primary" disabled={activeDocumentLocked} onClick={() => void restoreHistoryAsCurrent()} title={activeDocumentLocked ? t("app.unlockToEdit") : undefined}><AppIcon icon={RotateCcw} size={14} />{t("history.restoreCurrent")}</Button>
+            <Button className="danger" disabled={!canDeleteHistory(historyPreview.item)} onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={historyPreview.item.protected ? t("history.protectedDeleteHint") : t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} size={14} /></Button>
           </div>
         </div>}
         status={<footer className="status-bar">
@@ -695,14 +734,14 @@ export function VaultWorkspace({
 
       <PaneResizer label={t("app.resizeRight")} side="right" value={preferences.outlineWidth} min={OUTLINE_WIDTH_MIN} max={OUTLINE_WIDTH_MAX} onResize={(outlineWidth) => setPreferences((current) => ({ ...current, outlineWidth }))} />
 
+      <WorkspaceDrawer compact={compactRight} open={visible && !closingWorkspace && outlineOpen} side="right" title={t("app.rightPanel")} container={shell} onClose={() => setOutlineOpen(false)}>
       <aside className="outline-pane">
         <WorkspacePanelHeader
           tab={preferences.rightPanelTab}
           onTabChange={rightPanelTab => setPreferences({ ...preferences, rightPanelTab })}
           onCollapse={() => setPreferences({ ...preferences, outlineCollapsed: true })}
           onClose={() => setOutlineOpen(false)}
-        />
-        <section className="right-panel-content" aria-label={preferences.rightPanelTab === "outline" ? t("app.noteOutline") : t("history.list")}>
+        >
           {preferences.rightPanelTab === "outline"
             ? <WorkspaceOutline key={historyPreview?.item.historyId ?? activeDocument?.objectId ?? ""} items={outline} editorArea={documentNavigation.editorArea}
                 mode={historyPreview ? "reading" : effectiveMode} collapsed={preferences.outlineCollapsed} open={outlineOpen} onSelect={jumpToHeading} />
@@ -723,14 +762,15 @@ export function VaultWorkspace({
                 onClear={() => void clearCurrentHistory()}
                 onLoadMore={() => activeDocument && void loadHistory(activeDocument.objectId, historyCursor, true)}
               />}
-        </section>
+        </WorkspacePanelHeader>
       </aside>
+      {inRightDrawer && !settingsOpen && confirmDialog}
+      </WorkspaceDrawer>
 
-      {(treeOpen || outlineOpen) && <button className="drawer-scrim" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} aria-label={t("app.closeSidebars")} />}
-      {importExport.result && <ImportResultPanel result={importExport.result} onClose={importExport.dismiss} />}
-      {contextMenu && contextDocument && <ContextMenu document={contextDocument} selection={contextDocuments} documents={documents} position={contextMenu} onClose={() => setContextMenu(null)} onSelect={selectDocument} onRename={renameDocument} onToggleLock={toggleNoteLock} onCreate={createNewDocument} onDuplicate={duplicateDocuments} onExport={exportDocuments} onPin={pinDocuments} onDelete={(ids) => setDeletedMany(ids, true)} onRestore={(ids) => setDeletedMany(ids, false)} onPurge={requestPurgeDocuments} />}
-      {settingsOpen && <Suspense fallback={<SettingsPanelLoading onClose={() => setSettingsOpen(false)} />}><SettingsPanel storageStatus={storageStatus} user={{ ...user, displayName }} endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange} preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={onLogout} onImport={handleImport} onExport={() => exportRoot(null)} onDisplayName={(nextDisplayName) => { setDisplayName(nextDisplayName); onDisplayNameChange(nextDisplayName); }} onUsername={onUsernameChange} avatarUrl={avatarUrl} onAvatarChange={updateAvatarUrl} trashItems={trashItems} purging={purging} onRestoreTrash={(objectId) => setDeletedMany([objectId], false)} onPurgeTrash={(objectId) => requestPurgeDocuments([objectId])} onClearTrash={requestClearTrash} historySettings={historySettings} onHistorySettings={applyHistorySettings} onRefreshHistorySettings={refreshHistorySettings} onClearHistory={clearAllHistory} onNotify={showMessage} /></Suspense>}
-      <ToastStack notices={notices} onDismiss={dismissMessage} />
+      {visible && importExport.result && <ImportResultPanel result={importExport.result} onClose={importExport.dismiss} />}
+      {!settingsOpen && !inTreeDrawer && !inRightDrawer && confirmDialog}
+      {!inTreeDrawer && settingsDialog}
+      {visible && <ToastStack />}
     </div>
   );
 }

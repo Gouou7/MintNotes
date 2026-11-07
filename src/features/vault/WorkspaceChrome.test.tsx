@@ -45,7 +45,7 @@ describe("workspace chrome", () => {
     const onTabChange = vi.fn(), onCollapse = vi.fn(), onClose = vi.fn();
     await act(async () => root.render(<I18nProvider><WorkspacePanelHeader tab="outline" onTabChange={onTabChange} onCollapse={onCollapse} onClose={onClose} /></I18nProvider>));
     const tabs = container.querySelectorAll<HTMLButtonElement>(".right-panel-tabs button");
-    expect(tabs[0].getAttribute("aria-current")).toBe("page");
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect([...tabs].every(button => Boolean(button.getAttribute("aria-label")))).toBe(true);
     act(() => tabs[1].click());
     expect(onTabChange).toHaveBeenCalledWith("history");

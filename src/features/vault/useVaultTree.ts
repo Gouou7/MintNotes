@@ -58,7 +58,6 @@ export function useVaultTree(options: Options) {
 
   const [renamingDocumentId, setRenamingDocumentId] = useState<string | null>(null);
 
-  const [contextMenu, setContextMenu] = useState<{ objectId: string; x: number; y: number } | null>(null);
 
   const documentTree = useRef<HTMLDivElement>(null);
 
@@ -182,12 +181,11 @@ export function useVaultTree(options: Options) {
     }
   };
 
-  const openTreeContext = (entry: OpenDocument, x: number, y: number) => {
+  const openTreeContext = (entry: OpenDocument) => {
     if (!selectedIds.has(entry.objectId)) {
       setSelectedIds(new Set([entry.objectId]));
       selectionAnchor.current = entry.objectId;
     }
-    setContextMenu({ objectId: entry.objectId, x, y });
   };
 
   const beginTreeDrag = (entry: OpenDocument): string[] => {
@@ -238,8 +236,6 @@ export function useVaultTree(options: Options) {
     setTreeDropTarget,
     renamingDocumentId,
     setRenamingDocumentId,
-    contextMenu,
-    setContextMenu,
     documentTree,
     beginTreeRename,
     selectDocument,

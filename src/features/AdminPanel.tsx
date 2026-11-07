@@ -1,3 +1,9 @@
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
+import { Badge } from "@/components/ui/badge";
+import { AppDialog } from "../components/AppDialog";
+import { Confirmation, useConfirmation } from "../components/Confirmation";
+import { Input } from "@/components/ui/input";
 import { useWorkspaceServices } from "./session/workspaceServices";
 import { SettingsSection } from "../components/SettingsSection";
 import { SettingsItem } from "../components/SettingsItem";
@@ -6,7 +12,7 @@ import { AdminQuotaEditor, type StorageQuotaUser } from "./storage/AdminQuotaEdi
 import { QuotaFields, quotaDraft, quotaPayload } from "./storage/QuotaFields";
 import { formatHistoryBytes } from "./history";
 import { capacityLevel } from "../storage/storageStatus";
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Copy, HardDrive, KeyRound, Trash2, UserRound, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
@@ -34,6 +40,7 @@ interface AccountSetup {
 export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNotify: (text: string, tone: ToastTone) => void }) {
   const { transport: { api }, cryptoClient } = useWorkspaceServices();
   const { formatDateTime, t } = useI18n();
+  const confirmation = useConfirmation();
   const createFormId = useId();
   const [defaultQuotaBytes, setDefaultQuotaBytes] = useState(2 * 1024 * 1024 * 1024);
   const [newQuota, setNewQuota] = useState(() => quotaDraft("inherit", null));
@@ -76,8 +83,16 @@ export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNot
     finally { setBusy(false); }
   };
 
+  const currentSetups = useRef({ setups, busy });
+  currentSetups.current = { setups, busy };
   const cancel = async (setup: AccountSetup) => {
-    if (!window.confirm(t("admin.cancelActivationConfirm", { username: setup.username }))) return;
+    if (!await confirmation.request({
+      title: t("admin.pending"),
+      message: t("admin.cancelActivationConfirm", { username: setup.username }),
+      action: t("common.remove"),
+      destructive: true
+    })) return;
+    if (currentSetups.current.busy || !currentSetups.current.setups.some((entry) => entry.id === setup.id)) return;
     setBusy(true);
     try {
       await api(`/api/admin/account-setups/${setup.id}`, { method: "DELETE" });
@@ -111,21 +126,22 @@ export function AdminPanel({ currentUser, onNotify }: { currentUser: User; onNot
   return <div className="settings-page admin-panel">
     <SettingsSection title={t("admin.userManagement")} className="admin-user-management">
       <div className="admin-subsection">
-        <SettingsItem title={t("admin.createPending")} description={t("admin.createPendingHelp")}><SettingsButton icon={KeyRound} type="submit" form={createFormId} className="primary compact" disabled={busy}>{t("admin.createCode")}</SettingsButton></SettingsItem>
+        <SettingsItem title={t("admin.createPending")} description={t("admin.createPendingHelp")}><SettingsButton icon={KeyRound} type="submit" form={createFormId} variant="default" className="primary compact" disabled={busy}>{t("admin.createCode")}</SettingsButton></SettingsItem>
         <form id={createFormId} className="admin-create" onSubmit={create}>
-          <SettingsItem title={t("auth.username")}>{(control) => <input {...control} value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" required />}</SettingsItem>
-          <SettingsItem title={t("auth.displayName")}>{(control) => <input {...control} value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />}</SettingsItem>
+          <SettingsItem title={t("auth.username")}>{(control) => <Input {...control} value={username} onChange={(event) => setUsername(event.target.value)} pattern="[a-z0-9][a-z0-9._-]{2,47}" required />}</SettingsItem>
+          <SettingsItem title={t("auth.displayName")}>{(control) => <Input {...control} value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />}</SettingsItem>
           <QuotaFields label={t("storage.totalQuota")} defaultBytes={defaultQuotaBytes} value={newQuota} onChange={setNewQuota} disabled={busy} />
         </form>
         {activation && <div className="activation-result"><strong>{t("admin.codeShownOnce")}</strong><code>{activation}</code><SettingsButton icon={Copy} onClick={() => navigator.clipboard.writeText(activation)}>{t("common.copy")}</SettingsButton></div>}
-        {!!setups.length && <><h4>{t("admin.pending")}</h4><div className="user-list settings-list">{setups.map((entry) => <div className="user-row settings-list-row" key={entry.id}><span className="settings-list-icon"><AppIcon icon={UserRound} size={20} /></span><span className="settings-list-details"><strong>{entry.displayName}</strong><small>@{entry.username} · {t("admin.expires", { date: formatDateTime(entry.expiresAt) })}</small></span><div className="settings-list-actions"><SettingsButton icon={X} disabled={busy} onClick={() => void cancel(entry)}>{t("common.cancel")}</SettingsButton></div></div>)}</div></>}
+        {!!setups.length && <><h4>{t("admin.pending")}</h4><div className="user-list settings-list">{setups.map((entry) => <Item className="user-row settings-list-row" key={entry.id}><ItemMedia className="settings-list-icon"><AppIcon icon={UserRound} size={20} /></ItemMedia><ItemContent className="settings-list-details"><strong>{entry.displayName}</strong><small>@{entry.username} · {t("admin.expires", { date: formatDateTime(entry.expiresAt) })}</small></ItemContent><div className="settings-list-actions"><SettingsButton icon={X} disabled={busy} onClick={() => void cancel(entry)}>{t("common.cancel")}</SettingsButton></div></Item>)}</div></>}
       </div>
       <div className="admin-subsection">
-        <h4>{t("admin.existingUsers")}</h4><div className="user-list settings-list">{users.map((entry) => <div className="user-row settings-list-row" key={entry.id}><span className="settings-list-icon"><AppIcon icon={UserRound} size={20} /></span><span className="settings-list-details"><strong>{entry.displayName}{entry.id === currentUser.id && <em>{t("admin.currentAccount")}</em>}</strong><small>@{entry.username} · {entry.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")}</small><small className="user-storage">{formatHistoryBytes(entry.totalBytes ?? entry.encryptedBytes)} / {entry.quotaBytes === null ? t("storage.unlimited") : formatHistoryBytes(entry.quotaBytes ?? defaultQuotaBytes)} · {t(`storage.level.${capacityLevel(entry.totalBytes ?? entry.encryptedBytes, entry.quotaBytes ?? (entry.quotaMode === "unlimited" ? null : defaultQuotaBytes))}`)}</small></span><div className="user-actions settings-list-actions"><SettingsButton icon={HardDrive} disabled={busy} onClick={() => setQuotaTarget(entry)}>{t("storage.editQuota")}</SettingsButton><SettingsButton icon={entry.disabled ? UserRoundCheck : UserRoundX} disabled={busy || entry.id === currentUser.id} onClick={() => void toggle(entry)}>{entry.disabled ? t("admin.enable") : t("admin.disable")}</SettingsButton>{entry.id !== currentUser.id && <SettingsButton icon={Trash2} className="danger" disabled={busy} onClick={() => beginDelete(entry)}>{t("admin.delete")}</SettingsButton>}</div></div>)}</div>
+        <h4>{t("admin.existingUsers")}</h4><div className="user-list settings-list">{users.map((entry) => <Item className="user-row settings-list-row" key={entry.id}><ItemMedia className="settings-list-icon"><AppIcon icon={UserRound} size={20} /></ItemMedia><ItemContent className="settings-list-details"><strong>{entry.displayName}{entry.id === currentUser.id && <Badge variant="outline" render={<em />}>{t("admin.currentAccount")}</Badge>}</strong><small>@{entry.username} · {entry.role === "admin" ? t("admin.roleAdmin") : t("admin.roleUser")}</small><small className="user-storage">{formatHistoryBytes(entry.totalBytes ?? entry.encryptedBytes)} / {entry.quotaBytes === null ? t("storage.unlimited") : formatHistoryBytes(entry.quotaBytes ?? defaultQuotaBytes)} · {t(`storage.level.${capacityLevel(entry.totalBytes ?? entry.encryptedBytes, entry.quotaBytes ?? (entry.quotaMode === "unlimited" ? null : defaultQuotaBytes))}`)}</small></ItemContent><div className="user-actions settings-list-actions"><SettingsButton icon={HardDrive} disabled={busy} onClick={() => setQuotaTarget(entry)}>{t("storage.editQuota")}</SettingsButton><SettingsButton icon={entry.disabled ? UserRoundCheck : UserRoundX} disabled={busy || entry.id === currentUser.id} onClick={() => void toggle(entry)}>{entry.disabled ? t("admin.enable") : t("admin.disable")}</SettingsButton>{entry.id !== currentUser.id && <SettingsButton icon={Trash2} variant="destructive" className="danger" disabled={busy} onClick={() => beginDelete(entry)}>{t("admin.delete")}</SettingsButton>}</div></Item>)}</div>
       </div>
     </SettingsSection>
     <DatabaseStorageSection />
     {quotaTarget && <AdminQuotaEditor user={quotaTarget} defaultBytes={defaultQuotaBytes} onSaved={load} onClose={() => setQuotaTarget(null)} onNotify={onNotify} />}
-    {deleteTarget && <div className="danger-confirm" role="dialog" aria-modal="true" aria-label={t("admin.deleteUser")}><header><h3>{t("admin.deleteUserTitle", { username: deleteTarget.username })}</h3><button type="button" onClick={() => setDeleteTarget(null)} aria-label={t("common.close")}><AppIcon icon={X} /></button></header><p>{t("admin.deleteWarning")}</p><form onSubmit={deleteUser}><label>{t("admin.confirmUsername")}<input value={confirmationUsername} onChange={(event) => setConfirmationUsername(event.target.value)} placeholder={deleteTarget.username} required /></label><label>{t("admin.yourPassword")}<input type="password" autoComplete="current-password" value={administratorPassword} onChange={(event) => setAdministratorPassword(event.target.value)} required /></label><div className="settings-actions"><SettingsButton icon={X} type="button" onClick={() => setDeleteTarget(null)}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Trash2} className="danger" disabled={busy || confirmationUsername !== deleteTarget.username}>{t("admin.deleteUser")}</SettingsButton></div></form></div>}
+    {deleteTarget && <AppDialog className="danger-confirm" title={t("admin.deleteUserTitle", { username: deleteTarget.username })} onClose={() => setDeleteTarget(null)} dismissible={!busy}><p>{t("admin.deleteWarning")}</p><form onSubmit={deleteUser}><Field><FieldLabel>{t("admin.confirmUsername")}<Input value={confirmationUsername} onChange={(event) => setConfirmationUsername(event.target.value)} placeholder={deleteTarget.username} required /></FieldLabel></Field><Field><FieldLabel>{t("admin.yourPassword")}<Input type="password" autoComplete="current-password" value={administratorPassword} onChange={(event) => setAdministratorPassword(event.target.value)} required /></FieldLabel></Field><div className="settings-actions"><SettingsButton icon={X} type="button" onClick={() => setDeleteTarget(null)}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Trash2} type="submit" variant="destructive" className="danger" disabled={busy || confirmationUsername !== deleteTarget.username}>{t("admin.deleteUser")}</SettingsButton></div></form></AppDialog>}
+    <Confirmation current={confirmation.current} />
   </div>;
 }

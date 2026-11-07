@@ -20,7 +20,7 @@ async function pending(objectId: string, ownerNoteId?: string) {
 }
 async function harness(run: (controller: ReturnType<typeof useVaultTrash>, options: any) => Promise<void>) {
   const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
-  const options: any = { model: { documentsRef: { current: [target] }, attachmentsRef: { current: [] } }, selection: {},
+  const options: any = { confirm: vi.fn().mockResolvedValue(true), model: { documentsRef: { current: [target] }, attachmentsRef: { current: [] } }, selection: {},
     showMessage: vi.fn(), t: (key: string) => key, nameReservations: { current: {} }, persistObject: vi.fn(), setEditorSessionId: vi.fn(), requestPush: vi.fn(),
     serverSessionVerified: true, documentSaveQueue: { hasPending: () => false, flushAll: vi.fn() },
     objectPersistence: { drainAll: vi.fn(), coordinate: (_id: string, operation: () => Promise<void>) => operation() },
@@ -31,6 +31,19 @@ async function harness(run: (controller: ReturnType<typeof useVaultTrash>, optio
   finally { await act(async () => root.unmount()); host.remove(); }
 }
 describe("scoped permanent clearing", () => {
+  it("does not purge a different set of tombstones after an asynchronous confirmation", async () => {
+    await harness(async (controller, options) => {
+      let accept!: (confirmed: boolean) => void;
+      options.confirm.mockImplementationOnce(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+      const pendingConfirmation = controller.requestClearTrash();
+      options.model.documentsRef.current = [target, { ...target, objectId: "newly-trashed" }];
+      accept(true);
+      await pendingConfirmation;
+      expect(mocks.api).not.toHaveBeenCalled();
+      expect(options.showMessage).toHaveBeenCalledWith("notice.purgeTargetsChanged");
+    });
+  });
+
   it("clears a synced target without flushing unrelated failed queues", async () => {
     await pending("unrelated");
     await harness(async (controller, options) => {

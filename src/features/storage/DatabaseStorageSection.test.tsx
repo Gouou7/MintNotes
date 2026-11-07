@@ -33,6 +33,7 @@ describe("database storage presentation", () => {
     expect(container.querySelector(".storage-total strong")?.textContent).toBe("10 KiB");
     expect([...container.querySelectorAll<HTMLElement>(".storage-composition > span")].map(node => node.style.width)).toEqual(["60%", "30%", "10%"]);
     expect(container.querySelector(".database-supplement")?.textContent).toContain("20 KiB");
+    await act(async () => container.querySelector<HTMLButtonElement>(".storage-details button")!.click());
     expect(container.querySelector(".storage-details")?.textContent).toContain("2.0 KiB");
   });
 

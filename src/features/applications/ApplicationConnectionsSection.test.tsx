@@ -48,7 +48,7 @@ it("names the application access setting and revokes or removes only the selecte
     .toEqual([["编辑", "撤销"], ["撤销"], ["移除设备"]]);
   await act(async () => button(entries()[0], "撤销").click());
   expect(vi.mocked(api).mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
-  await act(async () => button(container.querySelector("[role=alertdialog]")!, "撤销").click());
+  await act(async () => button(document.querySelector("[role=alertdialog]")!, "撤销").click());
   expect(api).toHaveBeenCalledWith("/api/account/application-connections/active", expect.objectContaining({ method: "DELETE" }));
   expect(button(entries()[0], "移除设备")).toBeTruthy();
   await act(async () => button(entries()[2], "移除设备").click());

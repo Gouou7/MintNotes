@@ -1,3 +1,4 @@
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useWorkspaceServices } from "../session/workspaceServices";
 import { SettingsSection } from "../../components/SettingsSection";
 import { useEffect, useState } from "react";
@@ -51,10 +52,10 @@ export function DatabaseStorageSection() {
         <div><dt><AppIcon icon={Archive} size={17} />{t("storage.backups")}</dt><dd>{formatHistoryBytes(status.backupsBytes)}</dd><dd className="database-metric-help">{t("storage.backupsSeparate")}</dd></div>
       </dl>
     </div>
-      <details className="storage-details"><summary>{t("storage.databaseDetails")}</summary>
+      <Collapsible className="storage-details"><CollapsibleTrigger>{t("storage.databaseDetails")}</CollapsibleTrigger><CollapsibleContent>
       <p className="settings-help">{t("storage.databaseState", { sqlite: status.sqliteVersion, schema: status.schemaVersion, journal: status.journalMode })}</p>
       <dl className="storage-metrics"><div><dt>{t("storage.reusable")}</dt><dd>{formatHistoryBytes(status.reusableBytes)}</dd></div></dl>
-      <p className="settings-help">{t("storage.databaseReadOnly")}</p></details>
+      <p className="settings-help">{t("storage.databaseReadOnly")}</p></CollapsibleContent></Collapsible>
       <p className="settings-help storage-summary">{t(failed ? "storage.cachedAt" : "storage.updatedAt", { date: formatDateTime(status.checkedAt) })}</p></>}
   </SettingsSection>;
 }

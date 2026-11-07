@@ -1,5 +1,7 @@
 import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, SetStateAction } from "react";
+import { useRef } from "react";
+import type { RequestConfirmation } from "../../components/Confirmation";
 import { translateError, type Translate } from "../../i18n";
 import { historyKey, localDb } from "../../storage/database";
 import type { HistoryListItem, OpenDocument } from "../../types";
@@ -16,6 +18,8 @@ import type { useVaultModel } from "./useVaultModel";
 import type { useWorkspaceSelection } from "./useWorkspaceSelection";
 
 interface Options {
+  confirm: RequestConfirmation;
+  sessionVerified: () => boolean;
   model: ReturnType<typeof useVaultModel>;
   selection: ReturnType<typeof useWorkspaceSelection>;
   history: ReturnType<typeof useVaultHistory>;
@@ -40,6 +44,8 @@ export function useVaultHistoryActions(options: Options) {
   const { transport: { api } } = useWorkspaceServices();
   const {
     model,
+    confirm,
+    sessionVerified,
     selection,
     history,
     activeDocument,
@@ -58,7 +64,7 @@ export function useVaultHistoryActions(options: Options) {
     persistDocumentCopy
   } = options;
   const { documentIndexRef, attachmentIndexRef, documentsRef } = model;
-  const { activateDocument } = selection;
+  const { activateDocument, activeIdRef } = selection;
   const {
     saveHistorySnapshot,
     setRenamingHistoryId,
@@ -74,6 +80,8 @@ export function useVaultHistoryActions(options: Options) {
     historyLastCapturedAt,
     historyLastSignature
   } = history;
+  const latestHistory = useRef(history);
+  latestHistory.current = history;
 
   const saveCurrentHistory = async () => {
     if (!activeDocument) return;
@@ -159,7 +167,13 @@ export function useVaultHistoryActions(options: Options) {
   const deleteHistorySnapshot = async (item: HistoryListItem) => {
     if (!canDeleteHistory(item)) return showMessage(t("notice.historyProtectedDeleteBlocked"));
     if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
-    if (!window.confirm(t("history.deleteConfirm", { date: formatNoteTime(item.capturedAt) }))) return;
+    const action = t("history.deleteOne");
+    if (!await confirm({ title: action, message: t("history.deleteConfirm", { date: formatNoteTime(item.capturedAt) }), action, destructive: true })) return;
+    if (!sessionVerified() || activeIdRef.current !== item.noteId) return;
+    const latest = latestHistory.current;
+    const current = latest.historyItems.find((entry) => entry.historyId === item.historyId)
+      ?? (latest.historyPreview?.item.historyId === item.historyId ? latest.historyPreview.item : null);
+    if (!current || !canDeleteHistory(current)) return;
     try {
       await api(`/api/notes/${item.noteId}/history/${item.historyId}`, { method: "DELETE" });
       const key = historyKey(userId, item.noteId, item.historyId);
@@ -181,7 +195,9 @@ export function useVaultHistoryActions(options: Options) {
   const clearCurrentHistory = async () => {
     if (!activeDocument) return;
     if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
-    if (!window.confirm(t("history.clearNoteConfirm", { title: activeDocument.title }))) return;
+    const action = t("history.clearNote");
+    if (!await confirm({ title: action, message: t("history.clearNoteConfirm", { title: activeDocument.title }), action, destructive: true })) return;
+    if (!sessionVerified() || activeIdRef.current !== activeDocument.objectId || !documentIndexRef.current.has(activeDocument.objectId)) return;
     try {
       const protectionPending = (await localDb.historyMetadataOutbox
         .where("[userId+noteId]").equals([userId, activeDocument.objectId]).toArray())
@@ -215,7 +231,8 @@ export function useVaultHistoryActions(options: Options) {
 
   const clearAllHistory = async () => {
     if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
-    if (!window.confirm(t("history.clearAllConfirm"))) return;
+    const action = t("settings.historyClearAll");
+    if (!await confirm({ title: action, message: t("history.clearAllConfirm"), action, destructive: true }) || !sessionVerified()) return;
     try {
       const protectionPending = (await localDb.historyMetadataOutbox.where("userId").equals(userId).toArray())
         .some((entry) => entry.protected !== undefined);
@@ -252,15 +269,22 @@ export function useVaultHistoryActions(options: Options) {
       showMessage(t("notice.noteLockedEdit", { title: activeDocument.title }));
       return;
     }
-    const missing = attachmentIdsIn(historyPreview.payload.markdown)
+    const missingAttachments = () => attachmentIdsIn(historyPreview.payload.markdown)
       .filter((id) => !attachmentIndexRef.current.get(id) || attachmentIndexRef.current.get(id)?.deleted);
-    if (missing.length && !window.confirm(t("history.restoreMissingAttachments", { count: missing.length }))) return;
+    const missing = missingAttachments();
+    if (missing.length) {
+      const action = t("history.restoreCurrent");
+      if (!await confirm({ title: action, message: t("history.restoreMissingAttachments", { count: missing.length }), action })) return;
+      if (latestHistory.current.historyPreview?.item.historyId !== historyPreview.item.historyId || missingAttachments().some((id) => !missing.includes(id))) return;
+    }
     try {
       await flushDocument(activeDocument.objectId);
       const current = documentIndexRef.current.get(activeDocument.objectId);
-      if (!current) return;
+      if (!current || current.deleted || isLockedNote(current) || activeIdRef.current !== current.objectId) return;
       const checkpoint = await saveHistorySnapshot(current, "restore-safety", { force: true });
       if (!checkpoint) throw new Error(t("notice.historySaveFailed"));
+      if (activeIdRef.current !== current.objectId || documentIndexRef.current.get(current.objectId) !== current
+        || latestHistory.current.historyPreview?.item.historyId !== historyPreview.item.historyId) return;
       const title = siblingTitleExists(nameDocuments(), historyPreview.payload.title, current.parentId, current.objectId)
         ? uniqueSiblingTitle(nameDocuments(), historyPreview.payload.title, current.parentId)
         : historyPreview.payload.title;

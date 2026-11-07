@@ -145,9 +145,16 @@ describe("vault feature composition", () => {
     await settle(async () => await localDb.historySnapshots.where("[userId+noteId]")
       .equals([userId, firstId]).count() > 0);
     const baseline = (await localDb.historySnapshots.where("[userId+noteId]").equals([userId, firstId]).toArray())[0];
-    await act(async () => host.querySelectorAll<HTMLButtonElement>(".right-panel-tabs button")[1].click());
-    await settle(() => Boolean(host.querySelector(`[data-history-id="${baseline.historyId}"] .history-select`)));
-    await act(async () => host.querySelector<HTMLButtonElement>(`[data-history-id="${baseline.historyId}"] .history-select`)!.click());
+    if (!document.querySelector(".right-panel-tabs") || document.querySelector(".workspace-drawer[hidden] .right-panel-tabs")) {
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Open right sidebar"]')!.click());
+    }
+    const historyTab = '[role="tab"][aria-label="History"]';
+    await settle(() => Boolean(document.querySelector(historyTab)));
+    await act(async () => document.querySelector<HTMLButtonElement>(historyTab)!.click());
+    const historyItem = `[data-history-id="${baseline.historyId}"] .history-select`;
+    await settle(() => Boolean(document.querySelector(historyItem)));
+    await act(async () => document.querySelector<HTMLButtonElement>(historyItem)!.click());
+    await act(async () => document.querySelector<HTMLButtonElement>(".workspace-drawer:not([hidden]) .mobile-outline-close")?.click());
     await settle(() => host.querySelector('[aria-label="test-preview"]')?.textContent === "First body");
     await act(async () => host.querySelector<HTMLButtonElement>(".history-preview-banner .primary")!.click());
     await settle(() => host.querySelector<HTMLTextAreaElement>('[aria-label="test-editor"]')?.value === "First body");

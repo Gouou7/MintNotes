@@ -111,10 +111,10 @@ describe("HistoryPanel", () => {
     expect(badge?.nextElementSibling?.classList.contains("history-actions")).toBe(true);
     expect(container.querySelector(".history-select svg")).toBeNull();
     await act(async () => (container.querySelector("button[aria-label='History actions']") as HTMLButtonElement).click());
-    const menuButtons = [...container.querySelectorAll(".history-context-menu button")] as HTMLButtonElement[];
+    const menuButtons = [...document.querySelectorAll(".history-context-menu [role=menuitem]")] as HTMLButtonElement[];
     expect(menuButtons.map((button) => button.textContent?.trim())).toEqual(["Rename", "Remove protection", "Delete this version"]);
     expect(menuButtons.every((button) => button.querySelector("svg"))).toBe(true);
-    expect(menuButtons[2].disabled).toBe(true);
+    expect(menuButtons[2].getAttribute("aria-disabled")).toBe("true");
     expect(menuButtons[2].title).toBe("Remove protection before deleting this version");
     await act(async () => menuButtons[1].click());
     expect(props.onToggleProtection).toHaveBeenCalledWith(protectedItem);
@@ -139,14 +139,12 @@ describe("HistoryPanel", () => {
 
     await act(async () => row.dispatchEvent(event));
 
-    const menu = container.querySelector(".history-context-menu") as HTMLElement;
+    const menu = document.querySelector(".history-context-menu") as HTMLElement;
     expect(event.defaultPrevented).toBe(true);
     expect(menu).not.toBeNull();
-    expect(menu.parentElement).toBe(container);
+    expect(menu.getAttribute("role")).toBe("menu");
     expect(container.querySelector(".outline-pane .history-context-menu")).toBeNull();
-    expect(menu.style.left).toBe("80px");
-    expect(menu.style.top).toBe("90px");
-    expect([...menu.querySelectorAll("button")].map((button) => button.textContent?.trim())).toEqual(["Rename", "Remove protection", "Delete this version"]);
+    expect([...menu.querySelectorAll("[role=menuitem]")].map((button) => button.textContent?.trim())).toEqual(["Rename", "Remove protection", "Delete this version"]);
   });
 
   it.each([
@@ -157,14 +155,14 @@ describe("HistoryPanel", () => {
     const item = { ...protectedItem, protected: false };
     const { container, props } = await renderHistory({ items: [item] });
     await act(async () => (container.querySelector(".history-actions") as HTMLButtonElement).click());
-    const button = container.querySelectorAll<HTMLButtonElement>(".history-context-menu button")[index];
+    const button = document.querySelectorAll<HTMLElement>(".history-context-menu [role=menuitem]")[index];
 
     await act(async () => button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
-    expect(container.querySelector(".history-context-menu")).not.toBeNull();
+    expect(document.querySelector(".history-context-menu")).not.toBeNull();
     await act(async () => button.click());
 
     expect(props[callback]).toHaveBeenCalledExactlyOnceWith(item);
-    expect(container.querySelector(".history-context-menu")).toBeNull();
+    expect(document.querySelector(".history-context-menu")).toBeNull();
   });
 
   it.each(["pointerdown", "Escape"])("dismisses the menu on %s", async (event) => {
@@ -175,17 +173,17 @@ describe("HistoryPanel", () => {
       ? new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
       : new PointerEvent("pointerdown", { bubbles: true })));
 
-    expect(container.querySelector(".history-context-menu")).toBeNull();
+    expect(document.querySelector(".history-context-menu")).toBeNull();
   });
 
   it("removes the menu when its history panel unmounts", async () => {
     const { container } = await renderHistory();
     await act(async () => (container.querySelector(".history-actions") as HTMLButtonElement).click());
-    expect(container.querySelector(".history-context-menu")).not.toBeNull();
+    expect(document.querySelector(".history-context-menu")).not.toBeNull();
 
     await act(async () => roots.pop()!.unmount());
 
-    expect(container.querySelector(".history-context-menu")).toBeNull();
+    expect(document.querySelector(".history-context-menu")).toBeNull();
   });
 
   it.each(["", "里程碑"])("keeps the displayed name and metadata in place while renaming %s", async (name) => {

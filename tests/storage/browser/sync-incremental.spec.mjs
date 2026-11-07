@@ -199,7 +199,7 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
     await page.getByRole("button", { name: `Open menu for ${title}`, exact: true }).click();
     const deletionAccepted = page.waitForResponse((response) => response.url().endsWith("/api/objects/batch")
       && response.request().method() === "POST" && response.request().postDataJSON()?.objects?.some((object) => object.deleted));
-    await page.getByRole("button", { name: "Move to trash", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Move to trash", exact: true }).click();
     expect((await (await deletionAccepted).json()).results.every((object) => ["accepted", "idempotent"].includes(object.status))).toBe(true);
     await otherContext.setOffline(false);
     const recoveredTitles = async () => (await other.locator(".tree-title").allTextContents()).filter((value) => !priorTitles.has(value));

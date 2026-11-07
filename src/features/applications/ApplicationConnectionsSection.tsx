@@ -1,3 +1,9 @@
+import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription } from "@/components/ui/alert-dialog";
+import { Alert } from "@/components/ui/alert";
+import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SettingsSection } from "../../components/SettingsSection";
 import { SettingsItem } from "../../components/SettingsItem";
 import { useState, type FormEvent } from "react";
@@ -47,42 +53,45 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
     catch { onNotify(t("applications.copyFailed"), "warning"); }
   };
   return <SettingsSection title={t("applications.title")} className="application-connections">
-    <SettingsItem title={t("applications.authorization")} description={t("applications.help")}><SettingsButton icon={Plug} className="primary" disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit("new")}>{t("applications.add")}</SettingsButton></SettingsItem>
+    <SettingsItem title={t("applications.authorization")} description={t("applications.help")}><SettingsButton icon={Plug} variant="default" className="primary" disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit("new")}>{t("applications.add")}</SettingsButton></SettingsItem>
     {!online && <p className="session-gate">{t("notice.onlineSessionRequired")}</p>}
-    {controller.error && <p className="error" role="alert">{t("applications.failed")}</p>}
+    {controller.error && <Alert className="error" variant="destructive">{t("applications.failed")}</Alert>}
     {editing && online && <form className="compact-form application-form" onSubmit={(event) => void submit(event)}>
-      <SettingsItem title={t("applications.name")}>{(control) => <input {...control} value={name} maxLength={80} required disabled={disabled || controller.retryPending} onChange={(event) => setName(event.target.value)} autoFocus />}</SettingsItem>
-      {editing === "new" && <SettingsItem title={t("applications.permission")} description={t("applications.permissionHelp")}>{(control) => <select {...control} value={access} disabled={disabled || controller.retryPending} onChange={(event) => setAccess(event.target.value as typeof access)}><option value="read-write">{t("applications.readWrite")}</option><option value="read">{t("applications.readOnly")}</option></select>}</SettingsItem>}
-      <SettingsItem title={t("applications.idleExpiry")} description={t("applications.idleHelp")}>{(control) => <select {...control} value={idle ?? "never"} disabled={disabled || controller.retryPending} onChange={(event) => setIdle(event.target.value === "never" ? null : Number(event.target.value) as 7 | 30 | 90)}>{[7, 30, 90].map((days) => <option key={days} value={days}>{t("applications.days", { count: days })}</option>)}<option value="never">{t("applications.never")}</option></select>}</SettingsItem>
-      <SettingsItem title={t("applications.fixedExpiry")}>{(control) => <input {...control} type="datetime-local" value={expiry} disabled={disabled || controller.retryPending} onChange={(event) => setExpiry(event.target.value)} />}</SettingsItem>
-      <div className="settings-actions"><SettingsButton icon={X} type="button" disabled={controller.busy} onClick={() => { controller.dismissKey(); setEditing(null); }}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" className="primary" disabled={disabled}>{t(controller.retryPending ? "applications.retry" : editing === "new" ? "applications.generate" : "common.save")}</SettingsButton></div>
+      <SettingsItem title={t("applications.name")}>{(control) => <Input {...control} value={name} maxLength={80} required disabled={disabled || controller.retryPending} onChange={(event) => setName(event.target.value)} autoFocus />}</SettingsItem>
+      {editing === "new" && <SettingsItem title={t("applications.permission")} description={t("applications.permissionHelp")}>{(control) => <NativeSelect {...control} value={access} disabled={disabled || controller.retryPending} onChange={(event) => setAccess(event.target.value as typeof access)}><option value="read-write">{t("applications.readWrite")}</option><option value="read">{t("applications.readOnly")}</option></NativeSelect>}</SettingsItem>}
+      <SettingsItem title={t("applications.idleExpiry")} description={t("applications.idleHelp")}>{(control) => <NativeSelect {...control} value={idle ?? "never"} disabled={disabled || controller.retryPending} onChange={(event) => setIdle(event.target.value === "never" ? null : Number(event.target.value) as 7 | 30 | 90)}>{[7, 30, 90].map((days) => <option key={days} value={days}>{t("applications.days", { count: days })}</option>)}<option value="never">{t("applications.never")}</option></NativeSelect>}</SettingsItem>
+      <SettingsItem title={t("applications.fixedExpiry")}>{(control) => <Input {...control} type="datetime-local" value={expiry} disabled={disabled || controller.retryPending} onChange={(event) => setExpiry(event.target.value)} />}</SettingsItem>
+      <div className="settings-actions"><SettingsButton icon={X} type="button" disabled={controller.busy} onClick={() => { controller.dismissKey(); setEditing(null); }}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" variant="default" className="primary" disabled={disabled}>{t(controller.retryPending ? "applications.retry" : editing === "new" ? "applications.generate" : "common.save")}</SettingsButton></div>
     </form>}
     {controller.applicationKey && online && <div className="application-key-card" role="region" aria-label={t("applications.newKey")}>
       <strong>{t("applications.newKey")}</strong>
       <p>{t("applications.once")}</p>
-      <label>{t("applications.serverUrl")}<input readOnly value={window.location.origin} /></label>
-      <label>{t("applications.key")}<input readOnly autoComplete="off" spellCheck={false} value={controller.applicationKey} /></label>
+      <label>{t("applications.serverUrl")}<Input readOnly value={window.location.origin} /></label>
+      <label>{t("applications.key")}<Input readOnly autoComplete="off" spellCheck={false} value={controller.applicationKey} /></label>
       <div className="settings-actions"><SettingsButton icon={Copy} onClick={() => void copy(window.location.origin)}>{t("applications.copyUrl")}</SettingsButton><SettingsButton icon={Copy} onClick={() => void copy(controller.applicationKey!)}>{t("applications.copyKey")}</SettingsButton><SettingsButton icon={X} onClick={controller.dismissKey}>{t("applications.savedKey")}</SettingsButton></div>
     </div>}
-    {confirming && online && <div className="application-confirm" role="alertdialog" aria-label={t("applications.revoke")}>
-      <p>{t("applications.confirmOne")}</p>
-      <div className="settings-actions"><SettingsButton icon={X} disabled={disabled} onClick={() => setConfirming(null)}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Trash2} className="danger" disabled={disabled} onClick={() => void controller.revoke(confirming).then((ok) => { if (ok) setConfirming(null); })}>{t("applications.revoke")}</SettingsButton></div>
-    </div>}
+    {confirming && online && <AlertDialog open onOpenChange={(open) => { if (!open && !disabled) setConfirming(null); }}>
+      <AlertDialogContent className="application-confirm">
+      <AlertDialogTitle>{t("applications.revoke")}</AlertDialogTitle>
+      <AlertDialogDescription>{t("applications.confirmOne")}</AlertDialogDescription>
+      <div className="settings-actions"><SettingsButton icon={X} disabled={disabled} onClick={() => setConfirming(null)}>{t("common.cancel")}</SettingsButton><SettingsButton icon={Trash2} variant="destructive" className="danger" disabled={disabled} onClick={() => void controller.revoke(confirming).then((ok) => { if (ok) setConfirming(null); })}>{t("applications.revoke")}</SettingsButton></div>
+      </AlertDialogContent>
+    </AlertDialog>}
     {online && controller.connections.length === 0 && !controller.busy && <p className="settings-help">{t("applications.empty")}</p>}
-    <div className="session-list settings-list">{controller.connections.map((row) => <article className="session-row settings-list-row" key={row.connectionId}>
-      <span className="settings-list-icon"><AppIcon icon={Plug} size={20} /></span>
-      <span className="session-details settings-list-details"><strong>{row.name}<em>{t(row.access === "read" ? "applications.readOnly" : "applications.readWrite")}</em><em>{t(`applications.${row.status}`)}</em></strong>
+    <div className="session-list settings-list">{controller.connections.map((row) => <Item className="session-row settings-list-row" key={row.connectionId} render={<article />}>
+      <ItemMedia className="settings-list-icon"><AppIcon icon={Plug} size={20} /></ItemMedia>
+      <ItemContent className="session-details settings-list-details"><strong>{row.name}<Badge variant="outline" render={<em />}>{t(row.access === "read" ? "applications.readOnly" : "applications.readWrite")}</Badge><Badge variant="outline" render={<em />}>{t(`applications.${row.status}`)}</Badge></strong>
         <span>{t("applications.created", { date: formatDateTime(row.createdAt) })}</span>
         <small>{t("applications.lastUsed", { date: row.lastUsedAt ? formatDateTime(row.lastUsedAt) : t("applications.unused") })}</small>
         <small>{t("applications.idlePolicy", { value: row.idleTimeoutDays === null ? t("applications.never") : t("applications.days", { count: row.idleTimeoutDays }) })}</small>
         <small>{t("applications.expires", { date: row.validUntil ? formatDateTime(row.validUntil) : t("applications.never") })}</small>
-      </span>
+      </ItemContent>
       <div className="settings-list-actions">
         {row.status === "active" && <SettingsButton icon={Pencil} disabled={disabled || Boolean(editing) || Boolean(controller.applicationKey)} onClick={() => startEdit(row)}>{t("applications.edit")}</SettingsButton>}
         {row.status === "revoked"
           ? <SettingsButton icon={Trash2} disabled={disabled || Boolean(controller.applicationKey)} onClick={() => void controller.remove(row.connectionId)}>{t("applications.removeDevice")}</SettingsButton>
-          : <SettingsButton icon={Trash2} className="danger" disabled={disabled || Boolean(controller.applicationKey)} onClick={() => setConfirming(row.connectionId)}>{t("applications.revoke")}</SettingsButton>}
+          : <SettingsButton icon={Trash2} variant="destructive" className="danger" disabled={disabled || Boolean(controller.applicationKey)} onClick={() => setConfirming(row.connectionId)}>{t("applications.revoke")}</SettingsButton>}
       </div>
-    </article>)}</div>
+    </Item>)}</div>
   </SettingsSection>;
 }

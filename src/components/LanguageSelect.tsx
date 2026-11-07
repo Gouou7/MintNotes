@@ -1,3 +1,4 @@
+import { NativeSelect } from "@/components/ui/native-select";
 import { LANGUAGE_OPTIONS, type LanguagePreference, useI18n } from "../i18n";
 
 export function LanguageSelect({
@@ -15,7 +16,7 @@ export function LanguageSelect({
 }) {
   const { t } = useI18n();
   return (
-    <select
+    <NativeSelect
       className={className}
       id={id}
       aria-describedby={describedBy}
@@ -28,6 +29,6 @@ export function LanguageSelect({
           {option.value === "system" ? t("language.system") : option.label}
         </option>
       ))}
-    </select>
+    </NativeSelect>
   );
 }

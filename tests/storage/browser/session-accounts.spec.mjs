@@ -45,7 +45,7 @@ async function loginRemembered(page, username) {
 
 async function setAvatar(page) {
   await sidebarAction(page, "Settings");
-  await page.getByRole("button", { name: "Account and security", exact: true }).click();
+  await page.getByRole("tab", { name: "Account and security", exact: true }).click();
   await page.getByRole("button", { name: "Edit profile", exact: true }).click();
   const profile = page.getByRole("dialog", { name: "Edit profile", exact: true });
   const dataUrl = await page.evaluate(() => {
@@ -67,7 +67,7 @@ async function setAvatar(page) {
 
 async function setPin(page, pin) {
   await sidebarAction(page, "Settings");
-  await page.getByRole("button", { name: "Account and security", exact: true }).click();
+  await page.getByRole("tab", { name: "Account and security", exact: true }).click();
   await page.getByRole("button", { name: "Set PIN", exact: true }).click();
   const pinDialog = page.getByRole("dialog", { name: "Set PIN" });
   await pinDialog.getByLabel("Master password", { exact: true }).fill(password);

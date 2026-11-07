@@ -198,6 +198,8 @@ const messages = {
     "zh-CN": "新版本可用。更新前请确认笔记已保存到本地。",
     "zh-TW": "新版本可用。更新前請確認筆記已儲存至本機。"
   },
+  "pwa.update.title": { en: "Update available", "zh-CN": "有可用更新", "zh-TW": "有可用更新" },
+  "pwa.update.action": { en: "Update now", "zh-CN": "立即更新", "zh-TW": "立即更新" },
 
   "auth.recovery.title": { en: "Save your recovery key", "zh-CN": "保存恢复密钥", "zh-TW": "儲存復原金鑰" },
   "auth.recovery.description": {
@@ -522,6 +524,7 @@ const messages = {
   "settings.editorCoreOrigin": { en: "Upstream project for the editor core", "zh-CN": "编辑器核心的上游项目", "zh-TW": "編輯器核心的上游專案" },
   "settings.mathFormulaRendering": { en: "Used to render mathematical formulas", "zh-CN": "用于渲染数学公式", "zh-TW": "用於算繪數學公式" },
   "settings.diagramRendering": { en: "Used to render diagrams", "zh-CN": "用于渲染图表", "zh-TW": "用於算繪圖表" },
+  "settings.uiComponentLibrary": { en: "Interface component library", "zh-CN": "界面组件库", "zh-TW": "介面元件庫" },
   "settings.iconLibrary": { en: "Used for interface icons", "zh-CN": "用于界面图标", "zh-TW": "用於介面圖示" },
 
   "notice.loadDevicesFailed": { en: "Unable to load login devices", "zh-CN": "无法加载登录设备", "zh-TW": "無法載入登入裝置" },
@@ -650,6 +653,7 @@ const messages = {
   "app.conflictSuffix": { en: "conflict copy", "zh-CN": "冲突副本", "zh-TW": "衝突副本" },
   "app.copySuffix": { en: "copy", "zh-CN": "副本", "zh-TW": "副本" },
   "app.closeNotification": { en: "Close notification", "zh-CN": "关闭通知", "zh-TW": "關閉通知" },
+  "app.notifications": { en: "Notifications", "zh-CN": "通知", "zh-TW": "通知" },
   "app.collapseDirectory": { en: "Collapse directory", "zh-CN": "折叠目录", "zh-TW": "收合目錄" },
   "app.closeDirectory": { en: "Close directory", "zh-CN": "关闭目录", "zh-TW": "關閉目錄" },
   "app.pinned": { en: "Pinned", "zh-CN": "置顶", "zh-TW": "置頂" },
@@ -778,6 +782,7 @@ const messages = {
   "notice.clearTrashConfirm": { en: "Permanently delete all trash contents? Server revision history and encrypted attachments will also be deleted. This cannot be undone.", "zh-CN": "永久删除回收站全部内容？服务器历史版本及附件密文也将删除。此操作无法撤销。", "zh-TW": "永久刪除垃圾桶全部內容？伺服器歷史版本及附件密文也將刪除。此操作無法復原。" },
   "notice.purgeOnlineOnly": { en: "Permanent deletion requires an online connection. Offline items remain in trash.", "zh-CN": "永久删除需联网。离线时内容仍保留在回收站。", "zh-TW": "永久刪除需連網。離線時內容仍保留在垃圾桶。" },
   "notice.purgeWaitSync": { en: "Wait for deletion status to synchronize before permanently deleting.", "zh-CN": "请等待删除状态同步完成后再永久删除。", "zh-TW": "請等待刪除狀態同步完成後再永久刪除。" },
+  "notice.purgeTargetsChanged": { en: "Trash contents changed. Review the items and confirm permanent deletion again.", "zh-CN": "回收站内容已变化。请重新确认要永久删除的项目。", "zh-TW": "資源回收筒內容已變更。請重新確認要永久刪除的項目。" },
   "notice.purgeComplete": { en: "Selected trash content permanently deleted.", "zh-CN": "已永久删除所选回收站内容。", "zh-TW": "已永久刪除所選垃圾桶內容。" },
   "notice.purgeFailed": { en: "Permanent deletion failed", "zh-CN": "永久删除失败", "zh-TW": "永久刪除失敗" },
   "notice.moveIntoDescendant": { en: "A folder cannot be moved into itself or a subfolder.", "zh-CN": "文件夹不能移入自身或其子文件夹。", "zh-TW": "資料夾不能移入自身或其子資料夾。" },

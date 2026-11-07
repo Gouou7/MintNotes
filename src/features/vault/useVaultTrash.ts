@@ -1,6 +1,7 @@
 import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, RefObject, SetStateAction } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { RequestConfirmation } from "../../components/Confirmation";
 import { translateError, type Translate } from "../../i18n";
 import type { OpenDocument } from "../../types";
 import { NameReservations } from "../siblingNames";
@@ -13,6 +14,7 @@ import type { useVaultModel } from "./useVaultModel";
 import type { useWorkspaceSelection } from "./useWorkspaceSelection";
 
 interface Options {
+  confirm: RequestConfirmation;
   model: ReturnType<typeof useVaultModel>;
   selection: ReturnType<typeof useWorkspaceSelection>;
   showMessage: ReturnType<typeof useToastNotifications>["showMessage"];
@@ -35,6 +37,7 @@ export function useVaultTrash(options: Options) {
   const { transport: { api } } = useWorkspaceServices();
   const {
     model,
+    confirm,
     selection,
     showMessage,
     t,
@@ -54,6 +57,9 @@ export function useVaultTrash(options: Options) {
   const { activeIdRef, activateDocument, setSelectedIds, selectionAnchor } = selection;
 
   const [purging, setPurging] = useState(false);
+  const purgingRef = useRef(false);
+  const sessionVerified = useRef(serverSessionVerified);
+  sessionVerified.current = serverSessionVerified;
 
   const setDeletedMany = async (objectIds: string[], deleted: boolean) => {
     const roots = selectionRoots(documentsRef.current, objectIds);
@@ -91,38 +97,48 @@ export function useVaultTrash(options: Options) {
     }
   };
 
-  const requestPurgeDocuments = (objectIds: string[]) => {
+  const purgeTargets = (objectIds: string[] | null) => {
+    const documentIds = objectIds === null
+      ? new Set(documentsRef.current.filter((entry) => entry.deleted).map((entry) => entry.objectId))
+      : new Set(selectionRoots(documentsRef.current, objectIds).flatMap((objectId) => [...descendantsOf(documentsRef.current, objectId)]));
+    const documents = documentsRef.current.filter((entry) => documentIds.has(entry.objectId) && entry.deleted);
+    const noteIds = new Set(documents.filter((entry) => entry.kind === "note").map((entry) => entry.objectId));
+    const targets = [
+      ...documents,
+      ...attachmentsRef.current.filter((entry) => noteIds.has(entry.ownerNoteId) || (objectIds === null && entry.deleted))
+    ];
+    return { noteIds, targets };
+  };
+  const targetVersion = (objectIds: string[] | null) => JSON.stringify(purgeTargets(objectIds).targets
+    .map((entry) => [entry.objectId, entry.serverRevision]).sort());
+
+  const requestPurgeDocuments = async (objectIds: string[]) => {
     const roots = selectionRoots(documentsRef.current, objectIds);
     const targets = roots.map((id) => documentsRef.current.find((entry) => entry.objectId === id && entry.deleted)).filter(Boolean) as OpenDocument[];
     if (!targets.length) return;
     const label = targets.length === 1
       ? t("notice.purgeSingleLabel", { title: targets[0].title })
       : t("notice.purgeMultipleLabel", { count: targets.length });
-    if (window.confirm(t("notice.purgeConfirm", { label }))) {
-      void purgeTrash(roots);
-    }
+    const version = targetVersion(roots);
+    const action = t("settings.permanentDelete");
+    if (await confirm({ title: action, message: t("notice.purgeConfirm", { label }), action, destructive: true })) await purgeTrash(roots, version);
   };
 
-  const requestClearTrash = () => {
+  const requestClearTrash = async () => {
     if (!documentsRef.current.some((entry) => entry.deleted) && !attachmentsRef.current.some((entry) => entry.deleted)) return;
-    if (window.confirm(t("notice.clearTrashConfirm"))) {
-      void purgeTrash(null);
-    }
+    const version = targetVersion(null);
+    const action = t("settings.clearTrash");
+    if (await confirm({ title: action, message: t("notice.clearTrashConfirm"), action, destructive: true })) await purgeTrash(null, version);
   };
 
-  const purgeTrash = async (objectIds: string[] | null) => {
-    if (purging) return;
-    if (!serverSessionVerified) return showMessage(t("notice.purgeOnlineOnly"));
+  const purgeTrash = async (objectIds: string[] | null, confirmedVersion?: string) => {
+    if (purgingRef.current) return;
+    if (!sessionVerified.current) return showMessage(t("notice.purgeOnlineOnly"));
+    if (confirmedVersion !== undefined && targetVersion(objectIds) !== confirmedVersion) return showMessage(t("notice.purgeTargetsChanged"));
+    purgingRef.current = true;
     setPurging(true);
     try {
-      const documentIds = objectIds === null
-        ? new Set(documentsRef.current.filter((entry) => entry.deleted).map((entry) => entry.objectId))
-        : new Set(selectionRoots(documentsRef.current, objectIds).flatMap((objectId) => [...descendantsOf(documentsRef.current, objectId)]));
-      const noteIds = new Set([...documentIds].filter((id) => documentsRef.current.find((entry) => entry.objectId === id)?.kind === "note"));
-      const targets = [
-        ...documentsRef.current.filter((entry) => documentIds.has(entry.objectId) && entry.deleted),
-        ...attachmentsRef.current.filter((entry) => noteIds.has(entry.ownerNoteId) || (objectIds === null && entry.deleted))
-      ];
+      const { noteIds, targets } = purgeTargets(objectIds);
       if (!targets.length) return;
       const targetIds = new Set(targets.map((entry) => entry.objectId));
       const perform = async () => {
@@ -153,6 +169,7 @@ export function useVaultTrash(options: Options) {
     } catch (error) {
       showMessage(translateError(error, t, "notice.purgeFailed"), "critical");
     } finally {
+      purgingRef.current = false;
       setPurging(false);
     }
   };

@@ -1,3 +1,5 @@
+import { Progress } from "@/components/ui/progress";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SettingsSection } from "../components/SettingsSection";
 import { SettingsItem } from "../components/SettingsItem";
 import { HardDrive, Laptop, RefreshCw, ShieldCheck } from "lucide-react";
@@ -44,7 +46,7 @@ export function StorageUsage({ status }: { status: StorageStatus }) {
     <div className="storage-overview"><div className="storage-server">
     {usage ? <><div className="storage-heading"><span className="storage-section-label"><AppIcon icon={HardDrive} size={17} />{t("storage.serverUsage")}</span>{refreshButton}</div>
       <div className="storage-total"><strong>{formatHistoryBytes(usage.totalBytes)}</strong><span>{t("storage.quotaLabel", { size: limit(usage.quotaBytes) })}</span></div>
-      {usage.quotaBytes !== null && <progress className={`storage-quota-progress ${level}`} aria-label={t("storage.total")} max={Math.max(1, usage.quotaBytes)} value={Math.min(usage.totalBytes, Math.max(1, usage.quotaBytes))} />}
+      {usage.quotaBytes !== null && <Progress className={`storage-quota-progress ${level}`} aria-label={t("storage.total")} max={Math.max(1, usage.quotaBytes)} value={Math.min(usage.totalBytes, Math.max(1, usage.quotaBytes))} />}
       {level !== "normal" && level !== "unlimited" && <p className={`storage-capacity ${level}`}>{t(`storage.level.${level}`)}</p>}
       <StorageBreakdown label={t("storage.breakdown")} totalBytes={usage.totalBytes} categories={categories.map(({ key, ...category }) => ({ ...category, label: t(key) }))} />
       <div className="storage-server-footer">
@@ -55,10 +57,10 @@ export function StorageUsage({ status }: { status: StorageStatus }) {
     <dl className="storage-metrics"><div><dt title={t("storage.cacheHelp")}>{t("storage.localEstimate")}</dt><dd>{status.localReady ? formatHistoryBytes(status.local.bytes) : t("storage.unknown")}</dd></div>
       <div><dt>{t("storage.lastCompleteSync")}</dt><dd>{status.lastSync ? formatDateTime(status.lastSync) : t("storage.neverSynced")}</dd></div>
     </dl><PendingStorage status={status} />
-    <details className="storage-details"><summary>{t("storage.browserStorage")}</summary>
+    <Collapsible className="storage-details"><CollapsibleTrigger>{t("storage.browserStorage")}</CollapsibleTrigger><CollapsibleContent>
     <dl className="storage-metrics"><div><dt title={t("storage.estimateHelp")}>{t("storage.siteEstimateLabel")}</dt><dd>{status.estimate?.usage !== undefined ? `${formatHistoryBytes(status.estimate.usage)} / ${status.estimate.quota === undefined ? t("storage.unknown") : formatHistoryBytes(status.estimate.quota)}` : t("storage.unknown")}</dd></div></dl>
     <SettingsItem title={t("storage.persistenceLabel")} className="storage-persistence" description={<span title={t("storage.persistenceHelp")}>{t(`storage.persistence.${status.persistence}`)}</span>}>
-      <SettingsButton icon={ShieldCheck} disabled={status.persistence === "unsupported" || status.persistence === "granted"} onClick={() => void status.requestPersistence()}>{t("storage.requestPersistence")}</SettingsButton></SettingsItem></details>
+      <SettingsButton icon={ShieldCheck} disabled={status.persistence === "unsupported" || status.persistence === "granted"} onClick={() => void status.requestPersistence()}>{t("storage.requestPersistence")}</SettingsButton></SettingsItem></CollapsibleContent></Collapsible>
     </div></div>
   </SettingsSection>;
 }

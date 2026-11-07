@@ -15,6 +15,7 @@ async function closeWorkspace(discard: boolean, saveError?: Error) {
   const registerClose = vi.fn();
   const options = {
     logoutStarted: { current: false },
+    cancelConfirmation: vi.fn(() => { order.push("confirmation"); }),
     importExport: { cancel: stage("cancel"), resume: vi.fn() },
     finishHistorySession: stage("history"),
     documentSaveQueue: { flushAll: stage("save", saveError), cancelAll: vi.fn() },
@@ -33,7 +34,7 @@ async function closeWorkspace(discard: boolean, saveError?: Error) {
 describe("workspace close", () => {
   it("drains durable edits before stopping the workspace", async () => {
     const { options, order, result } = await closeWorkspace(false);
-    expect(order).toEqual(["cancel", "history", "save", "drain"]);
+    expect(order).toEqual(["confirmation", "cancel", "history", "save", "drain"]);
     expect(options.logoutStarted.current).toBe(true);
     expect(options.stopSync).toHaveBeenCalledOnce();
     expect(result).toBe(true);
@@ -47,7 +48,7 @@ describe("workspace close", () => {
   });
   it("discards queued edits only on confirmed logout", async () => {
     const { options, order, result } = await closeWorkspace(true);
-    expect(order).toEqual(["cancel", "drain"]);
+    expect(order).toEqual(["confirmation", "cancel", "drain"]);
     expect(options.documentSaveQueue.cancelAll).toHaveBeenCalledOnce();
     expect(result).toBe(true);
   });

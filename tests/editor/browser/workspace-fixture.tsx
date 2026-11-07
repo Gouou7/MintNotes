@@ -1,3 +1,9 @@
+import { ToastProvider } from "../../../src/components/ui/toast";
+import { WorkspaceDrawer } from "../../../src/features/vault/WorkspaceDrawer";
+import { useMediaQuery } from "../../../src/features/useMediaQuery";
+import { useMobileDrawerGestures } from "../../../src/features/vault/useWorkspaceInteractions";
+import { SettingsDialog } from "../../../src/features/SettingsDialog";
+import { DialogTitle } from "../../../src/components/ui/dialog";
 import { createRoot } from "react-dom/client";
 import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { Pin, Check, X, Trash2 } from "lucide-react";
@@ -10,7 +16,7 @@ import { NotePaneLayout } from "../../../src/features/vault/NotePaneLayout";
 import { useWorkspaceEditorMode } from "../../../src/features/vault/useWorkspaceEditorMode";
 import { DEFAULT_DEVICE_WORKSPACE_PREFERENCES } from "../../../src/features/workspace";
 import { SettingsButton } from "../../../src/components/SettingsButton";
-import { ToastStack, type ToastNotice, type ToastTone } from "../../../src/components/Toast";
+import { ToastStack, type ToastActionHandler, type ToastTone } from "../../../src/components/Toast";
 import { useToastNotifications } from "../../../src/features/vault/useToastNotifications";
 import { NoteToolbar } from "../../../src/features/vault/NoteToolbar";
 import { TreeLevel, TreeNoteLock } from "../../../src/features/vault/VaultTree";
@@ -44,10 +50,11 @@ const tree = new Map<string | null, OpenDocument[]>([
   ["subfolder", [document("nested", "Nested note", "note", "subfolder")]]
 ]);
 let saves = 0;
+let lastMove: { ids: string[]; parentId: string | null } | null = null;
 let notify!: ReturnType<typeof useToastNotifications>["showMessage"];
 let loadMarkdown!: (text: string) => void;
-declare global { interface Window { mintWorkspaceFixture: { saves(): number; loadMarkdown(text: string): void; notify(text: string, tone: ToastTone, action?: ToastNotice["action"]): void } } }
-window.mintWorkspaceFixture = { saves: () => saves, loadMarkdown: text => loadMarkdown(text), notify: (...args) => notify(...args) };
+declare global { interface Window { mintWorkspaceFixture: { saves(): number; lastMove(): typeof lastMove; loadMarkdown(text: string): void; notify(text: string, tone: ToastTone, action?: ToastActionHandler): void } } }
+window.mintWorkspaceFixture = { saves: () => saves, lastMove: () => lastMove, loadMarkdown: text => loadMarkdown(text), notify: (...args) => notify(...args) };
 
 function Workspace() {
   const notifications = useToastNotifications(); notify = notifications.showMessage;
@@ -58,6 +65,7 @@ function Workspace() {
   loadMarkdown = setMarkdown;
   const outline = useMemo(() => buildOutline(markdown), [markdown]);
   const [treeOpen, setTreeOpen] = useState(false), [outlineOpen, setOutlineOpen] = useState(false);
+  useMobileDrawerGestures({ treeOpen, outlineOpen, settingsOpen, setTreeOpen, setOutlineOpen });
   const [treeCollapsed, setTreeCollapsed] = useState(false), [outlineCollapsed, setOutlineCollapsed] = useState(false);
   const [treeWidth, setTreeWidth] = useState(297), [outlineWidth, setOutlineWidth] = useState(297);
   const [sortMode, setSortMode] = useState<UiPreferences["sortMode"]>("alphabetical"), [tab, setTab] = useState<UiPreferences["rightPanelTab"]>(historyFixture ? "history" : "outline");
@@ -66,17 +74,22 @@ function Workspace() {
   const [expanded, setExpanded] = useState(new Set(["folder-two", "subfolder"]));
   const searchInput = useRef<HTMLInputElement>(null), titleInput = useRef<HTMLInputElement>(null);
   const editorMode = useWorkspaceEditorMode({ preferences, document: { ...selected, locked }, previewing: false, onPreferences: setPreferences });
+  const shell = useRef<HTMLDivElement>(null);
+  const compactTree = useMediaQuery("(max-width: 720px)");
+  const compactRight = useMediaQuery("(max-width: 1100px)");
   const area = editorMode.navigation.editorArea;
-  return <div className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${treeCollapsed ? "tree-collapsed" : ""} ${outlineCollapsed ? "outline-collapsed" : ""}`} style={{ "--tree-width": `${treeWidth}px`, "--outline-width": `${outlineWidth}px` } as CSSProperties}>
+  return <div ref={shell} className={`app-shell ${treeOpen ? "tree-open" : ""} ${outlineOpen ? "outline-open" : ""} ${treeCollapsed ? "tree-collapsed" : ""} ${outlineCollapsed ? "outline-collapsed" : ""}`} style={{ "--tree-width": `${treeWidth}px`, "--outline-width": `${outlineWidth}px` } as CSSProperties}>
+    <WorkspaceDrawer compact={compactTree} open={treeOpen} side="left" title="Directory" container={shell} onClose={() => setTreeOpen(false)}>
     <WorkspaceSidebar searchInput={searchInput} search={search} onSearchChange={setSearch} onCreate={() => {}} sortMode={sortMode} onSortChange={setSortMode}
       canLocate onLocate={() => {}} onCollapseAll={() => setExpanded(new Set())} onCollapse={() => setTreeCollapsed(true)} onClose={() => setTreeOpen(false)}
       displayName="User" username="username" avatarUrl={null} onLock={() => {}} onSettings={() => setSettingsOpen(true)}
       pinned={<div className="pinned-section"><div className="tree-section-label"><AppIcon icon={Pin} size={8} />Pinned</div>{[selected, lockedNote].map(entry => <div key={entry.objectId} className={`tree-row ${entry === selected ? "active" : ""}`}><button className="tree-main"><span className="tree-spacer" /><span className="tree-title">{entry.title}</span><TreeNoteLock document={entry} /></button></div>)}</div>}
     >
-      <div className="document-tree"><TreeLevel childrenByParent={tree} parentId={null} activeId={selected.objectId} selectedIds={new Set([selected.objectId])} expanded={expanded}
+      <div className="document-tree"><TreeLevel menuActions={{ selection: (entry) => [entry], documents: [...tree.values()].flat(), onSelect: () => {}, onRename: () => {}, onToggleLock: async () => {}, onCreate: async () => "", onDuplicate: async () => {}, onExport: async () => {}, onPin: async () => {}, onDelete: async () => {}, onRestore: async () => {}, onPurge: () => {} }} childrenByParent={tree} parentId={null} activeId={selected.objectId} selectedIds={new Set([selected.objectId])} expanded={expanded}
         draggingIds={new Set()} dropTarget={null} renamingDocumentId={null} onDropTarget={() => {}} onSelect={entry => { if (entry.kind === "folder") setExpanded(current => { const next = new Set(current); if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId); return next; }); }}
-        onContext={() => {}} onDragSelection={() => []} onDragFinish={() => {}} onMove={() => {}} onRenameCommit={() => {}} onRenameCancel={() => {}} /></div>
+        onContext={() => {}} onDragSelection={(entry) => [entry.objectId]} onDragFinish={() => {}} onMove={(ids, parentId) => { lastMove = { ids, parentId }; }} onRenameCommit={() => {}} onRenameCancel={() => {}} /></div>
     </WorkspaceSidebar>
+    </WorkspaceDrawer>
     <PaneResizer label="Resize left panel" side="left" value={treeWidth} min={220} max={420} onResize={setTreeWidth} />
     <NotePaneLayout editorArea={area} toolbar={<NoteToolbar titleInput={titleInput} active title={title} titleReadOnly={editorMode.readOnly} locked={locked} historyPreview={false}
       sourceMode={editorMode.sourceMode} readOnly={editorMode.readOnly} onOpenLeft={() => treeCollapsed ? setTreeCollapsed(false) : setTreeOpen(true)} onTitleChange={event => setTitle(event.target.value)}
@@ -85,7 +98,8 @@ function Workspace() {
       <MarkdownEditor documentKey="workspace-note" markdown={markdown} mode={editorMode.effectiveMode} readOnly={editorMode.readOnly} onModeChange={editorMode.onModeChange} onChange={text => { saves++; setMarkdown(text); }} />
     </NotePaneLayout>
     <PaneResizer label="Resize right panel" side="right" value={outlineWidth} min={200} max={420} onResize={setOutlineWidth} />
-    <aside className="outline-pane"><WorkspacePanelHeader tab={tab} onTabChange={setTab} onCollapse={() => setOutlineCollapsed(true)} onClose={() => setOutlineOpen(false)} /><section className="right-panel-content">
+    <WorkspaceDrawer compact={compactRight} open={outlineOpen} side="right" title="Right panel" container={shell} onClose={() => setOutlineOpen(false)}>
+    <aside className="outline-pane"><WorkspacePanelHeader tab={tab} onTabChange={setTab} onCollapse={() => setOutlineCollapsed(true)} onClose={() => setOutlineOpen(false)}>
       {tab === "history" && historyFixture ? <HistoryPanel
         items={historyItems} selectedId={selectedHistoryId} loading={false} hasMore={false} disabled={false} renamingId={renamingHistoryId}
         onSelect={item => setSelectedHistoryId(item.historyId)}
@@ -98,12 +112,19 @@ function Workspace() {
       /> : tab === "outline" ? <WorkspaceOutline items={outline} editorArea={area} mode={editorMode.effectiveMode}
         collapsed={outlineCollapsed} open={outlineOpen} onSelect={item => { editorMode.navigation.jumpToHeading(item); setOutlineOpen(false); }} />
         : <nav className="outline-list"><p className="outline-empty">No history</p></nav>}
-    </section></aside>
-    {settingsOpen && <div className="modal-backdrop"><section className="settings-modal"><div className="settings-section"><div className="settings-actions"><SettingsButton icon={Check} className="primary">Save</SettingsButton><SettingsButton icon={X} onClick={() => setSettingsOpen(false)}>Cancel</SettingsButton><SettingsButton icon={Trash2} className="danger">Delete</SettingsButton></div></div></section></div>}
-    {(treeOpen || outlineOpen) && <button className="drawer-scrim" aria-label="Close panels" onClick={() => { setTreeOpen(false); setOutlineOpen(false); }} />}
-    <ToastStack notices={notifications.notices} onDismiss={notifications.dismissMessage} />
+    </WorkspacePanelHeader></aside>
+    </WorkspaceDrawer>
+    {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)}>
+      <DialogTitle className="sr-only">Settings</DialogTitle>
+      <div className="settings-section"><div className="settings-actions">
+        <SettingsButton icon={Check} variant="default" className="primary">Save</SettingsButton>
+        <SettingsButton icon={X} onClick={() => setSettingsOpen(false)}>Cancel</SettingsButton>
+        <SettingsButton icon={Trash2} variant="destructive" className="danger">Delete</SettingsButton>
+      </div></div>
+    </SettingsDialog>}
+    <ToastStack />
   </div>;
 }
 
 localStorage.setItem("webmd-notes-language", fixtureParameters.get("language") ?? "en");
-createRoot(window.document.getElementById("root")!).render(<I18nProvider><Workspace /></I18nProvider>);
+createRoot(window.document.getElementById("root")!).render(<I18nProvider><ToastProvider limit={Infinity}><Workspace /></ToastProvider></I18nProvider>);

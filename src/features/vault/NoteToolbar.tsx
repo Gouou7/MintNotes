@@ -1,3 +1,7 @@
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyHeader, EmptyMedia } from "@/components/ui/empty";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Input } from "@/components/ui/input";
 import type { ChangeEvent, FocusEvent, KeyboardEvent, RefObject } from "react";
 import {
   CodeXml,
@@ -55,9 +59,9 @@ export function NoteToolbar({
   const noteActionDisabled = !active || historyPreview;
 
   return <header className="note-toolbar">
-    <button className="pane-toggle" onClick={onOpenLeft} title={t("app.openLeft")} aria-label={t("app.openLeft")}><AppIcon icon={PanelLeftOpen} size={16} /></button>
+    <Button className="pane-toggle" onClick={onOpenLeft} title={t("app.openLeft")} aria-label={t("app.openLeft")}><AppIcon icon={PanelLeftOpen} size={16} /></Button>
     {active
-      ? <input
+      ? <Input
           ref={titleInput}
           className="title-input"
           value={title}
@@ -68,33 +72,40 @@ export function NoteToolbar({
           aria-label={t("app.noteTitle")}
         />
       : <strong className="empty-title-slot">{t("app.selectNote")}</strong>}
-    <button
+    <Button
       className="toolbar-icon"
       disabled={noteActionDisabled || readOnly}
       onClick={onAddImage}
       title={locked ? t("app.unlockToEdit") : t("app.addImage")}
       aria-label={t("app.addImage")}
-    ><AppIcon icon={ImagePlus} size={16} strokeWidth={1.5} /></button>
-    <button
+    ><AppIcon icon={ImagePlus} size={16} strokeWidth={1.5} /></Button>
+    <Button
       className={`toolbar-icon note-lock-toggle ${active && locked ? "active" : ""}`}
       disabled={noteActionDisabled}
       onClick={onToggleLock}
       title={locked ? t("app.unlockNote") : t("app.lockNote")}
       aria-label={locked ? t("app.unlockNote") : t("app.lockNote")}
       aria-pressed={active && locked}
-    ><AppIcon icon={FileLock2} size={16} strokeWidth={1.5} /></button>
-    <div className="mode-switch" role="group" aria-label={t("app.editorMode")}>
-      <button disabled={modeDisabled || locked} className={active && readOnly ? "active" : ""} aria-pressed={active && readOnly} title={t("app.modeReading")} aria-label={t("app.modeReading")} onClick={onToggleReadOnly}><AppIcon icon={PencilOff} size={16} strokeWidth={1.5} /></button>
-      <button disabled={modeDisabled} className={active && sourceMode ? "active" : ""} aria-pressed={active && sourceMode} title={t("app.modeSource")} aria-label={t("app.modeSource")} onClick={onToggleSource}><AppIcon icon={CodeXml} size={16} strokeWidth={1.5} /></button>
-    </div>
-    <button className="toolbar-icon right-pane-toggle" onClick={onOpenRight} title={t("app.openRight")} aria-label={t("app.openRight")}><AppIcon icon={PanelRightOpen} size={16} /></button>
+    ><AppIcon icon={FileLock2} size={16} strokeWidth={1.5} /></Button>
+    <ToggleGroup multiple className="mode-switch" aria-label={t("app.editorMode")}
+      value={active ? [...(readOnly ? ["reading"] : []), ...(sourceMode ? ["source"] : [])] : []}
+      onValueChange={(values) => {
+        if (!modeDisabled && !locked && values.includes("reading") !== readOnly) onToggleReadOnly();
+        if (!modeDisabled && values.includes("source") !== sourceMode) onToggleSource();
+      }}>
+      <ToggleGroupItem value="reading" disabled={modeDisabled || locked} title={t("app.modeReading")} aria-label={t("app.modeReading")}><AppIcon icon={PencilOff} strokeWidth={1.5} /></ToggleGroupItem>
+      <ToggleGroupItem value="source" disabled={modeDisabled} title={t("app.modeSource")} aria-label={t("app.modeSource")}><AppIcon icon={CodeXml} strokeWidth={1.5} /></ToggleGroupItem>
+    </ToggleGroup>
+    <Button className="toolbar-icon right-pane-toggle" onClick={onOpenRight} title={t("app.openRight")} aria-label={t("app.openRight")}><AppIcon icon={PanelRightOpen} size={16} /></Button>
   </header>;
 }
 
 export function EmptyEditor() {
   const { t } = useI18n();
-  return <div className="empty-editor">
-    <div className="empty-icon"><AppIcon icon={Sparkles} size={34} /></div>
-    <h2>{t("app.emptyTitle")}</h2>
-  </div>;
+  return <Empty className="empty-editor">
+    <EmptyHeader>
+      <EmptyMedia className="empty-icon"><AppIcon icon={Sparkles} size={34} /></EmptyMedia>
+      <h2 className="empty-editor-title">{t("app.emptyTitle")}</h2>
+    </EmptyHeader>
+  </Empty>;
 }

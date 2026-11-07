@@ -138,6 +138,7 @@ test('locking and history preview reject native edits and pending insertion', as
   await page.getByText('Alpha', { exact: true }).click(); await page.keyboard.insertText('BAD');
   expect(await page.evaluate(() => window.mintFixture.markdown())).toBe('- [ ] task\n\nAlpha'); expect(await saved(page)).toBe(0);
   await page.getByRole('button', { name: 'History preview', exact: true }).click(); await expect(page.locator('.markdown-editor-host .ProseMirror').first()).toHaveAttribute('contenteditable', 'false');
+  expect(await saved(page)).toBe(0);
 });
 test('literal syntax in fenced code has no math, wiki, comments or HTML execution', async ({ page }) => {
   await load(page, '```js\nconst x = "[[Note]] $x$ %%hidden%% ^[body]";\n```\n\n<script>window.bad = true</script>'); await page.getByRole('button', { name: 'reading', exact: true }).click();
