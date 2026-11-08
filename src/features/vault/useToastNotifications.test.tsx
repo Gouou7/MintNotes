@@ -24,7 +24,7 @@ async function setup() {
   return { get controller() { return controller; } };
 }
 
-const notices = () => [...document.querySelectorAll(".toast-notice:not([data-ending-style]) p")].map((element) => element.textContent);
+const notices = () => [...document.querySelectorAll('[data-slot="alert"]:not([data-ending-style]) [data-slot="alert-description"]')].map((element) => element.textContent);
 
 it("keeps notices in arrival order and dismisses only the requested notice", async () => {
   const { controller } = await setup();

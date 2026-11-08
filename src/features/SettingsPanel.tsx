@@ -3,6 +3,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AppDialog } from "../components/AppDialog";
 import { Confirmation, useConfirmation } from "../components/Confirmation";
@@ -515,16 +516,20 @@ export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoin
   return <SettingsDialog onClose={onClose} dismissible={!newRecoveryKey}
     style={{ "--settings-font-size": `${normalizeFontSize(preferences.fontSize)}px` } as CSSProperties}>
       <Tabs value={tab} onValueChange={(value) => changeTab(value as Tab)} orientation={compactTabs ? "horizontal" : "vertical"} className="settings-layout">
-        <aside className="settings-sidebar">
-          <DialogTitle className="settings-title"><AppIcon icon={Settings} size={16} />{t("settings.title")}</DialogTitle>
-          <TabsList className="settings-tabs" variant="line" aria-label={t("settings.title")}>
-            <TabsTrigger value="general"><AppIcon icon={SlidersHorizontal} size={16} />{t("settings.general")}</TabsTrigger>
-            <TabsTrigger value="security"><AppIcon icon={UserRoundCog} size={16} />{t("settings.security")}</TabsTrigger>
-            <TabsTrigger value="storage"><AppIcon icon={Notebook} size={16} />{t("storage.title")}</TabsTrigger>
-            {user.role === "admin" && serverSessionVerified && <TabsTrigger value="users" className="admin-tab"><AppIcon icon={ShieldCheck} size={16} />{t("settings.admin")}</TabsTrigger>}
-            <TabsTrigger value="about"><AppIcon icon={Info} size={16} />{t("settings.about")}</TabsTrigger>
-          </TabsList>
-        </aside>
+        <Sidebar className="settings-sidebar h-auto w-full">
+          <SidebarHeader className="p-0">
+            <DialogTitle className="settings-title"><AppIcon icon={Settings} size={16} />{t("settings.title")}</DialogTitle>
+          </SidebarHeader>
+          <SidebarContent>
+            <TabsList className="settings-tabs" variant="line" aria-label={t("settings.title")}>
+              <TabsTrigger value="general"><AppIcon icon={SlidersHorizontal} size={16} />{t("settings.general")}</TabsTrigger>
+              <TabsTrigger value="security"><AppIcon icon={UserRoundCog} size={16} />{t("settings.security")}</TabsTrigger>
+              <TabsTrigger value="storage"><AppIcon icon={Notebook} size={16} />{t("storage.title")}</TabsTrigger>
+              {user.role === "admin" && serverSessionVerified && <TabsTrigger value="users" className="admin-tab"><AppIcon icon={ShieldCheck} size={16} />{t("settings.admin")}</TabsTrigger>}
+              <TabsTrigger value="about"><AppIcon icon={Info} size={16} />{t("settings.about")}</TabsTrigger>
+            </TabsList>
+          </SidebarContent>
+        </Sidebar>
         <div className="settings-main">
           <header className="settings-header"><DialogClose render={<Button variant="ghost" size="icon" disabled={Boolean(newRecoveryKey)} aria-label={t("settings.close")} />}><AppIcon icon={X} /></DialogClose></header>
           <div className="settings-content" ref={contentRef}>
@@ -595,9 +600,9 @@ export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoin
             {user.role === "admin" && serverSessionVerified && <TabsContent value="users" className="admin-settings"><AdminPanel currentUser={user} onNotify={onNotify} /></TabsContent>}
           </div>
         </div>
-        <div className="settings-logout-section">
+        <SidebarFooter className="settings-logout-section flex-row">
           <SettingsButton icon={LogOut} type="button" variant="destructive" className="settings-logout danger" onClick={() => setLogoutConfirming(true)}>{t("app.logout")}</SettingsButton>
-        </div>
+        </SidebarFooter>
       </Tabs>
       {profileDialogOpen && <AppDialog className="danger-confirm profile-edit-dialog settings-section" title={t("settings.editProfile")} onClose={closeProfileDialog} dismissible={!busy}>
         <div className="profile-avatar-editor"><strong>{t("settings.avatar")}</strong><Avatar className="profile-avatar">{avatarUrl && <AvatarImage src={avatarUrl} alt={t("settings.currentAvatar")} />}<AvatarFallback><AppIcon icon={UserRound} size={44} /></AvatarFallback></Avatar><input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden onChange={(event) => { void uploadAvatar(event.target.files); event.target.value = ""; }} /><div className="settings-actions"><SettingsButton icon={Upload} type="button" className="profile-action-button" disabled={busy || !serverSessionVerified} onClick={() => avatarInput.current?.click()}>{t(avatarUrl ? "settings.changeAvatar" : "settings.uploadAvatar")}</SettingsButton>{avatarUrl && <SettingsButton icon={Trash2} type="button" variant="destructive" className="danger profile-action-button" disabled={busy || !serverSessionVerified} onClick={() => void removeAvatar()}>{t("settings.removeAvatar")}</SettingsButton>}</div></div>

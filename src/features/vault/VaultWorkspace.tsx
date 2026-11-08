@@ -3,6 +3,7 @@ import { Spinner } from "../../components/ui/spinner";
 import { WorkspaceDrawer } from "./WorkspaceDrawer";
 import { useMediaQuery } from "../useMediaQuery";
 import { Button } from "@/components/ui/button";
+import { Sidebar, SidebarContent } from "@/components/ui/sidebar";
 import { Confirmation, useConfirmation } from "../../components/Confirmation";
 import { useWorkspaceServices } from "../session/workspaceServices";
 import { useStorageStatus } from "../storage/useStorageStatus";
@@ -660,10 +661,10 @@ function Workspace({
           </div>} />)}
         </div>}
       >
-        <div ref={documentTree} className="document-tree" role="tree" aria-multiselectable="true" onClick={(event) => { if (event.target === event.currentTarget) { setSelectedIds(new Set()); selectionAnchor.current = null; } }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTreeDropTarget(null); }} onDrop={(event) => { setTreeDropTarget(null); setTreeDraggingIds(new Set()); const ids = draggedDocumentIds(event.dataTransfer); if (ids.length) void moveDocuments(ids, null); }}>
+        <SidebarContent ref={documentTree} className="document-tree block" role="tree" aria-multiselectable="true" onClick={(event) => { if (event.target === event.currentTarget) { setSelectedIds(new Set()); selectionAnchor.current = null; } }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTreeDropTarget(null); }} onDrop={(event) => { setTreeDropTarget(null); setTreeDraggingIds(new Set()); const ids = draggedDocumentIds(event.dataTransfer); if (ids.length) void moveDocuments(ids, null); }}>
           <TreeLevel menuActions={menuActions} childrenByParent={treeChildren} parentId={null} activeId={activeId} selectedIds={selectedIds} expanded={expanded} draggingIds={treeDraggingIds} dropTarget={treeDropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={updateTreeDropTarget} onSelect={selectTreeEntry} onContext={openTreeContext} onDragSelection={beginTreeDrag} onDragFinish={() => setTreeDraggingIds(new Set())} onMove={moveDocuments} onRenameCommit={commitTreeRename} onRenameCancel={() => setRenamingDocumentId(null)} />
           {!searched.length && <p className="empty-tree">{t("app.noMatches")}</p>}
-        </div>
+        </SidebarContent>
       </WorkspaceSidebar>
       {inTreeDrawer && (settingsDialog || confirmDialog)}
       </WorkspaceDrawer>
@@ -735,7 +736,7 @@ function Workspace({
       <PaneResizer label={t("app.resizeRight")} side="right" value={preferences.outlineWidth} min={OUTLINE_WIDTH_MIN} max={OUTLINE_WIDTH_MAX} onResize={(outlineWidth) => setPreferences((current) => ({ ...current, outlineWidth }))} />
 
       <WorkspaceDrawer compact={compactRight} open={visible && !closingWorkspace && outlineOpen} side="right" title={t("app.rightPanel")} container={shell} onClose={() => setOutlineOpen(false)}>
-      <aside className="outline-pane">
+      <Sidebar className="outline-pane" aria-label={t("app.rightPanel")}>
         <WorkspacePanelHeader
           tab={preferences.rightPanelTab}
           onTabChange={rightPanelTab => setPreferences({ ...preferences, rightPanelTab })}
@@ -763,7 +764,7 @@ function Workspace({
                 onLoadMore={() => activeDocument && void loadHistory(activeDocument.objectId, historyCursor, true)}
               />}
         </WorkspacePanelHeader>
-      </aside>
+      </Sidebar>
       {inRightDrawer && !settingsOpen && confirmDialog}
       </WorkspaceDrawer>
 

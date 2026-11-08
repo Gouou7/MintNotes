@@ -3,6 +3,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
 import type { ReactNode, RefObject } from "react";
 import { ArrowDownToDot, ChevronsDownUp, FolderPlus, History, List, ListOrdered, LockKeyhole, PanelLeftClose, PanelRightClose, Search, Settings, SquarePen, X } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
@@ -33,13 +34,13 @@ interface WorkspaceSidebarProps {
 
 export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   const { t } = useI18n();
-  return <aside className="tree-pane">
-    <header className="side-header">
+  return <Sidebar className="tree-pane">
+    <SidebarHeader className="side-header flex-row">
       <img className="brand-small" src="/icon.svg" alt="" aria-hidden="true" />
       <strong>Mint Notes</strong>
       <Button className="tree-pane-collapse" onClick={props.onCollapse} title={t("app.collapseDirectory")} aria-label={t("app.collapseDirectory")}><AppIcon icon={PanelLeftClose} size={16} /></Button>
       <Button className="mobile-tree-close" onClick={props.onClose} title={t("app.closeDirectory")} aria-label={t("app.closeDirectory")}><AppIcon icon={PanelLeftClose} size={16} /></Button>
-    </header>
+    </SidebarHeader>
     <InputGroup className="search-box">
       <InputGroupAddon><AppIcon icon={Search} size={20} /></InputGroupAddon>
       <InputGroupInput ref={props.searchInput} value={props.search} onChange={event => props.onSearchChange(event.target.value)} placeholder={t("app.search")} aria-label={t("app.search")} />
@@ -56,7 +57,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     </nav>
     {props.pinned}
     {props.children}
-    <footer className="side-footer">
+    <SidebarFooter className="side-footer flex-row">
       <div className="sidebar-user" title={`@${props.username}`}>
         <Avatar className="sidebar-avatar" aria-hidden="true">
           {props.avatarUrl && <AvatarImage src={props.avatarUrl} alt="" />}
@@ -69,8 +70,8 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
         {props.accountSwitcher}
         <Button onClick={props.onSettings} title={t("settings.title")} aria-label={t("settings.title")}><AppIcon icon={Settings} size={16} /></Button>
       </div>
-    </footer>
-  </aside>;
+    </SidebarFooter>
+  </Sidebar>;
 }
 
 export function WorkspacePanelHeader({ tab, onTabChange, onCollapse, onClose, children }: {
@@ -82,14 +83,14 @@ export function WorkspacePanelHeader({ tab, onTabChange, onCollapse, onClose, ch
 }) {
   const { t } = useI18n();
   return <Tabs value={tab} onValueChange={(value) => onTabChange(value as UiPreferences["rightPanelTab"])} className="workspace-panel-tabs">
-    <header className="side-header right-panel-header">
+    <SidebarHeader className="side-header right-panel-header flex-row">
     <TabsList className="right-panel-tabs" variant="line" aria-label={t("app.rightPanel")}>
       <TabsTrigger value="outline" title={t("app.outline")} aria-label={t("app.outline")}><AppIcon icon={List} /></TabsTrigger>
       <TabsTrigger value="history" title={t("history.title")} aria-label={t("history.title")}><AppIcon icon={History} /></TabsTrigger>
     </TabsList>
     <Button className="right-pane-collapse" onClick={onCollapse} title={t("app.collapseRight")} aria-label={t("app.collapseRight")}><AppIcon icon={PanelRightClose} size={16} /></Button>
     <Button className="mobile-outline-close" onClick={onClose} title={t("app.closeRight")} aria-label={t("app.closeRight")}><AppIcon icon={PanelRightClose} size={16} /></Button>
-    </header>
-    <TabsContent key={tab} value={tab} className="right-panel-content">{children}</TabsContent>
+    </SidebarHeader>
+    <TabsContent key={tab} value={tab} className="right-panel-content" render={<SidebarContent />}>{children}</TabsContent>
   </Tabs>;
 }

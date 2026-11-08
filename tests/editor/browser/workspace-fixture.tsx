@@ -4,6 +4,7 @@ import { useMediaQuery } from "../../../src/features/useMediaQuery";
 import { useMobileDrawerGestures } from "../../../src/features/vault/useWorkspaceInteractions";
 import { SettingsDialog } from "../../../src/features/SettingsDialog";
 import { DialogTitle } from "../../../src/components/ui/dialog";
+import { Sidebar, SidebarContent } from "../../../src/components/ui/sidebar";
 import { createRoot } from "react-dom/client";
 import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { Pin, Check, X, Trash2 } from "lucide-react";
@@ -85,9 +86,9 @@ function Workspace() {
       displayName="User" username="username" avatarUrl={null} onLock={() => {}} onSettings={() => setSettingsOpen(true)}
       pinned={<div className="pinned-section"><div className="tree-section-label"><AppIcon icon={Pin} size={8} />Pinned</div>{[selected, lockedNote].map(entry => <div key={entry.objectId} className={`tree-row ${entry === selected ? "active" : ""}`}><button className="tree-main"><span className="tree-spacer" /><span className="tree-title">{entry.title}</span><TreeNoteLock document={entry} /></button></div>)}</div>}
     >
-      <div className="document-tree"><TreeLevel menuActions={{ selection: (entry) => [entry], documents: [...tree.values()].flat(), onSelect: () => {}, onRename: () => {}, onToggleLock: async () => {}, onCreate: async () => "", onDuplicate: async () => {}, onExport: async () => {}, onPin: async () => {}, onDelete: async () => {}, onRestore: async () => {}, onPurge: () => {} }} childrenByParent={tree} parentId={null} activeId={selected.objectId} selectedIds={new Set([selected.objectId])} expanded={expanded}
+      <SidebarContent className="document-tree block"><TreeLevel menuActions={{ selection: (entry) => [entry], documents: [...tree.values()].flat(), onSelect: () => {}, onRename: () => {}, onToggleLock: async () => {}, onCreate: async () => "", onDuplicate: async () => {}, onExport: async () => {}, onPin: async () => {}, onDelete: async () => {}, onRestore: async () => {}, onPurge: () => {} }} childrenByParent={tree} parentId={null} activeId={selected.objectId} selectedIds={new Set([selected.objectId])} expanded={expanded}
         draggingIds={new Set()} dropTarget={null} renamingDocumentId={null} onDropTarget={() => {}} onSelect={entry => { if (entry.kind === "folder") setExpanded(current => { const next = new Set(current); if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId); return next; }); }}
-        onContext={() => {}} onDragSelection={(entry) => [entry.objectId]} onDragFinish={() => {}} onMove={(ids, parentId) => { lastMove = { ids, parentId }; }} onRenameCommit={() => {}} onRenameCancel={() => {}} /></div>
+        onContext={() => {}} onDragSelection={(entry) => [entry.objectId]} onDragFinish={() => {}} onMove={(ids, parentId) => { lastMove = { ids, parentId }; }} onRenameCommit={() => {}} onRenameCancel={() => {}} /></SidebarContent>
     </WorkspaceSidebar>
     </WorkspaceDrawer>
     <PaneResizer label="Resize left panel" side="left" value={treeWidth} min={220} max={420} onResize={setTreeWidth} />
@@ -99,7 +100,7 @@ function Workspace() {
     </NotePaneLayout>
     <PaneResizer label="Resize right panel" side="right" value={outlineWidth} min={200} max={420} onResize={setOutlineWidth} />
     <WorkspaceDrawer compact={compactRight} open={outlineOpen} side="right" title="Right panel" container={shell} onClose={() => setOutlineOpen(false)}>
-    <aside className="outline-pane"><WorkspacePanelHeader tab={tab} onTabChange={setTab} onCollapse={() => setOutlineCollapsed(true)} onClose={() => setOutlineOpen(false)}>
+    <Sidebar className="outline-pane" aria-label="Right panel"><WorkspacePanelHeader tab={tab} onTabChange={setTab} onCollapse={() => setOutlineCollapsed(true)} onClose={() => setOutlineOpen(false)}>
       {tab === "history" && historyFixture ? <HistoryPanel
         items={historyItems} selectedId={selectedHistoryId} loading={false} hasMore={false} disabled={false} renamingId={renamingHistoryId}
         onSelect={item => setSelectedHistoryId(item.historyId)}
@@ -112,7 +113,7 @@ function Workspace() {
       /> : tab === "outline" ? <WorkspaceOutline items={outline} editorArea={area} mode={editorMode.effectiveMode}
         collapsed={outlineCollapsed} open={outlineOpen} onSelect={item => { editorMode.navigation.jumpToHeading(item); setOutlineOpen(false); }} />
         : <nav className="outline-list"><p className="outline-empty">No history</p></nav>}
-    </WorkspacePanelHeader></aside>
+    </WorkspacePanelHeader></Sidebar>
     </WorkspaceDrawer>
     {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)}>
       <DialogTitle className="sr-only">Settings</DialogTitle>

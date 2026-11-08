@@ -63,6 +63,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
     await page.setViewportSize({ width, height });
     await page.goto("/settings.html");
     const content = page.locator(".settings-content"), header = page.locator(".settings-header");
+    await expect(page.locator(".settings-backdrop")).toHaveCSS("backdrop-filter", "blur(4px)");
     await expect(page.locator(".settings-tabs button")).toHaveText(tabs);
     await expect(page.locator(".settings-tabs")).toHaveAttribute("data-orientation", width <= 720 ? "horizontal" : "vertical");
     if (width > 720) {
@@ -235,6 +236,18 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
         }
         if (title === "Administrator settings") {
           const databaseSection = content.locator(".database-storage");
+          const dividerColor = theme === "light" ? "rgb(226, 226, 226)" : "rgb(51, 51, 51)";
+          const dividers = [
+            [databaseSection, "top"],
+            [databaseSection.locator(".database-supplement > div + div"), "top"],
+            [databaseSection.locator(".storage-details"), "top"],
+            [page.locator(name === "mobile" ? ".settings-tabs" : ".settings-sidebar"), name === "mobile" ? "bottom" : "right"],
+          ] as const;
+          for (const [element, edge] of dividers) {
+            await expect(element).toHaveCSS(`border-${edge}-width`, "1px");
+            await expect(element).toHaveCSS(`border-${edge}-color`, dividerColor);
+          }
+          await expect(databaseSection).toHaveCSS("box-shadow", "none");
           await expect(databaseSection.locator(".storage-categories dt")).toHaveText(["Main database file", "WAL file", "Shared memory file"]);
           await expect(databaseSection.locator(".database-supplement")).toContainText("Stored separately");
           expect(await databaseSection.locator(".storage-composition").evaluate(element => Math.abs([...element.children].reduce((sum, segment) => sum + segment.getBoundingClientRect().width, 0) - element.clientWidth))).toBeLessThanOrEqual(1);
@@ -251,6 +264,11 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           await expect(newQuota.locator("option")).toHaveText(["Unlimited", "100MiB", "200MiB", "500MiB", "1GiB", "2GiB", "Custom"]);
           await page.getByRole("button", { name: "Edit quota", exact: true }).first().click();
           const dialog = page.locator(".quota-dialog");
+          if (name !== "mobile") {
+            const shadow = await page.locator(".settings-modal").evaluate(element => getComputedStyle(element).boxShadow);
+            expect(shadow).not.toBe("none");
+            await expect(dialog).toHaveCSS("box-shadow", shadow);
+          }
           await expectInlineQuota(dialog.locator(".quota-fields"));
           await page.screenshot({ path: info.outputPath(`${name}-${theme}-quota-custom.png`) });
           await dialog.getByRole("button", { name: "Close", exact: true }).click();

@@ -138,6 +138,19 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
     await page.getByRole("button", { name: "Open right sidebar" }).click();
     await expect(page.locator(".right-panel-header")).toBeVisible();
     await expect(page.locator(".right-panel-header > button:visible")).toHaveCount(1);
+    if (name === "desktop") {
+      for (const [side, pane, direction] of [["left", ".tree-pane", 1], ["right", ".outline-pane", -1]] as const) {
+        const sidebar = page.locator(pane);
+        await expect(sidebar).toHaveCSS("width", "297px");
+        const grip = (await page.getByRole("separator", { name: `Resize ${side} panel` }).boundingBox())!;
+        const x = grip.x + grip.width / 2, y = grip.y + grip.height / 2;
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        await page.mouse.move(x + direction * 24, y);
+        await page.mouse.up();
+        await expect(sidebar).toHaveCSS("width", "321px");
+      }
+    }
     const rightPanelButtons = page.locator(".right-panel-header button:visible");
     await expect(rightPanelButtons).toHaveCount(3);
     for (const button of await rightPanelButtons.all()) {
@@ -172,6 +185,8 @@ test("tree menus support keyboard navigation and preserve the folder drop payloa
   await note.click({ button: "right" });
   const menu = page.getByRole("menu");
   await expect(menu).toBeVisible();
+  const menuShadow = await menu.evaluate(element => getComputedStyle(element).boxShadow);
+  expect(menuShadow).not.toBe("none");
   await menu.press("Home");
   await expect(menu.getByRole("menuitem", { name: "Open", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowDown");
@@ -182,6 +197,7 @@ test("tree menus support keyboard navigation and preserve the folder drop payloa
   const more = page.getByRole("button", { name: "Open menu for Note one" });
   await more.focus();
   await page.keyboard.press("Enter");
+  await expect(menu).toHaveCSS("box-shadow", menuShadow);
   await expect(menu.getByRole("menuitem", { name: "Open", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(more).toBeFocused();
