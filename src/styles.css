@@ -431,6 +431,7 @@ body { color: var(--text); background: var(--surface); }
 .auth-card label { gap: 8px; font-weight: 550; line-height: 1.5; }
 .auth-card .remember-device { display: flex; align-items: center; justify-self: start; cursor: pointer; }
 .auth-actions { display: flex; justify-content: center; gap: 8px; margin-top: 21px; flex-wrap: wrap; }
+.auth-actions:empty { display: none; }
 .auth-config-error { margin: 14px 0 0; color: var(--danger); font-size: 12px; line-height: 1.5; text-align: center; }
 .error, .notice { margin: 0; padding: 9px; border-radius: 7px; font-size: 13px; }
 .error { color: var(--danger); background: var(--danger-soft); }
@@ -446,6 +447,7 @@ body { color: var(--text); background: var(--surface); }
 .lock-card form { margin-top: 30px; }
 .auth-account-actions { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: 8px; margin-top: 18px; }
 .account-picker-list { display: grid; gap: 6px; margin-top: 18px; }
+.account-picker > .account-picker-list:not(:empty) { padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); }
 .account-picker-row { height: auto; min-height: 44px; justify-content: flex-start; gap: 10px; min-width: 0; width: 100%; padding: 8px 10px; text-align: start; font-weight: 550; }
 .account-picker-row > :is(svg, .account-picker-avatar) { flex: none; }
 .account-picker-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
@@ -462,7 +464,8 @@ body { color: var(--text); background: var(--surface); }
 @media (pointer: coarse) {
   .account-switch-popover .account-picker-row { min-height: 40px; }
 }
-.recovery-card textarea { font-family: ui-monospace, monospace; word-break: break-all; resize: none; }
+.auth-card textarea { resize: none; }
+.recovery-card textarea { font-family: ui-monospace, monospace; word-break: break-all; }
 .spinner { width: 34px; height: 34px; color: var(--accent); }
 .loading-shell { align-content: center; gap: 12px; color: var(--muted); }
 .loading-shell > p { margin: 0; text-align: center; }
@@ -560,6 +563,7 @@ body { color: var(--text); background: var(--surface); }
 .profile-edit-dialog > header h3 { font-size: calc(20px + var(--font-adjust)); }
 .recovery-result { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--accent); border-radius: 10px; background: var(--accent-soft); }
 .recovery-result textarea { resize: none; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+.recovery-result label.recovery-confirm { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 
 .app-shell .settings-help { font-size: calc(13px + var(--font-adjust)); }
 .app-shell .status-bar { font-size: calc(11px + var(--font-adjust)); }

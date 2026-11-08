@@ -1,12 +1,13 @@
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, LockKeyhole, UserRound, UserRoundPlus } from "lucide-react";
+import { LockKeyhole, UserRound, UserRoundPlus } from "lucide-react";
 import { AppIcon } from "../../components/AppIcon";
 import { hasDevicePin } from "../../crypto/deviceUnlock";
 import { useI18n } from "../../i18n";
 import type { DeviceUnlockCredential } from "../../storage/database";
 import type { AuthEndpoint, User } from "../../types";
+import { AuthBackButton } from "./AuthBackButton";
 
 export interface AccountOption {
   user: User;
@@ -53,14 +54,14 @@ export function AccountChooser({ accounts, currentId, busy, error, onChoose, onL
   onBack?: () => void;
 }) {
   const { t } = useI18n();
-  return <main className="auth-shell">
+  return <main className="auth-shell auth-entry">
+    {onBack && <AuthBackButton disabled={busy} onClick={onBack} />}
     <section className="auth-card account-picker" aria-labelledby="account-picker-title" aria-busy={busy}>
       <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
       <h1 id="account-picker-title">{t("account.switch")}</h1>
       <AccountList accounts={accounts} currentId={currentId} busy={busy} onChoose={onChoose} />
       {error && <Alert className="error" variant="destructive">{t(error === "reauth" ? "account.reauth" : "account.switchFailed")}</Alert>}
       <div className="auth-account-actions">
-        {onBack && <Button type="button" variant="secondary" disabled={busy} onClick={onBack}><AppIcon icon={ArrowLeft} data-icon="inline-start" />{t("account.backToApp")}</Button>}
         <Button type="button" variant="ghost" disabled={busy} onClick={onLogin}><AppIcon icon={UserRoundPlus} data-icon="inline-start" />{t("account.otherLogin")}</Button>
       </div>
     </section>

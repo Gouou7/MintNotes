@@ -4,7 +4,7 @@ import { AppDialog } from "../components/AppDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type FormEvent, useState } from "react";
-import { LockKeyhole, LogOut, UserRoundCog, X } from "lucide-react";
+import { KeyRound, LockKeyhole, LockKeyholeOpen, LogOut, UserRoundCog, X } from "lucide-react";
 import { AppIcon } from "../components/AppIcon";
 import { translateError, useI18n } from "../i18n";
 import { submitFormOnEnter } from "./formKeyboard";
@@ -52,12 +52,12 @@ export function LockScreen({ user, browserOnline, onPin, onPasswordLogin, onSwit
       <form onSubmit={unlock}>
         <Field><FieldLabel>{t("lock.devicePin")}<Input type="password" value={pin} onChange={(event) => setPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" autoFocus required /></FieldLabel></Field>
         {error && <Alert className="error" variant="destructive">{error}</Alert>}
-        <Button type="submit" size="lg" disabled={busy}>{busy ? t("lock.unlocking") : t("lock.unlockWithPin")}</Button>
-        {browserOnline && <Button variant="secondary" type="button" disabled={busy} onClick={onPasswordLogin}>{t("lock.usePassword")}</Button>}
+        <Button type="submit" size="lg" disabled={busy}><AppIcon icon={LockKeyholeOpen} data-icon="inline-start" />{busy ? t("lock.unlocking") : t("lock.unlockWithPin")}</Button>
+        {browserOnline && <Button variant="secondary" size="lg" type="button" disabled={busy} onClick={onPasswordLogin}><AppIcon icon={KeyRound} data-icon="inline-start" />{t("lock.usePassword")}</Button>}
       </form>
       <div className="auth-account-actions">
-        <Button variant="ghost" type="button" disabled={busy} onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} data-icon="inline-start" />{t("lock.logout")}</Button>
-        {onSwitch && <Button variant="ghost" type="button" disabled={busy} onClick={onSwitch}><AppIcon icon={UserRoundCog} data-icon="inline-start" />{t("account.switch")}</Button>}
+        <Button variant="ghost" size="lg" type="button" disabled={busy} onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} data-icon="inline-start" />{t("lock.logout")}</Button>
+        {onSwitch && <Button variant="ghost" size="lg" type="button" disabled={busy} onClick={onSwitch}><AppIcon icon={UserRoundCog} data-icon="inline-start" />{t("account.switch")}</Button>}
       </div>
     </section>
     {logoutConfirming && <AppDialog className="danger-confirm logout-confirm settings-section" title={t("settings.logoutTitle")} onClose={() => setLogoutConfirming(false)} dismissible={!busy}>

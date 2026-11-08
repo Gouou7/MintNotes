@@ -255,7 +255,6 @@ const messages = {
   "auth.createAccount": { en: "Create account", "zh-CN": "创建账户", "zh-TW": "建立帳戶" },
   "auth.activateCreate": { en: "Activate and create keys", "zh-CN": "激活并创建密钥", "zh-TW": "啟用並建立金鑰" },
   "auth.resetPassword": { en: "Reset password", "zh-CN": "重设密码", "zh-TW": "重設密碼" },
-  "auth.backToLogin": { en: "Back to login", "zh-CN": "返回登录", "zh-TW": "返回登入" },
   "auth.forgotPassword": { en: "Forgot password", "zh-CN": "忘记密码", "zh-TW": "忘記密碼" },
   "auth.normalRegistration": { en: "Standard registration", "zh-CN": "普通注册", "zh-TW": "一般註冊" },
   "auth.configError": {
@@ -308,7 +307,6 @@ const messages = {
   "account.switch": { en: "Switch account", "zh-CN": "切换用户", "zh-TW": "切換使用者" },
   "account.current": { en: "Current", "zh-CN": "当前账号", "zh-TW": "目前帳號" },
   "account.back": { en: "Back", "zh-CN": "返回", "zh-TW": "返回" },
-  "account.backToApp": { en: "Back to app", "zh-CN": "返回应用", "zh-TW": "返回應用程式" },
   "account.otherLogin": { en: "Sign in to another account", "zh-CN": "登录其他账号", "zh-TW": "登入其他帳號" },
   "account.rememberFailed": { en: "This device could not be remembered. Sign in again to retry.", "zh-CN": "未能记住此设备。请重新登录后重试。", "zh-TW": "未能記住此裝置。請重新登入後重試。" },
   "account.reauth": { en: "Sign in again to use this account online.", "zh-CN": "请重新登录以在线使用此账号。", "zh-TW": "請重新登入以連線使用此帳號。" },

@@ -59,7 +59,6 @@ export default function App() {
       : <AuthScreen onUnlocked={session.handleUnlocked} getWorker={session.getAuthWorker}
           runAuthentication={session.runAuthentication} initialUsername={locked?.user.username} initialRememberDevice={locked?.endpoint.remembered}
           onBack={session.canSwitch && (workspace || locked || session.accounts.length) ? session.cancelLogin : undefined}
-          backDestination={workspace ? "app" : "accounts"}
           offlineUnavailable={!session.browserOnline} />)}
   </>;
 }

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { type FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, Check, Copy, Download } from "lucide-react";
+import { BadgeCheck, Check, Copy, Download, KeyRound, LogIn, UserRoundPlus } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { LanguageSelect } from "../components/LanguageSelect";
@@ -12,6 +12,7 @@ import type { CryptoClient, RegistrationCrypto } from "../crypto/client";
 import { translateError, useI18n } from "../i18n";
 import { submitFormOnEnter } from "./formKeyboard";
 import { downloadRecoveryKey } from "./recoveryKey";
+import { AuthBackButton } from "./session/AuthBackButton";
 import type { AuthParameters, BrowserSession } from "../types";
 
 interface Props {
@@ -21,11 +22,17 @@ interface Props {
   initialUsername?: string;
   initialRememberDevice?: boolean;
   onBack?: () => void;
-  backDestination?: "app" | "accounts";
   offlineUnavailable?: boolean;
 }
 
 type Mode = "login" | "register" | "activate" | "recover";
+
+const submitActions = {
+  login: { icon: LogIn, label: "auth.login" },
+  register: { icon: UserRoundPlus, label: "auth.createAccount" },
+  activate: { icon: BadgeCheck, label: "auth.activateCreate" },
+  recover: { icon: KeyRound, label: "auth.resetPassword" },
+} as const;
 
 interface AuthConfig {
   allowRegistration: boolean;
@@ -39,7 +46,7 @@ type AuthConfigState =
 
 export function AuthScreen({
   onUnlocked, getWorker: worker, runAuthentication: authenticate, initialUsername = "", initialRememberDevice = false,
-  onBack, backDestination = "app", offlineUnavailable = false
+  onBack, offlineUnavailable = false
 }: Props) {
   const open = (session: BrowserSession, authSecret?: string) => onUnlocked(session, worker(), authSecret);
   const { languagePreference, setLanguagePreference, t } = useI18n();
@@ -207,7 +214,12 @@ export function AuthScreen({
 
   if (newRecovery) {
     return (
-      <main className="auth-shell">
+      <main className="auth-shell auth-entry">
+        {error && <AuthBackButton disabled={busy} onClick={() => {
+          setNewRecovery(null);
+          setMode("login");
+          setError("");
+        }} />}
         <section className="auth-card recovery-card">
           <div className="auth-language"><LanguageSelect value={languagePreference} onChange={setLanguagePreference} /></div>
           <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
@@ -231,11 +243,6 @@ export function AuthScreen({
           </label>
           {error && <p className="error recovery-feedback" role="alert">{error}</p>}
           <Button size="lg" disabled={!recoveryConfirmed || busy} onClick={() => void confirmRecovery()}>{t("auth.recovery.saved")}</Button>
-          {error && <Button variant="ghost" type="button" disabled={busy} onClick={() => {
-            setNewRecovery(null);
-            setMode("login");
-            setError("");
-          }}>{t("auth.backToLogin")}</Button>}
         </section>
       </main>
     );
@@ -243,14 +250,11 @@ export function AuthScreen({
 
   const config = authConfig.status === "ready" ? authConfig.value : null;
   const publicRegistrationClosed = Boolean(config && !config.bootstrapAllowed && !config.allowRegistration);
+  const submitAction = submitActions[mode];
+  const goBack = mode === "login" ? onBack : () => setMode("login");
   return (
     <main className="auth-shell auth-entry">
-      {onBack && (
-        <Button className="justify-self-start" variant="secondary" type="button" disabled={busy} onClick={onBack}>
-          <AppIcon icon={ArrowLeft} data-icon="inline-start" />
-          {t(backDestination === "app" ? "account.backToApp" : "account.back")}
-        </Button>
-      )}
+      {goBack && <AuthBackButton disabled={busy} onClick={goBack} />}
       <section className="auth-card">
         <div className="auth-language"><LanguageSelect value={languagePreference} onChange={setLanguagePreference} /></div>
         <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
@@ -264,21 +268,23 @@ export function AuthScreen({
           <Field><FieldLabel>{t("auth.username")}<Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required /></FieldLabel></Field>
           {mode === "register" && <Field><FieldLabel>{t("auth.displayName")}<Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></FieldLabel></Field>}
           {mode === "activate" && <Field><FieldLabel>{t("auth.activationCode")}<Input type="text" value={activationCode} onChange={(event) => setActivationCode(event.target.value)} autoCapitalize="none" spellCheck={false} required /></FieldLabel></Field>}
-          {mode === "recover" && <Field><FieldLabel>{t("auth.recoveryKey")}<Textarea value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value)} rows={3} required /></FieldLabel></Field>}
+          {mode === "recover" && <Field><FieldLabel>{t("auth.recoveryKey")}<Input type="text" value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value)} autoComplete="off" autoCapitalize="none" spellCheck={false} required /></FieldLabel></Field>}
           <Field><FieldLabel>{mode === "recover" ? t("auth.newMasterPassword") : t("auth.masterPassword")}<Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete={mode === "login" ? "current-password" : "new-password"} enterKeyHint={mode === "login" ? "done" : "next"} required /></FieldLabel></Field>
           {mode === "login" && <label className="remember-device"><Checkbox checked={rememberDevice} onCheckedChange={setRememberDevice} /><span>{t("auth.rememberDevice")}</span></label>}
           {mode !== "login" && <Field><FieldLabel>{t("auth.confirmPassword")}<Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete="new-password" enterKeyHint="done" required /></FieldLabel></Field>}
           {error && <p className={notice ? "notice" : "error"}>{error}</p>}
-          <Button type="submit" size="lg" disabled={busy}>{busy ? t("auth.processingKeys") : mode === "login" ? t("auth.login") : mode === "register" ? t("auth.createAccount") : mode === "activate" ? t("auth.activateCreate") : t("auth.resetPassword")}</Button>
+          <Button type="submit" size="lg" disabled={busy}>
+            <AppIcon icon={submitAction.icon} data-icon="inline-start" />
+            {t(busy ? "auth.processingKeys" : submitAction.label)}
+          </Button>
         </form>
         {mode === "login" && offlineUnavailable && <p className="auth-config-error">{t("auth.offlineUnavailable")}</p>}
         {mode === "login" && !offlineUnavailable && authConfig.status === "error" && <p className="auth-config-error">{t("auth.configError")}</p>}
         <div className="auth-actions">
-          {mode !== "login" && <Button variant="ghost" size="sm" onClick={() => setMode("login")}>{t("auth.backToLogin")}</Button>}
-          {mode === "login" && <Button variant="ghost" size="sm" disabled={authConfig.status === "loading"} onClick={() => void openRegistration()}>{t("auth.register")}</Button>}
-          {mode === "login" && <Button variant="ghost" size="sm" onClick={() => setMode("recover")}>{t("auth.forgotPassword")}</Button>}
-          {mode === "register" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button variant="ghost" size="sm" onClick={() => setMode("activate")}>{t("auth.activate.title")}</Button>}
-          {mode === "activate" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button variant="ghost" size="sm" onClick={() => setMode("register")}>{t("auth.normalRegistration")}</Button>}
+          {mode === "login" && <Button variant="ghost" size="lg" disabled={authConfig.status === "loading"} onClick={() => void openRegistration()}><AppIcon icon={UserRoundPlus} data-icon="inline-start" />{t("auth.register")}</Button>}
+          {mode === "login" && <Button variant="ghost" size="lg" onClick={() => setMode("recover")}><AppIcon icon={KeyRound} data-icon="inline-start" />{t("auth.forgotPassword")}</Button>}
+          {mode === "register" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button variant="ghost" size="lg" onClick={() => setMode("activate")}><AppIcon icon={BadgeCheck} data-icon="inline-start" />{t("auth.activate.title")}</Button>}
+          {mode === "activate" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button variant="ghost" size="lg" onClick={() => setMode("register")}><AppIcon icon={UserRoundPlus} data-icon="inline-start" />{t("auth.normalRegistration")}</Button>}
         </div>
       </section>
     </main>

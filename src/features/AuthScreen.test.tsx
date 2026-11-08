@@ -27,7 +27,7 @@ const roots: Root[] = [];
 
 async function renderAuth(
   config: { allowRegistration: boolean; bootstrapAllowed: boolean } | Error,
-  options: Pick<ComponentProps<typeof AuthScreen>, "offlineUnavailable" | "onBack" | "backDestination"> = {}
+  options: Pick<ComponentProps<typeof AuthScreen>, "offlineUnavailable" | "onBack"> = {}
 ) {
   localStorage.setItem("webmd-notes-language", "zh-CN");
   if (config instanceof Error) vi.mocked(api).mockRejectedValueOnce(config);
@@ -80,18 +80,30 @@ describe("AuthScreen account entry points", () => {
     expect(container.textContent).not.toContain("返回");
   });
 
-  it.each([
-    { backDestination: "app", label: "返回应用" },
-    { backDestination: "accounts", label: "返回" }
-  ] as const)("labels and places the back button for $backDestination", async ({ backDestination, label }) => {
+  it("places the back button above the login card", async () => {
     const onBack = vi.fn();
-    const container = await renderAuth({ allowRegistration: true, bootstrapAllowed: false }, { onBack, backDestination });
-    const back = button(container, label);
+    const container = await renderAuth({ allowRegistration: true, bootstrapAllowed: false }, { onBack });
+    const back = button(container, "返回");
 
     expect(back.nextElementSibling).toBe(container.querySelector(".auth-card"));
     expect(back.type).toBe("button");
     expect(back.querySelector("svg")).toBeTruthy();
     await click(back);
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it("returns from password recovery to login before leaving the screen", async () => {
+    const onBack = vi.fn();
+    const container = await renderAuth({ allowRegistration: true, bootstrapAllowed: false }, { onBack });
+    await click(button(container, "忘记密码"));
+
+    const back = button(container, "返回");
+    expect(container.querySelectorAll(".auth-entry > button")).toHaveLength(1);
+    expect(back.nextElementSibling).toBe(container.querySelector(".auth-card"));
+    await click(back);
+    expect(button(container, "登录")).toBeTruthy();
+    expect(onBack).not.toHaveBeenCalled();
+    await click(button(container, "返回"));
     expect(onBack).toHaveBeenCalledOnce();
   });
 
@@ -197,7 +209,8 @@ describe("AuthScreen account entry points", () => {
     await click(button(container, "忘记密码"));
     expect(container.querySelector("h1")?.textContent).toBe("找回密码");
     expect(container.textContent).toContain("使用恢复密钥重置主密码。主密码与恢复密钥均丢失时将无法恢复数据。");
-    expect(container.textContent).toContain("恢复密钥");
+    const recoveryInput = [...container.querySelectorAll("input")].find((input) => input.labels?.[0]?.textContent === "恢复密钥");
+    expect(recoveryInput).toMatchObject({ type: "text", required: true });
   });
 
   it("stays on login and retries a failed registration config request", async () => {

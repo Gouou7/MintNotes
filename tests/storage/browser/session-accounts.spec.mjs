@@ -124,7 +124,7 @@ test("switches remembered accounts across windows and requires the target PIN of
 
   await openAccountPopover(page);
   await popover.getByRole("button", { name: "Sign in to another account", exact: true }).click();
-  await page.getByRole("button", { name: "Back to app", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page.locator(".app-shell")).toBeVisible();
   await expect(popover).toBeHidden();
   await loginRemembered(page, alpha, "Alpha");
@@ -169,7 +169,7 @@ test("switches remembered accounts across windows and requires the target PIN of
   if (info.project.name === "desktop") await page.setViewportSize(viewport);
   await actions.getByRole("button", { name: "Switch account", exact: true }).click();
   await expect(page.locator(".account-picker .account-picker-name")).toHaveText(["Alpha", "Beta"]);
-  await expect(page.locator(".account-picker").getByRole("button", { name: "Back to app", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Back", exact: true }).and(page.locator(".auth-entry > button"))).toBeVisible();
   await page.getByRole("button", { name: /Alpha/ }).click();
   await expect(page.locator(".sidebar-user-name")).toHaveText("Alpha");
 
