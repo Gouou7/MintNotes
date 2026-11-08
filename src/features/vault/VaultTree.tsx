@@ -172,7 +172,7 @@ export function TreeRowMenu({ document, actions, row, onOpen, contextDisabled }:
 }) {
   const { t } = useI18n();
   const { selection, documents, onSelect, onRename, onToggleLock, onCreate, onDuplicate, onExport, onPin, onDelete, onRestore, onPurge } = actions;
-  const items: RowMenuItems = (Item, Separator) => {
+  const items: RowMenuItems = (Item, Separator, { kind, runAfterContextClose }) => {
     const selected = selection(document);
     const selectedIds = selected.map((entry) => entry.objectId);
     const roots = selectionRoots(documents, selectedIds);
@@ -182,9 +182,9 @@ export function TreeRowMenu({ document, actions, row, onOpen, contextDisabled }:
     const allPinned = selected.every((entry) => entry.favorite);
     return <>
         {!single && <p className="context-selection-count">{t("app.selectedCount", { count: selected.length })}</p>}
-        {single && document.kind === "note" && <Item onClick={() => void onSelect(document.objectId)}><AppIcon icon={FileText} size={16} strokeWidth={1.5} />{t("app.open")}</Item>}
+        {kind === "dropdown" && single && document.kind === "note" && <Item onClick={() => void onSelect(document.objectId)}><AppIcon icon={FileText} size={16} strokeWidth={1.5} />{t("app.open")}</Item>}
         {!deleted && <>
-          {single && <Item disabled={isLockedNote(document)} title={isLockedNote(document) ? t("app.unlockToEdit") : undefined} onClick={() => void onRename(document.objectId)}><AppIcon icon={Pencil} size={16} strokeWidth={1.5} />{t("app.rename")}</Item>}
+          {single && <Item disabled={isLockedNote(document)} title={isLockedNote(document) ? t("app.unlockToEdit") : undefined} onClick={() => runAfterContextClose(() => onRename(document.objectId))}><AppIcon icon={Pencil} size={16} strokeWidth={1.5} />{t("app.rename")}</Item>}
           {single && document.kind === "note" && <Item onClick={() => void onToggleLock(document.objectId)}><AppIcon icon={FileLock2} size={16} strokeWidth={1.5} />{isLockedNote(document) ? t("app.unlockNote") : t("app.lockNote")}</Item>}
           <Item onClick={() => void onPin(selectedIds, !allPinned)}><AppIcon icon={allPinned ? PinOff : Pin} size={16} strokeWidth={1.5} />{allPinned ? t("app.unpin") : t("app.pinned")}</Item>
         </>}

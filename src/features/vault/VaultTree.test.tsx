@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../i18n";
 import type { OpenDocument } from "../../types";
-import { TreeRowMenu, TreeLevel, type TreeDropTarget } from "./VaultTree";
+import { TreeRowMenu, TreeLevel, type TreeDropTarget, type TreeMenuActions } from "./VaultTree";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -31,8 +31,28 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function TreeFeedback({ draggingIds = new Set(["note-b"]) }: { draggingIds?: ReadonlySet<string> }) {
+function treeMenuActions(onRename: TreeMenuActions["onRename"] = vi.fn()): TreeMenuActions {
+  return {
+    selection: () => [note], documents: [note],
+    onSelect: vi.fn(),
+    onRename,
+    onToggleLock: vi.fn(async () => undefined),
+    onCreate: vi.fn(async () => "new-object"),
+    onDuplicate: vi.fn(async () => undefined),
+    onExport: vi.fn(async () => undefined),
+    onPin: vi.fn(async () => undefined),
+    onDelete: vi.fn(async () => undefined),
+    onRestore: vi.fn(async () => undefined),
+    onPurge: vi.fn(),
+  };
+}
+
+function TreeFixture({ draggingIds = new Set(["note-b"]), onRenameCommit }: {
+  draggingIds?: ReadonlySet<string>;
+  onRenameCommit?: (id: string, value: string) => void;
+}) {
   const [dropTarget, setDropTarget] = useState<TreeDropTarget | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   return <I18nProvider>
     <TreeLevel
       childrenByParent={new Map([[null, [note]]])}
@@ -42,15 +62,19 @@ function TreeFeedback({ draggingIds = new Set(["note-b"]) }: { draggingIds?: Rea
       expanded={new Set()}
       draggingIds={draggingIds}
       dropTarget={dropTarget}
-      renamingDocumentId={null}
+      renamingDocumentId={renamingId}
+      menuActions={onRenameCommit && treeMenuActions(setRenamingId)}
       onDropTarget={setDropTarget}
       onSelect={vi.fn()}
       onContext={vi.fn()}
       onDragSelection={() => [note.objectId]}
       onDragFinish={vi.fn()}
       onMove={vi.fn()}
-      onRenameCommit={vi.fn()}
-      onRenameCancel={vi.fn()}
+      onRenameCommit={(id, value) => {
+        onRenameCommit?.(id, value);
+        setRenamingId(null);
+      }}
+      onRenameCancel={() => setRenamingId(null)}
     />
   </I18nProvider>;
 }
@@ -75,7 +99,7 @@ describe("VaultTree drag feedback", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    await act(async () => root.render(<TreeFeedback />));
+    await act(async () => root.render(<TreeFixture />));
 
     const row = container.querySelector<HTMLElement>(".tree-row");
     expect(row).not.toBeNull();
@@ -91,7 +115,7 @@ describe("VaultTree drag feedback", () => {
     expect(row?.classList.contains("drop-after")).toBe(true);
     expect(row?.dataset.dropPosition).toBe("after");
 
-    await act(async () => root.render(<TreeFeedback draggingIds={new Set([note.objectId])} />));
+    await act(async () => root.render(<TreeFixture draggingIds={new Set([note.objectId])} />));
     act(() => dragOver(row!, 104, note.objectId));
     expect(row?.classList.contains("drop-before")).toBe(false);
     expect(row?.classList.contains("drop-after")).toBe(false);
@@ -102,6 +126,43 @@ describe("VaultTree drag feedback", () => {
 });
 
 describe("VaultTree context menu", () => {
+  it("hands focus to the rename input after choosing Rename from the context menu", async () => {
+    const container = document.createElement("div");
+    const previousFocus = document.createElement("button");
+    document.body.append(previousFocus, container);
+    const root = createRoot(container);
+    const onRenameCommit = vi.fn();
+
+    try {
+      await act(async () => root.render(<TreeFixture onRenameCommit={onRenameCommit} />));
+      previousFocus.focus();
+      const row = container.querySelector<HTMLElement>(".tree-row")!;
+      await act(async () => row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 })));
+      const items = [...document.querySelectorAll<HTMLElement>('[data-slot="context-menu-item"]')];
+      expect(items.map((item) => item.textContent)).not.toContain("Open");
+      const rename = items.find((item) => item.textContent === "Rename")!;
+      await act(async () => {
+        rename.focus();
+        rename.click();
+      });
+      await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+
+      expect(onRenameCommit).not.toHaveBeenCalled();
+      const input = container.querySelector("input")!;
+      expect(input).not.toBeNull();
+      expect(document.activeElement).toBe(input);
+
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Renamed note");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await act(async () => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+      expect(onRenameCommit).toHaveBeenCalledExactlyOnceWith(note.objectId, "Renamed note");
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   it("shows an icon beside every available action", async () => {
     const container = document.createElement("div");
     document.body.append(container);
@@ -110,24 +171,14 @@ describe("VaultTree context menu", () => {
       document={note}
       row={(more) => <div>{more}</div>}
       onOpen={vi.fn()}
-      actions={{ selection: () => [note], documents: [note],
-        onSelect: vi.fn(),
-        onRename: vi.fn(),
-        onToggleLock: vi.fn(async () => undefined),
-        onCreate: vi.fn(async () => "new-object"),
-        onDuplicate: vi.fn(async () => undefined),
-        onExport: vi.fn(async () => undefined),
-        onPin: vi.fn(async () => undefined),
-        onDelete: vi.fn(async () => undefined),
-        onRestore: vi.fn(async () => undefined),
-        onPurge: vi.fn(),
-      }}
+      actions={treeMenuActions()}
     /></I18nProvider>));
 
     await act(async () => (container.querySelector(".tree-more") as HTMLButtonElement).click());
     const actions = [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitem]")];
     expect(actions.length).toBeGreaterThan(0);
     expect(actions.every((action) => action.querySelector("svg"))).toBe(true);
+    expect(actions.map((action) => action.textContent)).toContain("Open");
     expect(actions.every((action) => action.textContent?.trim() !== "Move to")).toBe(true);
 
     await act(async () => root.unmount());
