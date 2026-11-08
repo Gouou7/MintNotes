@@ -1,5 +1,31 @@
 import { expect, test } from '@playwright/test';
 
+test('the note scrollbar stays between the glass bars, including history preview', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 568 });
+  await page.goto('/');
+  const viewport = page.locator('.editor-area');
+  const track = page.locator('.note-pane [data-slot="scroll-area-scrollbar"][data-orientation="vertical"]');
+  const thumb = track.locator('[data-slot="scroll-area-thumb"]');
+  await page.evaluate(() => window.mintFixture.load(Array.from({ length: 100 }, (_, index) => `Paragraph ${index}`).join('\n\n')));
+
+  for (const preview of [false, true]) {
+    if (preview) await page.getByRole('button', { name: 'History preview' }).click();
+    await viewport.evaluate(element => element.scrollTop = 0);
+    await expect(thumb).toBeVisible();
+    const top = (await page.locator('.note-pane-top').boundingBox())!;
+    const bottom = (await page.locator('.note-pane-bottom').boundingBox())!;
+    const rail = (await track.boundingBox())!;
+    expect(rail.y).toBeCloseTo(top.y + top.height, 0);
+    expect(rail.y + rail.height).toBeCloseTo(bottom.y, 0);
+    await expect.poll(async () => (await thumb.boundingBox())!.y).toBeCloseTo(rail.y, 0);
+    await viewport.evaluate(element => element.scrollTop = element.scrollHeight);
+    await expect.poll(async () => {
+      const box = (await thumb.boundingBox())!;
+      return box.y + box.height;
+    }).toBeCloseTo(rail.y + rail.height, 0);
+  }
+});
+
 for (const [name, width, height] of [['desktop', 1440, 900], ['tablet', 834, 1112], ['mobile', 390, 844]] as const) {
   test(`${name} blank page margins focus the actual input surface`, async ({ page }) => {
     await page.setViewportSize({ width, height });

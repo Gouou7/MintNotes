@@ -100,6 +100,7 @@ export default defineConfig({
   },
   test: {
     environment: "happy-dom",
+    setupFiles: ["./tests/vitest.setup.ts"],
     maxWorkers: 1,
     exclude: [...configDefaults.exclude, "server-dist/**", "src/editor/typora-web/**", "src/editor/patches/**", ".generated/**", "tests/editor/browser/**", "tests/storage/browser/**"]
   }

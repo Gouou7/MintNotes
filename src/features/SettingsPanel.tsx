@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWorkspaceServices } from "./session/workspaceServices";
 import { SettingsSection } from "../components/SettingsSection";
 import { SettingsItem } from "../components/SettingsItem";
@@ -529,9 +530,11 @@ export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoin
             </TabsList>
           </SidebarContent>
         </Sidebar>
-        <div className="settings-main">
-          <header className="settings-header"><DialogClose render={<Button variant="ghost" size="icon" disabled={Boolean(newRecoveryKey)} aria-label={t("settings.close")} />}><AppIcon icon={X} /></DialogClose></header>
-          <div className="settings-content" ref={contentRef}>
+        <ScrollArea className="settings-main"
+          header={<header className="settings-header"><DialogClose render={<Button variant="ghost" size="icon" disabled={Boolean(newRecoveryKey)} aria-label={t("settings.close")} />}><AppIcon icon={X} /></DialogClose></header>}
+          viewport={{ className: "settings-content", ref: contentRef }}
+          contentClassName="settings-scroll-content"
+        >
             <h2 className="settings-page-title">{pageTitle}</h2>
             {!serverSessionVerified && <p className="auth-guidance warning">{t("settings.localOnly")}</p>}
             <TabsContent value="general" className="settings-page general-settings">
@@ -609,8 +612,7 @@ export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoin
               </ul></SettingsSection>
             </TabsContent>
             {user.role === "admin" && serverSessionVerified && <TabsContent value="users" className="admin-settings"><AdminPanel currentUser={user} onNotify={onNotify} /></TabsContent>}
-          </div>
-        </div>
+        </ScrollArea>
         <SidebarFooter className="settings-logout-section flex-row">
           <SettingsButton icon={LogOut} onClick={() => setLogoutConfirming(true)}>{t("app.logout")}</SettingsButton>
         </SidebarFooter>

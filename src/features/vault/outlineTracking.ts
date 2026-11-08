@@ -88,7 +88,10 @@ export function trackActiveOutlineHeading(
     if (id !== previousId) { previousId = id; onChange(id); }
   };
 
-  const mutations = new MutationObserver(invalidate);
+  const mutations = new MutationObserver(records => {
+    // The scroll area writes overflow distances to the viewport style on every scroll.
+    if (records.some(record => record.target !== area || record.attributeName !== "style")) invalidate();
+  });
   mutations.observe(area, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
   if (area.parentElement) mutations.observe(area.parentElement, { attributes: true, attributeFilter: ["style"] });
   area.addEventListener("scroll", schedule, { passive: true, capture: true });

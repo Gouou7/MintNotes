@@ -7,13 +7,11 @@ import { NotePaneLayout } from "./NotePaneLayout";
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.replaceChildren(); });
 
 it("measures chrome, updates wrapping history/safe-area heights only on change, and preserves the scroll surface", async () => {
-  let resize!: () => void;
-  const disconnect = vi.fn();
-  const observed: Element[] = [];
+  const observers = new Map<Element, { resize: () => void; disconnect: () => void }>();
   vi.stubGlobal("ResizeObserver", class {
-    constructor(callback: () => void) { resize = callback; }
-    observe(element: Element) { observed.push(element); }
-    disconnect = disconnect;
+    constructor(readonly resize: () => void) {}
+    observe(element: Element) { observers.set(element, this); }
+    disconnect = vi.fn();
   });
   let headerHeight = 57;
   let footerHeight = 28;
@@ -26,31 +24,34 @@ it("measures chrome, updates wrapping history/safe-area heights only on change, 
   const area = createRef<HTMLDivElement>();
   const render = (history = false) => <NotePaneLayout editorArea={area} toolbar={<header>Title</header>}
     historyBanner={history ? <div>History</div> : null} status={<footer>Saved</footer>}><article>Body</article></NotePaneLayout>;
+  let chromeObserver: ReturnType<typeof observers.get>;
   try {
     await act(async () => root.render(render()));
     const pane = host.querySelector<HTMLElement>("main")!;
     const scroller = area.current!;
     scroller.scrollTop = 300;
-    expect(observed).toHaveLength(2);
+    chromeObserver = observers.get(pane.querySelector(".note-pane-top")!);
+    expect(chromeObserver).toBeDefined();
+    expect(observers.get(pane.querySelector(".note-pane-bottom")!)).toBe(chromeObserver);
     expect(pane.style.getPropertyValue("--editor-inset-top")).toBe("57px");
     expect(pane.style.getPropertyValue("--editor-inset-bottom")).toBe("28px");
     const write = vi.spyOn(pane.style, "setProperty");
-    resize();
+    chromeObserver!.resize();
     expect(write).not.toHaveBeenCalled();
     headerHeight = 153;
     footerHeight = 68;
     await act(async () => root.render(render(true)));
-    resize();
+    chromeObserver!.resize();
     expect(pane.style.getPropertyValue("--editor-inset-top")).toBe("153px");
     expect(pane.style.getPropertyValue("--editor-inset-bottom")).toBe("68px");
     expect(area.current).toBe(scroller);
     expect(scroller.scrollTop).toBe(300);
     headerHeight = 57;
     await act(async () => root.render(render()));
-    resize();
+    chromeObserver!.resize();
     expect(pane.style.getPropertyValue("--editor-inset-top")).toBe("57px");
   } finally {
     await act(async () => root.unmount());
   }
-  expect(disconnect).toHaveBeenCalledOnce();
+  expect(chromeObserver!.disconnect).toHaveBeenCalledOnce();
 });

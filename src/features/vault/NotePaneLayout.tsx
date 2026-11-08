@@ -1,4 +1,5 @@
 import { type ReactNode, type RefObject, useLayoutEffect, useRef } from "react";
+import { ScrollArea } from "../../components/ui/scroll-area";
 
 interface NotePaneLayoutProps {
   toolbar: ReactNode;
@@ -36,9 +37,10 @@ export function NotePaneLayout({ toolbar, historyBanner, status, children, edito
     return () => observer.disconnect();
   }, []);
 
-  return <main className="note-pane" ref={pane}>
-    <div className="note-pane-top" ref={top}>{toolbar}{historyBanner}</div>
-    <div className="editor-area" ref={editorArea}>{children}</div>
-    <div className="note-pane-bottom" ref={bottom}>{status}</div>
-  </main>;
+  return <ScrollArea className="note-pane" render={<main ref={pane} />} role="main"
+    header={<div className="note-pane-top" ref={top}>{toolbar}{historyBanner}</div>}
+    footer={<div className="note-pane-bottom" ref={bottom}>{status}</div>}
+    viewport={{ className: "editor-area", ref: editorArea }}
+    contentClassName="editor-scroll-content"
+  >{children}</ScrollArea>;
 }

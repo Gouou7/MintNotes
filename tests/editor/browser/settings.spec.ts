@@ -5,6 +5,25 @@ const database = { databaseBytes: 83886080, walBytes: 4194304, shmBytes: 32768, 
   reusableBytes: 1048576, logicalBytes: 52428800, userCount: 1, sqliteVersion: "3.50.0", schemaVersion: 4,
   journalMode: "wal", checkedAt: "2026-10-23T10:30:00Z", available: true };
 
+test("the settings scrollbar starts below the glass header on wide and narrow layouts", async ({ page }) => {
+  await page.goto("/settings.html");
+  await page.getByRole("tab", { name: "Notes and storage" }).click();
+  const viewport = page.locator(".settings-content");
+  const track = page.locator(".settings-main [data-slot='scroll-area-scrollbar'][data-orientation='vertical']");
+  const thumb = track.locator("[data-slot='scroll-area-thumb']");
+  for (const width of [1440, 834, 390]) {
+    await page.setViewportSize({ width, height: 568 });
+    await viewport.evaluate(element => element.scrollTop = 0);
+    await expect(thumb).toBeVisible();
+    const header = page.locator(width > 720 ? ".settings-header" : ".settings-tabs");
+    const box = (await header.boundingBox())!;
+    expect((await track.boundingBox())!.y).toBeCloseTo(box.y + box.height, 0);
+    await expect.poll(async () => (await thumb.boundingBox())!.y).toBeCloseTo(box.y + box.height, 0);
+    await viewport.evaluate(element => element.scrollTop = 200);
+    expect((await viewport.locator(".settings-page-title").boundingBox())!.y).toBeLessThan(box.y + box.height);
+  }
+});
+
 async function chooseSetting(trigger: Locator, label: string) {
   await trigger.click();
   await trigger.page().getByRole("listbox").getByRole("option", { name: label, exact: true }).click();
@@ -400,7 +419,7 @@ test("settings rows keep available space and move complete action groups when na
 test("offline settings retain a visible notice and respect forced colors", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/settings.html?offline");
-  const notice = page.locator(".settings-content > .auth-guidance");
+  const notice = page.locator(".settings-scroll-content > .auth-guidance");
   await expect(notice).toBeVisible();
   expect((await notice.boundingBox())!.y).toBeGreaterThan((await page.locator(".settings-header").boundingBox())!.y);
   await page.emulateMedia({ forcedColors: "active" });
