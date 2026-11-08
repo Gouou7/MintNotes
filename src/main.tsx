@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import { Confirmation, useConfirmation } from "./components/Confirmation";
+import { ToastStack } from "./components/Toast";
 import { createPwaUpdatePrompt, waitForPwaUpdateSurface } from "./features/pwaUpdate";
 import { applyDocumentTheme } from "./features/theme";
 import { I18nProvider, translateCurrent } from "./i18n";
@@ -52,6 +53,7 @@ function PwaUpdateConfirmation() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>
+      <ToastStack />
       <App />
       <PwaUpdateConfirmation />
     </I18nProvider>

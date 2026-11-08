@@ -38,19 +38,19 @@ describe("workspace chrome", () => {
     await act(async () => root.unmount());
   });
 
-  it("keeps panel navigation and both close controls accessible without visible labels", async () => {
+  it("keeps the labeled panel tabs and both close controls accessible", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
     const onTabChange = vi.fn(), onCollapse = vi.fn(), onClose = vi.fn();
     await act(async () => root.render(<I18nProvider><WorkspacePanelHeader tab="outline" onTabChange={onTabChange} onCollapse={onCollapse} onClose={onClose} /></I18nProvider>));
-    const tabs = container.querySelectorAll<HTMLButtonElement>(".right-panel-tabs button");
+    const tabs = container.querySelectorAll<HTMLButtonElement>('.right-panel-tabs [role="tab"]');
+    expect([...tabs].map(button => button.textContent)).toEqual(["Outline", "History"]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
-    expect([...tabs].every(button => Boolean(button.getAttribute("aria-label")))).toBe(true);
     act(() => tabs[1].click());
     expect(onTabChange).toHaveBeenCalledWith("history");
-    act(() => container.querySelector<HTMLButtonElement>(".right-pane-collapse")?.click());
-    act(() => container.querySelector<HTMLButtonElement>(".mobile-outline-close")?.click());
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Collapse right sidebar"]')?.click());
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Close right sidebar"]')?.click());
     expect(onCollapse).toHaveBeenCalledOnce(); expect(onClose).toHaveBeenCalledOnce();
     await act(async () => root.unmount());
   });

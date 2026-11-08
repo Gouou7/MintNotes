@@ -148,9 +148,10 @@ describe("vault feature composition", () => {
     if (!document.querySelector(".right-panel-tabs") || document.querySelector(".workspace-drawer[hidden] .right-panel-tabs")) {
       await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Open right sidebar"]')!.click());
     }
-    const historyTab = '[role="tab"][aria-label="History"]';
-    await settle(() => Boolean(document.querySelector(historyTab)));
-    await act(async () => document.querySelector<HTMLButtonElement>(historyTab)!.click());
+    const historyTab = () => [...document.querySelectorAll<HTMLButtonElement>('.right-panel-tabs [role="tab"]')]
+      .find(button => button.textContent === "History");
+    await settle(() => Boolean(historyTab()));
+    await act(async () => historyTab()!.click());
     const historyItem = `[data-history-id="${baseline.historyId}"] .history-select`;
     await settle(() => Boolean(document.querySelector(historyItem)));
     await act(async () => document.querySelector<HTMLButtonElement>(historyItem)!.click());

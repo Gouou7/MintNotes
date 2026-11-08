@@ -1,28 +1,35 @@
-import { useCallback, useRef } from "react";
-import { toastDuration, type ToastActionHandler, type ToastTone } from "../../components/Toast";
-import { useToastManager } from "../../components/ui/toast";
+import { useCallback, useLayoutEffect, useRef } from "react";
+import { dismissToast, showToast, type ToastActionHandler, type ToastEntry, type ToastTone } from "../../components/Toast";
 
-/** Refresh repeated feedback in place, while keeping action notices independent. */
-export function useToastNotifications() {
-  const { add, close } = useToastManager<{ tone: ToastTone }>();
-  const repeated = useRef(new Map<string, string>());
+export function useToastNotifications(visible = true) {
+  const active = useRef(new Set<ToastEntry>());
+  const visibleRef = useRef(visible);
+  const clearMessages = useCallback(() => {
+    for (const entry of active.current) dismissToast(entry);
+  }, []);
+
+  useLayoutEffect(() => {
+    visibleRef.current = visible;
+    return () => {
+      visibleRef.current = false;
+      clearMessages();
+    };
+  }, [visible, clearMessages]);
+
   const showMessage = useCallback((text: string, tone: ToastTone = "warning", action?: ToastActionHandler): void => {
-    const key = action ? undefined : JSON.stringify([text, tone]);
-    const id = key === undefined ? undefined : repeated.current.get(key);
-    const next = add({
-      id,
-      description: text,
-      timeout: toastDuration(tone) ?? 0,
-      data: { tone },
-      onClose: () => {
-        if (key !== undefined && repeated.current.get(key) === next) repeated.current.delete(key);
-      },
-      actionProps: action && {
-        children: action.label,
-        onClick: () => { void Promise.resolve().then(action.run).then(() => close(next), () => undefined); }
+    if (!visibleRef.current) return;
+    const entries = active.current;
+    if (!action) {
+      for (const entry of entries) {
+        if (entry.tone === tone && entry.content?.text === text && !entry.content.action) {
+          // A fresh Sonner entry gives a repeated message a new timeout.
+          dismissToast(entry);
+          break;
+        }
       }
-    });
-    if (key !== undefined) repeated.current.set(key, next);
-  }, [add, close]);
-  return { showMessage };
+    }
+    entries.add(showToast(tone, { text, action, onClose: (entry) => entries.delete(entry) }));
+  }, []);
+
+  return { showMessage, clearMessages };
 }

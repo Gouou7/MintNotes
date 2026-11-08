@@ -1,4 +1,3 @@
-import { ToastProvider } from "../../components/ui/toast";
 import { Spinner } from "../../components/ui/spinner";
 import { WorkspaceDrawer } from "./WorkspaceDrawer";
 import { useMediaQuery } from "../useMediaQuery";
@@ -26,7 +25,6 @@ import {
 import { AppIcon } from "../../components/AppIcon";
 import { HistoryPanel } from "../../components/HistoryPanel";
 import { PaneResizer } from "../../components/PaneResizer";
-import { ToastStack } from "../../components/Toast";
 import { MarkdownEditor } from "../../editor/product/MarkdownEditor";
 import { ReadingEditor } from "../../editor/product/ReadingEditor";
 import { translateError, useI18n } from "../../i18n";
@@ -80,11 +78,7 @@ const TREE_WIDTH_MAX = 420;
 const OUTLINE_WIDTH_MIN = 200;
 const OUTLINE_WIDTH_MAX = 420;
 
-export function VaultWorkspace(props: VaultAppProps) {
-  return <ToastProvider limit={Infinity}><Workspace {...props} /></ToastProvider>;
-}
-
-function Workspace({
+export function VaultWorkspace({
   user,
   endpoint,
   credential,
@@ -172,7 +166,7 @@ function Workspace({
     markLocalSuccess
   } = useSyncStatus(serverSessionVerified);
 
-  const { showMessage } = useToastNotifications();
+  const { showMessage } = useToastNotifications(visible);
 
   useEffect(() => {
     serverSessionVerifiedRef.current = serverSessionVerified;
@@ -771,7 +765,6 @@ function Workspace({
       {visible && importExport.result && <ImportResultPanel result={importExport.result} onClose={importExport.dismiss} />}
       {!settingsOpen && !inTreeDrawer && !inRightDrawer && confirmDialog}
       {!inTreeDrawer && settingsDialog}
-      {visible && <ToastStack />}
     </div>
   );
 }

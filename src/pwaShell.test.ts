@@ -61,8 +61,10 @@ describe("installed PWA shell", () => {
     expect(styles).not.toContain(".desktop-collapse { display: none; }");
   });
 
-  it("places transient notifications below the top toolbar", () => {
-    expect(styles).toMatch(/\.toast-stack\s*\{[^}]*top: calc\(64px \+ var\(--safe-area-top\)\)/s);
+  it("anchors Sonner above the bottom bar and the system safe area", () => {
+    const notifications = readFileSync(resolve("src/components/Toast.tsx"), "utf8");
+    expect(notifications).toContain('position="bottom-center"');
+    expect(notifications).toContain('bottom: "calc(40px + var(--safe-area-bottom))"');
   });
 
   it("keeps the editor pane constrained so the document owns vertical scrolling", () => {

@@ -113,6 +113,8 @@
   --danger-soft: #fff0f0;
   --warning-bg: #fff8df;
   --warning-text: #6c520c;
+  --toast-warning-bg: var(--warning-bg);
+  --toast-warning-text: var(--warning-text);
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
@@ -291,29 +293,30 @@ body { color: var(--text); background: var(--surface); }
 .tree-collapsed .pane-toggle { display: grid; }
 .right-pane-toggle { display: none; }
 .outline-collapsed .right-pane-toggle { display: grid; }
-.toast-stack {
-  --toast-width: min(300px, calc(100vw - 32px - var(--safe-area-left) - var(--safe-area-right)));
-  --toast-right: max(16px, var(--safe-area-right));
-  --toast-shadow-space: 32px;
-  position: fixed; left: auto; bottom: auto; margin: 0;
-  top: calc(64px + var(--safe-area-top) - var(--toast-shadow-space)); right: 0; z-index: 220;
-  width: min(100vw, calc(var(--toast-width) + var(--toast-right) + var(--toast-shadow-space)));
-  max-width: none;
-  max-height: calc(100dvh - 64px - var(--safe-area-top) - var(--safe-area-bottom) + var(--toast-shadow-space));
-  /* Keep the rounded Alert shadows inside the scrollport. */
-  padding: var(--toast-shadow-space) var(--toast-right) var(--toast-shadow-space) 0;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 16px;
-  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; pointer-events: none;
+.app-sonner[data-sonner-toaster] {
+  z-index: 220;
+  font-family: inherit;
 }
-.toast-stack::-webkit-scrollbar { display: none; }
-.toast-notice { --glass-opacity: 94%; flex: none; width: var(--toast-width); min-height: 46px; align-items: start; pointer-events: auto; animation: toast-enter .16s ease-out; }
-.toast-stack-empty, .toast-notice[data-ending-style] { display: none; }
-.toast-notice :is([data-slot="alert-description"], .toast-close, .toast-action) { color: inherit; }
-.toast-notice [data-slot="alert-description"] { grid-column: 2; min-width: 0; overflow-wrap: anywhere; white-space: pre-line; }
-.toast-notice .toast-action { grid-column: 2; justify-self: start; max-width: 100%; height: auto; min-height: 28px; padding-block: 4px; overflow-wrap: anywhere; white-space: normal; text-align: start; }
-.toast-notice[data-tone="warning"] { --glass-surface: var(--warning-bg); color: var(--warning-text); border-color: color-mix(in srgb, var(--warning-text) 32%, var(--border)); }
-.toast-notice[data-tone="critical"] { --glass-surface: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 32%, var(--border)); }
-@keyframes toast-enter { from { opacity: 0; transform: translateY(-8px); } }
+.toast-notice[data-sonner-toast] { --glass-opacity: 94%; }
+.toast-notice:has([data-toast-cleared]) { visibility: hidden; }
+.toast-notice[data-sonner-toast][data-styled="true"] { box-shadow: var(--floating-shadow); }
+.toast-notice[data-sonner-toast] [data-title] { white-space: pre-line; }
+.toast-notice[data-sonner-toast][data-styled="true"] [data-cancel] { background: color-mix(in srgb, var(--normal-text) 12%, transparent); }
+.toast-notice[data-sonner-toast][data-styled="true"]:has([data-action]) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+.toast-notice[data-sonner-toast][data-styled="true"] [data-action] { grid-column: 2 / -1; justify-self: end; margin: 0; max-width: 100%; height: auto; min-height: 24px; padding-block: 4px; white-space: normal; overflow-wrap: anywhere; text-align: start; }
+.toast-notice[data-type="warning"] {
+  --toast-surface: var(--toast-warning-bg);
+  --normal-text: var(--toast-warning-text);
+  --normal-border: color-mix(in srgb, var(--toast-warning-text) 32%, var(--border));
+}
+.toast-notice[data-type="error"] {
+  --toast-surface: var(--danger-soft);
+  --normal-text: var(--danger);
+  --normal-border: color-mix(in srgb, var(--danger) 32%, var(--border));
+}
+.app-sonner [data-sonner-toast]:focus-visible,
+.app-sonner button:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; }
+.toast-notice[data-sonner-toast][data-styled="true"] button:focus-visible { box-shadow: none; }
 .editor-area { min-height: 0; scroll-padding-top: var(--editor-inset-top, 0px); scroll-padding-bottom: var(--editor-inset-bottom, 0px); flex: 1; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .empty-editor { height: 100%; padding-top: var(--editor-inset-top, 0px); padding-bottom: var(--editor-inset-bottom, 0px); display: grid; place-content: center; text-align: center; color: var(--muted); }
@@ -340,7 +343,6 @@ body { color: var(--text); background: var(--surface); }
 }
 @media (prefers-reduced-motion: reduce) {
   .app-shell { --pane-motion-duration: 0ms; }
-  .toast-notice { animation: none; }
 }
 
 .right-panel-content { min-width: 0; min-height: 0; flex: 1; display: flex; overflow: hidden; }
@@ -447,7 +449,6 @@ body { color: var(--text); background: var(--surface); }
 .account-switch-popover .account-picker-row[aria-current="true"] { background: var(--button-hover); }
 .account-switch-popover .account-picker-row > svg { color: var(--muted); }
 .account-switch-actions { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
-.account-transition-error { position: fixed; z-index: 100; top: calc(64px + var(--safe-area-top)); pointer-events: none; inset-inline: 16px; margin-inline: auto; width: max-content; max-width: calc(100% - 32px); padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
 .recovery-card textarea { font-family: ui-monospace, monospace; word-break: break-all; resize: none; }
 .spinner { width: 34px; height: 34px; color: var(--accent); }
 .loading-shell { align-content: center; gap: 12px; color: var(--muted); }
@@ -604,18 +605,19 @@ body { color: var(--text); background: var(--surface); }
 }
 
 /* Shared material contract: docs/system-design.md#统一材质与可访问性 */
-.note-pane-top, .status-bar, .context-menu, .toast-notice, .auth-card, .settings-header {
+.note-pane-top, .status-bar, .context-menu, .toast-notice[data-sonner-toast][data-styled="true"], .auth-card, .settings-header {
   --glass-surface: var(--surface-raised);
   --muted: var(--glass-muted);
   background: var(--glass-surface);
 }
 .note-pane-top, .status-bar { --glass-surface: var(--chrome-background); }
+.toast-notice[data-sonner-toast][data-styled="true"] { --glass-surface: var(--toast-surface, var(--surface-raised)); }
 .settings-header { --glass-surface: var(--settings-chrome-background); --glass-translucent: color-mix(in srgb, #000000 var(--settings-header-opacity), transparent); --glass-blur: 25px; }
 @media (max-width: 720px) {
   .settings-modal .settings-sidebar { --glass-surface: var(--settings-chrome-background); --glass-translucent: color-mix(in srgb, #000000 var(--settings-header-opacity), transparent); --glass-blur: 25px; --muted: var(--glass-muted); background: var(--glass-surface); }
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .note-pane-top, .status-bar, .context-menu, .toast-notice, .auth-card, .settings-header {
+  .note-pane-top, .status-bar, .context-menu, .toast-notice[data-sonner-toast][data-styled="true"], .auth-card, .settings-header {
     background: var(--glass-translucent, color-mix(in srgb, var(--glass-surface) var(--glass-opacity), transparent));
     -webkit-backdrop-filter: blur(var(--glass-blur));
     backdrop-filter: blur(var(--glass-blur));
@@ -625,7 +627,7 @@ body { color: var(--text); background: var(--surface); }
   }
 }
 @media (prefers-reduced-transparency: reduce), (forced-colors: active) {
-  .note-pane-top, .status-bar, .context-menu, .toast-notice, .auth-card, .settings-header {
+  .note-pane-top, .status-bar, .context-menu, .toast-notice[data-sonner-toast][data-styled="true"], .auth-card, .settings-header {
     background: var(--glass-surface);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;

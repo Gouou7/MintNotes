@@ -1,4 +1,3 @@
-import { ToastProvider } from "../../../src/components/ui/toast";
 import { WorkspaceDrawer } from "../../../src/features/vault/WorkspaceDrawer";
 import { useMediaQuery } from "../../../src/features/useMediaQuery";
 import { useMobileDrawerGestures } from "../../../src/features/vault/useWorkspaceInteractions";
@@ -124,9 +123,8 @@ function Workspace() {
         <SettingsButton icon={Trash2} variant="destructive">Delete</SettingsButton>
       </div></div>
     </SettingsDialog>}
-    <ToastStack />
   </div>;
 }
 
 localStorage.setItem("webmd-notes-language", fixtureParameters.get("language") ?? "en");
-createRoot(window.document.getElementById("root")!).render(<I18nProvider><ToastProvider limit={Infinity}><Workspace /></ToastProvider></I18nProvider>);
+createRoot(window.document.getElementById("root")!).render(<I18nProvider><ToastStack /><Workspace /></I18nProvider>);

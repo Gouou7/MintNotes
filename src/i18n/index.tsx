@@ -652,7 +652,6 @@ const messages = {
   },
   "app.conflictSuffix": { en: "conflict copy", "zh-CN": "冲突副本", "zh-TW": "衝突副本" },
   "app.copySuffix": { en: "copy", "zh-CN": "副本", "zh-TW": "副本" },
-  "app.closeNotification": { en: "Close notification", "zh-CN": "关闭通知", "zh-TW": "關閉通知" },
   "app.notifications": { en: "Notifications", "zh-CN": "通知", "zh-TW": "通知" },
   "app.collapseDirectory": { en: "Collapse directory", "zh-CN": "折叠目录", "zh-TW": "收合目錄" },
   "app.closeDirectory": { en: "Close directory", "zh-CN": "关闭目录", "zh-TW": "關閉目錄" },

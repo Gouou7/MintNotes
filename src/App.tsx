@@ -1,11 +1,12 @@
 import { Spinner } from "@/components/ui/spinner";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { AuthScreen } from "./features/AuthScreen";
 import { LockScreen } from "./features/LockScreen";
 import { AccountChooser } from "./features/session/AccountChooser";
 import { SidebarAccountSwitcher } from "./features/session/SidebarAccountSwitcher";
 import { useSessionController } from "./features/session/useSessionController";
 import { WorkspaceServicesContext } from "./features/session/workspaceServices";
+import { useToastNotifications } from "./features/vault/useToastNotifications";
 import { useI18n } from "./i18n";
 import { useDatabaseUpgrade } from "./storage/useDatabaseUpgrade";
 
@@ -16,6 +17,13 @@ export default function App() {
   const databaseBlocked = useDatabaseUpgrade();
   const session = useSessionController();
   const { workspace, locked } = session;
+  const { showMessage, clearMessages } = useToastNotifications();
+  const transitionError = !databaseBlocked && !session.restoring && !session.chooser ? session.error : null;
+  useEffect(() => {
+    if (!transitionError) return;
+    showMessage(t(transitionError === "reauth" ? "account.reauth" : "account.switchFailed"), "critical");
+    return clearMessages;
+  }, [transitionError, t, showMessage, clearMessages]);
   if (databaseBlocked) return <main className="loading-shell"><p role="status">{t("storage.upgradeBlocked")}</p></main>;
   if (session.restoring) return <main className="loading-shell"><Spinner className="spinner" aria-hidden="true" /><p>{t("lock.restoring")}</p></main>;
 
@@ -52,8 +60,5 @@ export default function App() {
           runAuthentication={session.runAuthentication} initialUsername={locked?.user.username} initialRememberDevice={locked?.endpoint.remembered}
           onBack={session.canSwitch && (workspace || locked || session.accounts.length) ? session.cancelLogin : undefined}
           offlineUnavailable={!session.browserOnline} />)}
-    {session.error && !session.chooser && <div role="alert" className="account-transition-error">
-      {t(session.error === "reauth" ? "account.reauth" : "account.switchFailed")}
-    </div>}
   </>;
 }
