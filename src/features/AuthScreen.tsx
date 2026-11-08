@@ -213,12 +213,12 @@ export function AuthScreen({
           <p>{t("auth.recovery.description")}</p>
           <Textarea readOnly value={newRecovery.code} rows={3} />
           <div className="recovery-actions">
-            <Button onClick={() => void copyRecoveryKey()}>
-              <AppIcon icon={recoveryCopyState === "copied" ? Check : Copy} size={16} />
+            <Button variant="outline" onClick={() => void copyRecoveryKey()}>
+              <AppIcon icon={recoveryCopyState === "copied" ? Check : Copy} data-icon="inline-start" />
               {recoveryCopyState === "copied" ? t("auth.recovery.copied") : t("auth.recovery.copy")}
             </Button>
-            <Button onClick={() => downloadRecoveryKey(newRecovery.session.user.username, newRecovery.code)}>
-              <AppIcon icon={Download} size={16} />
+            <Button variant="outline" onClick={() => downloadRecoveryKey(newRecovery.session.user.username, newRecovery.code)}>
+              <AppIcon icon={Download} data-icon="inline-start" />
               {t("auth.recovery.download")}
             </Button>
           </div>
@@ -228,8 +228,8 @@ export function AuthScreen({
             <span>{t("auth.recovery.confirm")}</span>
           </label>
           {error && <p className="error recovery-feedback" role="alert">{error}</p>}
-          <Button className="primary" disabled={!recoveryConfirmed || busy} onClick={() => void confirmRecovery()}>{t("auth.recovery.saved")}</Button>
-          {error && <Button className="auth-ghost" type="button" disabled={busy} onClick={() => {
+          <Button size="lg" disabled={!recoveryConfirmed || busy} onClick={() => void confirmRecovery()}>{t("auth.recovery.saved")}</Button>
+          {error && <Button variant="ghost" type="button" disabled={busy} onClick={() => {
             setNewRecovery(null);
             setMode("login");
             setError("");
@@ -244,7 +244,7 @@ export function AuthScreen({
   return (
     <main className="auth-shell">
       <section className="auth-card">
-        {onBack && <Button className="auth-ghost" type="button" disabled={busy} onClick={onBack}>{t("account.back")}</Button>}
+        {onBack && <Button variant="ghost" type="button" disabled={busy} onClick={onBack}>{t("account.back")}</Button>}
         <div className="auth-language"><LanguageSelect value={languagePreference} onChange={setLanguagePreference} /></div>
         <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
         <h1>{mode === "login" ? "Mint Notes" : mode === "register" ? t("auth.register.title") : mode === "activate" ? t("auth.activate.title") : t("auth.recover.title")}</h1>
@@ -262,16 +262,16 @@ export function AuthScreen({
           {mode === "login" && <label className="remember-device"><Checkbox  checked={rememberDevice} onCheckedChange={(checked) => setRememberDevice(checked)} />{t("auth.rememberDevice")}</label>}
           {mode !== "login" && <Field><FieldLabel>{t("auth.confirmPassword")}<Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete="new-password" enterKeyHint="done" required /></FieldLabel></Field>}
           {error && <p className={notice ? "notice" : "error"}>{error}</p>}
-          <Button type="submit" className="primary" disabled={busy}>{busy ? t("auth.processingKeys") : mode === "login" ? t("auth.login") : mode === "register" ? t("auth.createAccount") : mode === "activate" ? t("auth.activateCreate") : t("auth.resetPassword")}</Button>
+          <Button type="submit" size="lg" disabled={busy}>{busy ? t("auth.processingKeys") : mode === "login" ? t("auth.login") : mode === "register" ? t("auth.createAccount") : mode === "activate" ? t("auth.activateCreate") : t("auth.resetPassword")}</Button>
         </form>
         {mode === "login" && offlineUnavailable && <p className="auth-config-error">{t("auth.offlineUnavailable")}</p>}
         {mode === "login" && !offlineUnavailable && authConfig.status === "error" && <p className="auth-config-error">{t("auth.configError")}</p>}
         <div className="auth-actions">
-          {mode !== "login" && <Button onClick={() => setMode("login")}>{t("auth.backToLogin")}</Button>}
-          {mode === "login" && <Button disabled={authConfig.status === "loading"} onClick={() => void openRegistration()}>{t("auth.register")}</Button>}
-          {mode === "login" && <Button onClick={() => setMode("recover")}>{t("auth.forgotPassword")}</Button>}
-          {mode === "register" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button onClick={() => setMode("activate")}>{t("auth.activate.title")}</Button>}
-          {mode === "activate" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button onClick={() => setMode("register")}>{t("auth.normalRegistration")}</Button>}
+          {mode !== "login" && <Button variant="ghost" size="sm" onClick={() => setMode("login")}>{t("auth.backToLogin")}</Button>}
+          {mode === "login" && <Button variant="ghost" size="sm" disabled={authConfig.status === "loading"} onClick={() => void openRegistration()}>{t("auth.register")}</Button>}
+          {mode === "login" && <Button variant="ghost" size="sm" onClick={() => setMode("recover")}>{t("auth.forgotPassword")}</Button>}
+          {mode === "register" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button variant="ghost" size="sm" onClick={() => setMode("activate")}>{t("auth.activate.title")}</Button>}
+          {mode === "activate" && Boolean(config?.allowRegistration && !config.bootstrapAllowed) && <Button variant="ghost" size="sm" onClick={() => setMode("register")}>{t("auth.normalRegistration")}</Button>}
         </div>
       </section>
     </main>

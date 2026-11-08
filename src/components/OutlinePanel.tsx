@@ -34,11 +34,11 @@ const OutlineBranch = memo(function OutlineBranch(props: Omit<OutlineLevelProps,
   const groupId = `${props.groupPrefix}-${node.item.id}`;
   return <li className="outline-node" data-outline-id={node.item.id} data-outline-level={node.level} key={node.key}>
     <div className={`outline-row ${selected ? "active" : ""}`}>
-      {hasChildren ? <Button className="outline-toggle" aria-expanded={expanded} aria-controls={groupId}
+      {hasChildren ? <Button variant="ghost" size="icon-xs" className="outline-toggle" aria-expanded={expanded} aria-controls={groupId}
         aria-label={t(expanded ? "outline.collapseHeading" : "outline.expandHeading", { title: node.item.text })}
         onClick={() => props.onToggle(node.key)}><AppIcon icon={expanded ? ChevronDown : ChevronRight} size={16} /></Button>
         : <span className="outline-spacer" aria-hidden="true" />}
-      <Button className="outline-title" aria-current={selected ? "location" : undefined} onClick={() => props.onSelect(node)}>{node.item.text}</Button>
+      <Button variant="ghost" className="outline-title" aria-current={selected ? "location" : undefined} onClick={() => props.onSelect(node)}>{node.item.text}</Button>
     </div>
     {hasChildren && <ul className="outline-children" id={groupId} hidden={!expanded}>
       <OutlineLevel {...props} nodes={node.children} activePath={childPath.length ? childPath : EMPTY_PATH} />

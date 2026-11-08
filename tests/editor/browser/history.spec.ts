@@ -14,9 +14,9 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
     for (const theme of ["dark", "light"] as const) {
       await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
       await page.mouse.move(width / 2, height - 50);
-      await expect(panel.getByRole("button", { name: "创建快照", exact: true })).toHaveCSS("height", "30px");
-      await expect(panel.getByRole("button", { name: "清空历史", exact: true })).toHaveCSS("height", "30px");
-      await expect(panel.locator(".history-panel-actions button").first()).toHaveCSS("border-radius", "8px");
+      await expect(panel.getByRole("button", { name: "创建快照", exact: true })).toHaveCSS("height", "32px");
+      await expect(panel.getByRole("button", { name: "清空历史", exact: true })).toHaveCSS("height", "32px");
+      await expect(panel.locator(".history-panel-actions button").first()).toHaveCSS("border-radius", "9px");
       await expect(panel.locator(".history-day h3")).toHaveText("2000-01-01");
       await expect(details).toHaveText("00:00 · 自动保存 · 需联网下载");
       await expect(title).toHaveCSS("font-size", "14px");

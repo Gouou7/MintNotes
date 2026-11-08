@@ -1,3 +1,5 @@
+import type { MintContext } from "./context.ts";
+
 /** A display label and a native input share the same compact header slot. */
 export interface InlineTextEditor {
   element: HTMLElement;
@@ -21,6 +23,7 @@ export function inlineArrowDirection(input: HTMLInputElement, event: KeyboardEve
 
 export function inlineTextEditor(options: {
   value: string; display: string; label: string; placeholder?: string;
+  styleButton?: MintContext["styleButton"];
   readOnly(): boolean;
   validate?(value: string): string;
   commit(value: string): void;
@@ -30,6 +33,7 @@ export function inlineTextEditor(options: {
 }): InlineTextEditor {
   const element = document.createElement("span"), label = document.createElement("button"), input = document.createElement("input"), measure = document.createElement("span");
   element.className = "mint-inline-editor"; label.className = "mint-inline-editor-label"; input.className = "mint-inline-editor-input"; measure.className = "mint-inline-editor-measure";
+  options.styleButton?.(label, "inline");
   label.type = "button"; label.setAttribute("aria-label", options.label); input.setAttribute("aria-label", options.label); measure.setAttribute("aria-hidden", "true");
   input.type = "text"; input.spellcheck = false; input.autocomplete = "off"; input.placeholder = options.placeholder ?? ""; input.hidden = measure.hidden = true; element.append(label, input, measure);
   let value = options.value, display = options.display, editing = false, composing = false, finishAfterComposition = false, disposed = false;

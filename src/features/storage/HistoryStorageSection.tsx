@@ -31,7 +31,7 @@ export function HistoryStorageSection({ historySettings, busy, serverSessionVeri
                 <QuotaFields presets={HISTORY_QUOTA_PRESETS} label={t("storage.historyBudget")} description={t("storage.historyBudgetHelp")} value={quota.draft} onChange={quota.change} disabled={busy || quota.saving || !serverSessionVerified} />
               </div>
               <SettingsItem title={t("settings.historyStorage")} className="history-usage" description={<>{formatHistoryBytes(historySettings.usedBytes)} / {historySettings.quotaBytes === null ? t("storage.unlimited") : formatHistoryBytes(historySettings.quotaBytes)} · {t("settings.historyVersionCount", { count: historySettings.count })}</>}>
-                <SettingsButton icon={Trash2} variant="destructive" className="danger" disabled={busy || !serverSessionVerified || historySettings.count === 0} onClick={() => void onClearHistory()}>{t("settings.historyClearAll")}</SettingsButton>
+                <SettingsButton icon={Trash2} variant="destructive" disabled={busy || !serverSessionVerified || historySettings.count === 0} onClick={() => void onClearHistory()}>{t("settings.historyClearAll")}</SettingsButton>
               </SettingsItem>
             </SettingsSection>;
 }

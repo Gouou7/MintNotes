@@ -101,37 +101,25 @@
 .markdown-editor-host .ProseMirror .mint-math-block > pre code { padding: 0; border: 0; border-radius: 0; color: inherit; font: inherit; white-space: pre-wrap; }
 .markdown-editor-host .ProseMirror .mint-math-block .syntax-hint { color: var(--syntax-marker-color); }
 .mint-reading :is(.mint-math,.mint-display-math,.mint-math-preview) { cursor: auto; }
-.wiki-link { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; cursor: pointer; }
+.wiki-link { display: inline; height: auto; padding: 0; border: 0; color: var(--accent); font: inherit; font-weight: 600; white-space: normal; overflow-wrap: anywhere; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .inline-footnote-body { display: none; }
 .mint-inline-footnote:hover .inline-footnote-body { display: inline; }
 .mint-code-actions { display: flex; position: absolute; top: 9px; right: 9px; color: var(--code-block-muted); white-space: normal; }
 .markdown-editor-host .ProseMirror pre .cb-chrome { display: flex; position: absolute; top: 15px; left: 15px; right: 47px; bottom: auto; align-items: center; gap: 5px; min-width: 0; color: var(--code-block-muted); font: 600 calc(12px + var(--font-adjust, 0px))/calc(20px + var(--font-adjust, 0px)) Inter, ui-sans-serif, system-ui, sans-serif; white-space: normal; }
 .mint-code-actions { user-select: none; }
 .mint-code-language > span:not(.mint-inline-editor), .mint-code-actions button > span, .callout-type-icon, .callout-type-icon > span { display: inline-flex; flex: 0 0 auto; }
-.mint-code-language svg, .callout-icon svg, .callout-toggle svg { width: 20px; height: 20px; }
-.mint-code-actions svg { width: 16px; height: 16px; }
-.mint-code-actions button, .callout-toggle { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--code-block-muted); cursor: pointer; transition: background-color 120ms ease, color 120ms ease; }
-.mint-code-actions button svg, .callout-toggle svg { transition: transform 100ms ease; }
-@media (hover: hover) and (pointer: fine) {
-  .mint-code-actions button:hover, .callout-toggle:hover { background: var(--editor-control-bg); }
-}
-.mint-code-actions button:focus-visible, .callout-toggle:focus-visible { background: var(--editor-control-bg); }
-.mint-code-actions button:active, .callout-toggle:active { background: var(--button-active); }
-.mint-code-actions button:active svg, .callout-toggle:active svg { transform: scale(.9); }
-@media (prefers-reduced-motion: reduce) {
-  .mint-code-actions button, .mint-code-actions button svg, .callout-toggle, .callout-toggle svg { transition: none; }
-  .mint-code-actions button:active svg, .callout-toggle:active svg { transform: none; }
-}
+.mint-code-language svg, .callout-icon svg { width: 20px; height: 20px; }
 .mint-inline-editor { display: inline-grid; grid-template-columns: minmax(0, auto); min-width: 0; max-width: 100%; vertical-align: top; }
 .mint-inline-editor > [hidden], .callout-toggle[hidden] { display: none; }
 .mint-inline-editor-label, .mint-inline-editor-measure, .markdown-editor-host .ProseMirror pre .cb-lang-input, .mint-inline-editor-input { grid-area: 1 / 1; min-width: 0; margin: 0; padding: 0 3px; border: 0; border-radius: 8px; font: inherit; line-height: inherit; }
-.mint-inline-editor-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; background: transparent; text-align: left; cursor: pointer; }
-.mint-inline-editor-label:disabled { cursor: default; }
-.mint-inline-editor-label:enabled:hover { background: var(--editor-control-bg); }
+.mint-inline-editor-label { display: block; height: auto; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.mint-inline-editor-label:disabled { opacity: 1; }
 .mint-inline-editor-measure { visibility: hidden; white-space: pre; }
 .markdown-editor-host .ProseMirror pre .cb-lang-input, .mint-inline-editor-input { width: 100%; background: var(--editor-control-bg); color: var(--code-block-text); outline: 0; user-select: text; }
 .markdown-editor-host .ProseMirror .mint-inline-editor-input:focus-visible { outline: 0; }
 .mint-code-actions button[data-copy-state="failed"] { color: var(--danger); }
+.table-toolbar { background: var(--surface-raised); border-color: var(--border); }
+.table-toolbar button[data-slot="button"].active { background: var(--surface-hover); color: var(--accent-text); }
 .hljs-keyword,.hljs-selector-tag,.hljs-literal { color: #9b43aa; }
 .hljs-string,.hljs-attr,.hljs-addition { color: #26774c; }
 .hljs-number,.hljs-built_in,.hljs-type { color: #a05d16; }
@@ -193,9 +181,6 @@
 .property-key { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .property-key-editor { position: relative; display: block; }
 .property-key-editor small { position: absolute; top: calc(100% + 3px); left: 4px; z-index: 3; width: max-content; max-width: 260px; padding: 3px 6px; border: 1px solid var(--danger); border-radius: 5px; background: var(--surface-raised); color: var(--danger); font-size: 11px; }
-.property-row input { min-width: 0; width: 100%; border: 1px solid transparent; border-radius: 6px; outline: 0; background: transparent; color: var(--text); }
-.property-row input:hover { background: var(--surface-input); }
-.property-row input:focus { border-color: var(--accent); background: var(--surface-raised); }
 .property-key-editor input, .property-scalar-input { height: 30px; padding: 4px 7px; }
 .property-value { min-width: 0; color: var(--text); }
 .property-value > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -205,13 +190,11 @@
 .property-list-editor { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .property-list-editor > input { width: 110px; height: 28px; flex: 1 1 90px; padding: 3px 6px; }
 .property-chip { max-width: 180px; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; padding: 3px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); font-size: 12px; line-height: 1.4; }
-.property-chip > button { width: 17px; height: 17px; display: grid; place-items: center; flex: 0 0 17px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; line-height: 1; }
-.property-chip > button:hover { background: color-mix(in srgb, var(--accent) 28%, transparent); }
-.property-remove { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; opacity: 0; background: transparent; color: var(--muted); cursor: pointer; }
-.property-row:hover .property-remove, .property-remove:focus-visible { opacity: 1; }
-.property-remove:hover { color: var(--danger); background: var(--danger-soft); }
-.property-add { min-height: 32px; display: inline-flex; align-items: center; gap: 7px; margin-top: 7px; padding: 4px 7px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
-.property-add:hover { color: var(--text-strong); background: var(--surface-hover); }
+@media (hover: hover) and (pointer: fine) {
+  .property-remove { opacity: 0; }
+  .property-row:hover .property-remove, .property-remove:focus-visible { opacity: 1; }
+}
+.property-add { margin-top: 7px; }
 .property-complex-value { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
 .properties-complex-hint { display: block; margin: 8px 7px 0; color: var(--muted); line-height: 1.45; }
 .properties-invalid { padding: 12px 14px 16px; border: 1px solid color-mix(in srgb, var(--warning-text) 55%, var(--border)); border-radius: 9px; background: var(--warning-bg); color: var(--warning-text); }

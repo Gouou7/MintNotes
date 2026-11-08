@@ -78,8 +78,8 @@ export function HistoryPanel({
 
   return <div className="history-panel" ref={panel}>
     <div className="history-panel-actions">
-      <Button disabled={disabled} onClick={onSave}><AppIcon icon={ClockPlus} size={16} />{t("history.saveNow")}</Button>
-      <Button className="history-clear" disabled={disabled || !items.length} onClick={onClear}><AppIcon icon={Trash2} size={16} />{t("history.clearNote")}</Button>
+      <Button disabled={disabled} onClick={onSave}><AppIcon icon={ClockPlus} data-icon="inline-start" />{t("history.saveNow")}</Button>
+      <Button variant="destructive" disabled={disabled || !items.length} onClick={onClear}><AppIcon icon={Trash2} data-icon="inline-start" />{t("history.clearNote")}</Button>
     </div>
     <div className="history-list" aria-label={t("history.list")}>
       {groups.map((group) => <section className="history-day" key={group.day}>
@@ -115,7 +115,7 @@ export function HistoryPanel({
       </section>)}
       {!items.length && !loading && <p className="outline-empty">{t("history.empty")}</p>}
       {loading && <p className="history-loading">{t("history.loading")}</p>}
-      {hasMore && !loading && <Button className="history-more" onClick={onLoadMore}>{t("history.loadMore")}</Button>}
+      {hasMore && !loading && <Button variant="outline" className="w-full" onClick={onLoadMore}>{t("history.loadMore")}</Button>}
     </div>
   </div>;
 }

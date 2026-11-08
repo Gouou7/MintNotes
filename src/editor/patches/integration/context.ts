@@ -16,6 +16,7 @@ export interface MintContext {
   editCalloutMarker?: (source: string, change: { type?: string; title?: string }) => string | null;
   onNavigate?: (target: string) => void;
   icon?: (name: string) => { element: HTMLElement; destroy(): void };
+  styleButton?: (button: HTMLButtonElement, kind: "icon" | "destructive" | "inline" | "link") => void;
   label?: (name: string) => string;
 }
 export function safeImage(source: string, context: MintContext): string | null {

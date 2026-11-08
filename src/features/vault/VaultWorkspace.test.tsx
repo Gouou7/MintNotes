@@ -156,7 +156,9 @@ describe("vault feature composition", () => {
     await act(async () => document.querySelector<HTMLButtonElement>(historyItem)!.click());
     await act(async () => document.querySelector<HTMLButtonElement>(".workspace-drawer:not([hidden]) .mobile-outline-close")?.click());
     await settle(() => host.querySelector('[aria-label="test-preview"]')?.textContent === "First body");
-    await act(async () => host.querySelector<HTMLButtonElement>(".history-preview-banner .primary")!.click());
+    const restoreCurrent = [...host.querySelectorAll<HTMLButtonElement>(".history-preview-banner button")]
+      .find(button => button.textContent === "Restore current note")!;
+    await act(async () => restoreCurrent.click());
     await settle(() => host.querySelector<HTMLTextAreaElement>('[aria-label="test-editor"]')?.value === "First body");
     const snapshots = await localDb.historySnapshots.where("[userId+noteId]").equals([userId, firstId]).toArray();
     const safety = snapshots.find(snapshot => snapshot.captureKind === "restore-safety");

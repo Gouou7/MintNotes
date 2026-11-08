@@ -26,13 +26,13 @@ describe("note toolbar", () => {
   it("keeps the empty layout and disables note-only controls", async () => {
     const { host } = await setup({ active: false });
     expect(host.querySelector(".empty-title-slot")?.textContent).toBe("Select a note");
-    const buttons = [...host.querySelectorAll<HTMLButtonElement>(".mode-switch button,.note-lock-toggle,.toolbar-icon:not(.right-pane-toggle)")];
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>('.mode-switch button, .note-lock-toggle, button[aria-label="Add image attachment"]')];
     expect(buttons).toHaveLength(4);
-    expect(buttons.every(button => button.disabled && !button.classList.contains("active"))).toBe(true);
+    expect(buttons.every(button => button.disabled && button.getAttribute("aria-pressed") !== "true")).toBe(true);
   });
   it("orders image, protection, read-only and source actions and toggles them independently", async () => {
     const { host, button, onToggleSource, onToggleReadOnly } = await setup({ sourceMode: true, readOnly: true });
-    expect([...host.querySelectorAll<HTMLButtonElement>(".toolbar-icon:not(.right-pane-toggle),.mode-switch button")].map(button => button.getAttribute("aria-label")))
+    expect([...host.querySelectorAll<HTMLButtonElement>('.mode-switch button, .note-lock-toggle, button[aria-label="Add image attachment"]')].map(button => button.getAttribute("aria-label")))
       .toEqual(["Add image attachment", "Lock note", "Read-only", "Source"]);
     expect(button("Read-only").getAttribute("aria-pressed")).toBe("true");
     expect(button("Source").getAttribute("aria-pressed")).toBe("true");
@@ -52,7 +52,7 @@ describe("note toolbar", () => {
   });
   it("disables mode and note actions in history preview", async () => {
     const { host } = await setup({ historyPreview: true });
-    expect([...host.querySelectorAll<HTMLButtonElement>(".mode-switch button,.note-lock-toggle,.toolbar-icon:not(.right-pane-toggle)")].every(button => button.disabled)).toBe(true);
+    expect([...host.querySelectorAll<HTMLButtonElement>('.mode-switch button, .note-lock-toggle, button[aria-label="Add image attachment"]')].every(button => button.disabled)).toBe(true);
   });
   it("shows only the empty-state instruction", async () => {
     const host = document.createElement("div"); document.body.append(host); root = createRoot(host);

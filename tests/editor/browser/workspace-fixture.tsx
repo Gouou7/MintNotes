@@ -3,6 +3,7 @@ import { WorkspaceDrawer } from "../../../src/features/vault/WorkspaceDrawer";
 import { useMediaQuery } from "../../../src/features/useMediaQuery";
 import { useMobileDrawerGestures } from "../../../src/features/vault/useWorkspaceInteractions";
 import { SettingsDialog } from "../../../src/features/SettingsDialog";
+import { Button } from "../../../src/components/ui/button";
 import { DialogTitle } from "../../../src/components/ui/dialog";
 import { Sidebar, SidebarContent } from "../../../src/components/ui/sidebar";
 import { createRoot } from "react-dom/client";
@@ -84,7 +85,7 @@ function Workspace() {
     <WorkspaceSidebar searchInput={searchInput} search={search} onSearchChange={setSearch} onCreate={() => {}} sortMode={sortMode} onSortChange={setSortMode}
       canLocate onLocate={() => {}} onCollapseAll={() => setExpanded(new Set())} onCollapse={() => setTreeCollapsed(true)} onClose={() => setTreeOpen(false)}
       displayName="User" username="username" avatarUrl={null} onLock={() => {}} onSettings={() => setSettingsOpen(true)}
-      pinned={<div className="pinned-section"><div className="tree-section-label"><AppIcon icon={Pin} size={8} />Pinned</div>{[selected, lockedNote].map(entry => <div key={entry.objectId} className={`tree-row ${entry === selected ? "active" : ""}`}><button className="tree-main"><span className="tree-spacer" /><span className="tree-title">{entry.title}</span><TreeNoteLock document={entry} /></button></div>)}</div>}
+      pinned={<div className="pinned-section"><div className="tree-section-label"><AppIcon icon={Pin} size={8} />Pinned</div>{[selected, lockedNote].map(entry => <div key={entry.objectId} className={`tree-row ${entry === selected ? "active" : ""}`}><Button variant="ghost" className="tree-main"><span className="tree-spacer" /><span className="tree-title">{entry.title}</span><TreeNoteLock document={entry} /></Button></div>)}</div>}
     >
       <SidebarContent className="document-tree block"><TreeLevel menuActions={{ selection: (entry) => [entry], documents: [...tree.values()].flat(), onSelect: () => {}, onRename: () => {}, onToggleLock: async () => {}, onCreate: async () => "", onDuplicate: async () => {}, onExport: async () => {}, onPin: async () => {}, onDelete: async () => {}, onRestore: async () => {}, onPurge: () => {} }} childrenByParent={tree} parentId={null} activeId={selected.objectId} selectedIds={new Set([selected.objectId])} expanded={expanded}
         draggingIds={new Set()} dropTarget={null} renamingDocumentId={null} onDropTarget={() => {}} onSelect={entry => { if (entry.kind === "folder") setExpanded(current => { const next = new Set(current); if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId); return next; }); }}
@@ -118,9 +119,9 @@ function Workspace() {
     {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)}>
       <DialogTitle className="sr-only">Settings</DialogTitle>
       <div className="settings-section"><div className="settings-actions">
-        <SettingsButton icon={Check} variant="default" className="primary">Save</SettingsButton>
+        <SettingsButton icon={Check} variant="default">Save</SettingsButton>
         <SettingsButton icon={X} onClick={() => setSettingsOpen(false)}>Cancel</SettingsButton>
-        <SettingsButton icon={Trash2} variant="destructive" className="danger">Delete</SettingsButton>
+        <SettingsButton icon={Trash2} variant="destructive">Delete</SettingsButton>
       </div></div>
     </SettingsDialog>}
     <ToastStack />

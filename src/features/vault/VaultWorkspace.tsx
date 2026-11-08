@@ -656,7 +656,7 @@ function Workspace({
         pinned={pinned.length > 0 && <div className="pinned-section" role="tree" aria-label={t("app.pinned")}>
           <div className="tree-section-label"><AppIcon icon={Pin} size={8} />{t("app.pinned")}</div>
           {pinned.map((entry) => <TreeRowMenu key={`pinned-${entry.objectId}`} document={entry} actions={menuActions} onOpen={() => openTreeContext(entry)} row={(more) => <div className={`tree-row pinned-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""}`} role="treeitem" aria-selected={selectedIds.has(entry.objectId)}>
-            <Button className="tree-main" onClick={(event) => selectPinnedEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><span className="tree-title">{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}<TreeNoteLock document={entry} /></Button>
+            <Button variant="ghost" className="tree-main" onClick={(event) => selectPinnedEntry(entry, event)} title={entry.kind === "folder" ? t("app.folderToggleHint") : undefined}><span className="tree-spacer" /><span className="tree-title">{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}<TreeNoteLock document={entry} /></Button>
             {more}
           </div>} />)}
         </div>}
@@ -713,10 +713,10 @@ function Workspace({
         historyBanner={historyPreview && <div className="history-preview-banner">
           <span><AppIcon icon={HistoryIcon} size={16} /><strong>{t("history.preview")}</strong><small>{formatNoteTime(historyPreview.item.capturedAt)}</small></span>
           <div>
-            <Button onClick={() => setHistoryPreview(null)}>{t("history.exitPreview")}</Button>
-            <Button onClick={() => void restoreHistoryAsCopy()}><AppIcon icon={Copy} size={14} />{t("history.restoreCopy")}</Button>
-            <Button className="primary" disabled={activeDocumentLocked} onClick={() => void restoreHistoryAsCurrent()} title={activeDocumentLocked ? t("app.unlockToEdit") : undefined}><AppIcon icon={RotateCcw} size={14} />{t("history.restoreCurrent")}</Button>
-            <Button className="danger" disabled={!canDeleteHistory(historyPreview.item)} onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={historyPreview.item.protected ? t("history.protectedDeleteHint") : t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} size={14} /></Button>
+            <Button variant="outline" onClick={() => setHistoryPreview(null)}>{t("history.exitPreview")}</Button>
+            <Button variant="outline" onClick={() => void restoreHistoryAsCopy()}><AppIcon icon={Copy} data-icon="inline-start" />{t("history.restoreCopy")}</Button>
+            <Button disabled={activeDocumentLocked} onClick={() => void restoreHistoryAsCurrent()} title={activeDocumentLocked ? t("app.unlockToEdit") : undefined}><AppIcon icon={RotateCcw} data-icon="inline-start" />{t("history.restoreCurrent")}</Button>
+            <Button variant="destructive" size="icon" disabled={!canDeleteHistory(historyPreview.item)} onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={historyPreview.item.protected ? t("history.protectedDeleteHint") : t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} /></Button>
           </div>
         </div>}
         status={<footer className="status-bar">

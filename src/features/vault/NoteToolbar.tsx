@@ -59,11 +59,11 @@ export function NoteToolbar({
   const noteActionDisabled = !active || historyPreview;
 
   return <header className="note-toolbar">
-    <Button className="pane-toggle" onClick={onOpenLeft} title={t("app.openLeft")} aria-label={t("app.openLeft")}><AppIcon icon={PanelLeftOpen} size={16} /></Button>
+    <Button variant="ghost" size="icon" className="pane-toggle" onClick={onOpenLeft} title={t("app.openLeft")} aria-label={t("app.openLeft")}><AppIcon icon={PanelLeftOpen} /></Button>
     {active
       ? <Input
           ref={titleInput}
-          className="title-input"
+          className="title-input border-transparent bg-transparent dark:bg-transparent"
           value={title}
           readOnly={titleReadOnly}
           onChange={onTitleChange}
@@ -73,30 +73,33 @@ export function NoteToolbar({
         />
       : <strong className="empty-title-slot">{t("app.selectNote")}</strong>}
     <Button
-      className="toolbar-icon"
+      variant="ghost"
+      size="icon"
       disabled={noteActionDisabled || readOnly}
       onClick={onAddImage}
       title={locked ? t("app.unlockToEdit") : t("app.addImage")}
       aria-label={t("app.addImage")}
-    ><AppIcon icon={ImagePlus} size={16} strokeWidth={1.5} /></Button>
+    ><AppIcon icon={ImagePlus} /></Button>
     <Button
-      className={`toolbar-icon note-lock-toggle ${active && locked ? "active" : ""}`}
+      variant="ghost"
+      size="icon"
+      className="note-lock-toggle"
       disabled={noteActionDisabled}
       onClick={onToggleLock}
       title={locked ? t("app.unlockNote") : t("app.lockNote")}
       aria-label={locked ? t("app.unlockNote") : t("app.lockNote")}
       aria-pressed={active && locked}
-    ><AppIcon icon={FileLock2} size={16} strokeWidth={1.5} /></Button>
+    ><AppIcon icon={FileLock2} /></Button>
     <ToggleGroup multiple className="mode-switch" aria-label={t("app.editorMode")}
       value={active ? [...(readOnly ? ["reading"] : []), ...(sourceMode ? ["source"] : [])] : []}
       onValueChange={(values) => {
         if (!modeDisabled && !locked && values.includes("reading") !== readOnly) onToggleReadOnly();
         if (!modeDisabled && values.includes("source") !== sourceMode) onToggleSource();
       }}>
-      <ToggleGroupItem value="reading" disabled={modeDisabled || locked} title={t("app.modeReading")} aria-label={t("app.modeReading")}><AppIcon icon={PencilOff} strokeWidth={1.5} /></ToggleGroupItem>
-      <ToggleGroupItem value="source" disabled={modeDisabled} title={t("app.modeSource")} aria-label={t("app.modeSource")}><AppIcon icon={CodeXml} strokeWidth={1.5} /></ToggleGroupItem>
+      <ToggleGroupItem className="size-8 p-0 motion-reduce:transition-none" value="reading" disabled={modeDisabled || locked} title={t("app.modeReading")} aria-label={t("app.modeReading")}><AppIcon icon={PencilOff} /></ToggleGroupItem>
+      <ToggleGroupItem className="size-8 p-0 motion-reduce:transition-none" value="source" disabled={modeDisabled} title={t("app.modeSource")} aria-label={t("app.modeSource")}><AppIcon icon={CodeXml} /></ToggleGroupItem>
     </ToggleGroup>
-    <Button className="toolbar-icon right-pane-toggle" onClick={onOpenRight} title={t("app.openRight")} aria-label={t("app.openRight")}><AppIcon icon={PanelRightOpen} size={16} /></Button>
+    <Button variant="ghost" size="icon" className="right-pane-toggle" onClick={onOpenRight} title={t("app.openRight")} aria-label={t("app.openRight")}><AppIcon icon={PanelRightOpen} /></Button>
   </header>;
 }
 

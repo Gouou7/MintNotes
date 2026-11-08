@@ -52,19 +52,19 @@ export function LockScreen({ user, browserOnline, onPin, onPasswordLogin, onSwit
       <form onSubmit={unlock}>
         <Field><FieldLabel>{t("lock.devicePin")}<Input type="password" value={pin} onChange={(event) => setPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" autoFocus required /></FieldLabel></Field>
         {error && <Alert className="error" variant="destructive">{error}</Alert>}
-        <Button type="submit" className="primary" disabled={busy}>{busy ? t("lock.unlocking") : t("lock.unlockWithPin")}</Button>
-        {browserOnline && <Button type="button" disabled={busy} onClick={onPasswordLogin}>{t("lock.usePassword")}</Button>}
+        <Button type="submit" size="lg" disabled={busy}>{busy ? t("lock.unlocking") : t("lock.unlockWithPin")}</Button>
+        {browserOnline && <Button variant="outline" type="button" disabled={busy} onClick={onPasswordLogin}>{t("lock.usePassword")}</Button>}
       </form>
       <div className="auth-ghost-actions">
-        <Button className="auth-ghost" type="button" disabled={busy} onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} size={16} />{t("lock.logout")}</Button>
-        {onSwitch && <Button className="auth-ghost" type="button" disabled={busy} onClick={onSwitch}><AppIcon icon={UserRoundCog} size={16} />{t("account.switch")}</Button>}
+        <Button variant="ghost" type="button" disabled={busy} onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} data-icon="inline-start" />{t("lock.logout")}</Button>
+        {onSwitch && <Button variant="ghost" type="button" disabled={busy} onClick={onSwitch}><AppIcon icon={UserRoundCog} data-icon="inline-start" />{t("account.switch")}</Button>}
       </div>
     </section>
     {logoutConfirming && <AppDialog className="danger-confirm logout-confirm settings-section" title={t("settings.logoutTitle")} onClose={() => setLogoutConfirming(false)} dismissible={!busy}>
       <p>{t("settings.logoutWarning")}</p>
       <div className="settings-actions">
-        <Button type="button" disabled={busy} onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</Button>
-        <Button type="button" className="danger danger-solid" disabled={busy} onClick={() => void logout()}><AppIcon icon={LogOut} size={15} />{t("app.logout")}</Button>
+        <Button variant="outline" type="button" disabled={busy} onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</Button>
+        <Button type="button" variant="destructive" disabled={busy} onClick={() => void logout()}><AppIcon icon={LogOut} data-icon="inline-start" />{t("app.logout")}</Button>
       </div>
     </AppDialog>}
   </main>;

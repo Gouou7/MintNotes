@@ -149,11 +149,11 @@ function PropertyRow({
           ? <div className="property-list-editor">
             {values.map((value, index) => <span className="property-chip" key={`${value}:${index}`}>
               {value || t("properties.noValue")}
-              {editable && <Button
+              {editable && <Button variant="ghost" size="icon-xs"
                 type="button"
                 onClick={() => emit(setFrontmatterProperty(markdown, property.key, values.filter((_, itemIndex) => itemIndex !== index)))}
                 aria-label={t("properties.removeListValue", { value })}
-              ><AppIcon icon={X} size={12} /></Button>}
+              ><AppIcon icon={X} /></Button>}
             </span>)}
             {editable && <Input
               value={listDraft}
@@ -190,13 +190,13 @@ function PropertyRow({
             {property.value === null || property.value === "" ? t("properties.noValue") : String(property.value)}
           </span>}
       </div>
-      {editable && property.kind !== "complex" && <Button
+      {editable && property.kind !== "complex" && <Button variant="ghost" size="icon-sm"
         className="property-remove"
         type="button"
         onClick={remove}
         title={t("properties.remove")}
         aria-label={t("properties.removeNamed", { key: property.key })}
-      ><AppIcon icon={Trash2} size={15} /></Button>}
+      ><AppIcon icon={Trash2} /></Button>}
     </div>
   );
 }
@@ -237,8 +237,8 @@ export function FrontmatterProperties({ markdown, editable = false, onChange }: 
           onChange={onChange}
         />)}
       </div>
-      {editable && <Button className="property-add" type="button" onClick={addProperty}>
-        <AppIcon icon={Plus} size={18} />{t("properties.add")}
+      {editable && <Button variant="ghost" className="property-add" type="button" onClick={addProperty}>
+        <AppIcon icon={Plus} data-icon="inline-start" />{t("properties.add")}
       </Button>}
       {parsed.properties.some((property) => property.kind === "complex") && <small className="properties-complex-hint">
         {t("properties.complexHint")}

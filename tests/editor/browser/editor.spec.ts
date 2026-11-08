@@ -26,6 +26,7 @@ test('readonly uses math, diagram, wiki, callout, footnote and highlight plugins
   const copy = page.getByRole('button', { name: 'Copy code' }), originalColor = await copy.evaluate(element => getComputedStyle(element).color);
   await copy.click(); await expect(page.getByRole('button', { name: 'Code copied' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Code copied' }).locator('.lucide-check')).toBeVisible();
+  await page.mouse.move(0, 0);
   await expect(page.getByRole('button', { name: 'Code copied' })).toHaveCSS('color', originalColor);
   await expect(page.getByRole('button', { name: 'Copy code' }).locator('.lucide-copy')).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { mintCopied: string }).mintCopied)).toBe('const value: number = 1;\n'); expect(await saved(page)).toBe(0);
@@ -259,7 +260,7 @@ test('Callout display and folded content have no caret while native inputs remai
   }
 });
 
-test('Callout creation keeps empty Enter and Backspace inside the new header/body interaction', async ({ page }) => {
+test('Callout creation keeps empty Enter inside the body and Backspace removes an empty block', async ({ page }) => {
   await load(page, '');
   const live = page.locator('.markdown-editor-host .ProseMirror').first(); await live.click();
   await page.keyboard.type('> [!note] Title'); await expect(page.locator('.markdown-callout')).toHaveCount(0);
@@ -272,8 +273,9 @@ test('Callout creation keeps empty Enter and Backspace inside the new header/bod
   await page.keyboard.type('Body'); await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toContain('> Body');
   await load(page, '> [!note] Title');
   await quote.locator(':scope > .callout-content').click(); await page.keyboard.press('Backspace');
-  await expect(header.getByRole('textbox', { name: 'Callout title' })).toBeFocused(); await expect(header).toBeVisible();
-  await expect(quote.locator(':scope > .callout-content > p')).toHaveCount(2); await expect(page.locator('.mint-callout-editing')).toHaveCount(0);
+  await expect(quote).toHaveCount(0);
+  await expect(live).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe('');
 });
 
 test('Callout arrows visit title before body in both directions and never expose marker source', async ({ page }) => {

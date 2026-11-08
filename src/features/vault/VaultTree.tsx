@@ -124,8 +124,8 @@ export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, e
         {renamingDocumentId === entry.objectId
           ? <div className="tree-main tree-main-renaming"><span className={entry.kind === "note" ? "tree-spacer" : undefined}>{entry.kind === "folder" && <AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={16} />}</span><TreeRenameInput initialValue={entry.title} label={t("app.rename")} onCommit={(value) => onRenameCommit(entry.objectId, value)} onCancel={onRenameCancel} /><TreeNoteLock document={entry} /></div>
           : entry.kind === "folder"
-            ? <Button className="tree-main" onClick={(event) => onSelect(entry, event)}><span><AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} size={16} /></span><span className="tree-title">{entry.title}</span></Button>
-            : <Button className="tree-main" onClick={(event) => onSelect(entry, event)}><span className="tree-spacer" /><span className="tree-title">{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}<TreeNoteLock document={entry} /></Button>}
+            ? <Button variant="ghost" className="tree-main" onClick={(event) => onSelect(entry, event)}><span><AppIcon icon={expanded.has(entry.objectId) ? ChevronDown : ChevronRight} /></span><span className="tree-title">{entry.title}</span></Button>
+            : <Button variant="ghost" className="tree-main" onClick={(event) => onSelect(entry, event)}><span className="tree-spacer" /><span className="tree-title">{entry.title || t("app.untitled")}</span>{entry.dirty && <i title={t("app.notSynced")} />}<TreeNoteLock document={entry} /></Button>}
         {more}
       </div>;
     return <div className="tree-node" key={entry.objectId}>

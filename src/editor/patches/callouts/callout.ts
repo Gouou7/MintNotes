@@ -32,9 +32,10 @@ export const callout: FeatureSpec = {
       };
       const icon = document.createElement("span"), iconHost = document.createElement("span"), types = document.createElement("select"), title = document.createElement("strong"), toggle = document.createElement("button");
       icon.className = "callout-icon"; iconHost.className = "callout-type-icon"; types.className = "callout-type-select"; toggle.className = "callout-toggle"; toggle.type = "button";
+      context.styleButton?.(toggle, "icon");
       types.setAttribute("aria-label", context.label?.("calloutType") ?? "Callout type");
       const titleEditor = inlineTextEditor({ value: appearance(node)!.title, display: appearance(node)!.title,
-        label: context.label?.("calloutTitle") ?? "Callout title", readOnly: () => !editable(), commit: value => commit({ title: value }),
+        label: context.label?.("calloutTitle") ?? "Callout title", styleButton: context.styleButton, readOnly: () => !editable(), commit: value => commit({ title: value }),
         endEditing() {
           const pos = getPos();
           if (pos !== undefined && calloutKey.getState(view.state)?.titleFocus === pos) view.dispatch(view.state.tr.setMeta(calloutKey, { titleFocus: null }));

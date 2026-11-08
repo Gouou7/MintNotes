@@ -592,7 +592,7 @@ describe("SettingsPanel", () => {
     expect([...container.querySelectorAll(".logout-confirm .storage-pending-item")].map((item) => item.textContent)).toEqual(["对象 2", "附件 1", "笔记历史 3"]);
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("本地待保存1 篇");
     expect(container.querySelector(".logout-confirm")?.textContent).toContain("已同步至服务器的数据不受影响");
-    await act(async () => (container.querySelector(".logout-confirm .settings-action-button.danger") as HTMLButtonElement).click());
+    await act(async () => button(container.querySelector<HTMLElement>(".logout-confirm")!, "登出").click());
     expect(onLogout).toHaveBeenCalledOnce();
   });
 

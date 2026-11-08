@@ -49,6 +49,7 @@ function codePresentation(context: MintContext): Plugin {
         output.push(Decoration.widget(pos + 1, () => {
           const actions = document.createElement("div"), copy = document.createElement("button");
           actions.className = "mint-code-actions"; actions.contentEditable = "false"; copy.type = "button";
+          context.styleButton?.(copy, "icon");
           copy.setAttribute("aria-label", context.label?.("copyCode") ?? "Copy code");
           let iconName = "copy", icon = context.icon?.(iconName); if (icon) copy.append(icon.element);
           copy.addEventListener("mousedown", event => event.preventDefault());

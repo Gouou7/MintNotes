@@ -143,7 +143,7 @@ test("switches remembered accounts across windows and requires the target PIN of
   const lock = page.locator(".lock-card");
   await expect(lock.getByRole("heading", { name: "Beta", exact: true })).toBeVisible();
   const actions = lock.locator(".auth-ghost-actions");
-  await expect(actions.locator("button.auth-ghost")).toHaveCount(2);
+  await expect(actions.getByRole("button")).toHaveCount(2);
   await expect(actions.getByRole("button", { name: "Log out", exact: true })).toBeVisible();
   const viewport = page.viewportSize();
   if (info.project.name === "desktop") await page.setViewportSize({ width: 820, height: 1180 });

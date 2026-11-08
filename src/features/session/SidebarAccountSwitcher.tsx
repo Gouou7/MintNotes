@@ -46,7 +46,7 @@ export function SidebarAccountSwitcher({ accounts, current, currentAvatarUrl, bu
         }} />
       {loadFailed && <Alert className="error" variant="destructive">{t("account.switchFailed")}</Alert>}
       <div className="account-switch-actions">
-        <Button type="button" className="account-picker-row" disabled={busy} onClick={() => {
+        <Button variant="ghost" type="button" className="account-picker-row" disabled={busy} onClick={() => {
           setOpen(false);
           onLogin();
         }}><AppIcon icon={UserRoundPlus} /><span className="account-picker-name">{t("account.otherLogin")}</span></Button>

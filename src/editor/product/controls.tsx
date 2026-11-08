@@ -1,6 +1,7 @@
 import { AlignCenter, AlignLeft, AlignRight, Beaker, Bug, Check, ChevronDown, ChevronRight, CircleCheck, CircleHelp, CircleX, ClipboardList, Code, Copy, CornerUpLeft, Image, ImageOff, Info, Lightbulb, ListMinus, MessageSquareWarning, OctagonAlert, Quote, ShieldAlert, Sparkles, TableProperties, Trash2, TriangleAlert, type LucideIcon } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import { AppIcon } from "../../components/AppIcon";
+import { buttonVariants } from "../../components/ui/button";
 import type { MessageKey, Translate } from "../../i18n";
 import type { EditorOptions } from "../engine";
 import { CALLOUT_TYPES, editCalloutMarker, parseCalloutMarker } from "./calloutMarker";
@@ -19,12 +20,24 @@ const labels: Record<string, MessageKey> = {
   alignLeft: "editor.alignLeft", alignCenter: "editor.alignCenter", alignRight: "editor.alignRight", rows: "editor.rows", columns: "editor.columns", codeLanguage: "editor.codeLanguage",
   calloutType: "editor.calloutType", calloutTitle: "editor.calloutTitle", invalidCodeLanguage: "editor.invalidCodeLanguage",
 };
-export function editorPresentation(getTranslate: () => Translate): Pick<EditorOptions, "icon" | "label" | "renderMath" | "renderMermaid" | "parseCallout" | "calloutTypes" | "editCalloutMarker"> {
+const editorButtonClasses = {
+  icon: buttonVariants({ variant: "ghost", size: "icon-sm" }),
+  destructive: buttonVariants({ variant: "destructive", size: "icon-sm" }),
+  inline: buttonVariants({ variant: "ghost", size: "xs" }),
+  link: buttonVariants({ variant: "link" }),
+};
+
+export function editorPresentation(getTranslate: () => Translate): Pick<EditorOptions, "icon" | "styleButton" | "label" | "renderMath" | "renderMermaid" | "parseCallout" | "calloutTypes" | "editCalloutMarker"> {
   return {
     icon(name) {
       const element = document.createElement("span"), root = createRoot(element);
       root.render(<AppIcon icon={icons[name] ?? Sparkles} size={16} strokeWidth={name === "copy" || name === "copy-success" ? 2.25 : name === "code" || name.startsWith("chevron-") ? 2 : 1.8} />);
       return { element, destroy: () => queueMicrotask(() => root.unmount()) };
+    },
+    // ProseMirror owns these DOM nodes and their event handlers.
+    styleButton(button, kind) {
+      button.dataset.slot = "button";
+      button.classList.add(...editorButtonClasses[kind].split(" "));
     },
     label: name => labels[name] ? getTranslate()(labels[name]) : name,
     renderMath: renderMathInto,

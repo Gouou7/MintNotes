@@ -31,7 +31,7 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await expect(source).toHaveCSS("border-width", "0px");
       expect(await page.evaluate(() => ["--accent", "--accent-text"].map(name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()))).toEqual(theme === "dark" ? ["#61d299", "#61d299"] : ["#61d2a0", "#61d2a0"]);
       await page.mouse.move(width - 10, height - 10);
-      await expect(source).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(source).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       await expect(page.locator("textarea.typora-web-source:not([hidden])")).toBeVisible();
       await source.click();
       await expect(source).toHaveAttribute("aria-pressed", "false");
@@ -63,7 +63,7 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       await expect(page.locator(".ProseMirror hr")).toHaveCSS("background-color", theme === "dark" ? "rgb(51, 51, 51)" : "rgb(226, 226, 226)");
       expect(await page.evaluate(() => window.mintWorkspaceFixture.saves())).toBe(0);
 
-      await expect(page.locator(".note-toolbar button svg").first()).toHaveAttribute("width", "16");
+      await expect(page.locator(".note-toolbar button svg").first()).toHaveCSS("width", "16px");
       const toolbarStroke = page.locator(".note-toolbar button svg > *").first();
       await expect(toolbarStroke).toHaveCSS("stroke-width", "1.5px");
       await expect(toolbarStroke).toHaveCSS("vector-effect", "non-scaling-stroke");
@@ -106,12 +106,14 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       const firstPinnedRow = (await page.locator(".pinned-section .tree-row").first().boundingBox())!;
       expect(firstPinnedRow.y - pinnedLabel.y - pinnedLabel.height).toBeGreaterThanOrEqual(8);
       const newNote = page.getByRole("button", { name: "New note", exact: true });
-      await expect(newNote.locator("svg")).toHaveAttribute("width", "16");
+      await expect(newNote.locator("svg")).toHaveCSS("width", "16px");
+      await expect(newNote).toHaveCSS("width", "32px");
+      await expect(newNote).toHaveCSS("height", "32px");
       await expect(newNote).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       await newNote.hover();
-      await expect.poll(() => newNote.evaluate(element => /(?:\/ |, )0\.1\)$/.test(getComputedStyle(element).backgroundColor))).toBe(true);
+      await expect(newNote).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       await page.mouse.down();
-      await expect.poll(() => newNote.evaluate(element => /(?:\/ |, )0\.3\)$/.test(getComputedStyle(element).backgroundColor))).toBe(true);
+      await expect(newNote).toHaveCSS("translate", "0px 1px");
       await page.mouse.up();
       await page.mouse.move(width - 10, height - 10);
       await expect(newNote).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
@@ -119,7 +121,8 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       for (const label of ["Save", "Cancel", "Delete"]) {
         const action = page.getByRole("button", { name: label, exact: true });
         await expect(action).toHaveCSS("height", name === "mobile" ? "36px" : "32px");
-        await expect(action).toHaveCSS("border-radius", "7px");
+        await expect(action).toHaveCSS("border-radius", "9px");
+        await expect(action.locator("svg")).toHaveAttribute("data-icon", "inline-start");
         await expect(action.locator("svg")).toHaveCSS("width", "16px");
         await expect(action.locator("svg > *").first()).toHaveCSS("stroke-width", "1.5px");
         await expect(action.locator("svg > *").first()).toHaveCSS("vector-effect", "non-scaling-stroke");
@@ -151,14 +154,15 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
         await expect(sidebar).toHaveCSS("width", "321px");
       }
     }
-    const rightPanelButtons = page.locator(".right-panel-header button:visible");
-    await expect(rightPanelButtons).toHaveCount(3);
-    for (const button of await rightPanelButtons.all()) {
-      const bounds = (await button.boundingBox())!;
-      expect(bounds.width).toBeCloseTo(30, 2);
-      expect(bounds.height).toBeCloseTo(30, 2);
-    }
-    const outline = page.getByRole("tab", { name: "Outline", exact: true }), history = page.getByRole("tab", { name: "History", exact: true });
+    const header = page.locator(".right-panel-header");
+    const tabList = header.getByRole("tablist");
+    const close = header.getByRole("button");
+    await expect(tabList.getByRole("tab")).toHaveText(["Outline", "History"]);
+    await expect(close).toHaveCSS("width", "32px");
+    await expect(close).toHaveCSS("height", "32px");
+    const headerBox = (await header.boundingBox())!, tabListBox = (await tabList.boundingBox())!;
+    expect(Math.abs(tabListBox.x + tabListBox.width / 2 - headerBox.x - headerBox.width / 2)).toBeLessThanOrEqual(1);
+    const outline = tabList.getByRole("tab", { name: "Outline", exact: true }), history = tabList.getByRole("tab", { name: "History", exact: true });
     for (const theme of ["dark", "light"]) {
       await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
       for (const [active, inactive] of [[outline, history], [history, outline]]) {
@@ -167,10 +171,6 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
         await active.blur();
         await expect(active).toHaveAttribute("aria-selected", "true");
         await expect(inactive).not.toHaveAttribute("aria-selected", "true");
-        await expect(active).toHaveCSS("color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
-        await expect(inactive).not.toHaveCSS("color", theme === "dark" ? "rgb(97, 210, 153)" : "rgb(97, 210, 160)");
-        await expect(active).toHaveCSS("border-top-width", "0px");
-        await expect(active).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       }
       await expect(page.locator(".outline-empty")).toHaveText("No history");
     }

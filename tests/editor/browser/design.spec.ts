@@ -35,7 +35,8 @@ for (const [name, width, height] of [['desktop', 1440, 900], ['tablet', 834, 111
       expect(bodyBounds!.y - headerBounds!.y - headerBounds!.height).toBeGreaterThanOrEqual(15);
       expect(bodyBounds!.width).toBeLessThanOrEqual(bounds!.width - 32);
       const copyBounds = await code.getByRole('button', { name: 'Copy code' }).boundingBox();
-      expect(copyBounds!.width).toBe(28); expect(copyBounds!.height).toBe(28);
+      expect(copyBounds!.width).toBe(copyBounds!.height);
+      await expect(code.getByRole("button", { name: "Copy code" })).toHaveAttribute("data-slot", "button");
       expect(copyBounds!.y - bounds!.y).toBeCloseTo(10, 0);
       expect(bounds!.x + bounds!.width - copyBounds!.x - copyBounds!.width).toBeCloseTo(10, 0);
       if (name === 'desktop') await page.locator('.editor-area').screenshot({ path: testInfo.outputPath(`editor-design-${theme}.png`) });

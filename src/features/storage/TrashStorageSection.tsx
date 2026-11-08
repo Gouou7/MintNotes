@@ -1,6 +1,6 @@
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SettingsSection } from "../../components/SettingsSection";
 import { SettingsItem } from "../../components/SettingsItem";
@@ -39,7 +39,7 @@ function TrashBranch({ item, childrenByParent, descendantCounts, expandedIds, au
       <ItemMedia className="trash-item-icon settings-list-icon">
         {children.length ? (forceExpanded
           ? <span className="trash-disclosure forced" aria-hidden="true"><AppIcon icon={ChevronDown} size={15} /></span>
-          : <Button className="trash-disclosure" onClick={() => onToggle(item.objectId)} title={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })} aria-label={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })}><AppIcon icon={expanded ? ChevronDown : ChevronRight} size={15} /></Button>)
+          : <Button variant="ghost" size="icon-xs" className="trash-disclosure" aria-expanded={expanded} onClick={() => onToggle(item.objectId)} title={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })} aria-label={t(expanded ? "settings.collapseFolder" : "settings.expandFolder", { title })}><AppIcon icon={expanded ? ChevronDown : ChevronRight} size={15} /></Button>)
           : null}
         <AppIcon icon={item.kind === "folder" ? Folder : FileText} size={20} />
       </ItemMedia>
@@ -100,10 +100,10 @@ export function TrashStorageSection({ trashItems, busy, purging, serverSessionVe
             return <SettingsSection title={t("settings.trash")} className="trash-settings">
               <SettingsItem title={t("settings.autoDelete")} description={t("settings.trashHelp")}>{(control) => <NativeSelect {...control} disabled={busy || !serverSessionVerified} value={trashRetentionDays === null ? "never" : String(trashRetentionDays)} onChange={(event) => void updateTrashRetention(event.target.value === "never" ? null : Number(event.target.value))}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 30 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></NativeSelect>}</SettingsItem>
               <SettingsItem title={t("settings.deletedItems")} description={trashItems.length > 0 ? (trashView.filtering ? t("settings.trashFilterSummary", { count: trashView.matchCount }) : t("settings.trashSummary", { roots: trashView.roots.length, total: trashItems.length })) : undefined}>
-                {trashItems.length > 0 && <>{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton icon={ChevronsUp} className="trash-collapse-all" onClick={() => setExpandedTrashIds(new Set())}>{t("settings.collapseAll")}</SettingsButton>}<SettingsButton icon={Trash2} variant="destructive" className="trash-clear danger" disabled={purging} onClick={onClearTrash}>{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></>}
+                {trashItems.length > 0 && <>{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton icon={ChevronsUp} onClick={() => setExpandedTrashIds(new Set())}>{t("settings.collapseAll")}</SettingsButton>}<SettingsButton icon={Trash2} variant="destructive" disabled={purging} onClick={onClearTrash}>{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></>}
               </SettingsItem>
               {trashItems.length > 0 && <div className="trash-toolbar">
-                <label className="trash-search"><AppIcon icon={Search} size={16} /><Input type="search" value={trashQuery} onChange={(event) => setTrashQuery(event.target.value)} placeholder={t("settings.searchTrash")} aria-label={t("settings.searchTrash")} /></label>
+                <InputGroup className="trash-search"><InputGroupAddon><AppIcon icon={Search} /></InputGroupAddon><InputGroupInput type="search" value={trashQuery} onChange={(event) => setTrashQuery(event.target.value)} placeholder={t("settings.searchTrash")} aria-label={t("settings.searchTrash")} /></InputGroup>
                 <NativeSelect value={trashKindFilter} onChange={(event) => setTrashKindFilter(event.target.value as TrashKindFilter)} aria-label={t("settings.trashTypeFilter")}><option value="all">{t("settings.allTypes")}</option><option value="folder">{t("settings.foldersOnly")}</option><option value="note">{t("settings.notesOnly")}</option></NativeSelect>
                 <NativeSelect value={trashSortMode} onChange={(event) => setTrashSortMode(event.target.value as TrashSortMode)} aria-label={t("settings.trashSort")}><option value="deleted-desc">{t("settings.deletedNewest")}</option><option value="deleted-asc">{t("settings.deletedOldest")}</option><option value="name">{t("settings.sortByName")}</option></NativeSelect>
               </div>}

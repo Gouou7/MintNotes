@@ -11,6 +11,7 @@ export function mintWidget(widget: WidgetDecoration, context: MintContext): HTML
   host.className = widget.kind;
   if (kind === "wikilink" || kind === "wiki-embed") {
     const button = document.createElement("button"); button.type = "button"; button.className = "wiki-link"; button.textContent = attrs.source; button.dataset.wikilinkTarget = attrs.target;
+    context.styleButton?.(button, "link");
     button.addEventListener("mousedown", event => event.preventDefault()); button.addEventListener("click", () => context.onNavigate?.(attrs.target)); host.append(button);
   } else if (kind === "footnote-ref" || kind === "inline-footnote") {
     const sup = document.createElement("sup"), link = document.createElement("a");

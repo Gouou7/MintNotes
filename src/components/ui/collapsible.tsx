@@ -1,12 +1,18 @@
 import { Collapsible as CollapsiblePrimitive } from "@base-ui/react/collapsible"
+import { ChevronRight } from "lucide-react"
+import { AppIcon } from "../AppIcon"
+import { Button } from "./button"
 
 function Collapsible({ ...props }: CollapsiblePrimitive.Root.Props) {
   return <CollapsiblePrimitive.Root data-slot="collapsible" {...props} />
 }
 
-function CollapsibleTrigger({ ...props }: CollapsiblePrimitive.Trigger.Props) {
+function CollapsibleTrigger({ children, ...props }: CollapsiblePrimitive.Trigger.Props) {
   return (
-    <CollapsiblePrimitive.Trigger data-slot="collapsible-trigger" {...props} />
+    <CollapsiblePrimitive.Trigger data-slot="collapsible-trigger" render={<Button variant="ghost" className="group/disclosure h-auto min-h-8 whitespace-normal text-start" />} {...props}>
+      <AppIcon icon={ChevronRight} data-icon="inline-start" className="group-aria-expanded/disclosure:rotate-90" />
+      {children}
+    </CollapsiblePrimitive.Trigger>
   )
 }
 
