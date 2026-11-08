@@ -60,14 +60,17 @@ test("protected history follows a note through trash, restore and permanent clea
   expect(headings.filter((value) => ["Storage usage", "Note history", "Trash", "Note migration"].includes(value))).toEqual(["Storage usage", "Note history", "Trash", "Note migration"]);
   await expect(page.getByText("Local status", { exact: true })).toBeVisible();
   const budgetSaved = page.waitForResponse((response) => response.url().endsWith("/api/account/note-history-settings") && response.request().method() === "PATCH");
-  await page.locator(".history-budget select").selectOption("unlimited");
-  await page.locator(".history-budget select").press("Tab");
+  const budget = page.locator(".history-budget").getByRole("combobox");
+  await budget.click();
+  await page.getByRole("option", { name: "Unlimited", exact: true }).click();
+  await budget.press("Tab");
   expect((await (await budgetSaved).json()).quotaBytes).toBeNull();
   if (info.project.name === "desktop") {
     await page.getByRole("tab", { name: "Administrator settings", exact: true }).click();
     await expect(page.locator(".database-storage")).toContainText("Database available");
     await page.getByRole("button", { name: "Edit quota", exact: true }).first().click();
-    await page.locator(".quota-dialog select").selectOption("custom");
+    await page.locator(".quota-dialog").getByRole("combobox").click();
+    await page.getByRole("option", { name: "Custom", exact: true }).click();
     await page.locator(".quota-dialog input[type=number]").fill("1");
     const quotaSaved = page.waitForResponse((response) => response.url().endsWith("/storage-quota") && response.request().method() === "PATCH");
     await page.locator(".quota-dialog").getByRole("button", { name: "Save quota", exact: true }).click();

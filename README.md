@@ -95,6 +95,7 @@ Mint Notes 采用 [MIT 许可证](LICENSE)。
 - [KaTeX](https://katex.org/)：用于渲染数学公式，采用 MIT 许可证。
 - [Mermaid](https://mermaid.js.org/)：用于渲染图表，采用 MIT 许可证。
 - [highlight.js](https://highlightjs.org/)：用于本地代码语法高亮，采用 BSD 3-Clause 许可证。
+- [shadcn/ui](https://ui.shadcn.com/) 提供界面组件，采用 MIT 许可证。
 - [Lucide React](https://lucide.dev/)：用于界面图标，采用 ISC 许可证；其中部分源自 Feather 的图标采用 MIT 许可证。
 
 完整的许可文本见[第三方许可声明](public/THIRD_PARTY_NOTICES.txt)，并随发布包一同提供。

@@ -1,4 +1,5 @@
 import { DialogContainer } from "../components/AppDialog";
+import { chooseSelect, openSelect } from "../components/select.testSupport";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -148,12 +149,12 @@ describe("SettingsPanel", () => {
   it("offers seven font sizes with localized small, default and large labels", async () => {
     const onPreferences = vi.fn();
     const container = await renderSettings(admin, vi.fn(), onPreferences);
-    const select = container.querySelector(".font-size-setting select") as HTMLSelectElement;
-    expect([...select.options].map(option => option.textContent)).toEqual(["11（小）", "12", "13", "14（默认）", "15", "16", "17（大）"]);
-    expect(select.value).toBe("14");
+    const select = container.querySelector<HTMLElement>(".font-size-setting [role=combobox]")!;
+    expect((await openSelect(select)).map(option => option.textContent)).toEqual(["11（小）", "12", "13", "14（默认）", "15", "16", "17（大）"]);
+    expect(select.textContent).toBe("14（默认）");
     expect(container.querySelector(".font-size-reset")).toBeNull();
-    for (const size of [11, 17, 14]) {
-      await act(async () => { select.value = String(size); select.dispatchEvent(new Event("change", { bubbles: true })); });
+    for (const [size, label] of [[11, "11（小）"], [17, "17（大）"]] as const) {
+      await chooseSelect(select, label);
       expect(onPreferences).toHaveBeenLastCalledWith(expect.objectContaining({ fontSize: size }));
     }
   });
@@ -171,11 +172,8 @@ describe("SettingsPanel", () => {
   it("saves an explicit language and updates the interface immediately", async () => {
     const onPreferences = vi.fn();
     const container = await renderSettings(admin, vi.fn(), onPreferences);
-    const language = container.querySelector("select[aria-label='界面语言']") as HTMLSelectElement;
-    await act(async () => {
-      language.value = "zh-TW";
-      language.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    const language = container.querySelector<HTMLElement>("[role=combobox][aria-label='界面语言']")!;
+    await chooseSelect(language, "繁體中文");
     expect(onPreferences).toHaveBeenCalledWith(expect.objectContaining({ language: "zh-TW" }));
     expect(container.textContent).toContain("使用者與安全");
     expect(localStorage.getItem("webmd-notes-language")).toBe("zh-TW");
@@ -327,14 +325,14 @@ describe("SettingsPanel", () => {
     });
     expect(container.querySelector(".trash-children")?.textContent).toContain("Nested note");
     expect(container.textContent).toContain("1 个匹配项");
-    expect((container.querySelector("select[aria-label='排序已删除项目']") as HTMLSelectElement).value).toBe("deleted-desc");
+    expect(container.querySelector("[role=combobox][aria-label='排序已删除项目']")?.textContent).toBe("删除时间：最新");
     expect(container.querySelectorAll("button[aria-label^='恢复']")).toHaveLength(1);
     await act(async () => container.querySelector<HTMLButtonElement>(".trash-more")!.click());
     const purge = document.querySelector<HTMLElement>('[role="menuitem"]')!;
     expect(purge.textContent).toBe("永久删除");
     await act(async () => purge.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-    const select = container.querySelector(".trash-settings .settings-item select") as HTMLSelectElement;
-    await act(async () => { select.value = "90"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    const select = container.querySelector<HTMLElement>(".trash-settings .settings-item [role=combobox]")!;
+    await chooseSelect(select, "90 天");
     expect(vi.mocked(api)).toHaveBeenCalledWith("/api/account/trash-retention", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ days: 90 }) }));
   });
 
@@ -358,7 +356,7 @@ describe("SettingsPanel", () => {
     expect(headings).toEqual(["账户凭据", "本机安全", "登录设备", "应用连接"]);
     const deviceSection = [...container.querySelectorAll(".settings-group")].find(section => section.querySelector("h3")?.textContent === "本机安全")!;
     expect([...deviceSection.querySelectorAll(".settings-item-title")].map(item => item.textContent)).toEqual(["本机 PIN", "无操作后自动锁定"]);
-    const lockControl = deviceSection.querySelector("select")!;
+    const lockControl = deviceSection.querySelector<HTMLElement>("[role=combobox]")!;
     expect(document.getElementById(lockControl.getAttribute("aria-describedby")!)?.textContent).toContain("需先设置本机 PIN");
     expect(button(container, "设置 PIN")).toBeTruthy();
     expect(container.querySelector("input[placeholder='至少 4 个字符']")).toBeNull();
@@ -375,8 +373,7 @@ describe("SettingsPanel", () => {
     expect(requestSubmit).toHaveBeenCalledWith(pinSubmit);
     await act(async () => (dialog.querySelector("button[aria-label='关闭']") as HTMLButtonElement).click());
     expect(container.querySelector(".pin-change-dialog")).toBeNull();
-    const autoLockSelect = container.querySelector(".settings-section select") as HTMLSelectElement;
-    await act(async () => { autoLockSelect.value = "5"; autoLockSelect.dispatchEvent(new Event("change", { bubbles: true })); });
+    await chooseSelect(lockControl, "5 分钟");
     expect(vi.mocked(setAutoLockMinutes)).not.toHaveBeenCalled();
     expect(onNotify).toHaveBeenCalledWith("开启自动锁定前请先设置本机 PIN", "warning");
     expect(container.querySelector(".notice")).toBeNull();
@@ -513,9 +510,9 @@ describe("SettingsPanel", () => {
   it("lets the user remove only the separate history budget", async () => {
     const container = await renderSettings();
     await act(async () => button(container, "笔记和存储").click());
-    const mode = container.querySelector(".history-budget select") as HTMLSelectElement;
-    await act(async () => { mode.value = "unlimited"; mode.dispatchEvent(new Event("change", { bubbles: true })); });
-    expect(container.querySelector(".history-budget button")).toBeNull();
+    const mode = container.querySelector<HTMLElement>(".history-budget [role=combobox]")!;
+    await chooseSelect(mode, "不限");
+    expect(container.querySelector(".history-budget button:not([role=combobox])")).toBeNull();
     expect(api).toHaveBeenCalledWith("/api/account/note-history-settings", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ quotaBytes: null }) }));
     expect(container.textContent).toContain("历史计入总配额");
   });

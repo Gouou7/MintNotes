@@ -58,12 +58,12 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
     {props.pinned}
     {props.children}
     <SidebarFooter className="side-footer flex-row">
-      <div className="sidebar-user" title={`@${props.username}`}>
+      <div className="sidebar-user" title={props.displayName}>
         <Avatar className="sidebar-avatar" aria-hidden="true">
           {props.avatarUrl && <AvatarImage src={props.avatarUrl} alt="" />}
           <AvatarFallback>{props.displayName.trim().charAt(0).toLocaleUpperCase() || props.username.charAt(0).toLocaleUpperCase()}</AvatarFallback>
         </Avatar>
-        <span className="sidebar-user-name"><strong>{props.displayName}</strong><small>@{props.username}</small></span>
+        <strong className="sidebar-user-name">{props.displayName}</strong>
       </div>
       <div className="side-footer-actions">
         {props.onLock && <Button variant="ghost" size="icon" onClick={props.onLock} title={t("app.lock")} aria-label={t("app.lock")}><AppIcon icon={LockKeyhole} /></Button>}

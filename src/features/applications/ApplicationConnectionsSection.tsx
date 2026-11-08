@@ -3,7 +3,7 @@ import { Alert } from "@/components/ui/alert";
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
+import { Select } from "@/components/ui/select";
 import { SettingsSection } from "../../components/SettingsSection";
 import { SettingsItem } from "../../components/SettingsItem";
 import { useState, type FormEvent } from "react";
@@ -58,8 +58,16 @@ export function ApplicationConnectionsSection({ userId, online, onNotify }: {
     {controller.error && <Alert className="error" variant="destructive">{t("applications.failed")}</Alert>}
     {editing && online && <form className="compact-form application-form" onSubmit={(event) => void submit(event)}>
       <SettingsItem title={t("applications.name")}>{(control) => <Input {...control} value={name} maxLength={80} required disabled={disabled || controller.retryPending} onChange={(event) => setName(event.target.value)} autoFocus />}</SettingsItem>
-      {editing === "new" && <SettingsItem title={t("applications.permission")} description={t("applications.permissionHelp")}>{(control) => <NativeSelect {...control} value={access} disabled={disabled || controller.retryPending} onChange={(event) => setAccess(event.target.value as typeof access)}><option value="read-write">{t("applications.readWrite")}</option><option value="read">{t("applications.readOnly")}</option></NativeSelect>}</SettingsItem>}
-      <SettingsItem title={t("applications.idleExpiry")} description={t("applications.idleHelp")}>{(control) => <NativeSelect {...control} value={idle ?? "never"} disabled={disabled || controller.retryPending} onChange={(event) => setIdle(event.target.value === "never" ? null : Number(event.target.value) as 7 | 30 | 90)}>{[7, 30, 90].map((days) => <option key={days} value={days}>{t("applications.days", { count: days })}</option>)}<option value="never">{t("applications.never")}</option></NativeSelect>}</SettingsItem>
+      {editing === "new" && <SettingsItem title={t("applications.permission")} description={t("applications.permissionHelp")}>{(control) => <Select {...control} value={access}
+        disabled={disabled || controller.retryPending} items={[
+          { value: "read-write", label: t("applications.readWrite") },
+          { value: "read", label: t("applications.readOnly") }
+        ]} onValueChange={setAccess} />}</SettingsItem>}
+      <SettingsItem title={t("applications.idleExpiry")} description={t("applications.idleHelp")}>{(control) => <Select {...control} value={idle ?? "never"}
+        disabled={disabled || controller.retryPending} items={[
+          ...([7, 30, 90] as const).map((days) => ({ value: days, label: t("applications.days", { count: days }) })),
+          { value: "never", label: t("applications.never") }
+        ]} onValueChange={(days) => setIdle(days === "never" ? null : days)} />}</SettingsItem>
       <SettingsItem title={t("applications.fixedExpiry")}>{(control) => <Input {...control} type="datetime-local" value={expiry} disabled={disabled || controller.retryPending} onChange={(event) => setExpiry(event.target.value)} />}</SettingsItem>
       <div className="settings-actions"><SettingsButton icon={X} type="button" disabled={controller.busy} onClick={() => { controller.dismissKey(); setEditing(null); }}>{t("common.cancel")}</SettingsButton><SettingsButton icon={KeyRound} type="submit" variant="default" disabled={disabled}>{t(controller.retryPending ? "applications.retry" : editing === "new" ? "applications.generate" : "common.save")}</SettingsButton></div>
     </form>}

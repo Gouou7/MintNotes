@@ -33,14 +33,14 @@ async function openAccountPopover(page) {
   return popover;
 }
 
-async function loginRemembered(page, username) {
+async function loginRemembered(page, username, displayName) {
   const popover = await openAccountPopover(page);
   await popover.getByRole("button", { name: "Sign in to another account", exact: true }).click();
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Master password", { exact: true }).fill(password);
   await page.getByRole("checkbox", { name: "Remember this device", exact: true }).check();
   await page.getByRole("button", { name: "Log in", exact: true }).click();
-  await expect(page.locator(".sidebar-user-name small")).toHaveText(`@${username}`);
+  await expect(page.locator(".sidebar-user-name")).toHaveText(displayName);
 }
 
 async function setAvatar(page) {
@@ -98,6 +98,9 @@ test("switches remembered accounts across windows and requires the target PIN of
   await expect(trigger.locator("svg.lucide-users-round-collaboration")).toHaveCount(1);
   await expect(current).toHaveAttribute("aria-current", "true");
   await expect(popover).not.toContainText(`@${alpha}`);
+  const titleSize = await popover.getByRole("heading").evaluate((heading) => parseFloat(getComputedStyle(heading).fontSize));
+  const rowSize = await current.evaluate((row) => parseFloat(getComputedStyle(row).fontSize));
+  expect(titleSize).toBeGreaterThanOrEqual(rowSize);
   const accountIcon = current.locator("svg.lucide-user-round");
   const loginIcon = login.locator("svg.lucide-user-round-plus");
   await expect(accountIcon).toBeVisible();
@@ -124,14 +127,14 @@ test("switches remembered accounts across windows and requires the target PIN of
   await page.getByRole("button", { name: "Back to app", exact: true }).click();
   await expect(page.locator(".app-shell")).toBeVisible();
   await expect(popover).toBeHidden();
-  await loginRemembered(page, alpha);
+  await loginRemembered(page, alpha, "Alpha");
   await setAvatar(page);
   await openAccountPopover(page);
   const avatar = popover.getByRole("button", { name: /Alpha/ }).locator("img");
   await expect(avatar).toHaveAttribute("src", /^blob:/);
   expect(await avatar.getAttribute("src")).toBe(await page.locator(".sidebar-avatar img").getAttribute("src"));
   await page.keyboard.press("Escape");
-  await loginRemembered(page, beta);
+  await loginRemembered(page, beta, "Beta");
 
   await openAccountPopover(page);
   await expect(popover.locator(".account-picker-list .account-picker-name")).toHaveText(["Alpha", "Beta"]);
@@ -168,7 +171,7 @@ test("switches remembered accounts across windows and requires the target PIN of
   await expect(page.locator(".account-picker .account-picker-name")).toHaveText(["Alpha", "Beta"]);
   await expect(page.locator(".account-picker").getByRole("button", { name: "Back to app", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Alpha/ }).click();
-  await expect(page.locator(".sidebar-user-name small")).toHaveText(`@${alpha}`);
+  await expect(page.locator(".sidebar-user-name")).toHaveText("Alpha");
 
   const sibling = await context.newPage();
   await sibling.goto("/");
@@ -200,12 +203,12 @@ test("switches remembered accounts across windows and requires the target PIN of
   await expect(lock.locator(".error")).toBeVisible();
   await lock.locator("input").fill(pin);
   await lock.getByRole("button", { name: "Unlock with PIN", exact: true }).click();
-  await expect(page.locator(".sidebar-user-name small")).toHaveText(`@${beta}`);
+  await expect(page.locator(".sidebar-user-name")).toHaveText("Beta");
   await context.setOffline(false);
   await page.bringToFront();
   await expect(page.locator(".status-synced")).toBeVisible();
   await page.reload();
-  await expect(page.locator(".sidebar-user-name small")).toHaveText(`@${beta}`);
+  await expect(page.locator(".sidebar-user-name")).toHaveText("Beta");
   await expect(page.locator(".status-synced")).toBeVisible();
   const cold = await context.newPage();
   await cold.goto("/");
@@ -216,7 +219,7 @@ test("switches remembered accounts across windows and requires the target PIN of
   await sidebarAction(page, "Lock");
   await lock.getByRole("button", { name: "Switch account", exact: true }).click();
   await page.getByRole("button", { name: /Alpha/ }).click();
-  await expect(page.locator(".sidebar-user-name small")).toHaveText(`@${alpha}`);
+  await expect(page.locator(".sidebar-user-name")).toHaveText("Alpha");
   const note = page.getByRole("button", { name: title, exact: true });
   if (page.viewportSize().width < 700
     && !await page.locator(".app-shell").evaluate((element) => element.classList.contains("tree-open"))) {
@@ -237,5 +240,5 @@ test("switches remembered accounts across windows and requires the target PIN of
   await expect(lock.locator(".error")).toBeVisible();
   await lock.locator("input").fill(alphaPin);
   await lock.getByRole("button", { name: "Unlock with PIN", exact: true }).click();
-  await expect(page.locator(".sidebar-user-name small")).toHaveText(`@${alpha}`);
+  await expect(page.locator(".sidebar-user-name")).toHaveText("Alpha");
 });

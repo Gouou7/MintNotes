@@ -5,14 +5,28 @@ const database = { databaseBytes: 83886080, walBytes: 4194304, shmBytes: 32768, 
   reusableBytes: 1048576, logicalBytes: 52428800, userCount: 1, sqliteVersion: "3.50.0", schemaVersion: 4,
   journalMode: "wal", checkedAt: "2026-10-23T10:30:00Z", available: true };
 
+async function chooseSetting(trigger: Locator, label: string) {
+  await trigger.click();
+  await trigger.page().getByRole("listbox").getByRole("option", { name: label, exact: true }).click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+}
+
+async function expectOptions(trigger: Locator, labels: string[]) {
+  await trigger.click();
+  await expect(trigger.page().getByRole("listbox").getByRole("option")).toHaveText(labels);
+  await trigger.page().keyboard.press("Escape");
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+}
+
 async function expectInlineQuota(fields: Locator) {
-  const select = fields.locator("select");
-  await select.selectOption("custom");
+  const select = fields.getByRole("combobox");
+  await chooseSetting(select, "Custom");
   const input = fields.locator("input[type=number]");
   await input.fill("200");
-  await expect(select).toHaveValue("custom");
-  const [choice, capacity] = await Promise.all([select.boundingBox(), input.boundingBox()]);
-  expect(Math.abs(choice!.y - capacity!.y)).toBeLessThanOrEqual(2);
+  await expect(select).toHaveText("Custom");
+  const [choice, capacity] = await Promise.all([select.boundingBox(), fields.locator(".quota-custom").boundingBox()]);
+  expect(Math.abs(choice!.y - capacity!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(choice!.height - capacity!.height)).toBeLessThanOrEqual(1);
   expect(capacity!.x).toBeGreaterThanOrEqual(choice!.x + choice!.width);
   expect(await fields.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
 }
@@ -29,7 +43,7 @@ for (const [name, width] of [["desktop", 1440], ["mobile", 320]] as const) {
   test(`${name} unlimited storage remains readable in Chinese with large text`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/settings.html?unlimited&language=zh-CN");
-    await page.getByRole("combobox", { name: "字体大小", exact: true }).selectOption("17");
+    await chooseSetting(page.getByRole("combobox", { name: "字体大小", exact: true }), "17（大）");
     await page.locator(".settings-tabs").getByRole("tab", { name: "用户和安全", exact: true }).click();
     const deviceSecurity = page.locator(".settings-group").filter({ has: page.getByRole("heading", { name: "本机安全", exact: true }) });
     await expect(deviceSecurity.locator(".settings-item-title")).toHaveText(["本机 PIN", "无操作后自动锁定"]);
@@ -75,17 +89,18 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
     }
     for (const theme of ["light", "dark"]) {
       await page.getByRole("tab", { name: "General", exact: true }).click();
-      await page.getByRole("combobox", { name: "Theme", exact: true }).selectOption(theme);
+      await chooseSetting(page.getByRole("combobox", { name: "Theme", exact: true }), theme === "dark" ? "Dark" : "Light");
       const fontSize = page.getByRole("combobox", { name: "Font size", exact: true });
-      await expect(fontSize.locator("option")).toHaveText(["11 (Small)", "12", "13", "14 (Default)", "15", "16", "17 (Large)"]);
-      for (const size of ["11", "17", "14"]) {
-        await fontSize.selectOption(size); await expect(fontSize).toHaveValue(size);
+      await expectOptions(fontSize, ["11 (Small)", "12", "13", "14 (Default)", "15", "16", "17 (Large)"]);
+      for (const [size, label] of [["11", "11 (Small)"], ["17", "17 (Large)"], ["14", "14 (Default)"]]) {
+        await chooseSetting(fontSize, label); await expect(fontSize).toHaveText(label);
         await expect(fontSize).toHaveCSS("font-size", `${size}px`);
         await expect(content.locator(".settings-item-title").first()).toHaveCSS("font-size", `${size}px`);
         await expect(page.locator(".settings-tabs button").first()).toHaveCSS("font-size", `${size}px`);
         await expect(content.locator("h3").first()).toHaveCSS("font-size", `${Number(size) + 2}px`);
         await expect(content.locator(".settings-page-title")).toHaveCSS("font-size", `${Number(size) + 10}px`);
       }
+      await page.getByRole("tab", { name: "About", exact: true }).click();
       for (const title of tabs) {
         const nav = page.locator(".settings-tabs").getByRole("tab", { name: title, exact: true });
         await nav.click();
@@ -192,11 +207,11 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           await expect(counts.locator("strong")).toHaveText(["12", "3", "24"]);
           await expect(counts.first().locator("span")).toHaveCSS("font-size", "12px");
           const historyQuota = content.locator(".history-budget .quota-fields");
-          await expect(historyQuota.locator("option")).toHaveText(["Unlimited", "100MiB", "200MiB", "500MiB", "Custom"]);
+          await expectOptions(historyQuota.getByRole("combobox"), ["Unlimited", "100MiB", "200MiB", "500MiB", "Custom"]);
           const quotaSaved = page.waitForRequest(request => request.url().endsWith("/api/account/note-history-settings") && request.method() === "PATCH" && request.postDataJSON().quotaBytes === 200 * 1048576);
           await expectInlineQuota(historyQuota);
           await quotaSaved;
-          await expect(content.locator(".history-budget button")).toHaveCount(0);
+          await expect(content.locator(".history-budget button:not([role=combobox])")).toHaveCount(0);
           const controls = await historyQuota.locator(".quota-controls").boundingBox();
           await expect(historyQuota.locator(".settings-item-title")).toHaveCSS("font-weight", "400");
           if (name !== "mobile") {
@@ -243,7 +258,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
           expect(await databaseSection.locator(".storage-composition").evaluate(element => Math.abs([...element.children].reduce((sum, segment) => sum + segment.getBoundingClientRect().width, 0) - element.clientWidth))).toBeLessThanOrEqual(1);
           const form = content.locator(".admin-create");
           if (name !== "mobile") {
-            const inputs = await form.locator("input, select").all();
+            const inputs = await form.locator("input:not([aria-hidden]), [role=combobox]").all();
             const bounds = await Promise.all(inputs.map(input => input.boundingBox()));
             expect(Math.max(...bounds.map(box => box!.x + box!.width)) - Math.min(...bounds.map(box => box!.x + box!.width))).toBeLessThanOrEqual(2);
             const row = content.locator(".user-row").first();
@@ -251,7 +266,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
             expect(actions.x).toBeGreaterThanOrEqual(identity.x + identity.width);
           }
           const newQuota = content.locator(".admin-create .quota-fields");
-          await expect(newQuota.locator("option")).toHaveText(["Unlimited", "100MiB", "200MiB", "500MiB", "1GiB", "2GiB", "Custom"]);
+          await expectOptions(newQuota.getByRole("combobox"), ["Unlimited", "100MiB", "200MiB", "500MiB", "1GiB", "2GiB", "Custom"]);
           await page.getByRole("button", { name: "Edit quota", exact: true }).first().click();
           const dialog = page.locator(".quota-dialog");
           if (name !== "mobile") {
@@ -282,7 +297,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
       }
     }
     await page.getByRole("tab", { name: "General", exact: true }).click();
-    await page.getByRole("combobox", { name: "Font size", exact: true }).selectOption("17");
+    await chooseSetting(page.getByRole("combobox", { name: "Font size", exact: true }), "17 (Large)");
     for (const title of tabs) {
       await page.locator(".settings-tabs").getByRole("tab", { name: title, exact: true }).click();
       if (title === "Administrator settings") await expect(page.locator(".database-storage")).toContainText("Database available");
@@ -301,7 +316,7 @@ for (const [name, width, height] of [["desktop", 1440, 1000], ["tablet", 834, 11
       await page.screenshot({ path: info.outputPath(`${name}-large-${title.replaceAll(" ", "-")}.png`) });
     }
     await page.getByRole("tab", { name: "General", exact: true }).click();
-    await page.getByRole("combobox", { name: "Font size", exact: true }).selectOption("14");
+    await chooseSetting(page.getByRole("combobox", { name: "Font size", exact: true }), "14 (Default)");
     await page.getByRole("tab", { name: "Account and security", exact: true }).click();
     await page.getByRole("button", { name: "Edit profile", exact: true }).click();
     const profile = page.getByRole("dialog", { name: "Edit profile", exact: true });
@@ -347,10 +362,10 @@ test("settings rows keep available space and move complete action groups when na
     for (const width of [520, 390, 320]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.locator(".settings-tabs").getByRole("tab", { name: "通用", exact: true }).click();
-      await page.getByRole("combobox", { name: "字体大小", exact: true }).selectOption(size);
-      for (const row of await content.locator(".general-settings .settings-item:has(select)").all()) {
+      await chooseSetting(page.getByRole("combobox", { name: "字体大小", exact: true }), size === "17" ? "17（大）" : "14（默认）");
+      for (const row of await content.locator(".general-settings .settings-item:has([role=combobox])").all()) {
         const copy = (await row.locator(".settings-item-copy").boundingBox())!;
-        const control = (await row.locator("select").boundingBox())!;
+        const control = (await row.getByRole("combobox").boundingBox())!;
         if (width >= 390) expect(Math.abs(copy.y + copy.height / 2 - control.y - control.height / 2)).toBeLessThanOrEqual(1);
         else expect(control.y).toBeGreaterThanOrEqual(copy.y + copy.height);
       }
@@ -397,12 +412,12 @@ test("application connection fields retain accessible names and descriptions at 
   await page.getByRole("tab", { name: "Account and security", exact: true }).click();
   await page.getByRole("button", { name: "Add application", exact: true }).click();
   const form = page.locator(".application-form");
-  const fields = form.locator(".settings-item-control :is(input, select)");
+  const fields = form.locator(".settings-item-control :is(input:not([aria-hidden]), [role=combobox])");
   await expect(fields).toHaveCount(4);
   for (const field of await fields.all()) await expect(field).toHaveAccessibleName(/.+/);
   expect(await fields.evaluateAll(controls => controls.every(control => !control.hasAttribute("aria-describedby") || Boolean(document.getElementById(control.getAttribute("aria-describedby")!))))).toBe(true);
-  await form.locator("select").first().selectOption("read");
-  await expect(form.locator("select").first()).toHaveValue("read");
+  await chooseSetting(form.getByRole("combobox").first(), "Read only");
+  await expect(form.getByRole("combobox").first()).toHaveText("Read only");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   await form.screenshot({ path: info.outputPath("mobile-application-fields.png") });
@@ -417,13 +432,36 @@ test("settings controls distinguish switch states and keep theme borders and key
   const track = page.locator("[data-slot=switch]");
   const tabKey = browserName === "webkit" ? "Alt+Tab" : "Tab", backTabKey = browserName === "webkit" ? "Alt+Shift+Tab" : "Shift+Tab";
   for (const theme of ["light", "dark"]) {
-    await themeSelect.selectOption(theme);
+    const themeLabel = theme === "light" ? "Light" : "Dark";
+    await chooseSetting(themeSelect, themeLabel);
     await expect(toggle).not.toBeChecked();
+    const selectSurface = theme === "light" ? "rgb(255, 255, 255)" : "rgb(42, 42, 42)";
+    await expect(themeSelect).toHaveCSS("background-color", selectSurface);
+    await themeSelect.hover();
+    await expect(themeSelect).toHaveCSS("background-color", theme === "light" ? "rgb(232, 233, 233)" : "rgb(51, 51, 51)");
+    await page.mouse.move(0, 0);
     const idleBorder = await themeSelect.evaluate(element => getComputedStyle(element).borderTopColor);
     await themeSelect.focus(); await page.keyboard.press(tabKey); await page.keyboard.press(backTabKey);
     await expect(themeSelect).toBeFocused();
     await expect(themeSelect).not.toHaveCSS("border-top-color", idleBorder);
     await expect(themeSelect).not.toHaveCSS("box-shadow", "none");
+    await page.keyboard.press("ArrowDown");
+    await expect(themeSelect).toHaveAttribute("aria-expanded", "true");
+    const list = page.getByRole("listbox");
+    await expect(page.locator("[data-slot=select-content]:visible")).toHaveCSS("background-color", selectSurface);
+    const selected = list.getByRole("option", { name: themeLabel, exact: true });
+    await expect(selected).toHaveAttribute("aria-selected", "true");
+    await expect(selected.locator("[data-slot=select-item-indicator]")).toBeVisible();
+    const other = list.getByRole("option", { name: "Follow system", exact: true });
+    await other.hover();
+    // Windows WebKit reports zero movement for Playwright mouse moves.
+    if (browserName === "webkit" && process.platform === "win32") {
+      await other.dispatchEvent("mousemove", { movementY: 1 });
+    }
+    await expect(other).toHaveAttribute("data-highlighted", "");
+    await expect(other).toHaveCSS("background-color", theme === "light" ? "rgb(232, 233, 233)" : "rgb(51, 51, 51)");
+    await page.keyboard.press("Escape");
+    await expect(themeSelect).toBeFocused();
 
     await toggle.focus(); await page.keyboard.press(tabKey); await page.keyboard.press(backTabKey);
     await expect(toggle).toBeFocused();
@@ -436,7 +474,7 @@ test("settings controls distinguish switch states and keep theme borders and key
     await track.click(); await expect(toggle).toBeChecked();
     await page.getByText("Wrap code blocks", { exact: true }).click(); await expect(toggle).not.toBeChecked();
   }
-  await themeSelect.selectOption("light");
+  await chooseSetting(themeSelect, "Light");
   await page.getByRole("tab", { name: "Account and security", exact: true }).click();
   const logout = page.getByRole("button", { name: "Log out", exact: true });
   await logout.focus(); await page.keyboard.press(backTabKey); await page.keyboard.press(tabKey);

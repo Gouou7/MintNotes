@@ -20,7 +20,7 @@ import { SettingsButton } from "../../../src/components/SettingsButton";
 import { ToastStack, type ToastActionHandler, type ToastTone } from "../../../src/components/Toast";
 import { useToastNotifications } from "../../../src/features/vault/useToastNotifications";
 import { NoteToolbar } from "../../../src/features/vault/NoteToolbar";
-import { TreeLevel, TreeNoteLock } from "../../../src/features/vault/VaultTree";
+import { TreeLevel, TreeNoteLock, type TreeDropTarget } from "../../../src/features/vault/VaultTree";
 import { WorkspacePanelHeader, WorkspaceSidebar } from "../../../src/features/vault/WorkspaceChrome";
 import { I18nProvider } from "../../../src/i18n";
 import { buildOutline } from "../../../src/editor/product/outline";
@@ -51,7 +51,7 @@ const tree = new Map<string | null, OpenDocument[]>([
   ["subfolder", [document("nested", "Nested note", "note", "subfolder")]]
 ]);
 let saves = 0;
-let lastMove: { ids: string[]; parentId: string | null } | null = null;
+let lastMove: { ids: string[]; parentId: string | null; beforeId?: string | null } | null = null;
 let notify!: ReturnType<typeof useToastNotifications>["showMessage"];
 let loadMarkdown!: (text: string) => void;
 declare global { interface Window { mintWorkspaceFixture: { saves(): number; lastMove(): typeof lastMove; loadMarkdown(text: string): void; notify(text: string, tone: ToastTone, action?: ToastActionHandler): void } } }
@@ -73,6 +73,7 @@ function Workspace() {
   const [historyItems, setHistoryItems] = useState(historyFixture ? snapshotItems : []);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null), [renamingHistoryId, setRenamingHistoryId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(new Set(["folder-two", "subfolder"]));
+  const [dropTarget, setDropTarget] = useState<TreeDropTarget | null>(null);
   const searchInput = useRef<HTMLInputElement>(null), titleInput = useRef<HTMLInputElement>(null);
   const editorMode = useWorkspaceEditorMode({ preferences, document: { ...selected, locked }, previewing: false, onPreferences: setPreferences });
   const shell = useRef<HTMLDivElement>(null);
@@ -87,8 +88,8 @@ function Workspace() {
       pinned={<div className="pinned-section"><div className="tree-section-label"><AppIcon icon={Pin} size={8} />Pinned</div>{[selected, lockedNote].map(entry => <div key={entry.objectId} className={`tree-row ${entry === selected ? "active" : ""}`}><Button variant="ghost" className="tree-main"><span className="tree-spacer" /><span className="tree-title">{entry.title}</span><TreeNoteLock document={entry} /></Button></div>)}</div>}
     >
       <SidebarContent className="document-tree block"><TreeLevel menuActions={{ selection: (entry) => [entry], documents: [...tree.values()].flat(), onSelect: () => {}, onRename: () => {}, onToggleLock: async () => {}, onCreate: async () => "", onDuplicate: async () => {}, onExport: async () => {}, onPin: async () => {}, onDelete: async () => {}, onRestore: async () => {}, onPurge: () => {} }} childrenByParent={tree} parentId={null} activeId={selected.objectId} selectedIds={new Set([selected.objectId])} expanded={expanded}
-        draggingIds={new Set()} dropTarget={null} renamingDocumentId={null} onDropTarget={() => {}} onSelect={entry => { if (entry.kind === "folder") setExpanded(current => { const next = new Set(current); if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId); return next; }); }}
-        onContext={() => {}} onDragSelection={(entry) => [entry.objectId]} onDragFinish={() => {}} onMove={(ids, parentId) => { lastMove = { ids, parentId }; }} onRenameCommit={() => {}} onRenameCancel={() => {}} /></SidebarContent>
+        draggingIds={new Set()} dropTarget={dropTarget} renamingDocumentId={null} onDropTarget={setDropTarget} onSelect={entry => { if (entry.kind === "folder") setExpanded(current => { const next = new Set(current); if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId); return next; }); }}
+        onContext={() => {}} onDragSelection={(entry) => [entry.objectId]} onDragFinish={() => {}} onMove={(ids, parentId, beforeId) => { lastMove = { ids, parentId, beforeId }; }} onRenameCommit={() => {}} onRenameCancel={() => {}} /></SidebarContent>
     </WorkspaceSidebar>
     </WorkspaceDrawer>
     <PaneResizer label="Resize left panel" side="left" value={treeWidth} min={220} max={420} onResize={setTreeWidth} />

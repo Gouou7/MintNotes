@@ -33,7 +33,7 @@ export default function App() {
   />;
 
   return <>
-    {workspace && <div hidden={session.chooser || session.login}>
+    {workspace && <div className="h-full" hidden={session.chooser || session.login}>
       <WorkspaceServicesContext.Provider value={workspace}>
         <Suspense fallback={<main className="loading-shell"><Spinner className="spinner" aria-hidden="true" /><p>{t("app.loadingNotes")}</p></main>}>
           <VaultApp key={workspace.id} {...workspace.account} serverSessionVerified={session.online} visible={!session.chooser && !session.login}

@@ -22,6 +22,11 @@ describe("workspace chrome", () => {
       displayName="User" username="username" avatarUrl={null} onLock={onLock} onSettings={onSettings}
     ><div className="document-tree" /></WorkspaceSidebar></I18nProvider>));
 
+    const identity = container.querySelector(".sidebar-user");
+    expect(identity?.querySelector(".sidebar-user-name")?.textContent).toBe("User");
+    expect(identity?.textContent).not.toContain("username");
+    expect(identity?.getAttribute("title")).toBe("User");
+
     const click = (label: string) => act(() => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.click());
     click("Clear search");
     expect(onSearchChange).toHaveBeenCalledWith("");

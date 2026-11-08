@@ -14,7 +14,7 @@ import { useMediaQuery } from "./useMediaQuery";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { NativeSelect } from "@/components/ui/native-select";
+import { Select } from "@/components/ui/select";
 import { useWorkspaceServices } from "./session/workspaceServices";
 import { SettingsSection } from "../components/SettingsSection";
 import { SettingsItem } from "../components/SettingsItem";
@@ -28,11 +28,10 @@ import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useMemo,
 import { Notebook, ChevronDown, ChevronRight, ChevronsUp, Check, Copy, Download, Ellipsis, FileText, Folder, History as HistoryIcon, Info, KeyRound, Laptop, LogOut, Pencil, Search, Settings, SlidersHorizontal, UserRoundCog, ShieldCheck, Trash2, Upload, UserRound, X } from "lucide-react";
 import { AppIcon } from "../components/AppIcon";
 import { SettingsButton } from "../components/SettingsButton";
-import { LanguageSelect } from "../components/LanguageSelect";
 import type { ToastTone } from "../components/Toast";
 import { createVaultEnvelopeBinding, type EncryptedProfileAvatar } from "../crypto/client";
 import { getDeviceUnlock, hasDevicePin, removeDevicePin, setAutoLockMinutes, setDevicePin } from "../crypto/deviceUnlock";
-import { translateError, useI18n } from "../i18n";
+import { LANGUAGE_OPTIONS, translateError, useI18n } from "../i18n";
 import type { DeviceUnlockCredential } from "../storage/database";
 import type { AuthEndpoint, AuthParameters, HistorySettings, OpenDocument, TrustedEndpointsResponse, UiPreferences, User, VaultEnvelopeBinding } from "../types";
 import { submitFormOnEnter } from "./formKeyboard";
@@ -537,12 +536,21 @@ export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoin
             {!serverSessionVerified && <p className="auth-guidance warning">{t("settings.localOnly")}</p>}
             <TabsContent value="general" className="settings-page general-settings">
               <SettingsSection title={t("settings.appearance")}>
-              <SettingsItem title={t("language.label")}>{(control) => <LanguageSelect {...control} value={preferences.language} onChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} />}</SettingsItem>
-              <SettingsItem title={t("settings.theme")}>{(control) => <NativeSelect {...control} value={preferences.theme} onChange={(event) => onPreferences({ ...preferences, theme: event.target.value as UiPreferences["theme"] })}><option value="system">{t("settings.themeSystem")}</option><option value="light">{t("settings.themeLight")}</option><option value="dark">{t("settings.themeDark")}</option></NativeSelect>}</SettingsItem>
+              <SettingsItem title={t("language.label")}>{(control) => <Select {...control} aria-label={t("language.selector")} value={preferences.language}
+                items={LANGUAGE_OPTIONS.map((option) => option.value === "system" ? { ...option, label: t("language.system") } : option)}
+                onValueChange={(language) => { setLanguagePreference(language); onPreferences({ ...preferences, language }); }} />}</SettingsItem>
+              <SettingsItem title={t("settings.theme")}>{(control) => <Select {...control} value={preferences.theme}
+                items={[
+                  { value: "system", label: t("settings.themeSystem") },
+                  { value: "light", label: t("settings.themeLight") },
+                  { value: "dark", label: t("settings.themeDark") }
+                ]} onValueChange={(theme) => onPreferences({ ...preferences, theme })} />}</SettingsItem>
               <SettingsItem title={t("settings.fontSize")} className="font-size-setting">{(control) =>
-                <NativeSelect {...control} value={normalizeFontSize(preferences.fontSize)} onChange={(event) => onPreferences({ ...preferences, fontSize: normalizeFontSize(Number(event.target.value)) })}>
-                  {Array.from({ length: MAX_FONT_SIZE - MIN_FONT_SIZE + 1 }, (_, index) => MIN_FONT_SIZE + index).map(size => <option key={size} value={size}>{size === MIN_FONT_SIZE ? t("settings.fontSizeSmall", { size }) : size === DEFAULT_FONT_SIZE ? t("settings.fontSizeDefault", { size }) : size === MAX_FONT_SIZE ? t("settings.fontSizeLarge", { size }) : size}</option>)}
-                </NativeSelect>}
+                <Select {...control} value={normalizeFontSize(preferences.fontSize)}
+                  items={Array.from({ length: MAX_FONT_SIZE - MIN_FONT_SIZE + 1 }, (_, index) => {
+                    const size = MIN_FONT_SIZE + index;
+                    return { value: size, label: size === MIN_FONT_SIZE ? t("settings.fontSizeSmall", { size }) : size === DEFAULT_FONT_SIZE ? t("settings.fontSizeDefault", { size }) : size === MAX_FONT_SIZE ? t("settings.fontSizeLarge", { size }) : String(size) };
+                  })} onValueChange={(fontSize) => onPreferences({ ...preferences, fontSize })} />}
               </SettingsItem>
               </SettingsSection><SettingsSection title={t("settings.editor")}>
               <SettingsItem title={t("settings.wrapCodeBlocks")}>{(control) =>
@@ -564,7 +572,10 @@ export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoin
               </SettingsSection>
               <SettingsSection title={t("settings.deviceSecurity")}>
                 <SettingsItem title={t("settings.devicePin")} description={t(hasDevicePin(credential) ? "settings.pinConfiguredHelp" : "settings.pinHelp")}><SettingsButton icon={KeyRound} type="button" variant="default" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("save")}>{hasDevicePin(credential) ? t("settings.changePin") : t("settings.setPin")}</SettingsButton>{hasDevicePin(credential) && <SettingsButton icon={KeyRound} type="button" disabled={busy || !serverSessionVerified} onClick={() => openPinDialog("remove")}>{t("settings.removePin")}</SettingsButton>}</SettingsItem>
-                <SettingsItem title={t("settings.autoLockAfter")} description={t("settings.autoLockHelp")}>{(control) => <NativeSelect {...control} disabled={busy} value={autoLock} onChange={(event) => void updateAutoLock(Number(event.target.value))}><option value="0">{t("settings.offDefault")}</option>{[1, 2, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })}</option>)}</NativeSelect>}</SettingsItem>
+                <SettingsItem title={t("settings.autoLockAfter")} description={t("settings.autoLockHelp")}>{(control) => <Select {...control} disabled={busy} value={autoLock}
+                  items={[{ value: 0, label: t("settings.offDefault") }, ...[1, 2, 5, 10, 15, 30, 60].map((minutes) => ({
+                    value: minutes, label: t(minutes === 1 ? "settings.minute" : "settings.minutes", { count: minutes })
+                  }))]} onValueChange={(minutes) => void updateAutoLock(minutes)} />}</SettingsItem>
               </SettingsSection><SettingsSection title={t("settings.loginDevices")}><p className="settings-help">{t("settings.loginDevicesHelp")}</p>
               {sessionsLoading && !deviceEndpoints && <p className="settings-help">{t("settings.loadingDevices")}</p>}
               {deviceEndpoints && <><p className="settings-help">{t("settings.inactiveDeviceRetention", { count: deviceEndpoints.inactiveRetentionDays })}</p>{!deviceEndpoints.canRevokeOthers && deviceEndpoints.endpoints.some((device) => !device.current && (device.active || device.resumable)) && <p className="session-gate">{t("settings.revokeAfter", { date: formatDateTime(deviceEndpoints.revokeEligibleAt) })}</p>}<div className="session-list settings-list">{deviceEndpoints.endpoints.map((device) => <Item className={`session-row settings-list-row ${device.current ? "current" : ""}`} key={device.id} render={<article />}><ItemMedia className="settings-list-icon"><AppIcon icon={Laptop} size={20} /></ItemMedia><ItemContent className="session-details settings-list-details"><strong>{device.deviceName}{device.current && <Badge variant="outline" render={<em />}>{t("settings.currentDevice")}</Badge>}{device.remembered && <Badge variant="outline" render={<em />}>{t("settings.remembered")}</Badge>}</strong><span>{t("settings.lastOnline", { date: formatDateTime(device.lastSeenAt) })}</span><small>{t("settings.deviceDetails", { first: formatDateTime(device.firstSeenAt), last: formatDateTime(device.lastLoginAt), count: device.loginCount, ip: device.ipAddress || t("common.unknown"), status: device.active ? t("settings.deviceActive") : device.resumable ? t("account.deviceResumable") : device.revokedAt ? t("settings.deviceSignedOut") : t("settings.deviceExpired") })}</small></ItemContent>{!device.current && <div className="settings-list-actions">{device.active || device.resumable ? <SettingsButton icon={LogOut} variant="destructive" className="session-revoke" disabled={!deviceEndpoints.canRevokeOthers || revokingSessionId === device.id} onClick={() => void revokeDeviceEndpoint(device.id, device.deviceName)}>{t("settings.signOut")}</SettingsButton> : <SettingsButton icon={Trash2} className="session-remove" disabled={revokingSessionId === device.id} onClick={() => void removeDeviceEndpoint(device.id, device.deviceName)}>{t("common.remove")}</SettingsButton>}</div>}</Item>)}</div></>}

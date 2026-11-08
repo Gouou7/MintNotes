@@ -1,7 +1,7 @@
 import { Item, ItemContent, ItemMedia } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { NativeSelect } from "@/components/ui/native-select";
+import { Select } from "@/components/ui/select";
 import { SettingsSection } from "../../components/SettingsSection";
 import { SettingsItem } from "../../components/SettingsItem";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -98,14 +98,26 @@ export function TrashStorageSection({ trashItems, busy, purging, serverSessionVe
     return next;
   });
             return <SettingsSection title={t("settings.trash")} className="trash-settings">
-              <SettingsItem title={t("settings.autoDelete")} description={t("settings.trashHelp")}>{(control) => <NativeSelect {...control} disabled={busy || !serverSessionVerified} value={trashRetentionDays === null ? "never" : String(trashRetentionDays)} onChange={(event) => void updateTrashRetention(event.target.value === "never" ? null : Number(event.target.value))}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 30 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></NativeSelect>}</SettingsItem>
+              <SettingsItem title={t("settings.autoDelete")} description={t("settings.trashHelp")}>{(control) => <Select {...control} disabled={busy || !serverSessionVerified}
+                value={trashRetentionDays ?? "never"} items={[
+                  ...[7, 30, 90, 180, 365].map((days) => ({ value: days, label: t(days === 30 ? "settings.daysDefault" : "settings.days", { count: days }) })),
+                  { value: "never", label: t("settings.keepForever") }
+                ]} onValueChange={(days) => void updateTrashRetention(days === "never" ? null : days)} />}</SettingsItem>
               <SettingsItem title={t("settings.deletedItems")} description={trashItems.length > 0 ? (trashView.filtering ? t("settings.trashFilterSummary", { count: trashView.matchCount }) : t("settings.trashSummary", { roots: trashView.roots.length, total: trashItems.length })) : undefined}>
                 {trashItems.length > 0 && <>{expandedTrashIds.size > 0 && !trashView.filtering && <SettingsButton icon={ChevronsUp} onClick={() => setExpandedTrashIds(new Set())}>{t("settings.collapseAll")}</SettingsButton>}<SettingsButton icon={Trash2} variant="destructive" disabled={purging} onClick={onClearTrash}>{purging ? t("settings.clearingTrash") : t("settings.clearTrash")}</SettingsButton></>}
               </SettingsItem>
               {trashItems.length > 0 && <div className="trash-toolbar">
                 <InputGroup className="trash-search"><InputGroupAddon><AppIcon icon={Search} /></InputGroupAddon><InputGroupInput type="search" value={trashQuery} onChange={(event) => setTrashQuery(event.target.value)} placeholder={t("settings.searchTrash")} aria-label={t("settings.searchTrash")} /></InputGroup>
-                <NativeSelect value={trashKindFilter} onChange={(event) => setTrashKindFilter(event.target.value as TrashKindFilter)} aria-label={t("settings.trashTypeFilter")}><option value="all">{t("settings.allTypes")}</option><option value="folder">{t("settings.foldersOnly")}</option><option value="note">{t("settings.notesOnly")}</option></NativeSelect>
-                <NativeSelect value={trashSortMode} onChange={(event) => setTrashSortMode(event.target.value as TrashSortMode)} aria-label={t("settings.trashSort")}><option value="deleted-desc">{t("settings.deletedNewest")}</option><option value="deleted-asc">{t("settings.deletedOldest")}</option><option value="name">{t("settings.sortByName")}</option></NativeSelect>
+                <Select value={trashKindFilter} onValueChange={setTrashKindFilter} aria-label={t("settings.trashTypeFilter")} items={[
+                  { value: "all", label: t("settings.allTypes") },
+                  { value: "folder", label: t("settings.foldersOnly") },
+                  { value: "note", label: t("settings.notesOnly") }
+                ]} />
+                <Select value={trashSortMode} onValueChange={setTrashSortMode} aria-label={t("settings.trashSort")} items={[
+                  { value: "deleted-desc", label: t("settings.deletedNewest") },
+                  { value: "deleted-asc", label: t("settings.deletedOldest") },
+                  { value: "name", label: t("settings.sortByName") }
+                ]} />
               </div>}
               {visibleTrashRoots.length ? <><div className="trash-list settings-list" role="tree">{visibleTrashRoots.map((item) => <TrashBranch key={item.objectId} item={item} childrenByParent={trashView.childrenByParent} descendantCounts={trashView.descendantCounts} expandedIds={expandedTrashIds} automaticallyExpandedIds={trashView.automaticallyExpandedIds} root restoring={restoringTrashId} purging={purging} onToggle={toggleTrashFolder} onRestore={(entry) => void restoreTrashItem(entry)} onPurge={onPurgeTrash} />)}</div>{visibleTrashRootCount < trashView.roots.length && <SettingsButton icon={ChevronDown} className="trash-load-more" onClick={() => setVisibleTrashRootCount((count) => count + TRASH_PAGE_SIZE)}>{t("settings.showMore", { count: Math.min(TRASH_PAGE_SIZE, trashView.roots.length - visibleTrashRootCount) })}</SettingsButton>}</> : <p className="trash-empty">{trashItems.length ? t("settings.noTrashMatches") : t("settings.trashEmpty")}</p>}
             </SettingsSection>;

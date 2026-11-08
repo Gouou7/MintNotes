@@ -1,5 +1,5 @@
 import { Switch } from "@/components/ui/switch";
-import { NativeSelect } from "@/components/ui/native-select";
+import { Select } from "@/components/ui/select";
 import { SettingsSection } from "../../components/SettingsSection";
 import { SettingsItem } from "../../components/SettingsItem";
 import { Trash2 } from "lucide-react";
@@ -25,8 +25,15 @@ export function HistoryStorageSection({ historySettings, busy, serverSessionVeri
                     onCheckedChange={(checked) => void updateHistorySettings({ enabled: checked })}
                 />}
               </SettingsItem>
-              <SettingsItem title={t("settings.historyFrequency")}>{(control) => <NativeSelect {...control} disabled={busy || !serverSessionVerified || !historySettings.enabled} value={historySettings.intervalMinutes} onChange={(event) => void updateHistorySettings({ intervalMinutes: Number(event.target.value) as HistorySettings["intervalMinutes"] })}>{[5, 10, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{t("settings.minutes", { count: minutes })}</option>)}</NativeSelect>}</SettingsItem>
-              <SettingsItem title={t("settings.historyRetention")} description={t("settings.historyTiered")}>{(control) => <NativeSelect {...control} disabled={busy || !serverSessionVerified} value={historySettings.retentionDays === null ? "never" : historySettings.retentionDays} onChange={(event) => void updateHistorySettings({ retentionDays: event.target.value === "never" ? null : Number(event.target.value) as HistorySettings["retentionDays"] })}>{[7, 30, 90, 180, 365].map((days) => <option key={days} value={days}>{t(days === 90 ? "settings.daysDefault" : "settings.days", { count: days })}</option>)}<option value="never">{t("settings.keepForever")}</option></NativeSelect>}</SettingsItem>
+              <SettingsItem title={t("settings.historyFrequency")}>{(control) => <Select {...control} disabled={busy || !serverSessionVerified || !historySettings.enabled}
+                value={historySettings.intervalMinutes} items={([5, 10, 30, 60] as const).map((minutes) => ({
+                  value: minutes, label: t("settings.minutes", { count: minutes })
+                }))} onValueChange={(intervalMinutes) => void updateHistorySettings({ intervalMinutes })} />}</SettingsItem>
+              <SettingsItem title={t("settings.historyRetention")} description={t("settings.historyTiered")}>{(control) => <Select {...control} disabled={busy || !serverSessionVerified}
+                value={historySettings.retentionDays ?? "never"} items={[
+                  ...([7, 30, 90, 180, 365] as const).map((days) => ({ value: days, label: t(days === 90 ? "settings.daysDefault" : "settings.days", { count: days }) })),
+                  { value: "never", label: t("settings.keepForever") }
+                ]} onValueChange={(days) => void updateHistorySettings({ retentionDays: days === "never" ? null : days })} />}</SettingsItem>
               <div className="history-budget" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void quota.flush(); }}>
                 <QuotaFields presets={HISTORY_QUOTA_PRESETS} label={t("storage.historyBudget")} description={t("storage.historyBudgetHelp")} value={quota.draft} onChange={quota.change} disabled={busy || quota.saving || !serverSessionVerified} />
               </div>

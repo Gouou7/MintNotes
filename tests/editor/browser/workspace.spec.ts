@@ -222,7 +222,49 @@ test("tree menus support keyboard navigation and preserve the folder drop payloa
   } else {
     await note.dragTo(page.getByRole("button", { name: "Folder one", exact: true }));
   }
-  await expect.poll(() => page.evaluate(() => window.mintWorkspaceFixture.lastMove())).toEqual({ ids: ["note"], parentId: "folder-one" });
+  await expect.poll(() => page.evaluate(() => window.mintWorkspaceFixture.lastMove())).toEqual({ ids: ["note"], parentId: "folder-one", beforeId: undefined });
+});
+
+test("tree insertion feedback stays centered and accepts a drop between nested siblings", async ({ page }) => {
+  await page.setViewportSize({ width: 1445, height: 956 });
+  await page.goto("/workspace.html");
+  const tree = page.locator(".document-tree");
+  const upper = (await tree.locator('[data-object-id="child-one"]').boundingBox())!;
+  const lower = (await tree.locator('[data-object-id="child-two"]').boundingBox())!;
+  const x = upper.x + upper.width / 2;
+  const upperEdge = upper.y + upper.height;
+  const gap = (upperEdge + lower.y) / 2;
+  const transfer = await page.evaluateHandle(() => new DataTransfer());
+  const dragAt = (type: "dragover" | "drop", y: number) => page.evaluate(({ type, x, y, dataTransfer }) => {
+    document.elementFromPoint(x, y)?.dispatchEvent(new DragEvent(type, {
+      bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer
+    }));
+  }, { type, x, y, dataTransfer: transfer });
+  try {
+    await tree.locator('[data-object-id="note"]').dispatchEvent("dragstart", { dataTransfer: transfer });
+    for (const y of [upperEdge - 1, gap, lower.y + 1]) {
+      await dragAt("dragover", y);
+      const target = tree.locator("[data-drop-position]");
+      await expect(target).toHaveCount(1);
+      const center = await target.evaluate(element => {
+        const row = element.getBoundingClientRect();
+        const line = getComputedStyle(element, "::before");
+        const thickness = parseFloat(line.borderTopWidth);
+        const top = element.getAttribute("data-drop-position") === "before"
+          ? row.top + parseFloat(line.top)
+          : row.bottom - parseFloat(line.bottom) - thickness;
+        return top + new DOMMatrixReadOnly(line.transform).m42 + thickness / 2;
+      });
+      expect(center).toBeCloseTo(gap, 1);
+    }
+    await dragAt("drop", gap);
+    await expect.poll(() => page.evaluate(() => window.mintWorkspaceFixture.lastMove())).toEqual({
+      ids: ["note"], parentId: "folder-two", beforeId: "child-two"
+    });
+    await expect(tree.locator("[data-drop-position]")).toHaveCount(0);
+  } finally {
+    await transfer.dispose();
+  }
 });
 
 test("mobile edge gestures open either sheet and Escape restores keyboard focus", async ({ page }) => {
