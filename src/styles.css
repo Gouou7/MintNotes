@@ -445,13 +445,16 @@ body { color: var(--text); background: var(--surface); }
 .account-picker-avatar { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
 .account-picker-pin { display: flex; flex: none; color: var(--muted); }
 .account-picker-current { flex: none; border-radius: 5px; padding: 2px 6px; background: var(--accent-soft); font-size: .8em; white-space: nowrap; }
-.account-switch-popover { width: min(280px, calc(100vw - 24px)); max-height: min(22rem, calc(var(--workspace-viewport-height, 100dvh) - var(--note-toolbar-height) - var(--safe-area-bottom) - 16px)); overflow: auto; padding: 8px; border-radius: 12px; background: var(--surface-raised); color: var(--text); font-size: calc(14px + var(--font-adjust)); line-height: 1.35; }
-.account-switch-popover h2 { margin: 3px 10px 7px; color: var(--muted); font-size: .875em; font-weight: 600; }
-.account-switch-popover .account-picker-list { margin-top: 0; gap: 3px; }
-.account-switch-popover .account-picker-row { min-height: 40px; border-radius: 7px; cursor: pointer; }
+.account-switch-popover { width: min(248px, calc(100vw - 24px)); max-height: min(22rem, calc(var(--workspace-viewport-height, 100dvh) - var(--note-toolbar-height) - var(--safe-area-bottom) - 16px)); overflow: auto; gap: 4px; padding: 6px; border-radius: 12px; background: var(--surface-raised); color: var(--text); font-size: calc(14px + var(--font-adjust)); line-height: 1.35; }
+.account-switch-popover h2 { margin: 2px 8px 0; color: var(--muted); font-size: .875em; font-weight: 600; }
+.account-switch-popover .account-picker-list { margin-top: 0; gap: 2px; }
+.account-switch-popover .account-picker-row { min-height: 34px; gap: 8px; padding: 4px 8px; border-radius: 7px; font-size: inherit; line-height: inherit; white-space: normal; cursor: pointer; }
 .account-switch-popover .account-picker-row[aria-current="true"] { background: var(--button-hover); }
 .account-switch-popover .account-picker-row > svg { color: var(--muted); }
-.account-switch-actions { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.account-switch-actions { padding-top: 4px; border-top: 1px solid var(--border); }
+@media (pointer: coarse) {
+  .account-switch-popover .account-picker-row { min-height: 40px; }
+}
 .recovery-card textarea { font-family: ui-monospace, monospace; word-break: break-all; resize: none; }
 .spinner { width: 34px; height: 34px; color: var(--accent); }
 .loading-shell { align-content: center; gap: 12px; color: var(--muted); }
