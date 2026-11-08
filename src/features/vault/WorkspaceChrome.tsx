@@ -1,8 +1,8 @@
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { NativeSelect } from "@/components/ui/native-select";
+import { Select } from "@/components/ui/select";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
 import type { ReactNode, RefObject } from "react";
 import { ArrowDownToDot, ChevronsDownUp, FolderPlus, ListOrdered, LockKeyhole, PanelLeftClose, PanelRightClose, Search, Settings, SquarePen, X } from "lucide-react";
@@ -34,6 +34,12 @@ interface WorkspaceSidebarProps {
 
 export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   const { t } = useI18n();
+  const sortOptions = [
+    { value: "alphabetical", label: "A–Z" },
+    { value: "created", label: t("app.sortCreated") },
+    { value: "updated", label: t("app.sortUpdated") },
+    { value: "manual", label: t("app.sortManual") }
+  ] as const;
   return <Sidebar className="tree-pane">
     <SidebarHeader className="side-header flex-row">
       <img className="brand-small" src="/icon.svg" alt="" aria-hidden="true" />
@@ -50,7 +56,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       <Button variant="ghost" size="icon" onClick={() => props.onCreate("note")} title={t("app.newNote")} aria-label={t("app.newNote")}><AppIcon icon={SquarePen} /></Button>
       <Button variant="ghost" size="icon" onClick={() => props.onCreate("folder")} title={t("app.createFolder")} aria-label={t("app.createFolder")}><AppIcon icon={FolderPlus} /></Button>
       <span className="tree-view-actions">
-        <label data-slot="button" className={buttonVariants({ variant: "ghost", size: "icon", className: "tree-sort-action has-[select:focus-visible]:border-ring has-[select:focus-visible]:ring-3 has-[select:focus-visible]:ring-ring/50" })} title={t("app.sort")}><AppIcon icon={ListOrdered} /><NativeSelect value={props.sortMode} onChange={event => props.onSortChange(event.target.value as UiPreferences["sortMode"])} aria-label={t("app.sort")}><option value="alphabetical">A–Z</option><option value="created">{t("app.sortCreated")}</option><option value="updated">{t("app.sortUpdated")}</option><option value="manual">{t("app.sortManual")}</option></NativeSelect></label>
+        <Select items={sortOptions} value={props.sortMode} onValueChange={props.onSortChange} triggerIcon={ListOrdered} title={t("app.sort")} aria-label={t("app.sort")} />
         <Button variant="ghost" size="icon" disabled={!props.canLocate} onClick={props.onLocate} title={t("app.locateCurrent")} aria-label={t("app.locateCurrent")}><AppIcon icon={ArrowDownToDot} /></Button>
         <Button variant="ghost" size="icon" onClick={props.onCollapseAll} title={t("app.collapseAll")} aria-label={t("app.collapseAll")}><AppIcon icon={ChevronsDownUp} /></Button>
       </span>

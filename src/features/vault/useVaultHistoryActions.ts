@@ -288,14 +288,15 @@ export function useVaultHistoryActions(options: Options) {
       const title = siblingTitleExists(nameDocuments(), historyPreview.payload.title, current.parentId, current.objectId)
         ? uniqueSiblingTitle(nameDocuments(), historyPreview.payload.title, current.parentId)
         : historyPreview.payload.title;
+      const markdown = historyPreview.payload.markdown;
       const restored = await persistObject({
         ...current,
         title,
-        markdown: historyPreview.payload.markdown,
+        markdown,
         tags: [...historyPreview.payload.tags],
-        attachmentIds: attachmentIdsIn(historyPreview.payload.markdown),
+        attachmentIds: attachmentIdsIn(markdown),
         dirty: true
-      });
+      }, { preserveUpdatedAt: title === current.title && markdown === current.markdown });
       setTitleDraft(restored.title);
       setHistoryPreview(null);
       setEditorSessionId((value) => value + 1);

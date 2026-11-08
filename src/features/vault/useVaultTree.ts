@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { buildOutline, findOutlineHeading } from "../../editor/product/outline";
 import { parseWikiLinkTarget, resolveWikiLink } from "../../editor/product/wikiLinkResolver";
 import { type Translate } from "../../i18n";
@@ -10,7 +10,7 @@ import type { useDocumentNavigation } from "./useDocumentNavigation";
 import type { useToastNotifications } from "./useToastNotifications";
 import type { useVaultModel } from "./useVaultModel";
 import type { useWorkspaceSelection } from "./useWorkspaceSelection";
-import { type TreeDropTarget } from "./VaultTree";
+import { acceptTreeDrag, draggedDocumentIds, type TreeDropTarget } from "./VaultTree";
 
 interface Options {
   model: ReturnType<typeof useVaultModel>;
@@ -28,6 +28,7 @@ interface Options {
   visibleTree: OpenDocument[];
   activeDocument: OpenDocument | null;
   documentNavigation: ReturnType<typeof useDocumentNavigation>;
+  moveDocuments: (ids: string[], parentId: string | null) => Promise<void>;
 }
 
 /** 目录树选择、导航、重命名和拖放交互。 */
@@ -47,7 +48,8 @@ export function useVaultTree(options: Options) {
     setTreeOpen,
     visibleTree,
     activeDocument,
-    documentNavigation
+    documentNavigation,
+    moveDocuments
   } = options;
   const { documentIndexRef, documentsRef } = model;
   const { setSelectedIds, selectionAnchor, activeIdRef, activateDocument, selectedIds } = selection;
@@ -208,6 +210,30 @@ export function useVaultTree(options: Options) {
     ));
   };
 
+  const finishTreeDrag = () => {
+    updateTreeDropTarget(null);
+    setTreeDraggingIds(new Set());
+  };
+
+  const dragOverTreeBackground = (event: DragEvent<HTMLDivElement>) => {
+    if (acceptTreeDrag(event)) updateTreeDropTarget(null);
+  };
+
+  const treeDropHandlers = {
+    onDragEnter: dragOverTreeBackground,
+    onDragOver: dragOverTreeBackground,
+    onDragLeave: (event: DragEvent<HTMLDivElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) updateTreeDropTarget(null);
+    },
+    onDrop: (event: DragEvent<HTMLDivElement>) => {
+      const ids = draggedDocumentIds(event.dataTransfer);
+      if (!ids.length) return;
+      event.preventDefault();
+      finishTreeDrag();
+      void moveDocuments(ids, null);
+    }
+  };
+
   const revealActiveDocument = () => {
     if (!activeDocument) return;
     const ancestors = new Set<string>();
@@ -231,9 +257,8 @@ export function useVaultTree(options: Options) {
 
   return {
     treeDraggingIds,
-    setTreeDraggingIds,
     treeDropTarget,
-    setTreeDropTarget,
+    treeDropHandlers,
     renamingDocumentId,
     setRenamingDocumentId,
     documentTree,
@@ -244,6 +269,7 @@ export function useVaultTree(options: Options) {
     selectTreeEntry,
     openTreeContext,
     beginTreeDrag,
+    finishTreeDrag,
     updateTreeDropTarget,
     revealActiveDocument
   };

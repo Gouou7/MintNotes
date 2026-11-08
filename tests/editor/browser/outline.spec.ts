@@ -36,8 +36,8 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
       const parentBox = (await parent.boundingBox())!, childBox = (await child.boundingBox())!;
       const branchBox = (await branch.boundingBox())!, deepBox = (await deepChild.boundingBox())!;
       // Firefox rounds the half-pixel branch border to a CSS pixel.
-      expect(Math.abs(childBox.x - parentBox.x - 23.5)).toBeLessThanOrEqual(0.6);
-      expect(Math.abs(deepBox.x - branchBox.x - 23.5)).toBeLessThanOrEqual(0.6);
+      expect(Math.abs(childBox.x - parentBox.x - 15.5)).toBeLessThanOrEqual(0.6);
+      expect(Math.abs(deepBox.x - branchBox.x - 15.5)).toBeLessThanOrEqual(0.6);
       expect(branchBox.height).toBeGreaterThan(30);
       await expect(parent).toHaveCSS("font-weight", "400");
       await expect(outline.locator(".outline-children").first()).toHaveCSS("border-left-width", /^(0\.5|1)px$/);

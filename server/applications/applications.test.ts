@@ -212,6 +212,17 @@ describe("application grants and encrypted adapters", () => {
     await expect(client.execute("mint_notes_update", { noteId: unlocked.objectId, expectedRevision: 1, markdown: `![x](webmd-attachment:${crypto.randomUUID()})` })).rejects.toMatchObject({ code: "ATTACHMENT_REFERENCE_CHANGE" });
   });
 
+  it("preserves the modification time for metadata updates and advances it for a body edit", async () => {
+    const note = await putNote("note", "original");
+    const noteId = note.objectId;
+    expect(await client.execute("mint_notes_update", { noteId, expectedRevision: 1, favorite: true, tags: ["tag"] }))
+      .toMatchObject({ status: "committed", revision: 2 });
+    expect(await client.execute("mint_notes_get", { noteId })).toMatchObject({ updatedAt: note.updatedAt, favorite: true, tags: ["tag"] });
+    expect(await client.execute("mint_notes_update", { noteId, expectedRevision: 2, markdown: "changed" }))
+      .toMatchObject({ status: "committed", revision: 3 });
+    expect(await client.execute("mint_notes_get", { noteId })).toMatchObject({ updatedAt: expect.not.stringMatching(note.updatedAt), markdown: "changed" });
+  });
+
   it("persists an interrupted append, retries once after restart, and keeps SQLite free of plaintext", async () => {
     const note = await putNote("note", "original");
     const operationId = newOperationId();

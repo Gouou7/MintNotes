@@ -178,6 +178,26 @@ for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 111
   });
 }
 
+for (const width of [1445, 834, 390]) {
+  test(`tree sort uses an accessible listbox at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/workspace.html");
+    if (width <= 720) await page.locator(".pane-toggle").click();
+    const sort = page.getByRole("combobox", { name: "Sort order" });
+    await sort.click();
+    const listbox = page.getByRole("listbox");
+    await expect(listbox).toBeVisible();
+    await expect(listbox.getByRole("option")).toHaveText(["A–Z", "Created", "Last modified", "Manual"]);
+    await listbox.getByRole("option", { name: "Manual" }).click();
+    await expect(listbox).toBeHidden();
+    await expect(sort).toBeFocused();
+    await sort.press("ArrowDown");
+    await expect(listbox.getByRole("option", { name: "Manual" })).toHaveAttribute("aria-selected", "true");
+    await sort.press("Escape");
+    await expect(listbox).toBeHidden();
+  });
+}
+
 test("tree menus support keyboard navigation and preserve the folder drop payload", async ({ page, browserName }) => {
   await page.setViewportSize({ width: 1445, height: 956 });
   await page.goto("/workspace.html");
@@ -235,15 +255,16 @@ test("tree insertion feedback stays centered and accepts a drop between nested s
   const upperEdge = upper.y + upper.height;
   const gap = (upperEdge + lower.y) / 2;
   const transfer = await page.evaluateHandle(() => new DataTransfer());
-  const dragAt = (type: "dragover" | "drop", y: number) => page.evaluate(({ type, x, y, dataTransfer }) => {
-    document.elementFromPoint(x, y)?.dispatchEvent(new DragEvent(type, {
+  const dragAt = (type: "dragenter" | "dragover" | "drop", y: number) => page.evaluate(({ type, x, y, dataTransfer }) => {
+    return document.elementFromPoint(x, y)?.dispatchEvent(new DragEvent(type, {
       bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer
     }));
   }, { type, x, y, dataTransfer: transfer });
   try {
     await tree.locator('[data-object-id="note"]').dispatchEvent("dragstart", { dataTransfer: transfer });
     for (const y of [upperEdge - 1, gap, lower.y + 1]) {
-      await dragAt("dragover", y);
+      expect(await dragAt("dragenter", y)).toBe(false);
+      expect(await dragAt("dragover", y)).toBe(false);
       const target = tree.locator("[data-drop-position]");
       await expect(target).toHaveCount(1);
       const center = await target.evaluate(element => {

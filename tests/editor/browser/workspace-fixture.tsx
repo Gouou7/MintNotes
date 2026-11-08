@@ -89,7 +89,7 @@ function Workspace() {
     >
       <SidebarContent className="document-tree block"><TreeLevel menuActions={{ selection: (entry) => [entry], documents: [...tree.values()].flat(), onSelect: () => {}, onRename: () => {}, onToggleLock: async () => {}, onCreate: async () => "", onDuplicate: async () => {}, onExport: async () => {}, onPin: async () => {}, onDelete: async () => {}, onRestore: async () => {}, onPurge: () => {} }} childrenByParent={tree} parentId={null} activeId={selected.objectId} selectedIds={new Set([selected.objectId])} expanded={expanded}
         draggingIds={new Set()} dropTarget={dropTarget} renamingDocumentId={null} onDropTarget={setDropTarget} onSelect={entry => { if (entry.kind === "folder") setExpanded(current => { const next = new Set(current); if (next.has(entry.objectId)) next.delete(entry.objectId); else next.add(entry.objectId); return next; }); }}
-        onContext={() => {}} onDragSelection={(entry) => [entry.objectId]} onDragFinish={() => {}} onMove={(ids, parentId, beforeId) => { lastMove = { ids, parentId, beforeId }; }} onRenameCommit={() => {}} onRenameCancel={() => {}} /></SidebarContent>
+        onContext={() => {}} onDragSelection={(entry) => [entry.objectId]} onDragFinish={() => setDropTarget(null)} onMove={(ids, parentId, beforeId) => { lastMove = { ids, parentId, beforeId }; }} onRenameCommit={() => {}} onRenameCancel={() => {}} /></SidebarContent>
     </WorkspaceSidebar>
     </WorkspaceDrawer>
     <PaneResizer label="Resize left panel" side="left" value={treeWidth} min={220} max={420} onResize={setTreeWidth} />

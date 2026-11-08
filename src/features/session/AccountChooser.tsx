@@ -39,9 +39,9 @@ export function AccountList({ accounts, currentId, currentAvatarUrl, busy, onCho
             </Avatar>
           : <AppIcon icon={UserRound} />}
         <span className="account-picker-name">{account.user.displayName}</span>
+        {isCurrent && <small className="account-picker-current">{t("account.current")}</small>}
         {hasDevicePin(account.credential) && <span className="account-picker-pin" role="img"
           aria-label={t("lock.devicePin")} title={t("lock.devicePin")}><AppIcon icon={LockKeyhole} size={14} /></span>}
-        {isCurrent && <small className="account-picker-current">{t("account.current")}</small>}
       </Button>;
     })}
   </div>;

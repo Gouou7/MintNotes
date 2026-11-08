@@ -365,7 +365,9 @@ export class ApplicationClient {
       throw new ApplicationError("FOLDER_NOT_FOUND", "Destination folder is unavailable", 404);
     }
     document.title = uniqueSiblingTitle(documents.filter((entry) => entry.objectId !== document.objectId), document.title, document.parentId);
-    document.updatedAt = new Date().toISOString();
+    if (original && (document.title !== original.title || document.markdown !== original.markdown)) {
+      document.updatedAt = new Date().toISOString();
+    }
     const sourceIds = original ? [...new Set([...original.attachmentIds, ...attachmentReferences(original.markdown)])] : [];
     const newReferences = attachmentReferences(document.markdown);
     if (newReferences.some((id) => !sourceIds.includes(id)) || (original && attachmentReferences(original.markdown).some((id) => !newReferences.includes(id)))) {

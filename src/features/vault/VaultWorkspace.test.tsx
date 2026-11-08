@@ -3,6 +3,7 @@ import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../i18n";
+import { chooseSelect } from "../../components/select.testSupport";
 import { localDb, localKey, preferencesKey } from "../../storage/database";
 import type { OpenDocument } from "../../types";
 import { DEFAULT_PREFERENCES } from "./useVaultPreferences";
@@ -104,6 +105,42 @@ afterEach(async () => {
 });
 
 describe("vault feature composition", () => {
+  it("preserves modification times for every reordered note and updates time for a body edit", async () => {
+    const first = { ...note(firstId, "First"), manualOrder: 1024 };
+    const second = { ...note(secondId, "Second"), manualOrder: 2048, updatedAt: "2026-02-01T00:00:00.000Z" };
+    await seed(first);
+    await seed(second);
+    await mount();
+    const sort = host.querySelector<HTMLElement>('[role="combobox"][aria-label="Sort order"]')!;
+    await chooseSelect(sort, "Manual");
+    const target = host.querySelector<HTMLElement>(`[data-object-id="${firstId}"]`)!;
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 100, 240, 30));
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperties(drop, {
+      clientY: { value: 101 },
+      dataTransfer: { value: { getData: (type: string) => type === "application/x-webmd-objects" ? JSON.stringify([secondId]) : "" } }
+    });
+    await act(async () => target.dispatchEvent(drop));
+    await settle(async () => await localDb.outbox.where("userId").equals(userId).count() === 2);
+    const saved = async (id: string) => JSON.parse((await localDb.outbox.get(localKey(userId, id)))!.ciphertext);
+    expect(await saved(firstId)).toMatchObject({ markdown: first.markdown, updatedAt: first.updatedAt, manualOrder: 2048 });
+    expect(await saved(secondId)).toMatchObject({ markdown: second.markdown, updatedAt: second.updatedAt, manualOrder: 1024 });
+    const firstInTree = () => host.querySelector<HTMLElement>(".document-tree [data-object-id]")?.dataset.objectId;
+    expect(firstInTree()).toBe(secondId);
+    await chooseSelect(sort, "Last modified");
+    expect(firstInTree()).toBe(secondId);
+
+    await act(async () => {
+      const editor = host.querySelector<HTMLTextAreaElement>('[aria-label="test-editor"]')!;
+      editor.value = "Edited body";
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await settle(async () => (await saved(firstId)).markdown === "Edited body");
+    expect((await saved(firstId)).updatedAt > first.updatedAt).toBe(true);
+    expect((await saved(firstId)).manualOrder).toBe(2048);
+    expect(firstInTree()).toBe(firstId);
+  });
+
   it("loads under StrictMode and durably saves the previous draft before navigating offline", async () => {
     await mount();
     const editor = host.querySelector<HTMLTextAreaElement>('[aria-label="test-editor"]')!;

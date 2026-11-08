@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { type MouseEvent as ReactMouseEvent, type ReactNode, type ReactElement } from "react";
+import { type DragEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type ReactElement } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -23,7 +23,6 @@ import { TreeRenameInput } from "../../components/TreeRenameInput";
 import { useI18n } from "../../i18n";
 import type { OpenDocument } from "../../types";
 import {
-  isFolderDropZone,
   lockedNoteInSelection,
   selectionRoots,
   treeDropPosition,
@@ -32,10 +31,20 @@ import {
 import { isLockedNote } from "../noteLock";
 
 const MULTI_DRAG_TYPE = "application/x-webmd-objects";
+const SINGLE_DRAG_TYPE = "application/x-webmd-object";
 
 export interface TreeDropTarget {
   objectId: string;
   position: TreeDropPosition;
+}
+
+export function acceptTreeDrag(event: DragEvent, allowed = true): boolean {
+  const { dataTransfer } = event;
+  if (!dataTransfer.types.includes(MULTI_DRAG_TYPE) && !dataTransfer.types.includes(SINGLE_DRAG_TYPE)) return false;
+  event.stopPropagation();
+  dataTransfer.dropEffect = allowed ? "move" : "none";
+  if (allowed) event.preventDefault();
+  return true;
 }
 
 export function draggedDocumentIds(dataTransfer: DataTransfer): string[] {
@@ -48,7 +57,7 @@ export function draggedDocumentIds(dataTransfer: DataTransfer): string[] {
       // Fall back to the single-item payload used by older clients.
     }
   }
-  const single = dataTransfer.getData("application/x-webmd-object");
+  const single = dataTransfer.getData(SINGLE_DRAG_TYPE);
   return single ? [single] : [];
 }
 
@@ -83,6 +92,17 @@ export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, e
   const children = childrenByParent.get(parentId) ?? [];
   return children.map((entry, entryIndex) => {
     const dropPosition = dropTarget?.objectId === entry.objectId ? dropTarget.position : null;
+    const positionAtPointer = (event: DragEvent<HTMLDivElement>) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      return treeDropPosition(entry.kind, (event.clientY - rect.top) / rect.height);
+    };
+    const updateDropTarget = (event: DragEvent<HTMLDivElement>) => {
+      const position = positionAtPointer(event);
+      const isDragged = draggingIds.has(entry.objectId);
+      if (acceptTreeDrag(event, position !== "inside" || !isDragged)) {
+        onDropTarget(isDragged ? null : { objectId: entry.objectId, position });
+      }
+    };
     const row = (more?: ReactNode) => <div
         className={`tree-row ${entry.objectId === activeId ? "active" : ""} ${selectedIds.has(entry.objectId) ? "selected" : ""} ${dropPosition === "inside" ? "drop-target" : ""} ${dropPosition === "before" ? "drop-before" : ""} ${dropPosition === "after" ? "drop-after" : ""}`}
         data-object-id={entry.objectId}
@@ -93,32 +113,24 @@ export function TreeLevel({ childrenByParent, parentId, activeId, selectedIds, e
         onDragStart={(event) => {
           const ids = onDragSelection(entry);
           event.dataTransfer.setData(MULTI_DRAG_TYPE, JSON.stringify(ids));
-          event.dataTransfer.setData("application/x-webmd-object", ids[0] ?? entry.objectId);
+          event.dataTransfer.setData(SINGLE_DRAG_TYPE, ids[0] ?? entry.objectId);
           event.dataTransfer.effectAllowed = "move";
         }}
-        onDragEnd={() => { onDropTarget(null); onDragFinish(); }}
-        onDragOver={(event) => {
-          if (!event.dataTransfer.types.includes(MULTI_DRAG_TYPE) && !event.dataTransfer.types.includes("application/x-webmd-object")) return;
-          event.preventDefault();
-          const rect = event.currentTarget.getBoundingClientRect();
-          const ratio = (event.clientY - rect.top) / rect.height;
-          const position = treeDropPosition(entry.kind, ratio);
-          onDropTarget(!(position !== "inside" && draggingIds.has(entry.objectId))
-            ? { objectId: entry.objectId, position }
-            : null);
-        }}
-        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget?.objectId === entry.objectId) onDropTarget(null); }}
+        onDragEnd={onDragFinish}
+        onDragEnter={updateDropTarget}
+        onDragOver={updateDropTarget}
         onDrop={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onDropTarget(null);
-          onDragFinish();
           const ids = draggedDocumentIds(event.dataTransfer);
           if (!ids.length) return;
-          const rect = event.currentTarget.getBoundingClientRect();
-          const ratio = (event.clientY - rect.top) / rect.height;
-          if (isFolderDropZone(entry.kind, ratio)) onMove(ids, entry.objectId);
-          else onMove(ids, entry.parentId, ratio < .5 ? entry.objectId : (children[entryIndex + 1]?.objectId ?? null));
+          event.preventDefault();
+          event.stopPropagation();
+          onDragFinish();
+          const position = positionAtPointer(event);
+          if (position === "inside") {
+            if (!draggingIds.has(entry.objectId)) onMove(ids, entry.objectId);
+          } else {
+            onMove(ids, entry.parentId, position === "before" ? entry.objectId : (children[entryIndex + 1]?.objectId ?? null));
+          }
         }}
       >
         {renamingDocumentId === entry.objectId

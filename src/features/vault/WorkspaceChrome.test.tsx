@@ -1,6 +1,7 @@
 import { act, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseSelect } from "../../components/select.testSupport";
 import { I18nProvider } from "../../i18n";
 import { WorkspacePanelHeader, WorkspaceSidebar } from "./WorkspaceChrome";
 
@@ -33,8 +34,8 @@ describe("workspace chrome", () => {
     expect(document.activeElement).toBe(searchInput.current);
     click("New note"); click("New folder");
     expect(onCreate.mock.calls).toEqual([["note"], ["folder"]]);
-    const sort = container.querySelector<HTMLSelectElement>("select")!;
-    act(() => { sort.value = "manual"; sort.dispatchEvent(new Event("change", { bubbles: true })); });
+    const sort = container.querySelector<HTMLElement>('[role="combobox"][aria-label="Sort order"]')!;
+    await chooseSelect(sort, "Manual");
     expect(onSortChange).toHaveBeenCalledWith("manual");
     click("Locate current note"); click("Collapse all folders");
     expect(onLocate).toHaveBeenCalledOnce(); expect(onCollapseAll).toHaveBeenCalledOnce();

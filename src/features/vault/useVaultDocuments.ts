@@ -9,12 +9,10 @@ import { documentPatchChanges } from "../documentPatch";
 import { derivedNoteLockState, effectiveEditorMode, isLockedNote } from "../noteLock";
 import { NameReservations } from "../siblingNames";
 import {
-  canMoveDocument,
   compareDocuments,
   descendantsOf,
   nextManualOrder,
   reorderedSiblingBatch,
-  reorderedSiblings,
   resolveManualDropBeforeId,
   selectionRoots,
   siblingTitleExists,
@@ -99,7 +97,8 @@ export function useVaultDocuments(options: Options) {
   const patchDocument = (objectId: string, patch: Partial<OpenDocument>, delay = 500) => {
     const current = documentIndexRef.current.get(objectId);
     if (!current || isLockedNote(current) || !documentPatchChanges(current, patch)) return;
-    const next = { ...current, ...patch, updatedAt: new Date().toISOString(), dirty: true };
+    const next = { ...current, ...patch, dirty: true };
+    if (next.markdown !== current.markdown || next.title !== current.title) next.updatedAt = new Date().toISOString();
     scheduleHistoryEdit(current, next);
     queueDocument(next, delay);
   };
@@ -205,26 +204,6 @@ export function useVaultDocuments(options: Options) {
     }
   };
 
-  const moveDocument = async (objectId: string, parentId: string | null, beforeId: string | null = null) => {
-    if (!canMoveDocument(documentsRef.current, objectId, parentId)) return showMessage(t("notice.moveIntoDescendant"));
-    const moving = documentsRef.current.find((entry) => entry.objectId === objectId);
-    if (!moving) return;
-    const conflict = nameReservations.current.claim(documentsRef.current, [{ ...moving, parentId }]);
-    if (conflict) return showMessage(t("notice.moveNameConflict", { title: moving.title }));
-    try {
-      if (preferences.sortMode === "manual") {
-        for (const change of reorderedSiblings(documentsRef.current, objectId, parentId, beforeId)) {
-          const document = documentsRef.current.find((entry) => entry.objectId === change.objectId);
-          if (document && (document.parentId !== change.parentId || document.manualOrder !== change.manualOrder)) await persistObject({ ...document, ...change, dirty: true });
-        }
-      } else {
-        await persistObject({ ...moving, parentId, manualOrder: nextManualOrder(documentsRef.current, parentId), dirty: true });
-      }
-      if (parentId) setExpanded((current) => new Set(current).add(parentId));
-      requestPush("structural");
-    } finally { nameReservations.current.release(objectId); }
-  };
-
   const moveDocuments = async (objectIds: string[], parentId: string | null, beforeId: string | null = null) => {
     const roots = selectionRoots(documentsRef.current, objectIds);
     if (!roots.length) return;
@@ -234,25 +213,28 @@ export function useVaultDocuments(options: Options) {
     const conflict = nameReservations.current.claim(documentsRef.current, moving.map((entry) => ({ ...entry, parentId })));
     if (conflict) return showMessage(t("notice.batchMoveNameConflict", { title: conflict.title }));
     try {
+      const changed: string[] = [];
       if (preferences.sortMode === "manual") {
         beforeId = resolveManualDropBeforeId(documentsRef.current, movingTreeIds, parentId, beforeId);
-        let changed = false;
         for (const change of reorderedSiblingBatch(documentsRef.current, roots, parentId, beforeId)) {
-          const document = documentsRef.current.find((entry) => entry.objectId === change.objectId);
+          const document = documentIndexRef.current.get(change.objectId);
           if (document && (document.parentId !== change.parentId || document.manualOrder !== change.manualOrder)) {
-            changed = true;
-            await persistObject({ ...document, ...change, dirty: true });
+            queueDocument({ ...document, ...change, dirty: true }, 0);
+            changed.push(document.objectId);
           }
         }
-        if (changed) {
-          if (parentId) setExpanded((current) => new Set(current).add(parentId!));
-          requestPush("structural");
-        }
       } else {
-        for (const entry of moving) await moveDocument(entry.objectId, parentId, beforeId);
+        for (const entry of moving) {
+          const manualOrder = nextManualOrder(documentsRef.current, parentId);
+          queueDocument({ ...entry, parentId, manualOrder, dirty: true }, 0);
+          changed.push(entry.objectId);
+        }
       }
+      if (changed.length && parentId) setExpanded((current) => new Set(current).add(parentId));
       setSelectedIds(new Set(roots));
       selectionAnchor.current = roots[roots.length - 1] ?? null;
+      for (const objectId of changed) await flushDocument(objectId);
+      if (changed.length) requestPush("structural");
     } finally { for (const entry of moving) nameReservations.current.release(entry.objectId); }
   };
 
@@ -308,7 +290,10 @@ export function useVaultDocuments(options: Options) {
   const pinDocuments = async (objectIds: string[], pinned: boolean) => {
     for (const objectId of objectIds) {
       const target = documentsRef.current.find((entry) => entry.objectId === objectId && !entry.deleted);
-      if (target && target.favorite !== pinned) await persistObject({ ...target, favorite: pinned, dirty: true });
+      if (target && target.favorite !== pinned) {
+        queueDocument({ ...target, favorite: pinned, dirty: true }, 0);
+        await flushDocument(objectId);
+      }
     }
     requestPush("structural");
   };
@@ -330,10 +315,11 @@ export function useVaultDocuments(options: Options) {
       showMessage(t("notice.renameConflict", { title }));
       return false;
     }
-    const next = { ...target, title, dirty: true };
+    const next = { ...target, title, updatedAt: new Date().toISOString(), dirty: true };
     scheduleHistoryEdit(target, next);
     upsertDocument(next);
     await persistObject(next, {
+      preserveUpdatedAt: true,
       commitState: () => documentIndexRef.current.get(objectId) === next
     });
     requestPush("structural");

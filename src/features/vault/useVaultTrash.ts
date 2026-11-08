@@ -80,9 +80,13 @@ export function useVaultTrash(options: Options) {
     try {
       const noteIds = new Set([...ids].filter((id) => documentsRef.current.find((entry) => entry.objectId === id)?.kind === "note"));
       const ownedAttachments = attachmentsRef.current.filter((entry) => noteIds.has(entry.ownerNoteId));
+      const trashedAt = deleted ? new Date().toISOString() : null;
       for (const id of ids) {
         const document = documentsRef.current.find((entry) => entry.objectId === id);
-        if (document) await persistObject({ ...document, deleted, dirty: true });
+        if (document && document.deleted !== deleted) {
+          // Use the local deletion time until the server supplies its timestamp.
+          await persistObject({ ...document, deleted, serverTrashedAt: trashedAt, dirty: true }, { preserveUpdatedAt: true });
+        }
       }
       for (const attachment of ownedAttachments) await persistObject({ ...attachment, deleted, dirty: true });
       if (deleted && ids.has(activeIdRef.current ?? "")) {

@@ -57,16 +57,17 @@ function TreeFeedback({ draggingIds = new Set(["note-b"]) }: { draggingIds?: Rea
 
 function dragOver(row: HTMLElement, clientY: number, draggedId = "note-b") {
   const event = new Event("dragover", { bubbles: true, cancelable: true });
+  const dataTransfer = {
+    types: ["application/x-webmd-object"],
+    dropEffect: "none",
+    getData: (type: string) => type === "application/x-webmd-object" ? draggedId : ""
+  };
   Object.defineProperties(event, {
     clientY: { value: clientY },
-    dataTransfer: {
-      value: {
-        types: ["application/x-webmd-object"],
-        getData: (type: string) => type === "application/x-webmd-object" ? draggedId : ""
-      }
-    }
+    dataTransfer: { value: dataTransfer }
   });
   row.dispatchEvent(event);
+  return { dropEffect: dataTransfer.dropEffect, accepted: event.defaultPrevented };
 }
 
 describe("VaultTree drag feedback", () => {
@@ -82,11 +83,11 @@ describe("VaultTree drag feedback", () => {
       value: () => ({ top: 100, bottom: 140, left: 0, right: 240, width: 240, height: 40, x: 0, y: 100, toJSON: () => ({}) })
     });
 
-    act(() => dragOver(row!, 104));
+    act(() => expect(dragOver(row!.querySelector("button")!, 104)).toEqual({ dropEffect: "move", accepted: true }));
     expect(row?.classList.contains("drop-before")).toBe(true);
     expect(row?.dataset.dropPosition).toBe("before");
 
-    act(() => dragOver(row!, 136));
+    act(() => expect(dragOver(row!, 136)).toEqual({ dropEffect: "move", accepted: true }));
     expect(row?.classList.contains("drop-after")).toBe(true);
     expect(row?.dataset.dropPosition).toBe("after");
 

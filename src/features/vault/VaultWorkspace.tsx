@@ -67,7 +67,7 @@ import { useVaultTree } from "./useVaultTree";
 import { useWorkspaceEditorMode } from "./useWorkspaceEditorMode";
 import { useMobileDrawerGestures, useWorkspaceAutoLock } from "./useWorkspaceInteractions";
 import { useWorkspaceSelection } from "./useWorkspaceSelection";
-import { draggedDocumentIds, TreeLevel, TreeNoteLock, TreeRowMenu, type TreeMenuActions } from "./VaultTree";
+import { TreeLevel, TreeNoteLock, TreeRowMenu, type TreeMenuActions } from "./VaultTree";
 import { WorkspacePanelHeader, WorkspaceSidebar } from "./WorkspaceChrome";
 import { WorkspaceOutline } from "./WorkspaceOutline";
 
@@ -255,7 +255,7 @@ export function VaultWorkspace({
     getDocument: (objectId) => documentIndexRef.current.get(objectId),
     upsertDocument,
     persistDocument: async (document, isCurrent) => {
-      return persistObject(document, { commitState: isCurrent });
+      return persistObject(document, { commitState: isCurrent, preserveUpdatedAt: true });
     },
     onPersisted: () => requestPush("editor")
   });
@@ -527,13 +527,13 @@ export function VaultWorkspace({
     setTreeOpen,
     visibleTree,
     activeDocument,
-    documentNavigation
+    documentNavigation,
+    moveDocuments
   });
   const {
     treeDraggingIds,
-    setTreeDraggingIds,
     treeDropTarget,
-    setTreeDropTarget,
+    treeDropHandlers,
     renamingDocumentId,
     setRenamingDocumentId,
     documentTree,
@@ -543,6 +543,7 @@ export function VaultWorkspace({
     selectTreeEntry,
     openTreeContext,
     beginTreeDrag,
+    finishTreeDrag,
     updateTreeDropTarget,
     revealActiveDocument
   } = tree;
@@ -655,8 +656,8 @@ export function VaultWorkspace({
           </div>} />)}
         </div>}
       >
-        <SidebarContent ref={documentTree} className="document-tree block" role="tree" aria-multiselectable="true" onClick={(event) => { if (event.target === event.currentTarget) { setSelectedIds(new Set()); selectionAnchor.current = null; } }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTreeDropTarget(null); }} onDrop={(event) => { setTreeDropTarget(null); setTreeDraggingIds(new Set()); const ids = draggedDocumentIds(event.dataTransfer); if (ids.length) void moveDocuments(ids, null); }}>
-          <TreeLevel menuActions={menuActions} childrenByParent={treeChildren} parentId={null} activeId={activeId} selectedIds={selectedIds} expanded={expanded} draggingIds={treeDraggingIds} dropTarget={treeDropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={updateTreeDropTarget} onSelect={selectTreeEntry} onContext={openTreeContext} onDragSelection={beginTreeDrag} onDragFinish={() => setTreeDraggingIds(new Set())} onMove={moveDocuments} onRenameCommit={commitTreeRename} onRenameCancel={() => setRenamingDocumentId(null)} />
+        <SidebarContent ref={documentTree} className="document-tree block" role="tree" aria-multiselectable="true" {...treeDropHandlers} onClick={(event) => { if (event.target === event.currentTarget) { setSelectedIds(new Set()); selectionAnchor.current = null; } }}>
+          <TreeLevel menuActions={menuActions} childrenByParent={treeChildren} parentId={null} activeId={activeId} selectedIds={selectedIds} expanded={expanded} draggingIds={treeDraggingIds} dropTarget={treeDropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={updateTreeDropTarget} onSelect={selectTreeEntry} onContext={openTreeContext} onDragSelection={beginTreeDrag} onDragFinish={finishTreeDrag} onMove={moveDocuments} onRenameCommit={commitTreeRename} onRenameCancel={() => setRenamingDocumentId(null)} />
           {!searched.length && <p className="empty-tree">{t("app.noMatches")}</p>}
         </SidebarContent>
       </WorkspaceSidebar>
