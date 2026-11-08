@@ -245,8 +245,7 @@ body { color: var(--text); background: var(--surface); }
 .tree-row:is(.drop-before, .drop-after)::before { content: ""; position: absolute; z-index: 4; inset-inline: 5px; border-top: 3px solid color-mix(in srgb, var(--accent) 55%, var(--text-strong)); border-radius: 2px; pointer-events: none; }
 .tree-row.drop-before::before { top: calc(var(--tree-row-gap) / -2); transform: translateY(-50%); }
 .tree-row.drop-after::before { bottom: calc(var(--tree-row-gap) / -2); transform: translateY(50%); }
-.tree-row[draggable="true"] { cursor: grab; }
-.tree-row[draggable="true"]:active { cursor: grabbing; }
+.tree-row[draggable="true"] > .tree-main:active { cursor: grabbing; }
 .tree-main { min-width: 0; flex: 1; height: 30px; display: flex; gap: 4px; align-items: center; padding: 0 5px 0 0; text-align: left; }
 .tree-main > span:first-child { width: 20px; height: 20px; flex: 0 0 20px; display: grid; place-items: center; color: var(--muted); }
 .tree-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
