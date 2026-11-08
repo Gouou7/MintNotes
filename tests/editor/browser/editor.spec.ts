@@ -38,6 +38,36 @@ test('source edits preserve literal extensions, references and unfinished input'
   await page.getByRole('button', { name: 'source', exact: true }).click(); await expect(page.locator('textarea.typora-web-source:not([hidden])')).toHaveValue(text + '!');
   expect(await saved(page)).toBe(1);
 });
+test('editing near the bottom of a long source note keeps the caret and viewport in place', async ({ page }) => {
+  const lines = Array.from({ length: 250 }, (_, index) => `Source line ${index + 1}`);
+  const text = lines.join('\n');
+  const line = 220;
+  const offset = text.indexOf(lines[line]) + lines[line].length;
+  await load(page, text);
+  await page.getByRole('button', { name: 'source', exact: true }).click();
+  const source = page.locator('textarea.typora-web-source:not([hidden])');
+  const area = page.locator('.editor-area');
+  const scrollTop = await source.evaluate((element: HTMLTextAreaElement, { offset, line }) => {
+    element.focus({ preventScroll: true });
+    element.setSelectionRange(offset, offset);
+    const scroller = element.closest('.editor-area')!;
+    const style = getComputedStyle(element);
+    scroller.scrollTop = parseFloat(style.paddingTop) + line * parseFloat(style.lineHeight) - scroller.clientHeight / 2;
+    return scroller.scrollTop;
+  }, { offset, line });
+  expect(scrollTop).toBeGreaterThan(0);
+
+  await page.keyboard.insertText('!');
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe(text.slice(0, offset) + '!' + text.slice(offset));
+  expect(await source.evaluate((element: HTMLTextAreaElement) => [element.selectionStart, element.selectionEnd])).toEqual([offset + 1, offset + 1]);
+  expect(await area.evaluate(element => element.scrollTop)).toBeCloseTo(scrollTop, 0);
+
+  const height = await area.evaluate(element => element.scrollHeight);
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.mintFixture.markdown())).toBe(text.slice(0, offset) + '!\n' + text.slice(offset));
+  expect(await area.evaluate(element => element.scrollHeight)).toBeGreaterThan(height);
+  expect(await area.evaluate(element => element.scrollTop)).toBeCloseTo(scrollTop, 0);
+});
 test('table edits and property panel submit through the native controller', async ({ page }) => {
   await load(page, '---\ncount: 2\nenabled: true\n---\n\n| A | B |\n| --- | --- |\n| cell | value |');
   await page.locator('.property-row input[type="number"]').fill('3'); await page.locator('.property-row input[type="number"]').blur();

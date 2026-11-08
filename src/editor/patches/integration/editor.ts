@@ -126,7 +126,14 @@ export function createMintEditor(host: HTMLElement, options: EditorOptions = {},
     if (mode === "source") { source.setSelectionRange(clamped, clamped); return; }
     view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(positionAtOffset(clamped)))).scrollIntoView());
   }
-  function resizeSource() { source.style.height = "auto"; source.style.height = `${Math.max(source.scrollHeight, 168)}px`; }
+  function resizeSource() {
+    const scroller = options.getScrollViewport?.()?.element;
+    const scrollTop = scroller?.scrollTop ?? 0;
+    // Measuring at auto height briefly collapses the note and clamps the workspace scroll.
+    source.style.height = "auto";
+    source.style.height = `${Math.max(source.scrollHeight, 168)}px`;
+    if (scroller && scrollTop > 0) scroller.scrollTop = scrollTop;
+  }
   function refreshReadOnly() {
     context.readOnly = forcedReadOnly || mode === "reading";
     source.readOnly = context.readOnly;
