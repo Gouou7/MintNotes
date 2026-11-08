@@ -30,7 +30,7 @@ export function AccountList({ accounts, currentId, currentAvatarUrl, busy, onCho
   return <div className="account-picker-list">
     {sortedAccounts.map((account) => {
       const isCurrent = account.user.id === currentId;
-      return <Button variant="outline" key={account.user.id} className="account-picker-row" type="button"
+      return <Button variant="ghost" key={account.user.id} className="account-picker-row" type="button"
         aria-current={isCurrent || undefined} disabled={busy} onClick={() => onChoose(account)}>
         {isCurrent && currentAvatarUrl
           ? <Avatar className="account-picker-avatar">
@@ -59,8 +59,8 @@ export function AccountChooser({ accounts, currentId, busy, error, onChoose, onL
       <h1 id="account-picker-title">{t("account.switch")}</h1>
       <AccountList accounts={accounts} currentId={currentId} busy={busy} onChoose={onChoose} />
       {error && <Alert className="error" variant="destructive">{t(error === "reauth" ? "account.reauth" : "account.switchFailed")}</Alert>}
-      <div className="auth-ghost-actions">
-        {onBack && <Button type="button" variant="ghost" disabled={busy} onClick={onBack}><AppIcon icon={ArrowLeft} data-icon="inline-start" />{t("account.back")}</Button>}
+      <div className="auth-account-actions">
+        {onBack && <Button type="button" variant="secondary" disabled={busy} onClick={onBack}><AppIcon icon={ArrowLeft} data-icon="inline-start" />{t("account.backToApp")}</Button>}
         <Button type="button" variant="ghost" disabled={busy} onClick={onLogin}><AppIcon icon={UserRoundPlus} data-icon="inline-start" />{t("account.otherLogin")}</Button>
       </div>
     </section>

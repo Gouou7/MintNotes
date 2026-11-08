@@ -20,7 +20,7 @@
   --color-sidebar-foreground: var(--text);
   --color-primary: var(--accent);
   --color-primary-foreground: var(--accent-on);
-  --color-secondary: var(--surface-hover);
+  --color-secondary: var(--button-hover);
   --color-secondary-foreground: var(--text);
   --color-accent: var(--surface-hover);
   --color-accent-foreground: var(--text);
@@ -391,6 +391,8 @@ body { color: var(--text); background: var(--surface); }
 .history-preview-banner > div { display: flex; align-items: center; gap: 6px; }
 
 .auth-shell, .loading-shell { height: 100%; min-height: 0; display: grid; place-items: center; padding: calc(24px + var(--safe-area-top)) max(24px, var(--safe-area-right)) calc(24px + var(--safe-area-bottom)) max(24px, var(--safe-area-left)); overflow: auto; color-scheme: light; background: var(--background-light); }
+.auth-shell { --auth-card-width: min(430px, 100%); }
+.auth-entry { grid-template-columns: var(--auth-card-width); place-content: safe center; gap: 12px; }
 :root[data-theme="dark"] :is(.auth-shell, .loading-shell) { color-scheme: dark; background: var(--background-dark); }
 /* 仅在认证卡片内调整中性色，继续复用下方的共享磨砂与实色回退规则。 */
 .auth-card {
@@ -400,7 +402,7 @@ body { color: var(--text); background: var(--surface); }
   --glass-muted: #626262;
   --auth-secondary-text: #626262;
   --auth-card-shadow: rgb(0 0 0 / 8%);
-  width: min(430px, 100%); padding: 30px 34px 32px; border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 22px 60px var(--auth-card-shadow), inset 0 1px 0 rgb(255 255 255 / 2%);
+  width: var(--auth-card-width); padding: 30px 34px 32px; border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 22px 60px var(--auth-card-shadow), inset 0 1px 0 rgb(255 255 255 / 2%);
 }
 :root[data-theme="dark"] .auth-card {
   --border: #383838;
@@ -417,9 +419,10 @@ body { color: var(--text); background: var(--surface); }
 .auth-guidance { margin: 18px 0 0; padding: 9px 11px; border-radius: 8px; color: var(--muted); background: var(--surface-input); font-size: 13px; line-height: 1.5; text-align: center; }
 .auth-guidance.warning { color: var(--warning-text); background: var(--warning-bg); }
 .auth-card form, .settings-section form { display: grid; gap: 14px; margin-top: 24px; }
-.auth-card form { gap: 16px; margin-top: 28px; }
+.auth-card form { grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 28px; }
 .auth-card label, .settings-section label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
 .auth-card label { gap: 8px; font-weight: 550; line-height: 1.5; }
+.auth-card .remember-device { display: flex; align-items: center; justify-self: start; cursor: pointer; }
 .auth-actions { display: flex; justify-content: center; gap: 8px; margin-top: 21px; flex-wrap: wrap; }
 .auth-config-error { margin: 14px 0 0; color: var(--danger); font-size: 12px; line-height: 1.5; text-align: center; }
 .error, .notice { margin: 0; padding: 9px; border-radius: 7px; font-size: 13px; }
@@ -434,7 +437,7 @@ body { color: var(--text); background: var(--surface); }
 .lock-user-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lock-status { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 11px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; text-align: center; }
 .lock-card form { margin-top: 30px; }
-.auth-ghost-actions { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: 8px; margin-top: 18px; }
+.auth-account-actions { display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center; gap: 8px; margin-top: 18px; }
 .account-picker-list { display: grid; gap: 6px; margin-top: 18px; }
 .account-picker-row { height: auto; min-height: 44px; justify-content: flex-start; gap: 10px; min-width: 0; width: 100%; padding: 8px 10px; text-align: start; font-weight: 550; }
 .account-picker-row > :is(svg, .account-picker-avatar) { flex: none; }
@@ -445,7 +448,7 @@ body { color: var(--text); background: var(--surface); }
 .account-switch-popover { width: min(280px, calc(100vw - 24px)); max-height: min(22rem, calc(var(--workspace-viewport-height, 100dvh) - var(--note-toolbar-height) - var(--safe-area-bottom) - 16px)); overflow: auto; padding: 8px; border-radius: 12px; background: var(--surface-raised); color: var(--text); font-size: calc(14px + var(--font-adjust)); line-height: 1.35; }
 .account-switch-popover h2 { margin: 3px 10px 7px; color: var(--muted); font-size: .875em; font-weight: 600; }
 .account-switch-popover .account-picker-list { margin-top: 0; gap: 3px; }
-.account-switch-popover .account-picker-row { min-height: 40px; border: 0; border-radius: 7px; background: transparent; cursor: pointer; }
+.account-switch-popover .account-picker-row { min-height: 40px; border-radius: 7px; cursor: pointer; }
 .account-switch-popover .account-picker-row[aria-current="true"] { background: var(--button-hover); }
 .account-switch-popover .account-picker-row > svg { color: var(--muted); }
 .account-switch-actions { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }

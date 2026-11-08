@@ -53,9 +53,9 @@ export function LockScreen({ user, browserOnline, onPin, onPasswordLogin, onSwit
         <Field><FieldLabel>{t("lock.devicePin")}<Input type="password" value={pin} onChange={(event) => setPin(event.target.value)} onKeyDown={submitFormOnEnter} enterKeyHint="done" autoFocus required /></FieldLabel></Field>
         {error && <Alert className="error" variant="destructive">{error}</Alert>}
         <Button type="submit" size="lg" disabled={busy}>{busy ? t("lock.unlocking") : t("lock.unlockWithPin")}</Button>
-        {browserOnline && <Button variant="outline" type="button" disabled={busy} onClick={onPasswordLogin}>{t("lock.usePassword")}</Button>}
+        {browserOnline && <Button variant="secondary" type="button" disabled={busy} onClick={onPasswordLogin}>{t("lock.usePassword")}</Button>}
       </form>
-      <div className="auth-ghost-actions">
+      <div className="auth-account-actions">
         <Button variant="ghost" type="button" disabled={busy} onClick={() => setLogoutConfirming(true)}><AppIcon icon={LogOut} data-icon="inline-start" />{t("lock.logout")}</Button>
         {onSwitch && <Button variant="ghost" type="button" disabled={busy} onClick={onSwitch}><AppIcon icon={UserRoundCog} data-icon="inline-start" />{t("account.switch")}</Button>}
       </div>
@@ -63,7 +63,7 @@ export function LockScreen({ user, browserOnline, onPin, onPasswordLogin, onSwit
     {logoutConfirming && <AppDialog className="danger-confirm logout-confirm settings-section" title={t("settings.logoutTitle")} onClose={() => setLogoutConfirming(false)} dismissible={!busy}>
       <p>{t("settings.logoutWarning")}</p>
       <div className="settings-actions">
-        <Button variant="outline" type="button" disabled={busy} onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</Button>
+        <Button variant="secondary" type="button" disabled={busy} onClick={() => setLogoutConfirming(false)}>{t("common.cancel")}</Button>
         <Button type="button" variant="destructive" disabled={busy} onClick={() => void logout()}><AppIcon icon={LogOut} data-icon="inline-start" />{t("app.logout")}</Button>
       </div>
     </AppDialog>}

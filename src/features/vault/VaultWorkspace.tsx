@@ -707,8 +707,8 @@ export function VaultWorkspace({
         historyBanner={historyPreview && <div className="history-preview-banner">
           <span><AppIcon icon={HistoryIcon} size={16} /><strong>{t("history.preview")}</strong><small>{formatNoteTime(historyPreview.item.capturedAt)}</small></span>
           <div>
-            <Button variant="outline" onClick={() => setHistoryPreview(null)}>{t("history.exitPreview")}</Button>
-            <Button variant="outline" onClick={() => void restoreHistoryAsCopy()}><AppIcon icon={Copy} data-icon="inline-start" />{t("history.restoreCopy")}</Button>
+            <Button variant="secondary" onClick={() => setHistoryPreview(null)}>{t("history.exitPreview")}</Button>
+            <Button variant="secondary" onClick={() => void restoreHistoryAsCopy()}><AppIcon icon={Copy} data-icon="inline-start" />{t("history.restoreCopy")}</Button>
             <Button disabled={activeDocumentLocked} onClick={() => void restoreHistoryAsCurrent()} title={activeDocumentLocked ? t("app.unlockToEdit") : undefined}><AppIcon icon={RotateCcw} data-icon="inline-start" />{t("history.restoreCurrent")}</Button>
             <Button variant="destructive" size="icon" disabled={!canDeleteHistory(historyPreview.item)} onClick={() => void deleteHistorySnapshot(historyPreview.item)} title={historyPreview.item.protected ? t("history.protectedDeleteHint") : t("history.deleteOne")} aria-label={t("history.deleteOne")}><AppIcon icon={Trash2} /></Button>
           </div>

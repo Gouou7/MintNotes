@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { type FormEvent, useEffect, useState } from "react";
-import { Check, Copy, Download } from "lucide-react";
+import { ArrowLeft, Check, Copy, Download } from "lucide-react";
 import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { LanguageSelect } from "../components/LanguageSelect";
@@ -21,6 +21,7 @@ interface Props {
   initialUsername?: string;
   initialRememberDevice?: boolean;
   onBack?: () => void;
+  backDestination?: "app" | "accounts";
   offlineUnavailable?: boolean;
 }
 
@@ -37,7 +38,8 @@ type AuthConfigState =
   | { status: "error" };
 
 export function AuthScreen({
-  onUnlocked, getWorker: worker, runAuthentication: authenticate, initialUsername = "", initialRememberDevice = false, onBack, offlineUnavailable = false
+  onUnlocked, getWorker: worker, runAuthentication: authenticate, initialUsername = "", initialRememberDevice = false,
+  onBack, backDestination = "app", offlineUnavailable = false
 }: Props) {
   const open = (session: BrowserSession, authSecret?: string) => onUnlocked(session, worker(), authSecret);
   const { languagePreference, setLanguagePreference, t } = useI18n();
@@ -213,11 +215,11 @@ export function AuthScreen({
           <p>{t("auth.recovery.description")}</p>
           <Textarea readOnly value={newRecovery.code} rows={3} />
           <div className="recovery-actions">
-            <Button variant="outline" onClick={() => void copyRecoveryKey()}>
+            <Button variant="secondary" onClick={() => void copyRecoveryKey()}>
               <AppIcon icon={recoveryCopyState === "copied" ? Check : Copy} data-icon="inline-start" />
               {recoveryCopyState === "copied" ? t("auth.recovery.copied") : t("auth.recovery.copy")}
             </Button>
-            <Button variant="outline" onClick={() => downloadRecoveryKey(newRecovery.session.user.username, newRecovery.code)}>
+            <Button variant="secondary" onClick={() => downloadRecoveryKey(newRecovery.session.user.username, newRecovery.code)}>
               <AppIcon icon={Download} data-icon="inline-start" />
               {t("auth.recovery.download")}
             </Button>
@@ -242,9 +244,14 @@ export function AuthScreen({
   const config = authConfig.status === "ready" ? authConfig.value : null;
   const publicRegistrationClosed = Boolean(config && !config.bootstrapAllowed && !config.allowRegistration);
   return (
-    <main className="auth-shell">
+    <main className="auth-shell auth-entry">
+      {onBack && (
+        <Button className="justify-self-start" variant="secondary" type="button" disabled={busy} onClick={onBack}>
+          <AppIcon icon={ArrowLeft} data-icon="inline-start" />
+          {t(backDestination === "app" ? "account.backToApp" : "account.back")}
+        </Button>
+      )}
       <section className="auth-card">
-        {onBack && <Button variant="ghost" type="button" disabled={busy} onClick={onBack}>{t("account.back")}</Button>}
         <div className="auth-language"><LanguageSelect value={languagePreference} onChange={setLanguagePreference} /></div>
         <img className="brand-mark" src="/icon.svg" alt="Mint Notes" />
         <h1>{mode === "login" ? "Mint Notes" : mode === "register" ? t("auth.register.title") : mode === "activate" ? t("auth.activate.title") : t("auth.recover.title")}</h1>
@@ -256,10 +263,10 @@ export function AuthScreen({
         <form onSubmit={submit}>
           <Field><FieldLabel>{t("auth.username")}<Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required /></FieldLabel></Field>
           {mode === "register" && <Field><FieldLabel>{t("auth.displayName")}<Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></FieldLabel></Field>}
-          {mode === "activate" && <Field><FieldLabel>{t("auth.activationCode")}<Textarea value={activationCode} onChange={(event) => setActivationCode(event.target.value)} rows={2} required /></FieldLabel></Field>}
+          {mode === "activate" && <Field><FieldLabel>{t("auth.activationCode")}<Input type="text" value={activationCode} onChange={(event) => setActivationCode(event.target.value)} autoCapitalize="none" spellCheck={false} required /></FieldLabel></Field>}
           {mode === "recover" && <Field><FieldLabel>{t("auth.recoveryKey")}<Textarea value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value)} rows={3} required /></FieldLabel></Field>}
           <Field><FieldLabel>{mode === "recover" ? t("auth.newMasterPassword") : t("auth.masterPassword")}<Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete={mode === "login" ? "current-password" : "new-password"} enterKeyHint={mode === "login" ? "done" : "next"} required /></FieldLabel></Field>
-          {mode === "login" && <label className="remember-device"><Checkbox  checked={rememberDevice} onCheckedChange={(checked) => setRememberDevice(checked)} />{t("auth.rememberDevice")}</label>}
+          {mode === "login" && <label className="remember-device"><Checkbox checked={rememberDevice} onCheckedChange={setRememberDevice} /><span>{t("auth.rememberDevice")}</span></label>}
           {mode !== "login" && <Field><FieldLabel>{t("auth.confirmPassword")}<Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} onKeyDown={submitFormOnEnter} autoComplete="new-password" enterKeyHint="done" required /></FieldLabel></Field>}
           {error && <p className={notice ? "notice" : "error"}>{error}</p>}
           <Button type="submit" size="lg" disabled={busy}>{busy ? t("auth.processingKeys") : mode === "login" ? t("auth.login") : mode === "register" ? t("auth.createAccount") : mode === "activate" ? t("auth.activateCreate") : t("auth.resetPassword")}</Button>

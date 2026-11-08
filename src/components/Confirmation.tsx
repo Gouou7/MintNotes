@@ -65,7 +65,7 @@ export function Confirmation({ current }: { current: PendingConfirmation | null 
         <AlertDialogDescription>{current.message}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <Button ref={cancelButton} variant="outline" onClick={() => current.finish(false)}>{t("common.cancel")}</Button>
+        <Button ref={cancelButton} variant="secondary" onClick={() => current.finish(false)}>{t("common.cancel")}</Button>
         <Button variant={current.destructive ? "destructive" : "default"} onClick={() => current.finish(true)}>{current.action}</Button>
       </AlertDialogFooter>
     </AlertDialogContent>

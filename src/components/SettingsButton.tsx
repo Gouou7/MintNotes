@@ -10,7 +10,7 @@ interface SettingsButtonProps extends Omit<ComponentProps<typeof Button>, "size"
 }
 
 /** Shared icon or labeled action for settings, including native form submission behavior. */
-export function SettingsButton({ icon, iconOnly = false, className, children, type = "button", variant = iconOnly ? "ghost" : "outline", ...props }: SettingsButtonProps) {
+export function SettingsButton({ icon, iconOnly = false, className, children, type = "button", variant = iconOnly ? "ghost" : "secondary", ...props }: SettingsButtonProps) {
   return <Button {...props} type={type} variant={variant} size={iconOnly ? "icon" : "default"}
     className={cn("settings-action-button", iconOnly && "settings-icon-button", className)}>
     <AppIcon icon={icon} data-icon={iconOnly ? undefined : "inline-start"} />

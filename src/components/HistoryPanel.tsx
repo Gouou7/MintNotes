@@ -115,7 +115,7 @@ export function HistoryPanel({
       </section>)}
       {!items.length && !loading && <p className="outline-empty">{t("history.empty")}</p>}
       {loading && <p className="history-loading">{t("history.loading")}</p>}
-      {hasMore && !loading && <Button variant="outline" className="w-full" onClick={onLoadMore}>{t("history.loadMore")}</Button>}
+      {hasMore && !loading && <Button variant="secondary" className="w-full" onClick={onLoadMore}>{t("history.loadMore")}</Button>}
     </div>
   </div>;
 }

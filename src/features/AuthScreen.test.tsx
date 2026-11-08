@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api";
@@ -27,7 +27,7 @@ const roots: Root[] = [];
 
 async function renderAuth(
   config: { allowRegistration: boolean; bootstrapAllowed: boolean } | Error,
-  offlineUnavailable = false
+  options: Pick<ComponentProps<typeof AuthScreen>, "offlineUnavailable" | "onBack" | "backDestination"> = {}
 ) {
   localStorage.setItem("webmd-notes-language", "zh-CN");
   if (config instanceof Error) vi.mocked(api).mockRejectedValueOnce(config);
@@ -36,7 +36,7 @@ async function renderAuth(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => { root.render(<I18nProvider><AuthScreen onUnlocked={vi.fn()} getWorker={() => cryptoClient} runAuthentication={(task) => task()} offlineUnavailable={offlineUnavailable} /></I18nProvider>); });
+  await act(async () => { root.render(<I18nProvider><AuthScreen onUnlocked={vi.fn()} getWorker={() => cryptoClient} runAuthentication={(task) => task()} {...options} /></I18nProvider>); });
   await act(async () => { await Promise.resolve(); });
   return container;
 }
@@ -77,6 +77,22 @@ describe("AuthScreen account entry points", () => {
     expect(button(container, "登录")).toBeTruthy();
     expect(button(container, "注册")).toBeTruthy();
     expect(button(container, "忘记密码")).toBeTruthy();
+    expect(container.textContent).not.toContain("返回");
+  });
+
+  it.each([
+    { backDestination: "app", label: "返回应用" },
+    { backDestination: "accounts", label: "返回" }
+  ] as const)("labels and places the back button for $backDestination", async ({ backDestination, label }) => {
+    const onBack = vi.fn();
+    const container = await renderAuth({ allowRegistration: true, bootstrapAllowed: false }, { onBack, backDestination });
+    const back = button(container, label);
+
+    expect(back.nextElementSibling).toBe(container.querySelector(".auth-card"));
+    expect(back.type).toBe("button");
+    expect(back.querySelector("svg")).toBeTruthy();
+    await click(back);
+    expect(onBack).toHaveBeenCalledOnce();
   });
 
   it("submits the login form when Enter is pressed in the password field", async () => {
@@ -112,7 +128,8 @@ describe("AuthScreen account entry points", () => {
     expect(container.textContent).toContain("显示名称");
     await click(button(container, "使用激活码注册"));
     expect(container.querySelector("h1")?.textContent).toBe("使用激活码注册");
-    expect(container.textContent).toContain("激活码");
+    const activationCode = [...container.querySelectorAll("input")].find((input) => input.labels?.[0]?.textContent === "激活码");
+    expect(activationCode).toMatchObject({ type: "text", required: true });
     expect(button(container, "普通注册")).toBeTruthy();
   });
 
@@ -194,7 +211,7 @@ describe("AuthScreen account entry points", () => {
 
   it("shows the remembered-device requirement instead of a registration error while offline", async () => {
     vi.mocked(api).mockReset();
-    const container = await renderAuth(new Error("unused"), true);
+    const container = await renderAuth(new Error("unused"), { offlineUnavailable: true });
 
     expect(container.textContent).toContain("离线访问需使用已记住的设备");
     expect(container.textContent).not.toContain("注册配置加载失败");
