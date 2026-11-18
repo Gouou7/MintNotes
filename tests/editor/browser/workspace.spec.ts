@@ -5,6 +5,19 @@ test.use({
   launchOptions: async ({ browserName, launchOptions }, use) => use(browserName === "chromium" ? { ...launchOptions, args: [...(launchOptions.args ?? []), "--force-device-scale-factor=2"] } : launchOptions),
 });
 
+test("keeps the workspace footer at the viewport bottom when narrowing a loaded window", async ({ page }) => {
+  await page.setViewportSize({ width: 1445, height: 780 });
+  await page.goto("/workspace.html");
+  const statusBar = page.locator(".status-bar");
+  await expect(statusBar).toBeVisible();
+
+  await page.setViewportSize({ width: 834, height: 980 });
+  await expect(page.locator('.workspace-drawer[data-side="right"]')).toBeAttached();
+  for (const footer of [statusBar, page.locator(".side-footer")]) {
+    await expect.poll(() => footer.evaluate(element => element.getBoundingClientRect().bottom)).toBe(980);
+  }
+});
+
 for (const [name, width, height] of [["desktop", 1445, 956], ["tablet", 834, 1112], ["mobile", 320, 844]] as const) {
   test(`${name} workspace matches theme tokens and keeps pane and mode controls usable`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });

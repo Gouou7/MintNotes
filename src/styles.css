@@ -908,6 +908,8 @@ body { color: var(--text); background: var(--surface); }
 
 /* Keep the workspace tracks on desktop and use the existing pane dimensions in compact sheets. */
 .workspace-panel-tabs { flex: 1; flex-direction: column; min-height: 0; gap: 0; }
+/* 抽屉的浮层容器保留在工作区内，但不占用网格轨道。 */
+.app-shell > [data-slot="sheet-portal"] { position: absolute; }
 .workspace-drawer {
   top: var(--workspace-viewport-top, 0px);
   bottom: auto;
