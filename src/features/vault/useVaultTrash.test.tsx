@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { operationId } from "@mint-notes/application-client";
 import { localDb, localKey } from "../../storage/database";
+import { NameReservations } from "../siblingNames";
 import { useVaultTrash } from "./useVaultTrash";
 import type { OpenDocument } from "../../types";
 
@@ -20,7 +21,8 @@ async function pending(objectId: string, ownerNoteId?: string) {
 }
 async function harness(run: (controller: ReturnType<typeof useVaultTrash>, options: any) => Promise<void>) {
   const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
-  const options: any = { confirm: vi.fn().mockResolvedValue(true), model: { documentsRef: { current: [target] }, attachmentsRef: { current: [] } }, selection: {},
+  const options: any = { confirm: vi.fn().mockResolvedValue(true), model: { documentsRef: { current: [target] }, attachmentsRef: { current: [] } },
+    selection: { activeIdRef: { current: null }, selectionAnchor: { current: null }, setSelectedIds: vi.fn() },
     showMessage: vi.fn(), t: (key: string) => key, nameReservations: { current: {} }, persistObject: vi.fn(), setEditorSessionId: vi.fn(), requestPush: vi.fn(),
     serverSessionVerified: true, documentSaveQueue: { hasPending: () => false, flushAll: vi.fn() },
     objectPersistence: { drainAll: vi.fn(), coordinate: (_id: string, operation: () => Promise<void>) => operation() },
@@ -61,6 +63,24 @@ describe("scoped permanent clearing", () => {
       expect(options.showMessage).toHaveBeenCalledWith("notice.purgeWaitSync", "critical");
       expect(await localDb.outbox.count()).toBe(1);
     });
+  });
+});
+
+it.each([true, false])("reports a restore result after local persistence (name conflict: %s)", async (conflict) => {
+  await harness(async (controller, options) => {
+    options.nameReservations.current = new NameReservations();
+    if (conflict) options.model.documentsRef.current = [target, { ...target, objectId: "existing", deleted: false }];
+
+    await controller.setDeletedMany([target.objectId], false);
+
+    if (conflict) {
+      expect(options.persistObject).not.toHaveBeenCalled();
+      expect(options.showMessage.mock.calls).toEqual([["notice.restoreNameConflict"]]);
+    } else {
+      expect(options.persistObject).toHaveBeenCalledOnce();
+      expect(options.showMessage.mock.calls).toEqual([["notice.itemRestored", "info"]]);
+      expect(options.persistObject.mock.invocationCallOrder[0]).toBeLessThan(options.showMessage.mock.invocationCallOrder[0]);
+    }
   });
 });
 

@@ -159,8 +159,8 @@ describe("vault feature composition", () => {
     await settle(() => mocks.api.mock.calls.some(([path]) => path.startsWith("/api/sync/status?")));
     await settle(() => warnings().some(message => message?.startsWith("Sync failed.")));
 
-    expect(warnings()).toEqual(["Sync failed. Changes are saved locally. Sync will retry automatically."]);
-    expect(host.querySelector(".status-meta")?.getAttribute("title")).toContain("Unable to connect to the server");
+    expect(warnings()).toEqual(["Sync failed. Saved changes remain on this device. Sync will retry automatically."]);
+    expect(host.querySelector(".status-meta")?.getAttribute("title")).toContain("Sync is temporarily unavailable");
   });
 
   it("preserves modification times for every reordered note and updates time for a body edit", async () => {

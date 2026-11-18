@@ -86,6 +86,7 @@ describe("sync status presentation", () => {
   it("does not call an unverified session offline when the browser reports a connection", () => {
     const unverified = createSyncStatus(false, true);
     expect(unverified.visible).toBe("error");
+    expect(visibleSyncStatusText(unverified, zh)).toBe("登录状态尚未验证");
     expect(syncStatusDetailText(unverified, zh)).toContain("登录状态尚未验证");
     expect(createSyncStatus(false, false).visible).toBe("offline");
     expect(createSyncStatus(true, false).visible).toBe("synced");
@@ -98,23 +99,26 @@ describe("sync status presentation", () => {
     expect(settledSyncPhase(false, 3)).toBe("offline");
   });
 
-  it("uses the four requested main labels and detailed failure tooltips", () => {
-    expect(visibleSyncStatusText("synced", zh)).toBe("已同步");
-    expect(visibleSyncStatusText("syncing", zh)).toBe("正在同步…");
-    expect(visibleSyncStatusText("error", zh)).toBe("同步错误 · 已保存到本地");
-    expect(visibleSyncStatusText("offline", zh)).toBe("离线 · 已保存到本地");
+  it("distinguishes saving, pending synchronization and synchronization results", () => {
+    const online = createSyncStatus(true);
+    expect(visibleSyncStatusText(phase(online, "saving"), zh)).toBe("正在保存到本地…");
+    expect(visibleSyncStatusText(phase(online, "local"), zh)).toBe("等待同步");
+    expect(visibleSyncStatusText(phase(online, "syncing"), zh)).toBe("正在同步…");
+    expect(visibleSyncStatusText(phase(online, "synced"), zh)).toBe("已同步");
+    expect(visibleSyncStatusText(phase(online, "offline"), zh)).toBe("离线");
 
-    const unreachable = reduceSyncStatus(createSyncStatus(true), {
+    const unreachable = reduceSyncStatus(online, {
       type: "sync-error",
       failure: { kind: "unreachable" }
     });
-    expect(syncStatusDetailText(unreachable, zh)).toBe("无法连接服务器。修改已保存到本地。系统将自动重试同步。");
+    expect(visibleSyncStatusText(unreachable, zh)).toBe("同步失败");
+    expect(syncStatusDetailText(unreachable, zh)).toBe("暂时无法同步。已保存的修改仍在本地，系统将自动重试。");
 
-    const rejected = reduceSyncStatus(createSyncStatus(true), {
+    const rejected = reduceSyncStatus(online, {
       type: "sync-error",
-      failure: { kind: "server", reason: "服务器繁忙" }
+      failure: { kind: "server", reason: "服务器繁忙。" }
     });
-    expect(syncStatusDetailText(rejected, zh)).toContain("服务器拒绝同步：服务器繁忙");
+    expect(syncStatusDetailText(rejected, zh)).toBe("服务器繁忙。已保存的修改仍在本地，系统将自动重试。");
   });
 
   it("never describes a local persistence failure as saved locally", () => {
@@ -122,7 +126,7 @@ describe("sync status presentation", () => {
       type: "local-failure",
       objectId: "note-1"
     });
-    expect(syncStatusDetailText(failed, zh)).toBe("本地保存失败。最新修改尚未保存，请保留当前页面并复制内容备份。");
+    expect(syncStatusDetailText(failed, zh)).toBe("最新修改尚未保存到本地。请保留此页面，并复制修改内容作为备份。");
     expect(syncStatusDetailText(failed, zh)).not.toContain("已保存到本地");
   });
 });

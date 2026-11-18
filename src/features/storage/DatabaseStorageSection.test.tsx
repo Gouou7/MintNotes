@@ -44,7 +44,7 @@ describe("database storage presentation", () => {
     expect(container.querySelector(".storage-total strong")?.textContent).toBe("10 KiB");
     expect(container.querySelector(".storage-summary")?.textContent).toContain("Cached");
     expect(container.querySelector(".storage-db-state")).toBeNull();
-    expect(container.querySelector(".warning")?.textContent).toContain("Database status is unavailable");
+    expect(container.querySelector(".warning")?.textContent).toBe("Could not read the database status. Refresh to try again.");
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Refresh"]')?.disabled).toBe(false);
   });
 });

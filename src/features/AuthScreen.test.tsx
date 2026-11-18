@@ -207,8 +207,8 @@ describe("AuthScreen account entry points", () => {
   it("explains recovery-key password reset", async () => {
     const container = await renderAuth({ allowRegistration: true, bootstrapAllowed: false });
     await click(button(container, "忘记密码"));
-    expect(container.querySelector("h1")?.textContent).toBe("找回密码");
-    expect(container.textContent).toContain("使用恢复密钥重置主密码。主密码与恢复密钥均丢失时将无法恢复数据。");
+    expect(container.querySelector("h1")?.textContent).toBe("重置主密码");
+    expect(container.textContent).toContain("可用恢复密钥重置主密码。如果两者均丢失，笔记将无法恢复。");
     const recoveryInput = [...container.querySelectorAll("input")].find((input) => input.labels?.[0]?.textContent === "恢复密钥");
     expect(recoveryInput).toMatchObject({ type: "text", required: true });
   });
@@ -216,7 +216,7 @@ describe("AuthScreen account entry points", () => {
   it("stays on login and retries a failed registration config request", async () => {
     const container = await renderAuth(new Error("offline"));
     expect(container.querySelector("h1")?.textContent).toBe("Mint Notes");
-    expect(container.textContent).toContain("注册配置加载失败。请选择“注册”重试。");
+    expect(container.textContent).toContain("无法加载注册设置。请选择“注册”重试。");
     vi.mocked(api).mockResolvedValueOnce({ allowRegistration: true, bootstrapAllowed: false });
     await click(button(container, "注册"));
     expect(container.querySelector("h1")?.textContent).toBe("创建加密账户");
@@ -226,8 +226,8 @@ describe("AuthScreen account entry points", () => {
     vi.mocked(api).mockReset();
     const container = await renderAuth(new Error("unused"), { offlineUnavailable: true });
 
-    expect(container.textContent).toContain("离线访问需使用已记住的设备");
-    expect(container.textContent).not.toContain("注册配置加载失败");
+    expect(container.textContent).toContain("离线使用前，请先在当前版本联网登录并记住此设备。");
+    expect(container.textContent).not.toContain("无法加载注册设置");
     expect(api).not.toHaveBeenCalled();
   });
 });

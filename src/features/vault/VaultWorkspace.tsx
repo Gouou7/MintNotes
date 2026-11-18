@@ -606,7 +606,7 @@ export function VaultWorkspace({
 
   const statusLabel = syncStatus.failedLocalObjectIds.size
     ? null
-    : visibleSyncStatusText(syncStatus.visible, t);
+    : visibleSyncStatusText(syncStatus, t);
 
   const statusDetail = syncStatusDetailText(syncStatus, t);
 

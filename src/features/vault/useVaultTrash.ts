@@ -2,7 +2,7 @@ import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useRef, useState } from "react";
 import type { RequestConfirmation } from "../../components/Confirmation";
-import { translateError, type Translate } from "../../i18n";
+import { translateError, UserFacingError, type Translate } from "../../i18n";
 import type { OpenDocument } from "../../types";
 import { NameReservations } from "../siblingNames";
 import { descendantsOf, lockedNoteInSelection, selectionRoots } from "../tree";
@@ -72,6 +72,9 @@ export function useVaultTrash(options: Options) {
     }
     const ids = new Set(roots.flatMap((objectId) => [...descendantsOf(documentsRef.current, objectId)]));
     if (!ids.size) return;
+    const restoredItem = !deleted && roots.length === 1
+      ? documentsRef.current.find((entry) => entry.objectId === roots[0] && entry.deleted)
+      : undefined;
     if (!deleted) {
       const restoring = documentsRef.current.filter((entry) => ids.has(entry.objectId));
       const conflict = nameReservations.current.claim(documentsRef.current, restoring.map((entry) => ({ ...entry, deleted: false })));
@@ -96,6 +99,7 @@ export function useVaultTrash(options: Options) {
       setSelectedIds((current) => new Set([...current].filter((id) => !ids.has(id))));
       if (selectionAnchor.current && ids.has(selectionAnchor.current)) selectionAnchor.current = null;
       requestPush("structural");
+      if (restoredItem) showMessage(t("notice.itemRestored", { title: restoredItem.title }), "info");
     } finally {
       if (!deleted) for (const id of ids) nameReservations.current.release(id);
     }
@@ -147,12 +151,12 @@ export function useVaultTrash(options: Options) {
       const targetIds = new Set(targets.map((entry) => entry.objectId));
       const perform = async () => {
         const currentTargets = targets.map((target) => documentsRef.current.find((r) => r.objectId === target.objectId) ?? attachmentsRef.current.find((r) => r.objectId === target.objectId));
-        if (currentTargets.some((r, index) => !r || (!r.deleted && !(r.kind === "attachment" && noteIds.has(r.ownerNoteId))) || r.dirty || r.serverRevision !== targets[index].serverRevision)) throw new Error(t("notice.purgeWaitSync"));
+        if (currentTargets.some((r, index) => !r || (!r.deleted && !(r.kind === "attachment" && noteIds.has(r.ownerNoteId))) || r.dirty || r.serverRevision !== targets[index].serverRevision)) throw new UserFacingError("notice.purgeWaitSync");
         if (
           targets.some((entry) => entry.dirty || entry.serverRevision < 1 || documentSaveQueue.hasPending(entry.objectId))
           || await hasPendingLocalObjectGraph(userId, targetIds)
         ) {
-          throw new Error(t("notice.purgeWaitSync"));
+          throw new UserFacingError("notice.purgeWaitSync");
         }
         const requests = targets.filter((entry) => entry.kind !== "attachment" || !noteIds.has(entry.ownerNoteId));
         for (let offset = 0; offset < requests.length; offset += 1000) {

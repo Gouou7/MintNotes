@@ -9,7 +9,7 @@ import { api } from "../api";
 import { AppIcon } from "../components/AppIcon";
 import { LanguageSelect } from "../components/LanguageSelect";
 import type { CryptoClient, RegistrationCrypto } from "../crypto/client";
-import { translateError, useI18n } from "../i18n";
+import { translateError, useI18n, UserFacingError } from "../i18n";
 import { submitFormOnEnter } from "./formKeyboard";
 import { downloadRecoveryKey } from "./recoveryKey";
 import { AuthBackButton } from "./session/AuthBackButton";
@@ -103,8 +103,8 @@ export function AuthScreen({
   };
 
   const register = async () => {
-    if (password.length < 10) throw new Error(t("auth.passwordMin"));
-    if (password !== confirmPassword) throw new Error(t("auth.passwordMismatch"));
+    if (password.length < 10) throw new UserFacingError("auth.passwordMin");
+    if (password !== confirmPassword) throw new UserFacingError("auth.passwordMismatch");
     const normalizedUsername = username.trim().toLowerCase();
     const encrypted: RegistrationCrypto = await worker().createRegistration(normalizedUsername, password);
     const result = await api<BrowserSession>("/api/auth/register", {
@@ -122,8 +122,8 @@ export function AuthScreen({
   };
 
   const activate = async () => {
-    if (password.length < 10) throw new Error(t("auth.passwordMin"));
-    if (password !== confirmPassword) throw new Error(t("auth.passwordMismatch"));
+    if (password.length < 10) throw new UserFacingError("auth.passwordMin");
+    if (password !== confirmPassword) throw new UserFacingError("auth.passwordMismatch");
     const normalizedUsername = username.trim().toLowerCase();
     const encrypted = await worker().createRegistration(normalizedUsername, password);
     const result = await api<BrowserSession>("/api/auth/activate", {
@@ -142,8 +142,8 @@ export function AuthScreen({
   };
 
   const recover = async () => {
-    if (password.length < 10) throw new Error(t("auth.newPasswordMin"));
-    if (password !== confirmPassword) throw new Error(t("auth.newPasswordMismatch"));
+    if (password.length < 10) throw new UserFacingError("auth.newPasswordMin");
+    if (password !== confirmPassword) throw new UserFacingError("auth.newPasswordMismatch");
     const normalizedUsername = username.trim().toLowerCase();
     const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(normalizedUsername)}`);
     const recovery = await worker().unlockRecovery(

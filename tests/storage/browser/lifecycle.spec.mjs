@@ -7,7 +7,7 @@ test("protected history follows a note through trash, restore and permanent clea
   await page.getByLabel("Username", { exact: true }).fill(`storage-${info.project.name}`);
   await page.getByLabel("Display name", { exact: true }).fill("Storage test");
   await page.getByLabel("Master password", { exact: true }).fill("Storage test passphrase 2026");
-  await page.getByLabel("Confirm password", { exact: true }).fill("Storage test passphrase 2026");
+  await page.getByLabel("Confirm master password", { exact: true }).fill("Storage test passphrase 2026");
   await page.getByRole("button", { name: "Create account", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Save your recovery key" })).toBeVisible();
   await page.getByRole("checkbox").check();
@@ -31,7 +31,7 @@ test("protected history follows a note through trash, restore and permanent clea
     await page.getByRole("tab", { name: "History", exact: true }).click();
   };
   await openHistory();
-  await page.getByRole("button", { name: "Create snapshot", exact: true }).click();
+  await page.getByRole("button", { name: "Save history version", exact: true }).click();
   await expect(page.locator(".history-row .history-protection")).not.toHaveCount(0);
   const historyRename = page.locator(".history-rename-input");
   if (await historyRename.isVisible()) await historyRename.press("Enter");
@@ -44,7 +44,7 @@ test("protected history follows a note through trash, restore and permanent clea
     await page.getByRole("button", { name: "Open menu for Lifecycle sample", exact: true }).click();
     const deletionAccepted = page.waitForResponse(response => response.url().endsWith("/api/objects/batch")
       && response.request().method() === "POST" && response.request().postDataJSON()?.objects?.some(object => object.deleted));
-    await page.getByRole("menuitem", { name: "Move to trash", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Move to Trash", exact: true }).click();
     const result = await (await deletionAccepted).json();
     expect(result.results.every(object => ["accepted", "idempotent"].includes(object.status))).toBe(true);
     await expect(page.locator(".status-synced")).toBeVisible();

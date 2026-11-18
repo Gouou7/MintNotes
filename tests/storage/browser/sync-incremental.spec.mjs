@@ -44,7 +44,7 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Display name", { exact: true }).fill("Sync test");
   await page.getByLabel("Master password", { exact: true }).fill(password);
-  await page.getByLabel("Confirm password", { exact: true }).fill(password);
+  await page.getByLabel("Confirm master password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Create account", exact: true }).click();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Recovery key saved", exact: true }).click();
@@ -199,7 +199,7 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
     await page.getByRole("button", { name: `Open menu for ${title}`, exact: true }).click();
     const deletionAccepted = page.waitForResponse((response) => response.url().endsWith("/api/objects/batch")
       && response.request().method() === "POST" && response.request().postDataJSON()?.objects?.some((object) => object.deleted));
-    await page.getByRole("menuitem", { name: "Move to trash", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Move to Trash", exact: true }).click();
     expect((await (await deletionAccepted).json()).results.every((object) => ["accepted", "idempotent"].includes(object.status))).toBe(true);
     await otherContext.setOffline(false);
     const recoveredTitles = async () => (await other.locator(".tree-title").allTextContents()).filter((value) => !priorTitles.has(value));

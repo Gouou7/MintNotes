@@ -2,7 +2,7 @@ import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, SetStateAction } from "react";
 import { useRef } from "react";
 import type { RequestConfirmation } from "../../components/Confirmation";
-import { translateError, type Translate } from "../../i18n";
+import { translateError, UserFacingError, type Translate } from "../../i18n";
 import { historyKey, localDb } from "../../storage/database";
 import type { HistoryListItem, OpenDocument } from "../../types";
 import { attachmentIdsIn } from "../attachments";
@@ -282,7 +282,7 @@ export function useVaultHistoryActions(options: Options) {
       const current = documentIndexRef.current.get(activeDocument.objectId);
       if (!current || current.deleted || isLockedNote(current) || activeIdRef.current !== current.objectId) return;
       const checkpoint = await saveHistorySnapshot(current, "restore-safety", { force: true });
-      if (!checkpoint) throw new Error(t("notice.historySaveFailed"));
+      if (!checkpoint) throw new UserFacingError("notice.historySaveFailed");
       if (activeIdRef.current !== current.objectId || documentIndexRef.current.get(current.objectId) !== current
         || latestHistory.current.historyPreview?.item.historyId !== historyPreview.item.historyId) return;
       const title = siblingTitleExists(nameDocuments(), historyPreview.payload.title, current.parentId, current.objectId)

@@ -4,7 +4,7 @@ import { pinCache } from "../../storage/cache";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../../api";
-import { translateError, type Translate } from "../../i18n";
+import { translateError, UserFacingError, type Translate } from "../../i18n";
 import { historySettingsKey, localDb, type LocalHistorySnapshot } from "../../storage/database";
 import type {
   EncryptedHistorySnapshot,
@@ -125,7 +125,7 @@ export function useVaultHistory(options: Options) {
   };
 
   const refreshHistorySettings = async (): Promise<HistorySettings> => {
-    if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
+    if (!serverSessionVerified) throw new UserFacingError("notice.onlineSessionRequired");
     const settings = await api<HistorySettings>("/api/account/note-history-settings");
     applyHistorySettings(settings);
     return settings;
@@ -208,7 +208,7 @@ export function useVaultHistory(options: Options) {
     const localPendingBytes = (await localDb.historyOutbox.where("userId").equals(userId).toArray()).reduce((sum, item) => sum + item.byteSize, 0);
     const pendingBudget = Math.min(historySettingsRef.current.quotaBytes ?? Infinity, historySettingsRef.current.totalQuotaBytes ?? Infinity);
     if (localPendingBytes >= pendingBudget) {
-      if (captureKind === "manual" || captureKind === "restore-safety") throw new Error(t("notice.historyQuotaReached"));
+      if (captureKind === "manual" || captureKind === "restore-safety") throw new UserFacingError("notice.historyQuotaReached");
       historyQuotaPaused.current = true;
       showMessage(t("notice.historyQuotaReached"), "warning");
       return null;
@@ -312,7 +312,7 @@ export function useVaultHistory(options: Options) {
 
   const ensureHistorySnapshot = async (item: HistoryListItem): Promise<LocalHistorySnapshot> => {
     return historyController.ensureSnapshot(item, async () => {
-      if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
+      if (!serverSessionVerified) throw new UserFacingError("notice.onlineSessionRequired");
       return api<EncryptedHistorySnapshot>(`/api/notes/${item.noteId}/history/${item.historyId}`);
     });
   };
@@ -329,7 +329,7 @@ export function useVaultHistory(options: Options) {
         snapshot.ciphertext,
         snapshot.nonce
       );
-      if (payload.schemaVersion !== 1) throw new Error(t("history.unsupported"));
+      if (payload.schemaVersion !== 1) throw new UserFacingError("history.unsupported");
       setHistoryPreview({ item, payload });
       setOutlineOpen(false);
     } catch (error) {

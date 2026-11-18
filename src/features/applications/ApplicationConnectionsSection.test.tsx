@@ -40,18 +40,18 @@ it("names the application access setting and revokes or removes only the selecte
   await act(async () => root!.render(<I18nProvider><ApplicationConnectionsSection userId="user" online onNotify={vi.fn()} /></I18nProvider>));
   const button = (scope: Element, label: string) => [...scope.querySelectorAll("button")].find(node => node.textContent === label)!;
   expect(container.querySelector(".settings-item-title")?.textContent).toBe("应用授权");
-  expect(button(container.querySelector(".settings-item")!, "添加应用")).toBeTruthy();
+  expect(button(container.querySelector(".settings-item")!, "添加连接")).toBeTruthy();
   expect(button(container, "刷新")).toBeUndefined();
-  expect(button(container, "撤销所有应用")).toBeUndefined();
+  expect(button(container, "撤销所有连接")).toBeUndefined();
   const entries = () => [...container.querySelectorAll(".session-row")];
   expect(entries().map(row => [...row.querySelectorAll("button")].map(node => node.textContent)))
-    .toEqual([["编辑", "撤销"], ["撤销"], ["移除设备"]]);
+    .toEqual([["编辑", "撤销"], ["撤销"], ["移除记录"]]);
   await act(async () => button(entries()[0], "撤销").click());
   expect(vi.mocked(api).mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
   await act(async () => button(document.querySelector("[role=alertdialog]")!, "撤销").click());
   expect(api).toHaveBeenCalledWith("/api/account/application-connections/active", expect.objectContaining({ method: "DELETE" }));
-  expect(button(entries()[0], "移除设备")).toBeTruthy();
-  await act(async () => button(entries()[2], "移除设备").click());
+  expect(button(entries()[0], "移除记录")).toBeTruthy();
+  await act(async () => button(entries()[2], "移除记录").click());
   expect(api).toHaveBeenCalledWith("/api/account/application-connections/revoked/record", expect.objectContaining({ method: "DELETE" }));
   expect(entries().map(row => row.querySelector("strong")?.textContent)).toHaveLength(2);
   expect(container.textContent).not.toContain("revoked application");

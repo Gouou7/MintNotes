@@ -128,8 +128,8 @@ describe("SettingsPanel", () => {
     expect(container.querySelectorAll(".profile-edit-dialog > .compact-form")).toHaveLength(2);
     expect(container.querySelector(".profile-avatar-editor")?.textContent).toContain("头像上传头像");
     expect(container.querySelector(".profile-field-form label")?.textContent).toContain("名称");
-    expect(button(container, "修改名称").classList).toContain("profile-action-button");
-    expect((button(container, "修改名称") as HTMLButtonElement).disabled).toBe(true);
+    expect(button(container, "修改显示名称").classList).toContain("profile-action-button");
+    expect((button(container, "修改显示名称") as HTMLButtonElement).disabled).toBe(true);
     expect(button(container, "修改用户名").classList).toContain("profile-action-button");
     expect((button(container, "修改用户名") as HTMLButtonElement).disabled).toBe(true);
     expect(button(container, "关闭").classList).toContain("profile-action-button");
@@ -198,7 +198,7 @@ describe("SettingsPanel", () => {
     await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     expect(api).toHaveBeenCalledWith("/api/account/profile", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ displayName: "New name" }) }));
     expect(onDisplayName).toHaveBeenCalledWith("New name");
-    expect(onNotify).toHaveBeenCalledWith("名称已更新", "info");
+    expect(onNotify).toHaveBeenCalledWith("显示名称已更新", "info");
   });
 
   it("changes the username only after rewrapping both vault envelopes", async () => {
@@ -250,7 +250,7 @@ describe("SettingsPanel", () => {
     );
     expect(api).toHaveBeenCalledWith("/api/account/username", expect.objectContaining({ method: "PATCH" }));
     expect(onUsername).toHaveBeenCalledWith("renamed-admin");
-    expect(onNotify).toHaveBeenCalledWith("用户名已更新。其他设备需重新登录。", "info");
+    expect(onNotify).toHaveBeenCalledWith("用户名已更新。其他设备需使用新用户名重新登录。", "info");
   });
 
   it("resets a missing recovery key before committing the username change", async () => {
@@ -302,14 +302,14 @@ describe("SettingsPanel", () => {
       replacementRecoveryAuthSecret: "replacement-recovery-auth"
     });
     expect(onUsername).toHaveBeenCalledWith("renamed-admin");
-    expect(onNotify).toHaveBeenCalledWith("用户名和恢复密钥已更新。其他设备需重新登录。", "info");
+    expect(onNotify).toHaveBeenCalledWith("用户名和恢复密钥已更新。其他设备需使用新用户名重新登录。", "info");
   });
 
   it("keeps deleted folders collapsed, reveals matching paths, and auto-saves retention", async () => {
     const container = await renderSettings();
     await act(async () => button(container, "笔记和存储").click());
     expect(container.textContent).toContain("回收站内容将在保留期满后永久删除。");
-    expect(container.textContent).toContain("1 个删除项目 · 共 2 项");
+    expect(container.textContent).toContain("顶层 1 项，共 2 项");
     expect(container.textContent).toContain("包含 1 项");
     expect(container.querySelector(".trash-children")).toBeNull();
     await act(async () => (container.querySelector("button[aria-label='展开 Deleted folder']") as HTMLButtonElement).click());
@@ -325,7 +325,7 @@ describe("SettingsPanel", () => {
     });
     expect(container.querySelector(".trash-children")?.textContent).toContain("Nested note");
     expect(container.textContent).toContain("1 个匹配项");
-    expect(container.querySelector("[role=combobox][aria-label='排序已删除项目']")?.textContent).toBe("删除时间：最新");
+    expect(container.querySelector("[role=combobox][aria-label='回收站排序']")?.textContent).toBe("最近删除优先");
     expect(container.querySelectorAll("button[aria-label^='恢复']")).toHaveLength(1);
     await act(async () => container.querySelector<HTMLButtonElement>(".trash-more")!.click());
     const purge = document.querySelector<HTMLElement>('[role="menuitem"]')!;
@@ -350,14 +350,14 @@ describe("SettingsPanel", () => {
     expect(tabs.map((entry) => entry.textContent?.trim())).toEqual(["通用", "用户和安全", "笔记和存储", "管理员设置", "关于"]);
     expect(tabs.slice(0, 6).every((entry) => Boolean(entry.querySelector("svg")))).toBe(true);
     await act(async () => button(container, "用户和安全").click());
-    expect(container.textContent).toContain("管理登录设备并移除失效记录。");
-    expect(container.textContent).toContain("已登出和已过期的设备记录将在 30 天后自动移除");
+    expect(container.textContent).toContain("当前设备登录满 24 小时后，可让其他设备退出登录。");
+    expect(container.textContent).toContain("已退出登录或已过期的设备记录将在 30 天后自动移除");
     const headings = [...container.querySelectorAll(".settings-group > h3")].map((entry) => entry.textContent?.trim());
     expect(headings).toEqual(["账户凭据", "本机安全", "登录设备", "应用连接"]);
     const deviceSection = [...container.querySelectorAll(".settings-group")].find(section => section.querySelector("h3")?.textContent === "本机安全")!;
-    expect([...deviceSection.querySelectorAll(".settings-item-title")].map(item => item.textContent)).toEqual(["本机 PIN", "无操作后自动锁定"]);
+    expect([...deviceSection.querySelectorAll(".settings-item-title")].map(item => item.textContent)).toEqual(["本机 PIN", "自动锁定时间"]);
     const lockControl = deviceSection.querySelector<HTMLElement>("[role=combobox]")!;
-    expect(document.getElementById(lockControl.getAttribute("aria-describedby")!)?.textContent).toContain("需先设置本机 PIN");
+    expect(document.getElementById(lockControl.getAttribute("aria-describedby")!)?.textContent).toContain("需要先设置本机 PIN");
     expect(button(container, "设置 PIN")).toBeTruthy();
     expect(container.querySelector("input[placeholder='至少 4 个字符']")).toBeNull();
     await act(async () => button(container, "设置 PIN").click());
@@ -375,11 +375,11 @@ describe("SettingsPanel", () => {
     expect(container.querySelector(".pin-change-dialog")).toBeNull();
     await chooseSelect(lockControl, "5 分钟");
     expect(vi.mocked(setAutoLockMinutes)).not.toHaveBeenCalled();
-    expect(onNotify).toHaveBeenCalledWith("开启自动锁定前请先设置本机 PIN", "warning");
+    expect(onNotify).toHaveBeenCalledWith("请先设置本机 PIN，再开启自动锁定。", "warning");
     expect(container.querySelector(".notice")).toBeNull();
     expect(container.textContent).not.toContain("本机 PIN 与自动锁定");
     expect(container.textContent).not.toContain("保存自动锁定设置");
-    expect(container.textContent).toContain("设置后每次启动应用均需输入 PIN。PIN 仅适用于当前设备。");
+    expect(container.textContent).toContain("设置本机 PIN 后，打开此设备上已记住的账户时需解锁。");
     expect(container.textContent).toContain("重置恢复密钥");
   });
 
@@ -514,7 +514,7 @@ describe("SettingsPanel", () => {
     await chooseSelect(mode, "不限");
     expect(container.querySelector(".history-budget button:not([role=combobox])")).toBeNull();
     expect(api).toHaveBeenCalledWith("/api/account/note-history-settings", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ quotaBytes: null }) }));
-    expect(container.textContent).toContain("历史计入总配额");
+    expect(container.textContent).toContain("历史仍计入总配额");
   });
 
   it("separates administrator settings and removes the encrypted snapshot", async () => {
@@ -552,16 +552,16 @@ describe("SettingsPanel", () => {
     const container = await renderSettings();
     await act(async () => button(container, "关于").click());
     expect(container.querySelector(".about-product")?.textContent).toContain(`Mint Notes版本 ${APP_VERSION}`);
-    expect(container.querySelector(".about-introduction")?.textContent).toBe("Mint Notes 是一款轻量的自托管 Markdown 笔记应用。支持多用户、PWA 离线编辑和跨设备同步。");
+    expect(container.querySelector(".about-introduction")?.textContent).toBe("Mint Notes 是可自托管的多用户 Markdown 笔记应用，支持离线编辑和跨设备同步。");
     expect(container.querySelector(".about-feedback")).toBeNull();
     expect(container.textContent).not.toContain("如果你发现 Bug 或者有功能建议");
     expect(container.textContent).toContain("致谢");
     expect([...container.querySelectorAll(".about-credits li")].map((item) => item.textContent)).toEqual([
-      "typora-web编辑器核心的上游项目",
-      "KaTeX用于渲染数学公式",
-      "Mermaid用于渲染图表",
+      "typora-web编辑器上游项目",
+      "KaTeX数学公式渲染",
+      "Mermaid图表渲染",
       "shadcn/ui界面组件库",
-      "Lucide React用于界面图标"
+      "Lucide React界面图标"
     ]);
     expect(container.querySelector(".about-credits")?.textContent).not.toContain("许可证");
     expect(container.querySelector(".about-list")).toBeNull();
@@ -584,12 +584,12 @@ describe("SettingsPanel", () => {
     }
     await act(async () => (logoutSection!.querySelector("button") as HTMLButtonElement).click());
     expect(onLogout).not.toHaveBeenCalled();
-    expect(container.querySelector(".logout-confirm")?.textContent).toContain("确认从当前设备登出？");
-    expect(container.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
+    expect(container.querySelector(".logout-confirm")?.textContent).toContain("要退出此设备的登录吗？");
+    expect(container.querySelector(".logout-confirm")?.textContent).toContain("未同步的数据将无法恢复");
     expect([...container.querySelectorAll(".logout-confirm .storage-pending-item")].map((item) => item.textContent)).toEqual(["对象 2", "附件 1", "笔记历史 3"]);
-    expect(container.querySelector(".logout-confirm")?.textContent).toContain("本地待保存1 篇");
-    expect(container.querySelector(".logout-confirm")?.textContent).toContain("已同步至服务器的数据不受影响");
-    await act(async () => button(container.querySelector<HTMLElement>(".logout-confirm")!, "登出").click());
+    expect(container.querySelector(".logout-confirm")?.textContent).toContain("尚未保存到本地1 篇");
+    expect(container.querySelector(".logout-confirm")?.textContent).toContain("已同步的数据保留在服务器上");
+    await act(async () => button(container.querySelector<HTMLElement>(".logout-confirm")!, "退出登录").click());
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
@@ -613,13 +613,13 @@ describe("SettingsPanel", () => {
     const container = await renderSettings(admin, onNotify);
     await act(async () => button(container, "用户和安全").click());
     await act(async () => { await Promise.resolve(); });
-    const signOutButton = button(container, "登出");
+    const signOutButton = button(container, "让设备退出登录");
     expect(signOutButton.classList).toContain("session-revoke");
     await act(async () => signOutButton.click());
     const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]')!;
-    await act(async () => button(dialog, "登出").click());
+    await act(async () => button(dialog, "让设备退出登录").click());
     await act(async () => { await Promise.resolve(); });
-    expect(onNotify).toHaveBeenCalledWith("Firefox · macOS 已登出", "info");
+    expect(onNotify).toHaveBeenCalledWith("“Firefox · macOS”已退出登录", "info");
     expect(container.querySelector(".notice")).toBeNull();
   });
 
@@ -658,7 +658,7 @@ describe("SettingsPanel", () => {
     await act(async () => button(dialog, "移除").click());
     await act(async () => { await Promise.resolve(); });
     expect(api).toHaveBeenCalledWith("/api/account/endpoints/inactive-endpoint", { method: "DELETE" });
-    expect(onNotify).toHaveBeenCalledWith("已移除 Firefox · Windows", "info");
+    expect(onNotify).toHaveBeenCalledWith("“Firefox · Windows”的登录记录已移除", "info");
   });
 });
 

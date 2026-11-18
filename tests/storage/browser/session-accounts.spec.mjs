@@ -9,7 +9,7 @@ async function register(page, username, displayName) {
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Display name", { exact: true }).fill(displayName);
   await page.getByLabel("Master password", { exact: true }).fill(password);
-  await page.getByLabel("Confirm password", { exact: true }).fill(password);
+  await page.getByLabel("Confirm master password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Create account", exact: true }).click();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Recovery key saved", exact: true }).click();
@@ -147,7 +147,7 @@ test("switches remembered accounts across windows and requires the target PIN of
   await expect(lock.getByRole("heading", { name: "Beta", exact: true })).toBeVisible();
   const actions = lock.locator(".auth-account-actions");
   await expect(actions.getByRole("button")).toHaveCount(2);
-  await expect(actions.getByRole("button", { name: "Log out", exact: true })).toBeVisible();
+  await expect(actions.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
   const viewport = page.viewportSize();
   if (info.project.name === "desktop") await page.setViewportSize({ width: 820, height: 1180 });
   const root = page.locator("html");

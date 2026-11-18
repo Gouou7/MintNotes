@@ -1,7 +1,7 @@
 import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useRef } from "react";
-import { translateError, type Translate } from "../../i18n";
+import { translateError, UserFacingError, type Translate } from "../../i18n";
 import type { HistoryListItem, NoteHistoryPayload, OpenDocument, OpenAttachment, UiPreferences } from "../../types";
 import { AttachmentCloneService } from "../attachmentClone";
 import { createLocalAttachment, decryptAttachmentBlob } from "../attachments";
@@ -240,7 +240,7 @@ export function useVaultDocuments(options: Options) {
 
   const addAttachment = async (noteId: string, file: File) => {
     const editableNote = documentIndexRef.current.get(noteId);
-    if (editableNote && isLockedNote(editableNote)) throw new Error(t("notice.noteLockedEdit", { title: editableNote.title }));
+    if (editableNote && isLockedNote(editableNote)) throw new UserFacingError("notice.noteLockedEdit", { title: editableNote.title });
     showMessage(t("notice.encryptingAttachment", { name: file.name }), "info");
     const attachment = await createLocalAttachment(userId, noteId, file, () => !logoutStarted.current, services.cryptoClient);
     upsertAttachment(attachment);

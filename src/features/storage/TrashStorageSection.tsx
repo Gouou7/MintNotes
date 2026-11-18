@@ -73,9 +73,8 @@ export function TrashStorageSection({ trashItems, busy, purging, serverSessionVe
     setRestoringTrashId(item.objectId);
     try {
       await onRestoreTrash(item.objectId);
-      onNotify(t("notice.itemRestored", { title: item.title }), "info");
     } catch (value) {
-      onNotify(value instanceof Error ? translateError(value, t, "notice.itemRestoreFailed") : t("notice.itemRestoreFailed", { title: item.title }), "warning");
+      onNotify(translateError(value, t, "notice.itemRestoreFailed", { title: item.title }), "warning");
     }
     finally { setRestoringTrashId(""); }
   };

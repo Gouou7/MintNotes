@@ -92,8 +92,8 @@ describe("LockScreen keyboard submission", () => {
 
     await act(async () => button(container, "退出登录").click());
     expect(onLogout).not.toHaveBeenCalled();
-    expect(document.querySelector(".logout-confirm")?.textContent).toContain("未同步数据将无法恢复");
-    await act(async () => button(document.body, "登出").click());
+    expect(document.querySelector(".logout-confirm")?.textContent).toContain("未同步的数据将无法恢复");
+    await act(async () => button(document.querySelector<HTMLElement>(".logout-confirm")!, "退出登录").click());
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
@@ -105,7 +105,7 @@ describe("LockScreen keyboard submission", () => {
     roots.push(root);
     await act(async () => root.render(<I18nProvider><LockScreen user={user} browserOnline={false} onPin={vi.fn()} onPasswordLogin={vi.fn()} onLogout={vi.fn()} /></I18nProvider>));
 
-    expect(container.textContent).toContain("离线 · 暂无法使用主密码解锁");
+    expect(container.textContent).toContain("联网后可使用主密码解锁。");
     expect(button(container, "使用 PIN 解锁")).toBeTruthy();
     expect(container.textContent).not.toContain("改用主密码");
   });

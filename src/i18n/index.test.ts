@@ -3,7 +3,10 @@ import {
   detectBrowserLocale,
   getLanguagePreference,
   resolveLocale,
-  translateMessage
+  translateError,
+  translateMessage,
+  UserFacingError,
+  type Translate
 } from "./index";
 
 afterEach(() => localStorage.clear());
@@ -36,5 +39,14 @@ describe("i18n language resolution", () => {
     expect(translateMessage("en", "app.unlockNote")).toBe("Unlock note");
     expect(translateMessage("zh-CN", "app.noteLockedBadge")).toBe("已锁定笔记");
     expect(translateMessage("zh-TW", "notice.lockedTrashBlocked", { title: "計畫" })).toContain("計畫");
+  });
+
+  it("localizes errors and uses the operation fallback for unknown details", () => {
+    const t: Translate = (key, values) => translateMessage("zh-CN", key, values);
+    expect(translateError(new UserFacingError("notice.noteLockedEdit", { title: "计划" }), t, "notice.attachmentSaveFailed"))
+      .toBe("解锁“计划”后可编辑");
+    expect(translateError(new Error("Invalid credentials"), t, "auth.operationFailed")).toBe("用户名或密码不正确");
+    expect(translateError(new Error("Unexpected IndexedDB response"), t, "notice.itemRestoreFailed", { title: "计划" }))
+      .toBe("无法恢复“计划”");
   });
 });

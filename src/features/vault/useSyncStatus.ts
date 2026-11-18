@@ -12,7 +12,7 @@ export type SyncFailure =
 
 export function synchronizationFailure(error: unknown, t: Translate): SyncFailure {
   return error instanceof ApiError
-    ? { kind: "server", reason: translateError(error, t, "notice.syncFailed") }
+    ? { kind: "server", reason: translateError(error, t, "app.save.error") }
     : { kind: "unreachable" };
 }
 
@@ -74,13 +74,16 @@ export function reduceSyncStatus(current: SyncStatusState, action: SyncStatusAct
   };
 }
 
-export function visibleSyncStatusText(status: VisibleSyncStatus, t: Translate): string {
+export function visibleSyncStatusText(status: SyncStatusState, t: Translate): string {
+  if (status.phase === "saving") return t("app.save.saving");
+  if (status.phase === "local") return t("app.save.pending");
+  if (status.failure?.kind === "unverified") return t("app.save.unverified");
   return ({
     synced: t("app.save.synced"),
     syncing: t("app.save.syncing"),
     error: t("app.save.error"),
     offline: t("app.save.offline")
-  } satisfies Record<VisibleSyncStatus, string>)[status];
+  } satisfies Record<VisibleSyncStatus, string>)[status.visible];
 }
 
 export function syncStatusDetailText(status: SyncStatusState, t: Translate): string {
@@ -91,7 +94,7 @@ export function syncStatusDetailText(status: SyncStatusState, t: Translate): str
   if (status.phase === "error") {
     if (status.failure?.kind === "unverified") return t("app.save.unverifiedDetail");
     return status.failure?.kind === "server"
-      ? t("app.save.serverErrorDetail", { reason: status.failure.reason })
+      ? t("app.save.serverErrorDetail", { reason: status.failure.reason.replace(/[.。]$/, "") })
       : t("app.save.unreachableDetail");
   }
   if (status.phase === "offline") return t("app.save.offlineDetail");

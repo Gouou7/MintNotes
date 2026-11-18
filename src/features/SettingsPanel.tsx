@@ -32,7 +32,7 @@ import { SettingsButton } from "../components/SettingsButton";
 import type { ToastTone } from "../components/Toast";
 import { createVaultEnvelopeBinding, type EncryptedProfileAvatar } from "../crypto/client";
 import { getDeviceUnlock, hasDevicePin, removeDevicePin, setAutoLockMinutes, setDevicePin } from "../crypto/deviceUnlock";
-import { LANGUAGE_OPTIONS, translateError, useI18n } from "../i18n";
+import { LANGUAGE_OPTIONS, translateError, useI18n, UserFacingError } from "../i18n";
 import type { DeviceUnlockCredential } from "../storage/database";
 import type { AuthEndpoint, AuthParameters, HistorySettings, OpenDocument, TrustedEndpointsResponse, UiPreferences, User, VaultEnvelopeBinding } from "../types";
 import { submitFormOnEnter } from "./formKeyboard";
@@ -159,9 +159,8 @@ export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoin
       onNotify(result.days === null ? t("notice.trashForever") : t("notice.trashDeleteAfter", { count: result.days }), "info");
     } catch (value) {
       setTrashRetentionDays(previous);
-      onNotify(value instanceof Error
-        ? t("notice.settingRestored", { message: translateError(value, t, "notice.saveTrashFailed") })
-        : t("notice.saveTrashFailed"), "warning");
+      const message = translateError(value, t, "notice.saveTrashFailed").replace(/[.。]$/, "");
+      onNotify(t("notice.settingRestored", { message }), "warning");
     } finally { setBusy(false); }
   };
 
@@ -378,7 +377,7 @@ export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoin
   };
 
   const masterPasswordSecret = async (password: string) => {
-    if (!serverSessionVerified) throw new Error(t("notice.onlineSessionRequired"));
+    if (!serverSessionVerified) throw new UserFacingError("notice.onlineSessionRequired");
     const parameters = await api<AuthParameters>(`/api/auth/parameters/${encodeURIComponent(user.username)}`);
     return cryptoClient.prepareLogin(password, parameters.kdfSalt, parameters.kdfParams);
   };

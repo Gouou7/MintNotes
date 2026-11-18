@@ -58,9 +58,9 @@ async function renderHistory(overrides: Partial<Parameters<typeof HistoryPanel>[
 
 describe("HistoryPanel", () => {
   it.each([
-    ["en", "Create snapshot", "Clear history"],
-    ["zh-CN", "创建快照", "清空历史"],
-    ["zh-TW", "建立快照", "清空歷史"]
+    ["en", "Save history version", "Clear history"],
+    ["zh-CN", "保存历史版本", "清空历史"],
+    ["zh-TW", "儲存歷史版本", "清空歷史"]
   ])("labels and connects both snapshot actions in %s", async (locale, createLabel, clearLabel) => {
     localStorage.setItem("webmd-notes-language", locale);
     const { container, props } = await renderHistory();
@@ -86,7 +86,7 @@ describe("HistoryPanel", () => {
     expect([...container.querySelectorAll(".history-day > h3")].map(heading => heading.textContent)).toEqual(["2026-08-09", "2026-08-08"]);
     expect([...container.querySelectorAll(".history-day")].map(day => day.querySelectorAll(".history-row").length)).toEqual([1, 2]);
     expect([...container.querySelectorAll(".history-select small")].map(details => details.textContent)).toEqual([
-      "00:05 · Saved manually · Download required", "23:55 · Saved manually · Download required", "14:12 · Saved manually · Pending sync"
+      "00:05 · Saved manually · Download required", "23:55 · Saved manually · Download required", "14:12 · Saved manually · Waiting to sync"
     ]);
   });
 
