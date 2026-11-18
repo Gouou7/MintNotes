@@ -9,6 +9,12 @@ import { shouldSynchronizeWorkspaceObject } from "../workspace";
 import { hasPendingLocalAuxiliaryData, hasPendingLocalObjectGraph } from "./localPurge";
 import { acknowledgeOutboxEntry, sameOutboxEntry } from "./outboxAcknowledgement";
 
+export class SyncCursorResetRequired extends Error {
+  constructor() {
+    super("SYNC_RECONCILE_REQUIRED");
+  }
+}
+
 export interface PullControllerDependencies {
   services: import("../session/workspaceServices").WorkspaceServices;
   userId: string;
@@ -85,7 +91,7 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
       `/api/sync?since=${cursor}&limit=500&compact=1`
     ));
     if (!isActive()) return { ...total, complete: false };
-    if (page.reset) throw new Error("SYNC_RECONCILE_REQUIRED");
+    if (page.reset) throw new SyncCursorResetRequired();
     const result = emptyResult();
     const candidates: Candidate[] = [];
     const blocked = new Set<string>();

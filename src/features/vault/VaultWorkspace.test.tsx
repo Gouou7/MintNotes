@@ -4,7 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../i18n";
 import { chooseSelect } from "../../components/select.testSupport";
-import { localDb, localKey, preferencesKey } from "../../storage/database";
+import { ToastStack } from "../../components/Toast";
+import { cursorKey, localDb, localKey, preferencesKey } from "../../storage/database";
 import type { OpenDocument } from "../../types";
 import { DEFAULT_PREFERENCES } from "./useVaultPreferences";
 import { VaultWorkspace } from "./VaultWorkspace";
@@ -50,10 +51,10 @@ async function seed(value: OpenDocument) {
     revision: serverRevision, deleted: false, updatedAt: value.updatedAt });
 }
 
-async function mount() {
-  await act(async () => root.render(<StrictMode><I18nProvider><VaultWorkspace
+async function mount(serverSessionVerified = false) {
+  await act(async () => root.render(<StrictMode><I18nProvider><ToastStack /><VaultWorkspace
     user={{ id: userId, username: "reader", displayName: "Reader", role: "user" }}
-    endpoint={{ id: "endpoint", remembered: true }} credential={null} serverSessionVerified={false}
+    endpoint={{ id: "endpoint", remembered: true }} credential={null} serverSessionVerified={serverSessionVerified}
     onCredentialChange={vi.fn()} onDisplayNameChange={vi.fn()} onUsernameChange={vi.fn()} onLock={vi.fn()} onLogout={vi.fn()} registerClose={vi.fn()}
   /></I18nProvider></StrictMode>));
   await settle(() => host.querySelector<HTMLTextAreaElement>('[aria-label="test-editor"]')?.value === "First body");
@@ -71,8 +72,12 @@ async function settle(ready: () => boolean | Promise<boolean>) {
   throw new Error("Workspace did not settle");
 }
 
+const warnings = () => [...document.querySelectorAll('[data-sonner-toast][data-type="warning"] [data-title]')]
+  .map(element => element.textContent);
+
 beforeEach(async () => {
   vi.clearAllMocks();
+  mocks.api.mockReset();
   await localDb.delete();
   await localDb.open();
   localStorage.clear();
@@ -105,6 +110,59 @@ afterEach(async () => {
 });
 
 describe("vault feature composition", () => {
+  it("shows an unverified status without a sync failure notification when the browser is online", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    await mount();
+
+    expect(mocks.api).not.toHaveBeenCalled();
+    expect(host.querySelector(".status-meta")?.getAttribute("title")).toContain("sign-in status is verified");
+    expect(warnings()).toEqual([]);
+  });
+
+  it("resumes sync without a warning when the server asks to reconcile the initial cursor", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    await localDb.meta.bulkPut([
+      { key: cursorKey(userId), value: "1" },
+      { key: `attachment-gc:${userId}`, value: String(Date.now()) }
+    ]);
+    const objects = await localDb.objects.where("userId").equals(userId).toArray();
+    const caughtUp = { epoch: "current", changes: [], cursor: 5, hasMore: false };
+    let allowReconciliation!: () => void;
+    const reconciliationReady = new Promise<void>(resolve => { allowReconciliation = resolve; });
+    mocks.api.mockImplementation(async (path: string) => {
+      if (path.startsWith("/api/sync?since=1&")) return { ...caughtUp, reset: true };
+      if (path.startsWith("/api/sync/status?")) {
+        await reconciliationReady;
+        return { epoch: "current", head: 5, floor: 3, reconcile: true, lease: "lease" };
+      }
+      if (path.startsWith("/api/sync/snapshot?")) return { epoch: "current", objects, next: null };
+      if (path.startsWith("/api/sync?since=5&")) return caughtUp;
+      if (path === "/api/attachments/ownership") return { complete: 1, version: 1, notes: [] };
+      if (path === "/api/account/storage") return { totalBytes: 0, quotaBytes: null };
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    await mount(true);
+    expect(host.querySelector(".status-meta")?.getAttribute("title")).toContain("pending sync");
+    expect(warnings()).toEqual([]);
+    await act(async () => allowReconciliation());
+    await settle(() => Boolean(host.querySelector(".status-synced")));
+    expect((await localDb.meta.get(cursorKey(userId)))?.value).toBe("5");
+    expect(warnings()).toEqual([]);
+  });
+
+  it("warns when the immediate background sync also fails", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    mocks.api.mockRejectedValue(new TypeError("Fetch failed"));
+
+    await mount(true);
+    await settle(() => mocks.api.mock.calls.some(([path]) => path.startsWith("/api/sync/status?")));
+    await settle(() => warnings().some(message => message?.startsWith("Sync failed.")));
+
+    expect(warnings()).toEqual(["Sync failed. Changes are saved locally. Sync will retry automatically."]);
+    expect(host.querySelector(".status-meta")?.getAttribute("title")).toContain("Unable to connect to the server");
+  });
+
   it("preserves modification times for every reordered note and updates time for a body edit", async () => {
     const first = { ...note(firstId, "First"), manualOrder: 1024 };
     const second = { ...note(secondId, "Second"), manualOrder: 2048, updatedAt: "2026-02-01T00:00:00.000Z" };
@@ -208,5 +266,8 @@ describe("vault feature composition", () => {
 
 vi.mock("../session/workspaceServices", async () => {
   const { testWorkspaceServices } = await import("../session/workspaceServices.testSupport");
-  return { useWorkspaceServices: testWorkspaceServices };
+  const services = testWorkspaceServices();
+  services.transport.setSyncLease = vi.fn();
+  services.transport.stream = vi.fn(async () => new Response());
+  return { useWorkspaceServices: () => services };
 });

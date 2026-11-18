@@ -761,7 +761,6 @@ const messages = {
   "notice.ciphertextRetained": { en: "The original encrypted data has been retained.", "zh-CN": "原始加密数据已保留。", "zh-TW": "原始加密資料已保留。" },
   "notice.ignoreRevision": { en: "Do not show this version again", "zh-CN": "不再提示此版本", "zh-TW": "不再提示此版本" },
   "notice.remoteIntegrityOthers": { en: "{count} items from the server failed integrity checks. Other readable notes have been loaded, and readable local versions have been retained.", "zh-CN": "服务器上的 {count} 项数据未通过完整性校验。已加载其他可读取的笔记，并保留本地可读取的版本。", "zh-TW": "伺服器上的 {count} 項資料未通過完整性驗證。已載入其他可讀取的筆記，並保留本機可讀取的版本。" },
-  "notice.localRestoredSyncRetry": { en: "Unable to sync with the server at this time. Local notes have been loaded. Sync will retry automatically.", "zh-CN": "暂时无法与服务器同步。已加载本地笔记，系统将自动重试。", "zh-TW": "暫時無法與伺服器同步。已載入本機筆記，系統將自動重試。" },
   "notice.loadedOffline": { en: "Currently offline. Local notes have been loaded and will sync after reconnection.", "zh-CN": "当前处于离线状态。已加载本地笔记，联网后将自动同步。", "zh-TW": "目前處於離線狀態。已載入本機筆記，連網後將自動同步。" },
   "notice.onlineSessionRequired": {
     en: "This action requires a connection to the server and verification of sign-in status.",

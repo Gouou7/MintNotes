@@ -15,6 +15,7 @@ import type { LanguagePreference, UiPreferences } from "../../types";
 import { normalizeFontSize, normalizeWrapCodeBlocks } from "../appearance";
 import { decryptAvailableLocalObjects, decryptFailureFingerprint, shouldCreateWelcomeNote } from "../vaultLoad";
 import { parseLegacyWorkspaceState, resolveDeviceActiveNoteId, resolveDeviceWorkspacePreferences, WORKSPACE_OBJECT_ID } from "../workspace";
+import { SyncCursorResetRequired } from "./pullController";
 import type { SaveState } from "./useSyncStatus";
 import { countPendingSyncEntries, settledSyncPhase, synchronizationFailure, type SyncFailure } from "./useSyncStatus";
 import type { useToastNotifications } from "./useToastNotifications";
@@ -144,17 +145,20 @@ export function useVaultLoad(options: Options) {
           && repairableFailures.every((object) => !pendingByKey.has(object.key));
         const mustVerifyServerFromStart = canRepairFromServer || (storedContent.length === 0 && pendingContent.length === 0);
         if (mustVerifyServerFromStart && !logoutStarted.current) await localDb.meta.put({ key: cursorKey(userId), value: "0" });
-        let initialPullError: unknown;
+        const attemptedInitialPull = serverSessionVerifiedRef.current;
+        let initialPullFailure: { error: unknown } | undefined;
         let failedRemoteIds = new Set<string>();
-        if (serverSessionVerifiedRef.current) {
+        if (attemptedInitialPull) {
           try {
             failedRemoteIds = await pullChanges();
           } catch (error) {
-            initialPullError = error;
+            initialPullFailure = { error };
           }
-        } else {
-          initialPullError = new Error("Server session has not been verified");
         }
+        if (cancelled || logoutStarted.current) return;
+        const awaitingReconciliation = initialPullFailure?.error instanceof SyncCursorResetRequired;
+        const openedOffline = !navigator.onLine && (!attemptedInitialPull || Boolean(initialPullFailure
+          && !awaitingReconciliation && !(initialPullFailure.error instanceof ApiError)));
 
         const loadedIds = new Set([
           ...documentsRef.current.map((entry) => entry.objectId),
@@ -162,7 +166,6 @@ export function useVaultLoad(options: Options) {
         ]);
         const unresolved = failedLocalObjects.filter((object) => !loadedIds.has(object.objectId));
         const visibleFailures = unresolved.filter((object) => !ignoredFailureFingerprints.has(decryptFailureFingerprint(object)));
-        if (logoutStarted.current) return;
         if (unresolved.length) {
           const pendingFailures = visibleFailures.filter((object) => pendingByKey.has(object.key)).length;
           if (visibleFailures.length) showMessage(
@@ -184,15 +187,15 @@ export function useVaultLoad(options: Options) {
           );
         } else if (failedRemoteIds.size) {
           showMessage(t("notice.remoteIntegrityOthers", { count: failedRemoteIds.size }), "critical");
-        } else if (initialPullError) {
-          showMessage(navigator.onLine ? t("notice.localRestoredSyncRetry") : t("notice.loadedOffline"), "warning");
+        } else if (openedOffline && opened.documents.some((entry) => entry.kind === "note" && !entry.deleted)) {
+          showMessage(t("notice.loadedOffline"), "warning");
         }
 
         const verifiedEmptyVault = shouldCreateWelcomeNote({
-          serverSessionVerified: serverSessionVerifiedRef.current,
+          serverSessionVerified: attemptedInitialPull && serverSessionVerifiedRef.current,
           storedContentCount: storedContent.length,
           pendingContentCount: pendingContent.length,
-          initialPullFailed: Boolean(initialPullError),
+          initialPullFailed: Boolean(initialPullFailure),
           failedRemoteCount: failedRemoteIds.size
         });
         if (verifiedEmptyVault && !documentsRef.current.some((entry) => entry.kind === "note" && !entry.deleted)) {
@@ -209,10 +212,14 @@ export function useVaultLoad(options: Options) {
             openNoteIds: []
           }));
         }
-        if (initialPullError) {
-          if (!serverSessionVerifiedRef.current) setUnavailable();
-          else if (!(initialPullError instanceof ApiError) && !navigator.onLine) setSaveState("offline");
-          else setSyncError(synchronizationFailure(initialPullError, t));
+        if (!attemptedInitialPull || !serverSessionVerifiedRef.current) {
+          setUnavailable();
+        } else if (openedOffline) {
+          setSaveState("offline");
+        } else if (awaitingReconciliation) {
+          setSaveState("local");
+        } else if (initialPullFailure) {
+          setSyncError(synchronizationFailure(initialPullFailure.error, t));
         } else {
           const remaining = await countPendingSyncEntries(userId);
           setSaveState(settledSyncPhase(serverSessionVerifiedRef.current, remaining));
