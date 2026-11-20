@@ -93,7 +93,7 @@ export async function maintainVaultStorage(options: { services: import("../sessi
     const [invalid, verified] = await Promise.all([
       localDb.meta.get(`history-invalid:${userId}:${note.objectId}`), localDb.meta.get(`history-verified:${userId}:${note.objectId}`)
     ]);
-    if (!collect && invalid?.value === verified?.value) continue;
+    if (!collect && (!invalid || invalid.value === verified?.value)) continue;
     const inventory = await validatedHistoryInventory(userId, note.objectId, isActive, options.services);
     const current = options.getDocument?.(note.objectId) ?? note;
     if (current.dirty || current.deleted || current.serverRevision !== note.serverRevision || options.hasPendingSave?.(note.objectId)
