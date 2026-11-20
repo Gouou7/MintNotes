@@ -21,6 +21,10 @@ export function validSyncLease(db: AppDatabase, userId: string, lease: unknown):
     return actual.length === expected.length && timingSafeEqual(actual, expected);
   } catch { return false; }
 }
+export function validSyncMutation(db: AppDatabase, userId: string, headers: Record<string, unknown>): boolean {
+  return headers["x-webmd-sync-epoch"] === syncState(db, userId).epoch
+    && validSyncLease(db, userId, headers["x-webmd-sync-lease"]);
+}
 export function registerProtocolGate(app: FastifyInstance) {
   app.addHook("onRequest", async (request, reply) => {
     const path = request.url.split("?")[0];

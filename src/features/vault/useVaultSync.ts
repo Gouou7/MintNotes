@@ -54,6 +54,7 @@ interface Options {
   setSaveState: (phase: Exclude<SaveState, "error">) => void;
   setSyncError: (failure: SyncFailure) => void;
   workspaceLoaded: boolean;
+  setBodySyncBusy: (busy: boolean) => void;
   serverSessionVerified: boolean;
   finishHistorySession: (capture?: boolean) => Promise<void>;
   flushDocument: (objectId: string) => Promise<void>;
@@ -321,7 +322,22 @@ export function useVaultSync(options: Options) {
       else upsertDocument({ ...current, serverTrashedAt });
     }
   });
-  const pullChanges = async () => (await pullVaultChanges(pullDependencies())).failedObjectIds;
+  const pullPreparedChanges = async () => {
+    const state = await localDb.meta.get(`sync-state:${userId}`);
+    const epoch = state && (JSON.parse(state.value) as { epoch: string }).epoch;
+    if (!epoch) throw new Error("SYNC_RECONCILIATION_INCOMPLETE");
+    const catalog = (await localDb.meta.get(`note-catalog:${userId}`))?.value === "true";
+    return pullVaultChanges({ ...pullDependencies(), epoch, catalog });
+  };
+  const pullChanges = () => withVaultSyncLock(userId, async () => {
+    options.setBodySyncBusy(true);
+    try {
+      if (!await prepareVaultSynchronization(pullDependencies())) throw new Error("SYNC_RECONCILIATION_INCOMPLETE");
+      const result = await pullPreparedChanges();
+      if (!result.complete && !result.failedObjectIds.size) throw new Error("SYNC_RECONCILIATION_INCOMPLETE");
+      return result.failedObjectIds;
+    } finally { options.setBodySyncBusy(false); }
+  });
 
   const pushPending = () => pushVaultPending({
     transport: services.transport,
@@ -348,6 +364,7 @@ export function useVaultSync(options: Options) {
     if (!intent.pull && (!intent.push || queued === 0)) return;
 
     if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
+    options.setBodySyncBusy(true);
     syncStatusTimer.current = window.setTimeout(() => setSaveState("syncing"), 200);
     try {
       const result = await executeVaultSync({
@@ -355,27 +372,28 @@ export function useVaultSync(options: Options) {
         countPending: () => countPendingSyncEntries(userId),
         prepare: async () => {
           for (const record of await localDb.recoveries.where("userId").equals(userId).toArray()) {
-            if (record.kind === "conversion" || await localDb.objects.get(`${userId}:${record.copyId}`)) continue;
+            if (record.archived || record.kind === "conversion" || await localDb.objects.get(`${userId}:${record.copyId}`)) continue;
             await preserveConflict(record.source, true, false);
           }
           return prepareVaultSynchronization(pullDependencies());
         },
         push: pushPending,
-        pull: pullChanges
+        pull: pullPreparedChanges
       }, intent);
       await completeConflictRecoveries(userId, () => !logoutStarted.current);
       result.pending = await countPendingSyncEntries(userId);
       if (logoutStarted.current) return;
-      if (!result.failedObjectIds.size) await maintainVaultStorage({ services, userId, isActive: () => !logoutStarted.current,
+      if (result.complete && !result.failedObjectIds.size) await maintainVaultStorage({ services, userId, isActive: () => !logoutStarted.current,
         documents: documentsRef.current, attachments: attachmentsRef.current, getDocument: (id) => documentIndexRef.current.get(id), hasPendingSave: documentSaveQueue.hasPending, trashOrphan: async (attachment) => {
           await objectPersistence.persistObject(attachment); requestPush("structural");
         } });
       if (result.failedObjectIds.size) showMessage(t("notice.remoteIntegrity", { count: result.failedObjectIds.size }), "critical");
       if (options.endpointId) await recordCompleteSync(userId, options.endpointId,
-        intent.pull && !result.failedObjectIds.size && !result.pending && !documentSaveQueue.pendingIds().length
+        result.complete && !result.failedObjectIds.size && !result.pending && !documentSaveQueue.pendingIds().length
         && !options.hasUnsavedChanges?.() && await countPendingSyncEntries(userId) === 0);
       window.dispatchEvent(new CustomEvent("webmd:storage-refresh"));
-      setSaveState(documentSaveQueue.pendingIds().length ? "saving" : result.pending ? "local" : "synced");
+      if (intent.pull && !result.complete) requestFallbackPull();
+      setSaveState(documentSaveQueue.pendingIds().length ? "saving" : result.pending || (intent.pull && !result.complete) ? "local" : "synced");
     } catch (error) {
       if (logoutStarted.current) return;
       if (!(error instanceof ApiError) && !navigator.onLine) setSaveState("offline");
@@ -384,6 +402,7 @@ export function useVaultSync(options: Options) {
       requestFallbackPull();
       throw error;
     } finally {
+      options.setBodySyncBusy(false);
       if (syncStatusTimer.current !== null) window.clearTimeout(syncStatusTimer.current);
       syncStatusTimer.current = null;
     }

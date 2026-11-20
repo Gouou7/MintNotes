@@ -4,6 +4,7 @@ import { LOG_LEVELS, type LogLevel } from "./logging.js";
 
 export interface ServerConfig {
   bodyChunkingEnabled?: boolean;
+  noteCatalogEnabled?: boolean;
   host: string;
   port: number;
   dataDirectory: string;
@@ -67,6 +68,7 @@ export function loadServerConfig(environment: NodeJS.ProcessEnv = process.env): 
   if (!host.trim() || host !== host.trim()) throw invalidSetting("HOST");
   return {
     bodyChunkingEnabled: booleanEnvironmentValue("NOTE_BODY_CHUNKING", environment.NOTE_BODY_CHUNKING, true),
+    noteCatalogEnabled: booleanEnvironmentValue("NOTE_CATALOG_SYNC", environment.NOTE_CATALOG_SYNC, true),
     host,
     port: numericEnvironmentValue("PORT", environment.PORT, 8787, portValue),
     dataDirectory: resolve(production ? "/data" : environment.MINT_NOTES_SMOKE_STORAGE_PATH ?? "./data"),

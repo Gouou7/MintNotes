@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { decodeVaultObject, encodeVaultObject, splitNoteBody } from "./noteBodies.js";
+import { decodeVaultObject, encodeVaultObject, splitNoteBody, encodeNoteCatalog, decodeNoteCatalog, catalogSourceDigest } from "./noteBodies.js";
 import { open, seal, objectAad } from "./crypto.js";
 import type { EncryptedObject, EncryptedNoteBodyBlock, VaultDocument } from "./types.js";
 
@@ -24,6 +24,19 @@ function fixture(length: number) {
   return result + "```\r\n![image](webmd-attachment:00000000-0000-4000-8000-000000000001)\n\ud800";
 }
 describe("encrypted note bodies", () => {
+  it("reads note metadata without body blocks and binds legacy summaries to the revision and ciphertext", async () => {
+    const original = document("# Secret正文\n");
+    const inline = await encode(original);
+    const catalog = await encodeNoteCatalog(key, user, inline, original);
+    expect(catalog.sourceDigest).toBe(await catalogSourceDigest(inline));
+    expect(catalog.sourceDigest).not.toBe(await catalogSourceDigest({ ...inline, ciphertext: "different" }));
+    const envelope = { ...inline, ciphertext: "", nonce: "", catalog };
+    expect(await decodeNoteCatalog(key, user, envelope)).toMatchObject({ title: original.title, kind: "note" });
+    expect(await decodeNoteCatalog(key, user, envelope)).not.toHaveProperty("markdown");
+    await expect(decodeNoteCatalog(key, user, { ...envelope, revision: 2 })).rejects.toThrow();
+    const chunked = await encode(document(fixture(150_000)));
+    expect(await decodeNoteCatalog(key, user, { ...chunked, bodyBlocks: undefined })).not.toHaveProperty("markdown");
+  });
   it("keeps oversized legacy offline proposals readable without relaxing new write limits", async () => {
     const legacy = document("x".repeat(1_600_000));
     const sealed = await seal(new TextEncoder().encode(JSON.stringify(legacy)), key, objectAad(user, noteId, "note", 1));

@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import Database from "better-sqlite3";
+import { migrationBackup } from "../server-dist/backupStorage.js";
 
 function run(args, env, ipc = false) {
   const child = spawn(process.execPath, args, {
@@ -74,7 +75,7 @@ export async function smokeServerDiagnostics(port) {
       assert.equal(started?.version, "0.36.0");
       assert.equal(started.port, port);
       assert.match(started.bootId, /^[a-f0-9]{16}$/);
-      await access(join(legacy, "backups", "pre-schema6.sqlite.sha256"));
+      await access(join(legacy, "backups", "pre-schema7.sqlite.sha256"));
       migrated.child.send("stop");
       assert.equal((await migrated.done).exitCode, 0);
       assert.deepEqual(migrated.lines().slice(-2).map((line) => line.event), ["server.stopping", "server.stopped"]);
@@ -82,6 +83,23 @@ export async function smokeServerDiagnostics(port) {
     } finally {
       if (migrated.child.exitCode === null && migrated.child.signalCode === null) migrated.child.kill("SIGKILL");
       await migrated.done;
+    }
+
+    for (const version of [6, 7]) {
+      const target = join(root, `restore-${version}`);
+      const source = join(root, `source-${version}.sqlite`);
+      await mkdir(target);
+      const original = new Database(join(legacy, "notes.sqlite"));
+      try {
+        original.pragma(`user_version = ${version}`);
+        migrationBackup(original, source);
+      } finally { original.close(); }
+      const restored = await run(["server-dist/storageCli.js", "restore", "--data-dir", target, "--source", source, "--apply"], {}).done;
+      assert.equal(restored.exitCode, 0, restored.errors);
+      assert.equal(JSON.parse(restored.output).epochRotated, true);
+      const verified = new Database(join(target, "notes.sqlite"), { readonly: true });
+      try { assert.equal(verified.pragma("user_version", { simple: true }), version); }
+      finally { verified.close(); }
     }
 
     await expectFatal(serverEnvironment(root, port, { LOG_LEVEL: "fixture-secret" }), "config", "CONFIG_INVALID");

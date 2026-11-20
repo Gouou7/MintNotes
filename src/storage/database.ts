@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
 import type { AuthEndpoint, HistoryCaptureKind, ObjectType, User } from "../types";
-import type { EncryptedNoteBodyBlock } from "@mint-notes/application-client";
+import type { EncryptedNoteBodyBlock, EncryptedNoteCatalog, SyncChange } from "@mint-notes/application-client";
 
 export interface LocalEncryptedObject {
   key: string;
@@ -17,13 +17,19 @@ export interface LocalEncryptedObject {
   serverTrashedAt?: string | null;
   bodyBlockIds?: string[];
   bodyBlocks?: EncryptedNoteBodyBlock[];
+  catalog?: EncryptedNoteCatalog;
 }
+
+export interface LocalCatalogNote extends LocalEncryptedObject { epoch: string; }
+export interface StagedSyncChange { key: string; userId: string; change: SyncChange; }
 
 export interface LocalBodyBlock extends EncryptedNoteBodyBlock { key: string; userId: string; noteId: string; uploaded?: boolean; }
 export interface RecoveryRecord {
   kind?: "conflict" | "conversion";
   key: string; userId: string; sourceId: string; copyId: string; source: OutboxEntry;
   attachments: LocalEncryptedObject[]; chunks: LocalAttachmentChunk[];
+  history?: LocalHistorySnapshot[];
+  archived?: boolean;
 }
 
 export interface ObjectUploadAttempt extends LocalEncryptedObject {
@@ -34,6 +40,7 @@ export interface ObjectUploadAttempt extends LocalEncryptedObject {
 }
 
 export interface OutboxEntry extends ObjectUploadAttempt {
+  recoveryEpoch?: string;
   /** Local writer identity; never sent to the server or included in encrypted Markdown. */
   writerId?: string;
   /** Exact encrypted request retained until its server outcome is known. */
@@ -187,6 +194,8 @@ class NotesDatabase extends Dexie {
   bodyBlocks!: EntityTable<LocalBodyBlock, "key">;
   recoveries!: EntityTable<RecoveryRecord, "key">;
   objects!: EntityTable<LocalEncryptedObject, "key">;
+  noteCatalog!: EntityTable<LocalCatalogNote, "key">;
+  syncStaging!: EntityTable<StagedSyncChange, "key">;
   outbox!: EntityTable<OutboxEntry, "key">;
   attachmentChunks!: EntityTable<LocalAttachmentChunk, "key">;
   attachmentOutbox!: EntityTable<AttachmentOutboxEntry, "key">;
@@ -302,6 +311,7 @@ class NotesDatabase extends Dexie {
       recoveries: "key, userId, sourceId, copyId"
     });
     this.version(9).stores({ deviceGrants: "userId" });
+    this.version(10).stores({ noteCatalog: "key, userId", syncStaging: "key, userId" });
   }
 }
 
@@ -349,10 +359,12 @@ export async function deleteLocalUserData(userId: string, revocation?: PendingEn
       localDb.historyIndex,
       localDb.historyOutbox,
       localDb.historyMetadataOutbox,
-      localDb.bodyBlocks, localDb.recoveries
+      localDb.bodyBlocks, localDb.recoveries, localDb.noteCatalog, localDb.syncStaging
     ],
     async () => {
       await localDb.objects.where("userId").equals(userId).delete();
+      await localDb.noteCatalog.where("userId").equals(userId).delete();
+      await localDb.syncStaging.where("userId").equals(userId).delete();
       await localDb.outbox.where("userId").equals(userId).delete();
       await localDb.attachmentChunks.where("userId").equals(userId).delete();
       await localDb.attachmentOutbox.where("userId").equals(userId).delete();
@@ -361,7 +373,7 @@ export async function deleteLocalUserData(userId: string, revocation?: PendingEn
         preferencesKey(userId),
         ignoredDecryptFailuresKey(userId),
         historySettingsKey(userId)
-        ,`sync-state:${userId}`, `sync-lease:${userId}`, `attachment-gc:${userId}`
+        ,`sync-state:${userId}`, `sync-lease:${userId}`, `attachment-gc:${userId}`, `note-catalog:${userId}`
       ]);
       await localDb.meta.where("key").startsWith(`storage-status:${userId}:`).delete();
       await localDb.meta.where("key").startsWith(`history-invalid:${userId}:`).delete();

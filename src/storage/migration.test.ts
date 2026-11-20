@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { localDb } from "./database";
 
 describe("non-destructive browser schema upgrade", () => {
-  it.each([1, 2, 3, 4, 5, 6, 7])("preserves schema %i objects, frozen requests and cursor", async (version) => {
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9])("preserves schema %i objects, frozen requests and cursor", async (version) => {
     await localDb.delete();
     const legacy = new Dexie("webmd-notes-v2");
     const schema: Record<string, string> = {
@@ -22,6 +22,11 @@ describe("non-destructive browser schema upgrade", () => {
       schema.historyIndex = "key, userId, [userId+noteId], [userId+noteId+capturedAt], historyId";
       schema.historyMetadataOutbox = "key, userId, [userId+noteId], generation";
     }
+    if (version >= 8) {
+      schema.bodyBlocks = "key, userId, [userId+noteId]";
+      schema.recoveries = "key, userId, sourceId, copyId";
+    }
+    if (version >= 9) schema.deviceGrants = "userId";
     legacy.version(version).stores(schema);
     const object = { key: "user:note", userId: "user", objectId: "note", objectType: "note", ciphertext: "legacy ciphertext", nonce: "legacy nonce", revision: 4, encryptionVersion: 1, deleted: false, updatedAt: "2026-10-28" };
     const pending = { ...object, idempotencyKey: "unchanged operation", baseRevision: 3, generation: 1, operation: "upsert", upload: { ...object, ciphertext: "frozen request", idempotencyKey: "frozen operation" } };
@@ -32,8 +37,9 @@ describe("non-destructive browser schema upgrade", () => {
     expect(await localDb.objects.get(object.key)).toEqual(object);
     expect(await localDb.outbox.get(object.key)).toEqual(pending);
     expect(await localDb.meta.get("sync-cursor:user")).toEqual({ key: "sync-cursor:user", value: "42" });
-    expect(localDb.verno).toBe(9);
+    expect(localDb.verno).toBe(10);
     expect(await localDb.bodyBlocks.count()).toBe(0);
     expect(await localDb.recoveries.count()).toBe(0);
+    expect(await localDb.noteCatalog.count()).toBe(0);
   });
 });

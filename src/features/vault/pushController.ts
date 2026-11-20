@@ -22,8 +22,8 @@ type WriteResult =
   | { objectId: string; status: "conflict"; currentRevision: number; reason: string };
 
 function payload(entry: ObjectUploadAttempt) {
-  const { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted, ownerNoteId } = entry;
-  return { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted, ...(ownerNoteId ? { ownerNoteId } : {}), ...(entry.bodyBlockIds ? { bodyBlockIds: entry.bodyBlockIds } : {}) };
+  const { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted, ownerNoteId, catalog } = entry;
+  return { objectId, objectType, ciphertext, nonce, encryptionVersion, baseRevision, idempotencyKey, deleted, ...(ownerNoteId ? { ownerNoteId } : {}), ...(entry.bodyBlockIds ? { bodyBlockIds: entry.bodyBlockIds } : {}), ...(catalog ? { catalog } : {}) };
 }
 
 /** Snapshot dependency graphs together; retain exact requests through response loss and later edits. */

@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { argon2id } from "hash-wasm";
-import { encodeVaultObject, decodeVaultObject } from "@mint-notes/application-client/crypto";
+import { encodeVaultObject, decodeVaultObject, encodeNoteCatalog, decodeNoteCatalog } from "@mint-notes/application-client/crypto";
 import { b64, fromB64, ownedBuffer, randomBytes, deriveSubkey, seal, open, sealBinary, openBinary, objectAad, attachmentChunkAad, historyAad, historyMetadataAad, createApplicationCredential, encryptAttachmentBytes, decryptAttachmentBytes } from "@mint-notes/application-client/crypto";
 
 import type { EncryptedAttachmentChunk, KdfParams, NoteHistoryMetadataPayload, NoteHistoryPayload, VaultAttachment, VaultObject } from "../types";
@@ -313,12 +313,28 @@ async function handle(operation: string, payload: any): Promise<any> {
     }
     case "encryptObject": {
       if (!vaultKey) throw new Error("Vault is locked");
-      return encodeVaultObject(vaultKey, payload.userId, payload.objectId, payload.objectType, payload.revision,
+      const key = vaultKey;
+      const encoded = await encodeVaultObject(key, payload.userId, payload.objectId, payload.objectType, payload.revision,
         payload.document, async (_note, id) => {
           const block = payload.blocks?.find((entry: { blockId: string }) => entry.blockId === id);
           if (!block) throw new Error("Note body block is not cached");
           return block;
         }, payload.previous, payload.enabled !== false);
+      if (encoded.encryptionVersion === 1 && payload.objectType === "note" && payload.catalogEnabled) {
+        const catalog = await encodeNoteCatalog(key, payload.userId, {
+          ...encoded, objectId: payload.objectId, objectType: "note", revision: payload.revision, deleted: payload.document.deleted
+        }, payload.document);
+        if (catalog.ciphertext.length <= 65_536) encoded.catalog = catalog;
+      }
+      return encoded;
+    }
+    case "encodeNoteCatalog": {
+      if (!vaultKey) throw new Error("Vault is locked");
+      return encodeNoteCatalog(vaultKey, payload.userId, payload.object, payload.document);
+    }
+    case "decodeNoteCatalog": {
+      if (!vaultKey) throw new Error("Vault is locked");
+      return decodeNoteCatalog(vaultKey, payload.userId, payload.object);
     }
     case "decryptObject": {
       if (!vaultKey) throw new Error("Vault is locked");

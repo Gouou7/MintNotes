@@ -2,8 +2,10 @@ import { localDb, localKey, type OutboxEntry } from "../../storage/database";
 
 /** Persist the source and its local attachment graph before copying or replacing anything. */
 export async function reserveConflictRecovery(userId: string, source: OutboxEntry, attachmentIds: readonly string[] = [], active: () => boolean = () => true) {
-  const key = localKey(userId, source.idempotencyKey);
-  return localDb.transaction("rw", [localDb.recoveries, localDb.objects, localDb.attachmentChunks], async () => {
+  const key = source.recoveryEpoch
+    ? localKey(userId, `epoch:${source.recoveryEpoch}:${source.objectId}:${source.revision}:${source.nonce}`)
+    : localKey(userId, source.idempotencyKey);
+  return localDb.transaction("rw", [localDb.recoveries, localDb.objects, localDb.attachmentChunks, localDb.bodyBlocks, localDb.historySnapshots], async () => {
     if (!active()) throw new DOMException("Inactive vault", "AbortError");
     const existing = await localDb.recoveries.get(key);
     if (existing) return existing;
@@ -15,7 +17,12 @@ export async function reserveConflictRecovery(userId: string, source: OutboxEntr
     const ids = new Set(attachments.map((object) => object.objectId));
     const chunks = (await localDb.attachmentChunks.where("userId").equals(userId).toArray())
       .filter((chunk) => ids.has(chunk.attachmentId));
-    const record = { key, userId, sourceId: source.objectId, source, copyId: crypto.randomUUID(), attachments, chunks };
+    const blocks = source.bodyBlockIds?.length ? await localDb.bodyBlocks.bulkGet(source.bodyBlockIds.map((id) => localKey(userId, `${source.objectId}:${id}`))) : [];
+    const history = source.recoveryEpoch && source.objectType === "note"
+      ? await localDb.historySnapshots.where("[userId+noteId]").equals([userId, source.objectId]).toArray() : undefined;
+    const record = { key, userId, sourceId: source.objectId,
+      source: { ...source, ...(blocks.length ? { bodyBlocks: blocks.flatMap((block) => block ? [{ blockId: block.blockId, ciphertext: block.ciphertext, nonce: block.nonce }] : []) } : {}) },
+      copyId: crypto.randomUUID(), attachments, chunks, ...(history?.length ? { history } : {}) };
     if (!active()) throw new DOMException("Inactive vault", "AbortError");
     await localDb.recoveries.add(record);
     return record;
@@ -37,6 +44,7 @@ export async function completeConflictRecoveries(userId: string, active: () => b
   await localDb.transaction("rw", [localDb.recoveries, localDb.objects, localDb.outbox, localDb.attachmentOutbox], async () => {
     for (const record of await localDb.recoveries.where("userId").equals(userId).toArray()) {
       if (!active()) return;
+      if (record.archived) continue;
       const copy = await localDb.objects.get(localKey(userId, record.copyId));
       if (!copy || await localDb.outbox.get(copy.key)) continue;
       const objects = await localDb.objects.where("userId").equals(userId).toArray();
@@ -44,7 +52,10 @@ export async function completeConflictRecoveries(userId: string, active: () => b
       let pending = false;
       for (const child of children) if (await localDb.outbox.get(child.key)
         || await localDb.attachmentOutbox.where("[userId+attachmentId]").equals([userId, child.objectId]).count()) pending = true;
-      if (!pending && active()) await localDb.recoveries.delete(record.key);
+      if (!pending && active()) {
+        if (record.history?.length) await localDb.recoveries.update(record.key, { archived: true });
+        else await localDb.recoveries.delete(record.key);
+      }
     }
   });
 }

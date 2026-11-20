@@ -1,4 +1,6 @@
-export type { ObjectType, VaultDocument, VaultAttachment, VaultObject, OpenDocument, OpenAttachment, EncryptedObject, SyncChange, EncryptedAttachmentChunk, HistoryCaptureKind, NoteHistoryPayload, NoteHistoryMetadataPayload, EncryptedHistoryMetadata, HistoryListItem, EncryptedHistorySnapshot, HistorySettings } from "@mint-notes/application-client";
+export type { ObjectType, VaultDocument, VaultAttachment, VaultObject, OpenAttachment, EncryptedObject, SyncChange, EncryptedAttachmentChunk, HistoryCaptureKind, NoteHistoryPayload, NoteHistoryMetadataPayload, EncryptedHistoryMetadata, HistoryListItem, EncryptedHistorySnapshot, HistorySettings } from "@mint-notes/application-client";
+export type OpenDocument = import("@mint-notes/application-client").OpenDocument & { bodyPending?: true };
+export type NoteDownloadMode = "on-demand" | "recent" | "all";
 
 export interface User {
   id: string;
@@ -76,6 +78,8 @@ export type LanguagePreference = "system" | "en" | "zh-CN" | "zh-TW";
 export type WorkspaceEditorMode = "live" | "source" | "reading";
 
 export interface UiPreferences {
+  noteDownloadMode?: NoteDownloadMode;
+  recentNoteDownloadLimit?: number;
   workspaceVersion: 1;
   activeNoteId: string | null;
   openNoteIds: string[];

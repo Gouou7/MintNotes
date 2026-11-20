@@ -101,15 +101,15 @@ try {
 
 | 工具 | 参数与结果 |
 | --- | --- |
-| `mint_notes_status` | 无参数；连接策略、离线标记、最近同步时间及待提交操作 |
+| `mint_notes_status` | 无参数；连接策略、离线标记、最近同步时间、待提交操作和旧时间线的可恢复版本 |
 | `mint_notes_list` | 可选 `parentId`（`null` 为根目录）、`tag`、`favorite`、`offset`、`limit`（1–100）；返回笔记／文件夹元数据，不含正文 |
 | `mint_notes_search` | 必填 `query`，其余过滤同上；标题、标签、正文搜索，返回最多 240 字符片段 |
-| `mint_notes_get` | `noteId`；完整 Markdown、修订、`canRead`、`canWrite`、`pending` |
+| `mint_notes_get` | `noteId` 或 `recoveryId`；完整 Markdown、修订、`canRead`、`canWrite`、`pending` |
 | `mint_notes_create` | `title`，可选 `markdown`、`parentId`、`tags`、`favorite`、`operationId` |
 | `mint_notes_update` | `noteId, expectedRevision`；可选标题、正文、文件夹、标签、收藏及 `operationId` |
 | `mint_notes_append` | `noteId, expectedRevision, markdown`，可选 `operationId`；按原样追加，不自动添加换行 |
 | `mint_notes_trash` | `noteId, expectedRevision`，可选 `operationId`；只做软删除 |
-| `mint_notes_recover` | `operationId`；用户明确要求后把过期待提交提案恢复为新UUID的独立笔记，不再次追加到原笔记 |
+| `mint_notes_recover` | `operationId` 或 `recoveryId`；经用户明确请求，将保留的提案或版本恢复为新 UUID 的独立笔记 |
 | `mint_notes_read_attachment` | `noteId, attachmentId`；原生客户端返回验证后的 `ArrayBuffer`，OpenClaw 转换为 image tool content |
 
 普通读取结果包含 `offline`、`lastSyncedAt`。写结果为 `{ operationId, objectId, status, revision?, conflictNoteId?, errorCode? }`：

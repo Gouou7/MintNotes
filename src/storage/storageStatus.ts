@@ -5,7 +5,7 @@ export async function readPendingStorageStatus(userId: string) {
   const [objects, chunks, history, metadata, recoveries] = await Promise.all([
     localDb.outbox.where("userId").equals(userId).primaryKeys(), localDb.attachmentOutbox.where("userId").equals(userId).primaryKeys(),
     localDb.historyOutbox.where("userId").equals(userId).primaryKeys(), localDb.historyMetadataOutbox.where("userId").equals(userId).primaryKeys(),
-    localDb.recoveries.where("userId").equals(userId).primaryKeys()
+    localDb.recoveries.where("userId").equals(userId).filter((record) => !record.archived).primaryKeys()
   ]);
   return { objects: objects.length + recoveries.length, attachments: new Set(chunks.map((key) => key.slice(0, key.lastIndexOf(":")))).size,
     history: new Set([...history, ...metadata]).size };
@@ -18,13 +18,13 @@ function payloadBytes(value: unknown): number {
 }
 export async function readLocalStorageStatus(userId: string): Promise<LocalStorageStatus> {
   return localDb.transaction("r", [localDb.objects, localDb.outbox, localDb.attachmentChunks, localDb.attachmentOutbox,
-    localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.bodyBlocks, localDb.recoveries], async () => {
-    const [objects, outbox, chunks, attachmentOutbox, snapshots, index, historyOutbox, metadataOutbox, bodyBlocks, recoveries] = await Promise.all([
+    localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.bodyBlocks, localDb.recoveries, localDb.noteCatalog, localDb.syncStaging], async () => {
+    const [objects, outbox, chunks, attachmentOutbox, snapshots, index, historyOutbox, metadataOutbox, bodyBlocks, recoveries, catalog, staging] = await Promise.all([
       localDb.objects, localDb.outbox, localDb.attachmentChunks, localDb.attachmentOutbox,
-      localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.bodyBlocks, localDb.recoveries
+      localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.bodyBlocks, localDb.recoveries, localDb.noteCatalog, localDb.syncStaging
     ].map((table) => table.where("userId").equals(userId).toArray()));
-    return { bytes: [...objects, ...outbox, ...chunks, ...attachmentOutbox, ...snapshots, ...index, ...historyOutbox, ...metadataOutbox, ...bodyBlocks, ...recoveries].reduce((sum, value) => sum + payloadBytes(value), 0),
-      objects: outbox.length + recoveries.length,
+    return { bytes: [...objects, ...outbox, ...chunks, ...attachmentOutbox, ...snapshots, ...index, ...historyOutbox, ...metadataOutbox, ...bodyBlocks, ...recoveries, ...catalog, ...staging].reduce((sum, value) => sum + payloadBytes(value), 0),
+      objects: outbox.length + recoveries.filter((row) => !(row as { archived?: boolean }).archived).length,
       attachments: new Set(attachmentOutbox.map((row) => (row as { attachmentId: string }).attachmentId)).size,
       history: new Set([...historyOutbox, ...metadataOutbox].map((row) => (row as { noteId: string; historyId: string }).noteId + ":" + (row as { historyId: string }).historyId)).size };
   });

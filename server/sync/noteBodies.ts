@@ -43,6 +43,14 @@ export function registerNoteBodyRoutes(app: FastifyInstance, db: AppDatabase, co
     const body = z.object({ blockIds: z.array(z.string().uuid()).min(1).max(16) }).strict().safeParse(request.body);
     if (!note.success || !body.success) return reply.code(400).send({ error: "Invalid note body block request" });
     const { userId } = scope(request);
+    const { epoch, revision } = request.query as { epoch?: string; revision?: string };
+    if (epoch !== undefined || revision !== undefined) {
+      const current = db.prepare("SELECT revision FROM objects WHERE user_id = ? AND object_id = ? AND object_type = 'note'").get(userId, note.data) as { revision: number } | undefined;
+      const timeline = db.prepare("SELECT epoch FROM sync_state WHERE user_id = ?").get(userId) as { epoch: string } | undefined;
+      if (!timeline || timeline.epoch !== epoch || !current || current.revision !== Number(revision)) {
+        return reply.code(409).send({ code: "SYNC_RECONCILE_REQUIRED", error: "Object version changed" });
+      }
+    }
     const blocks = body.data.blockIds.map((id) => db.prepare("SELECT block_id AS blockId, ciphertext, nonce FROM note_body_blocks WHERE user_id = ? AND note_id = ? AND block_id = ?").get(userId, note.data, id));
     if (blocks.some((block) => !block)) return reply.code(404).send({ error: "Note body block not found", code: "BODY_BLOCK_MISSING" });
     return { blocks };

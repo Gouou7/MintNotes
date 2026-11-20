@@ -7,7 +7,7 @@ import type { ToastTone } from "../../components/Toast";
 import { exportMarkdownZip, exportSingleMarkdown } from "../importExport";
 import { importFiles, ImportFailure, type ImportNote, type ImportResult } from "../importPlan";
 import { imageAttachmentId, markdownImages } from "../markdownImages";
-import { selectionRoots } from "../tree";
+import { descendantsOf, selectionRoots } from "../tree";
 import type { NameReservations } from "../siblingNames";
 import { makeDocument } from "./documentFactory";
 import { persistImportedDocument } from "./importPersistence";
@@ -23,6 +23,7 @@ interface Options {
   publish: (document: OpenDocument, attachments: OpenAttachment[]) => void;
   onImported: (objectId: string) => void | Promise<void>;
   onResult: () => void;
+  ensureBody?: (note: OpenDocument, signal: AbortSignal) => Promise<OpenDocument>;
   beforeExport?: () => Promise<void>;
   notify: (text: string, tone?: ToastTone) => void;
   t: Translate;
@@ -108,12 +109,21 @@ export function useImportExport(options: Options) {
     const prompt = roots.length > 1 ? t("notice.exportSelectionConfirm", { count: roots.length }) : t("notice.exportConfirm", { label: root ? `“${root.title}”` : t("notice.allNotes") });
     const action = t("storage.exportNotes");
     if (!await current.current.confirm({ title: action, message: prompt, action }, signal) || !isActive()) return;
-    const latestDocuments = current.current.getDocuments();
+    let latestDocuments = current.current.getDocuments();
     const latestRoots = ids ? selectionRoots(latestDocuments, ids) : [];
     if (latestRoots.length !== roots.length || roots.some((id) => !latestRoots.includes(id))) return;
-    const latestRoot = root && latestDocuments.find((entry) => entry.objectId === root.objectId);
+    let latestRoot = root && latestDocuments.find((entry) => entry.objectId === root.objectId);
     if (root && (!latestRoot || latestRoot.title !== root.title || latestRoot.deleted !== root.deleted)) return;
     try {
+      const selected = new Set(ids ? latestRoots.flatMap((id) => [...descendantsOf(latestDocuments, id)]) : latestDocuments.map((entry) => entry.objectId));
+      for (const document of latestDocuments) if (document.kind === "note" && !document.deleted && document.bodyPending && selected.has(document.objectId)) {
+        if (!current.current.ensureBody) throw new Error("The note body has not been verified");
+        await current.current.ensureBody(document, signal);
+      }
+      if (!isActive()) return;
+      latestDocuments = current.current.getDocuments();
+      if (latestDocuments.some((entry) => !entry.deleted && entry.bodyPending && selected.has(entry.objectId))) throw new Error("A note revision changed");
+      latestRoot = root && latestDocuments.find((entry) => entry.objectId === root.objectId);
       if (latestRoot?.kind === "note" && !markdownImages(latestRoot.markdown).some((image) => imageAttachmentId(image.url))) {
         exportSingleMarkdown(latestRoot);
       } else {

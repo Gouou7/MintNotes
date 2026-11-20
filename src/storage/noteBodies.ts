@@ -16,7 +16,7 @@ export async function persistBodyBlocks(userId: string, noteId: string, encoding
     if (!old) await localDb.bodyBlocks.add({ ...block, key, userId, noteId });
   }
 }
-export async function ensureBodyBlocks(userId: string, object: EncryptedObject, active: () => boolean, api: ApiClient["api"]): Promise<EncryptedNoteBodyBlock[]> {
+export async function ensureBodyBlocks(userId: string, object: EncryptedObject, active: () => boolean, api: ApiClient["api"], expected?: { epoch: string; signal?: AbortSignal }): Promise<EncryptedNoteBodyBlock[]> {
   if (object.encryptionVersion !== 2) return [];
   const fetched: EncryptedNoteBodyBlock[] = [];
   const ids = object.bodyBlockIds;
@@ -26,8 +26,9 @@ export async function ensureBodyBlocks(userId: string, object: EncryptedObject, 
   for (let offset = 0; offset < missing.length; offset += 16) {
     if (!active()) throw new DOMException("Inactive vault", "AbortError");
     const wanted = missing.slice(offset, offset + 16);
-    const response = await api<{ blocks: EncryptedNoteBodyBlock[] }>(`/api/notes/${object.objectId}/body-blocks/read`,
-      { method: "POST", body: JSON.stringify({ blockIds: wanted }) });
+    const version = expected ? `?epoch=${encodeURIComponent(expected.epoch)}&revision=${object.revision}` : "";
+    const response = await api<{ blocks: EncryptedNoteBodyBlock[] }>(`/api/notes/${object.objectId}/body-blocks/read${version}`,
+      { method: "POST", body: JSON.stringify({ blockIds: wanted }), signal: expected?.signal });
     if (!active()) throw new DOMException("Inactive vault", "AbortError");
     if (!Array.isArray(response.blocks) || response.blocks.length !== wanted.length
       || response.blocks.some((block, index) => block.blockId !== wanted[index])) throw new Error("Invalid body block response");

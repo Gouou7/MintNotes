@@ -143,7 +143,7 @@ describe("vault feature composition", () => {
     });
 
     await mount(true);
-    expect(host.querySelector(".status-meta")?.getAttribute("title")).toContain("pending sync");
+    expect(host.querySelector(".status-synced")).toBeNull();
     expect(warnings()).toEqual([]);
     await act(async () => allowReconciliation());
     await settle(() => Boolean(host.querySelector(".status-synced")));

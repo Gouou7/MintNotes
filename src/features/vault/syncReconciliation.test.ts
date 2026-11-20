@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { operationId } from "@mint-notes/application-client";
 import { localDb, localKey, cursorKey } from "../../storage/database";
 import { prepareVaultSynchronization } from "./syncReconciliation";
-import type { PullControllerDependencies } from "./pullController";
+import { pullVaultChanges, SyncCursorResetRequired, type PullControllerDependencies } from "./pullController";
 import type { VaultDocument } from "../../types";
 
 const mocks = vi.hoisted(() => ({ api: vi.fn(), lease: vi.fn(), decrypt: vi.fn() }));
@@ -74,6 +74,44 @@ describe("v2 full reconciliation", () => {
     expect(await prepareVaultSynchronization(deps)).toBe(true);
     expect(deps.preserveConflict).toHaveBeenCalledOnce();
     expect((await localDb.objects.get(local.key))?.ciphertext).toContain("restored branch");
+  });
+  it("rejects a page from another epoch before changing the only local version", async () => {
+    await localDb.objects.put(local);
+    await localDb.meta.put({ key: cursorKey(userId), value: "1" });
+    mocks.api.mockResolvedValue({ epoch: "restored", changes: [{ ...local, sequence: 2, ciphertext: "restored" }], cursor: 2, hasMore: false });
+    await expect(pullVaultChanges({ ...dependencies(), epoch: "original" })).rejects.toBeInstanceOf(SyncCursorResetRequired);
+    expect(await localDb.objects.get(local.key)).toEqual(local);
+    expect((await localDb.meta.get(cursorKey(userId)))?.value).toBe("1");
+  });
+  it("recovers an acknowledged note absent from a restored backup", async () => {
+    await localDb.objects.put(local);
+    await localDb.meta.put({ key: `sync-state:${userId}`, value: JSON.stringify({ epoch: "previous" }) });
+    mocks.api.mockImplementation(async (path: string) => path.includes("/status") ? { epoch: "restored", head: 8, floor: 0, reconcile: true, lease: "lease" }
+      : path.includes("/snapshot") ? { epoch: "restored", objects: [], next: null }
+      : { epoch: "restored", changes: [], cursor: 8, hasMore: false });
+    const deps = dependencies();
+    expect(await prepareVaultSynchronization(deps)).toBe(true);
+    expect(await localDb.objects.get(local.key)).toBeUndefined();
+    expect(deps.preserveConflict).toHaveBeenCalledOnce();
+    expect((await localDb.outbox.toArray())[0]?.ciphertext).toContain("unique local text");
+  });
+  it("journals the owning draft before a prior page removes its cached attachment", async () => {
+    const attachmentId = "22222222-2222-4222-8222-222222222222";
+    const attachment = { ...local, key: localKey(userId, attachmentId), objectId: attachmentId, objectType: "attachment" as const, ownerNoteId: id };
+    await localDb.objects.bulkPut([local, attachment]);
+    await localDb.outbox.put({ ...local, baseRevision: 1, operation: "upsert", idempotencyKey: operationId(), generation: 1 });
+    const deps = dependencies();
+    const preserve = deps.preserveConflict;
+    deps.preserveConflict = vi.fn(async (entry) => {
+      if (vi.mocked(deps.preserveConflict).mock.calls.length === 1) expect(await localDb.objects.get(attachment.key)).toEqual(attachment);
+      return preserve(entry);
+    });
+    const purge = (object: typeof local | typeof attachment, sequence: number) => ({ ...object, sequence, purged: true, serverUpdatedAt: local.updatedAt });
+    const result = await pullVaultChanges({ ...deps, initialCursor: 0, fetchPage: async (cursor) => cursor === 0
+      ? { changes: [purge(attachment, 1)], cursor: 1, hasMore: true }
+      : { changes: [purge(local, 2)], cursor: 2, hasMore: false } });
+    expect(result.complete).toBe(true);
+    expect(deps.preserveConflict).toHaveBeenCalledTimes(2);
   });
   it("preserves a fresh edit at the same server revision through a complete scan", async () => {
     await localDb.objects.put(local);

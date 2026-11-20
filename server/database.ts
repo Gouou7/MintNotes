@@ -10,7 +10,8 @@ import type { ReportStartup } from "./logging.js";
 export type AppDatabase = Database.Database;
 export type RegistrationRole = "admin" | "user";
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
+export const supportedStorageSchema = (version: number) => Number.isInteger(version) && version >= 2 && version <= SCHEMA_VERSION;
 
 export function runRegistrationTransaction<T>(
   db: AppDatabase,
@@ -49,7 +50,7 @@ function initializeDatabase(db: AppDatabase, dataDirectory: string, reportStartu
 
   const version = Number(db.pragma("user_version", { simple: true }));
   const hasLegacyTables = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get());
-  if (version !== 0 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== SCHEMA_VERSION) {
+  if (version !== 0 && !supportedStorageSchema(version)) {
     throw Object.assign(new Error(`Unsupported database schema ${version}`), { code: "SCHEMA_UNSUPPORTED" });
   }
   if (version === 0 && hasLegacyTables) {
@@ -59,7 +60,7 @@ function initializeDatabase(db: AppDatabase, dataDirectory: string, reportStartu
   if (version > 0 && version < SCHEMA_VERSION) {
     const schemas = { fromSchema: version, toSchema: SCHEMA_VERSION };
     reportStartup?.({ phase: "migration_backup", ...schemas });
-    migrationBackup(db, join(dataDirectory, "backups", "pre-schema6.sqlite"));
+    migrationBackup(db, join(dataDirectory, "backups", `pre-schema${SCHEMA_VERSION}.sqlite`));
     reportStartup?.({ phase: "migration_apply", ...schemas });
   }
   const initialize = db.transaction(() => {
@@ -352,7 +353,17 @@ function initializeDatabase(db: AppDatabase, dataDirectory: string, reportStartu
       secret_hash TEXT NOT NULL,
       expires_at TEXT NOT NULL
     );
-    PRAGMA user_version = 6;
+    CREATE TABLE IF NOT EXISTS note_catalog (
+      user_id TEXT NOT NULL,
+      note_id TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      ciphertext TEXT NOT NULL,
+      nonce TEXT NOT NULL,
+      source_digest TEXT NOT NULL,
+      PRIMARY KEY (user_id, note_id),
+      FOREIGN KEY (user_id, note_id) REFERENCES objects(user_id, object_id) ON DELETE CASCADE
+    );
+    PRAGMA user_version = ${SCHEMA_VERSION};
   `);
   });
   initialize.immediate();

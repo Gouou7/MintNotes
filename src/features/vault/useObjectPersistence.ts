@@ -55,6 +55,7 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
     options: ObjectPersistenceOptions = {}
   ): Promise<T> => {
     if (!dependencies.isActive()) return object;
+    if (object.kind !== "attachment" && object.bodyPending) throw new Error("The note body has not been verified");
     dependencies.setSaveState("saving");
     const key = localKey(dependencies.userId, object.objectId);
     const coordinated = await coordinator.current.enqueue(key, async () => {
@@ -83,6 +84,7 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
         nonce: encrypted.nonce,
         encryptionVersion: encrypted.encryptionVersion,
         ...(encrypted.bodyBlockIds ? { bodyBlockIds: encrypted.bodyBlockIds } : {}),
+        ...(encrypted.catalog ? { catalog: encrypted.catalog } : {}),
         revision: intendedRevision,
         deleted: next.deleted,
         updatedAt: next.updatedAt,
@@ -97,7 +99,7 @@ export function useObjectPersistence(dependencies: ObjectPersistenceDependencies
         writerId: writerId.current,
         ...(pending?.upload ? { upload: pending.upload } : {})
       };
-      await persistWithCacheRecovery(dependencies.userId, () => localDb.transaction("rw", localDb.objects, localDb.outbox, localDb.bodyBlocks, localDb.recoveries, localDb.attachmentChunks, async () => {
+      await persistWithCacheRecovery(dependencies.userId, () => localDb.transaction("rw", [localDb.objects, localDb.outbox, localDb.bodyBlocks, localDb.recoveries, localDb.attachmentChunks, localDb.historySnapshots], async () => {
         if (!dependencies.isActive()) return;
         const latest = await localDb.outbox.get(key);
         const previous = await localDb.objects.get(key);

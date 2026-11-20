@@ -107,7 +107,7 @@ export async function countPendingSyncEntries(userId: string): Promise<number> {
     localDb.attachmentOutbox.where("userId").equals(userId).count(),
     localDb.historyOutbox.where("userId").equals(userId).count(),
     localDb.historyMetadataOutbox.where("userId").equals(userId).count(),
-    localDb.recoveries.where("userId").equals(userId).count()
+    localDb.recoveries.where("userId").equals(userId).filter((record) => !record.archived).count()
   ]);
   return objects + attachments + history + historyMetadata + recoveries;
 }

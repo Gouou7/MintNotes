@@ -60,8 +60,15 @@ export interface EncryptedObject {
   serverTrashedAt?: string | null;
   ownerNoteId?: string;
   bodyBlockIds?: string[];
+  catalog?: EncryptedNoteCatalog;
   /** Encrypted local dependencies, excluded from object wire writes. */
   bodyBlocks?: EncryptedNoteBodyBlock[];
+}
+
+export interface EncryptedNoteCatalog {
+  ciphertext: string;
+  nonce: string;
+  sourceDigest: string;
 }
 
 export interface EncryptedNoteBodyBlock {
@@ -76,12 +83,14 @@ export interface EncryptedObjectEncoding {
   encryptionVersion: number;
   bodyBlockIds?: string[];
   bodyBlocks?: EncryptedNoteBodyBlock[];
+  catalog?: EncryptedNoteCatalog;
 }
 
 export interface SyncChange extends EncryptedObject {
   historyVersion?: number;
   sequence: number;
   serverUpdatedAt: string;
+  bodyDeferred?: boolean;
 }
 
 export interface EncryptedAttachmentChunk {

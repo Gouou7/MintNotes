@@ -9,6 +9,8 @@ import type { useWorkspaceSelection } from "./useWorkspaceSelection";
 
 export const DEFAULT_PREFERENCES: UiPreferences = {
   ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
+  noteDownloadMode: "all",
+  recentNoteDownloadLimit: 20,
   theme: "system",
   fontSize: DEFAULT_FONT_SIZE,
   wrapCodeBlocks: DEFAULT_WRAP_CODE_BLOCKS,

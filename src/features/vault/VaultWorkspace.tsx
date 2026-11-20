@@ -51,6 +51,8 @@ import { useSiblingNameRepair } from "./useSiblingNameRepair";
 import { syncStatusDetailText, useSyncStatus, visibleSyncStatusText } from "./useSyncStatus";
 import { useToastNotifications } from "./useToastNotifications";
 import { useVaultDerivedView } from "./useVaultDerivedView";
+import { useVaultBodies } from "./useVaultBodies";
+import { readSyncEpoch } from "./syncReconciliation";
 import { useVaultDocuments } from "./useVaultDocuments";
 import { useVaultHistory } from "./useVaultHistory";
 import { useVaultHistoryActions } from "./useVaultHistoryActions";
@@ -194,7 +196,11 @@ export function VaultWorkspace({
 
   const indexedActiveDocument = activeId ? documentIndexRef.current.get(activeId) : null;
 
-  const activeDocument = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : null;
+  const selectedNote = indexedActiveDocument?.kind === "note" ? indexedActiveDocument : undefined;
+  const hasCompleteCatalog = async () => workspaceLoaded && (!serverSessionVerifiedRef.current || Boolean(await readSyncEpoch(user.id)));
+  const bodies = useVaultBodies({ userId: user.id, model, enabled: workspaceLoaded && visible, active: selectedNote,
+    online: serverSessionVerified, preferences, isActive: () => !logoutStarted.current });
+  const activeDocument = selectedNote && !selectedNote.bodyPending ? selectedNote : null;
 
   const activeDocumentLocked = isLockedNote(activeDocument);
 
@@ -292,6 +298,8 @@ export function VaultWorkspace({
     commitTreeRename,
     renameDocument
   } = useVaultDocuments({
+    ensureBody: bodies.ensureBody,
+    hasCompleteCatalog,
     model,
     selection,
     scheduleHistoryEdit,
@@ -333,6 +341,7 @@ export function VaultWorkspace({
   });
 
   const sync = useVaultSync({
+    setBodySyncBusy: bodies.setSyncBusy,
     endpointId: endpoint.id,
     hasUnsavedChanges: () => syncStatus.failedLocalObjectIds.size > 0 || Boolean(selection.activeIdRef.current && documentIndexRef.current.get(selection.activeIdRef.current)?.title !== titleDraft),
     model,
@@ -427,6 +436,8 @@ export function VaultWorkspace({
   });
 
   const { purging, setDeletedMany, requestPurgeDocuments, requestClearTrash } = useVaultTrash({
+    ensureBody: bodies.ensureBody,
+    hasCompleteCatalog,
     confirm: requestConfirmation,
     model,
     selection,
@@ -549,10 +560,21 @@ export function VaultWorkspace({
   } = tree;
 
   const importExport = useImportExport({
+    ensureBody: bodies.ensureBody,
     confirm: requestConfirmation,
     userId: user.id, getDocuments: () => documentsRef.current, getAttachments: () => attachmentsRef.current,
     reservations: nameReservations.current, isActive: () => !logoutStarted.current,
-    beforeExport: async () => { if (selection.activeIdRef.current) { if (documentIndexRef.current.get(selection.activeIdRef.current)?.title !== titleDraft && !await commitDocumentTitle(selection.activeIdRef.current, titleDraft)) throw new Error("Export title is not saved"); await flushDocument(selection.activeIdRef.current); } await documentSaveQueue.flushAll(); await objectPersistence.drainAll(); },
+    beforeExport: async () => {
+      if (!await hasCompleteCatalog()) throw new Error("The note catalog is incomplete");
+      const id = selection.activeIdRef.current;
+      const selected = id && documentIndexRef.current.get(id);
+      if (id && selected && !selected.bodyPending) {
+        if (selected.title !== titleDraft && !await commitDocumentTitle(id, titleDraft)) throw new Error("Export title is not saved");
+        await flushDocument(id);
+      }
+      await documentSaveQueue.flushAll();
+      await objectPersistence.drainAll();
+    },
     readAttachment: (attachment, isActive, signal) => decryptAttachmentBlob(user.id, attachment, isActive, serverSessionVerifiedRef.current, signal, services),
     publish: (document, importedAttachments) => {
       for (const attachment of importedAttachments) upsertAttachment(attachment);
@@ -573,7 +595,7 @@ export function VaultWorkspace({
   const closingWorkspace = useWorkspaceClose({
     cancelConfirmation: confirmation.cancel,
     logoutStarted, importExport, finishHistorySession, documentSaveQueue, objectPersistence,
-    showMessage, t, stopSync, registerClose
+    showMessage, t, stopSync: () => { bodies.stop(); stopSync(); }, registerClose
   });
   useWorkspaceAutoLock({
     minutes: credential?.autoLockMinutes, userId: user.id, endpointId: endpoint.id, onLock
@@ -587,7 +609,7 @@ export function VaultWorkspace({
     setOutlineOpen(false);
   };
 
-  if (loading) return <main className="loading-shell"><Spinner className="spinner" aria-hidden="true" /><p>{t("app.loadingNotes")}</p></main>;
+  if (loading && !documents.length) return <main className="loading-shell"><Spinner className="spinner" aria-hidden="true" /><p>{t("app.loadingNotes")}</p></main>;
 
   if (loadFailure) return <main className="loading-shell" role="alert"><p>{loadFailure}</p></main>;
 
@@ -616,6 +638,7 @@ export function VaultWorkspace({
   const settingsDialog = settingsOpen && visible && !closingWorkspace && (
     <Suspense fallback={<SettingsPanelLoading onClose={() => setSettingsOpen(false)} />}>
       <SettingsPanel confirmationDialog={confirmDialog} storageStatus={storageStatus} user={{ ...user, displayName }}
+        noteBodies={{ total: documents.filter((entry) => entry.kind === "note").length, ready: documents.filter((entry) => entry.kind === "note" && !entry.bodyPending).length, catalogLoading: loading }}
         endpoint={endpoint} credential={credential} serverSessionVerified={serverSessionVerified} onCredentialChange={onCredentialChange}
         preferences={preferences} onPreferences={setPreferences} onClose={() => setSettingsOpen(false)} onLogout={onLogout}
         onImport={handleImport} onExport={() => exportRoot(null)}
@@ -660,6 +683,13 @@ export function VaultWorkspace({
           <TreeLevel menuActions={menuActions} childrenByParent={treeChildren} parentId={null} activeId={activeId} selectedIds={selectedIds} expanded={expanded} draggingIds={treeDraggingIds} dropTarget={treeDropTarget} renamingDocumentId={renamingDocumentId} onDropTarget={updateTreeDropTarget} onSelect={selectTreeEntry} onContext={openTreeContext} onDragSelection={beginTreeDrag} onDragFinish={finishTreeDrag} onMove={moveDocuments} onRenameCommit={commitTreeRename} onRenameCancel={() => setRenamingDocumentId(null)} />
           {!searched.length && <p className="empty-tree">{t("app.noMatches")}</p>}
         </SidebarContent>
+        {search.trim() && (bodies.searching || documents.some((entry) => !entry.deleted && entry.bodyPending)) && <div className="px-2 pb-2 text-sm text-muted-foreground">
+          <p>{t("storage.searchCoverage")}</p>
+          <Button variant="ghost" size="sm" disabled={!bodies.online && !bodies.searching}
+            onClick={() => void bodies.searchAll().catch(() => showMessage(t("storage.searchBodiesFailed"), "warning"))}>
+            {t(bodies.searching ? "storage.cancelBodySearch" : "storage.searchAllBodies")}
+          </Button>
+        </div>}
       </WorkspaceSidebar>
       {inTreeDrawer && (settingsDialog || confirmDialog)}
       </WorkspaceDrawer>
@@ -671,13 +701,13 @@ export function VaultWorkspace({
         toolbar={<>
         <NoteToolbar
           titleInput={titleInput}
-          active={Boolean(activeDocument)}
-          title={historyPreview?.payload.title ?? titleDraft}
-          titleReadOnly={Boolean(historyPreview) || editorMode.readOnly}
+          active={Boolean(selectedNote)}
+          title={historyPreview?.payload.title ?? (selectedNote?.bodyPending ? selectedNote.title : titleDraft)}
+          titleReadOnly={Boolean(selectedNote?.bodyPending || historyPreview) || editorMode.readOnly}
           locked={activeDocumentLocked}
           historyPreview={Boolean(historyPreview)}
           sourceMode={editorMode.sourceMode}
-          readOnly={editorMode.readOnly}
+          readOnly={Boolean(selectedNote?.bodyPending) || editorMode.readOnly}
           onOpenLeft={() => compactTree ? setTreeOpen(true) : setPreferences({ ...preferences, treeCollapsed: false })}
           onTitleChange={(event) => setTitleDraft(event.target.value)}
           onTitleBlur={(event) => {
@@ -725,7 +755,11 @@ export function VaultWorkspace({
           {activeDocument ? historyPreview
             ? <ReadingEditor markdown={historyPreview.payload.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />
             : <MarkdownEditor ref={documentNavigation.editorSurface} key={editorSessionId} documentKey={activeDocument.objectId} markdown={activeDocument.markdown} mode={effectiveMode} readOnly={editorMode.readOnly} wrapCodeBlocks={preferences.wrapCodeBlocks} emptyHint={t("app.emptyNoteHint")} attachmentUrls={attachmentUrls} attachmentsPending={attachmentUrlController.loading} onChange={noteEditor.onChange} onWikiLink={openWikiLink} onImageInsert={noteEditor.onImageInsert} onInsertionCancelled={() => showMessage(t("editor.insertRetry"), "critical")} onModeChange={editorMode.onModeChange} />
-            : <EmptyEditor />}
+            : selectedNote?.bodyPending ? <div className="empty-editor" role="status">
+              <p>{t(!bodies.online ? bodies.offlineBody ? "storage.bodyCachedVersion" : "storage.bodyOffline" : bodies.activeFailed ? "storage.bodyFailed" : "storage.bodyLoading")}</p>
+              {!!bodies.offlineBody && !bodies.online && <ReadingEditor markdown={bodies.offlineBody.markdown} wrapCodeBlocks={preferences.wrapCodeBlocks} attachmentUrls={attachmentUrls} onWikiLink={openWikiLink} />}
+              {bodies.online && bodies.activeFailed && <Button variant="secondary" onClick={bodies.retryActive}>{t("storage.bodyRetry")}</Button>}
+            </div> : <EmptyEditor />}
       </NotePaneLayout>
 
       <PaneResizer label={t("app.resizeRight")} side="right" value={preferences.outlineWidth} min={OUTLINE_WIDTH_MIN} max={OUTLINE_WIDTH_MAX} onResize={(outlineWidth) => setPreferences((current) => ({ ...current, outlineWidth }))} />

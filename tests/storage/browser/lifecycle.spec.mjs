@@ -78,7 +78,7 @@ test("protected history follows a note through trash, restore and permanent clea
     await page.getByRole("tab", { name: "Notes and storage", exact: true }).click();
   }
   await expect(page.locator(".settings-page-title")).toHaveText("Notes and storage");
-  await expect(page.locator(".note-storage-settings > .settings-group > .settings-card")).toHaveCount(4);
+  await expect(page.locator(".note-storage-settings > .settings-group > .settings-card")).toHaveCount(5);
   const counts = page.locator(".note-storage-settings .storage-pending-item");
   await expect(counts).toHaveCount(3);
   expect(await counts.evaluateAll((items) => {

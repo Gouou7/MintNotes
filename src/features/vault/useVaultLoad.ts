@@ -1,3 +1,5 @@
+import { normalizeRecentBodyLimit } from "./useVaultBodies";
+import { mergeByObjectId } from "../syncCoordinator";
 import { useWorkspaceServices } from "../session/workspaceServices";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useState } from "react";
@@ -77,11 +79,12 @@ export function useVaultLoad(options: Options) {
     let cancelled = false;
     void (async () => {
       try {
-        const [stored, pending, storedPreferences, ignoredFailuresRecord] = await Promise.all([
+        const [stored, pending, storedPreferences, ignoredFailuresRecord, catalog] = await Promise.all([
           localDb.objects.where("userId").equals(userId).toArray(),
           localDb.outbox.where("userId").equals(userId).toArray(),
           localDb.meta.get(preferencesKey(userId)),
-          localDb.meta.get(ignoredDecryptFailuresKey(userId))
+          localDb.meta.get(ignoredDecryptFailuresKey(userId)),
+          localDb.noteCatalog.where("userId").equals(userId).toArray()
         ]);
         if (cancelled || logoutStarted.current) return;
         let storedUiPreferences: Partial<UiPreferences> = {};
@@ -114,6 +117,8 @@ export function useVaultLoad(options: Options) {
           ...DEFAULT_PREFERENCES,
           ...storedUiPreferences,
           ...deviceWorkspace,
+          noteDownloadMode: storedUiPreferences.noteDownloadMode === "on-demand" || storedUiPreferences.noteDownloadMode === "recent" ? storedUiPreferences.noteDownloadMode : "all",
+          recentNoteDownloadLimit: normalizeRecentBodyLimit(storedUiPreferences.recentNoteDownloadLimit),
           fontSize: normalizeFontSize(storedUiPreferences.fontSize),
           wrapCodeBlocks: normalizeWrapCodeBlocks(storedUiPreferences.wrapCodeBlocks),
           language: isLanguagePreference(storedUiPreferences.language) ? storedUiPreferences.language : languagePreference
@@ -124,10 +129,27 @@ export function useVaultLoad(options: Options) {
           await localDb.meta.put({ key: preferencesKey(userId), value: JSON.stringify(loadedPreferences) });
         });
         pendingByKey.delete(localKey(userId, WORKSPACE_OBJECT_ID));
-        replaceDocuments(opened.documents.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID));
+
+        const projected = [];
+        for (const entry of catalog) {
+          if (pendingByKey.has(entry.key)) continue;
+          try {
+            const metadata = await cryptoClient.decodeNoteCatalog(userId, entry);
+            projected.push({ ...metadata, markdown: "", bodyPending: true as const, objectId: entry.objectId,
+              serverRevision: entry.revision, serverTrashedAt: entry.serverTrashedAt, dirty: false });
+          } catch {
+            // Leave the encrypted record available for the next reconciliation.
+          }
+        }
+        if (cancelled || logoutStarted.current) return;
+        if (serverSessionVerifiedRef.current) setSaveState("local");
+        replaceDocuments(mergeByObjectId(opened.documents.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID), projected));
         replaceAttachments(opened.attachments);
         setPreferences(loadedPreferences);
         setPreferencesLoaded(true);
+        if (!selection.activeIdRef.current) {
+          activateDocument(resolveDeviceActiveNoteId(loadedPreferences.activeNoteId, documentsRef.current));
+        }
 
         const failedLocalObjects = opened.failed.filter((object) => object.objectId !== WORKSPACE_OBJECT_ID);
         const storedContent = stored.filter((entry) => entry.objectId !== WORKSPACE_OBJECT_ID);
@@ -143,7 +165,7 @@ export function useVaultLoad(options: Options) {
         const repairableFailures = failedLocalObjects.filter((object) => !ignoredFailureFingerprints.has(decryptFailureFingerprint(object)));
         const canRepairFromServer = repairableFailures.length > 0
           && repairableFailures.every((object) => !pendingByKey.has(object.key));
-        const mustVerifyServerFromStart = canRepairFromServer || (storedContent.length === 0 && pendingContent.length === 0);
+        const mustVerifyServerFromStart = canRepairFromServer || (storedContent.length === 0 && pendingContent.length === 0 && catalog.length === 0);
         if (mustVerifyServerFromStart && !logoutStarted.current) await localDb.meta.put({ key: cursorKey(userId), value: "0" });
         const attemptedInitialPull = serverSessionVerifiedRef.current;
         let initialPullFailure: { error: unknown } | undefined;
@@ -193,7 +215,7 @@ export function useVaultLoad(options: Options) {
 
         const verifiedEmptyVault = shouldCreateWelcomeNote({
           serverSessionVerified: attemptedInitialPull && serverSessionVerifiedRef.current,
-          storedContentCount: storedContent.length,
+          storedContentCount: storedContent.length + catalog.length,
           pendingContentCount: pendingContent.length,
           initialPullFailed: Boolean(initialPullFailure),
           failedRemoteCount: failedRemoteIds.size
@@ -201,7 +223,7 @@ export function useVaultLoad(options: Options) {
         if (verifiedEmptyVault && !documentsRef.current.some((entry) => entry.kind === "note" && !entry.deleted)) {
           await createDocument("note", t("app.welcomeTitle"), null, t("app.welcomeMarkdown"), { activate: false });
         }
-        const restoredActiveId = resolveDeviceActiveNoteId(loadedPreferences.activeNoteId, documentsRef.current);
+        const restoredActiveId = resolveDeviceActiveNoteId(selection.activeIdRef.current ?? loadedPreferences.activeNoteId, documentsRef.current);
         if (restoredActiveId) {
           activateDocument(restoredActiveId);
         } else {

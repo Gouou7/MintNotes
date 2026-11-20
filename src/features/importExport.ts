@@ -25,6 +25,7 @@ function relativeAttachmentPath(notePath: string, attachmentPath: string): strin
 }
 
 export function exportSingleMarkdown(document: OpenDocument) {
+  if (document.bodyPending) throw new Error("The note body has not been verified");
   download(new Blob([document.markdown], { type: "text/markdown;charset=utf-8" }), `${safeName(document.title)}.md`);
 }
 
@@ -105,6 +106,7 @@ export async function exportMarkdownZip(
   const exportedAttachments = new Map<string, { path: string; originalName: string; ownerNoteId: string }>();
   const usedPaths = new Set<string>();
   for (const document of active.filter((item) => item.kind === "note" && includedIds.has(item.objectId))) {
+    if (document.bodyPending) throw new Error("The note body has not been verified");
     let markdown = document.markdown;
     const notePath = pathFor(document);
     const replacements = new Map<ReturnType<typeof markdownImages>[number], string>();

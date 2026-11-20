@@ -1,4 +1,5 @@
 import { createApp as createProductionApp, type ServerDependencies } from "./app.js";
+import { syncState } from "./sync/lifecycle.js";
 import { issueSyncLease } from "./sync/protocol.js";
 import { hashToken } from "./security.js";
 
@@ -15,7 +16,11 @@ export async function createApp(options: ServerDependencies = {}) {
       const bearer = /^Bearer ([0-9a-f-]{36})\./.exec(headers.authorization ?? headers.Authorization ?? "");
       const row = cookie ? db.prepare("SELECT user_id FROM sessions WHERE token_hash = ?").get(hashToken(cookie[1]))
         : bearer ? db.prepare("SELECT user_id FROM application_connections WHERE connection_id = ?").get(bearer[1]) : undefined;
-      if (row) headers["x-webmd-sync-lease"] = issueSyncLease(db, (row as { user_id: string }).user_id);
+      if (row) {
+        const userId = (row as { user_id: string }).user_id;
+        headers["x-webmd-sync-lease"] = issueSyncLease(db, userId);
+        headers["x-webmd-sync-epoch"] ??= syncState(db, userId).epoch;
+      }
     }
     return inject({ ...input, headers });
   }) as typeof app.inject;

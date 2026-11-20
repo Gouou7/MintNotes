@@ -1,4 +1,4 @@
-import type { EncryptedNoteBodyBlock, EncryptedObject, EncryptedObjectEncoding, VaultObject, VaultDocument } from "./types.js";
+import type { EncryptedNoteBodyBlock, EncryptedNoteCatalog, EncryptedObject, EncryptedObjectEncoding, VaultObject, VaultDocument } from "./types.js";
 import { b64, fromB64, open, seal, objectAad, ownedBuffer } from "./crypto.js";
 import { validateVaultObject } from "./policy.js";
 
@@ -12,6 +12,8 @@ interface Manifest { format: "json-string-utf8-v1"; length: number; digest: stri
 const manifestAad = (user: string, note: string, revision: number) => `webmd:${user}:${note}:note-manifest:schema:v1:encryption:v2:r${revision}`;
 const blockAad = (user: string, note: string, id: string) => `webmd:${user}:${note}:${id}:note-body-block:schema:v1:encryption:v1:r1`;
 const hash = async (bytes: Uint8Array) => b64(new Uint8Array(await crypto.subtle.digest("SHA-256", ownedBuffer(bytes))));
+const catalogAad = (user: string, note: string, revision: number, digest: string) => `webmd:${user}:${note}:note-catalog:v1:r${revision}:${digest}`;
+export const catalogSourceDigest = (object: Pick<EncryptedObject, "ciphertext" | "nonce">) => hash(new TextEncoder().encode(JSON.stringify([object.ciphertext, object.nonce])));
 
 /** Adapted from MIT LiveSync Commonlib 3e1a5e1dfd7d8da14009b66c7a3b8155986f92cb.
  * The continuous 48-byte window is independent of the last chunk boundary.
@@ -52,6 +54,35 @@ async function readManifest(key: Uint8Array, user: string, object: EncryptedObje
       || body.blocks.reduce((sum, entry) => sum + entry.length, 0) !== body.length) fail();
     return { value, body };
   } finally { bytes.fill(0); }
+}
+
+export async function encodeNoteCatalog(key: Uint8Array, user: string, object: EncryptedObject, document: VaultDocument): Promise<EncryptedNoteCatalog> {
+  const sourceDigest = await catalogSourceDigest(object);
+  const { markdown: _markdown, attachmentIds: _attachments, ...metadata } = document;
+  const bytes = new TextEncoder().encode(JSON.stringify(metadata));
+  try { return { ...await seal(bytes, key, catalogAad(user, object.objectId, object.revision, sourceDigest)), sourceDigest }; }
+  finally { bytes.fill(0); }
+}
+
+export async function decodeNoteCatalog(key: Uint8Array, user: string, object: EncryptedObject): Promise<Omit<VaultDocument, "markdown">> {
+  if (object.objectType !== "note" || !Number.isSafeInteger(object.revision) || object.revision < 1) fail();
+  let metadata: unknown;
+  if (object.encryptionVersion === 2) {
+    const { value } = await readManifest(key, user, object);
+    const { body: _body, ...rest } = value;
+    metadata = { ...rest, schemaVersion: 2 };
+  } else {
+    const catalog = object.catalog;
+    if (object.encryptionVersion !== 1 || !catalog || !/^[A-Za-z0-9_-]{43}$/.test(catalog.sourceDigest)) return fail();
+    const bytes = await open(catalog.ciphertext, catalog.nonce, key, catalogAad(user, object.objectId, object.revision, catalog.sourceDigest));
+    try { metadata = { ...JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), attachmentIds: [] }; }
+    finally { bytes.fill(0); }
+  }
+  if (!metadata || typeof metadata !== "object" || "markdown" in metadata) return fail();
+  const document = validateVaultObject({ ...metadata, markdown: "" }, "note") as VaultDocument;
+  if (document.deleted !== object.deleted) fail();
+  const { markdown: _markdown, ...result } = document;
+  return result;
 }
 
 export async function decodeVaultObject(key: Uint8Array, user: string, object: EncryptedObject, read: BodyBlockReader): Promise<VaultObject> {

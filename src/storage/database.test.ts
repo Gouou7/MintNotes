@@ -32,6 +32,8 @@ describe("deleteLocalUserData", () => {
       [localDb.historyOutbox, deleteHistoryOutbox],
       [localDb.historyMetadataOutbox, deleteHistoryMetadataOutbox],
       [localDb.bodyBlocks, vi.fn().mockResolvedValue(undefined)],
+      [localDb.noteCatalog, vi.fn().mockResolvedValue(undefined)],
+      [localDb.syncStaging, vi.fn().mockResolvedValue(undefined)],
       [localDb.recoveries, vi.fn().mockResolvedValue(undefined)]
     ] as const;
     const equalsSpies: ReturnType<typeof vi.fn>[] = [];
@@ -62,7 +64,7 @@ describe("deleteLocalUserData", () => {
       cursorKey(userId),
       preferencesKey(userId),
       ignoredDecryptFailuresKey(userId),
-      historySettingsKey(userId), `sync-state:${userId}`, `sync-lease:${userId}`, `attachment-gc:${userId}`
+      historySettingsKey(userId), `sync-state:${userId}`, `sync-lease:${userId}`, `attachment-gc:${userId}`, `note-catalog:${userId}`
     ]);
     expect(deleteCredential).toHaveBeenCalledWith(userId);
     expect(deleteGrant).toHaveBeenCalledWith(userId);

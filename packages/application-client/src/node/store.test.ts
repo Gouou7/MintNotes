@@ -27,7 +27,7 @@ describe("native encrypted cache compatibility", () => {
     expect(resource.store.operation(operation.operationId)).toEqual(operation);
     expect(resource.store.object(note.objectId)).toEqual(note);
     expect(resource.store.get("cursor")).toBe(42);
-    expect(resource.store.db.prepare("PRAGMA user_version").get()?.user_version).toBe(3);
+    expect(resource.store.db.prepare("PRAGMA user_version").get()?.user_version).toBe(4);
   });
   it("compares immutable ciphertext independently of JSON property order", () => {
     const { resource } = fixture();
@@ -36,6 +36,18 @@ describe("native encrypted cache compatibility", () => {
     expect(() => resource.store.putBodyBlock(note, { nonce: block.nonce, ciphertext: block.ciphertext, blockId: block.blockId })).not.toThrow();
     expect(() => resource.store.putBodyBlock(note, { ...block, ciphertext: "different" })).toThrow("Immutable body block mismatch");
     expect(resource.store.bodyBlock(note, block.blockId)).toEqual(block);
+  });
+  it("archives confirmed branches atomically when replacing the cache after a server restore", () => {
+    const { resource } = fixture();
+    const store = resource.store, objectId = crypto.randomUUID();
+    const old = { objectId, objectType: "note" as const, ciphertext: "previous body", nonce: "nonce", encryptionVersion: 1, revision: 1, deleted: false };
+    store.putObject(old);
+    store.set("epoch", "old");
+    store.stageReconciliation([{ ...old, ciphertext: "replacement body" }], true);
+    store.completeReconciliation(1, "restored", true);
+    const [archived] = store.recoveries();
+    expect(store.recovery(String(archived.recoveryId))?.object).toEqual(old);
+    expect(store.object(objectId)?.ciphertext).toBe("replacement body");
   });
   it("keeps the previous cache and cursor when SQLITE_FULL interrupts atomic proposal staging", () => {
     const { resource } = fixture();

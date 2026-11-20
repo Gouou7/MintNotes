@@ -33,6 +33,7 @@ vi.mock("../../storage/database", () => {
       historyIndex: table,
       historyOutbox: table,
       historyMetadataOutbox: table,
+      noteCatalog: table,
       transaction: vi.fn(async (...args: unknown[]) => {
         const operation = args.at(-1) as () => Promise<void>;
         return operation();

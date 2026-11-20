@@ -17,12 +17,16 @@ async function request(url, init = {}) {
   const cookie = headers.get("Cookie");
   const context = cookie && sessions.get(cookie.match(/webmd_session=([^;]+)/)?.[1]);
   if (context) headers.set("X-WebMD-Session", context);
-  if (cookie && ["PUT", "POST"].includes(init.method) && /\/api\/(?:objects|attachments)\//.test(String(url))) {
+  if (cookie && ["PUT", "POST", "DELETE"].includes(init.method) && /\/api\/(?:objects|attachments|notes)\/|\/api\/account\/note-history/.test(String(url))) {
     if (!leases.has(cookie)) {
       const status = await nativeFetch(`${baseUrl}/api/sync/status`, { headers: { Cookie: cookie, "X-WebMD-Protocol": "3", "X-WebMD-Session": context } });
-      if (status.ok) leases.set(cookie, (await status.json()).lease);
+      if (status.ok) leases.set(cookie, await status.json());
     }
-    if (leases.has(cookie)) headers.set("X-WebMD-Sync-Lease", leases.get(cookie));
+    const sync = leases.get(cookie);
+    if (sync) {
+      headers.set("X-WebMD-Sync-Lease", sync.lease);
+      headers.set("X-WebMD-Sync-Epoch", sync.epoch);
+    }
   }
   const response = await nativeFetch(url, { ...init, headers });
   const issued = responseCookies(response).webmd_session;

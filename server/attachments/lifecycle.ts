@@ -4,6 +4,7 @@ import type { AppDatabase } from "../database.js";
 import { authenticatedScope, type ScopeResolver, type AuthGuard } from "../types.js";
 import { syncState, SYNC_LIFETIME_MS } from "../sync/lifecycle.js";
 import { purgeUnusedAttachment } from "../trash.js";
+import { validSyncMutation } from "../sync/protocol.js";
 
 export function registerAttachmentLifecycle(app: FastifyInstance, options: { db: AppDatabase; authenticate: AuthGuard; apiPrefix?: string; scope?: ScopeResolver }) {
   const { db, authenticate } = options;
@@ -49,6 +50,7 @@ export function registerAttachmentLifecycle(app: FastifyInstance, options: { db:
     const { userId } = scope(request);
     const input = parsed.data;
     return db.transaction(() => {
+      if (!validSyncMutation(db, userId, request.headers)) return reply.code(409).send({ error: "Synchronization epoch changed", code: "SYNC_RECONCILE_REQUIRED" });
       const owner = db.prepare("SELECT complete, version FROM ownership_state WHERE user_id = ?").get(userId) as { complete: number; version: number } | undefined;
       const note = db.prepare("SELECT revision, deleted FROM objects WHERE user_id = ? AND object_id = ? AND object_type = 'note'").get(userId, input.noteId) as { revision: number; deleted: number } | undefined;
       const history = db.prepare("SELECT version FROM history_versions WHERE user_id = ? AND note_id = ?").get(userId, input.noteId) as { version: number } | undefined;
@@ -68,7 +70,7 @@ export function registerAttachmentLifecycle(app: FastifyInstance, options: { db:
             ownership_version=excluded.ownership_version, proposed_at=excluded.proposed_at`).run(userId, id, input.noteId, input.noteRevision, input.historyVersion, input.ownershipVersion, new Date().toISOString());
       }
       return { purged, graceDays: 90 };
-    })();
+    }).immediate();
   });
   app.get(`${prefix}/attachments/ownership`, { preHandler: authenticate }, async (request) => {
     const { userId } = scope(request);

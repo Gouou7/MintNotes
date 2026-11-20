@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useRef } from "react";
 import type { RequestConfirmation } from "../../components/Confirmation";
 import { translateError, UserFacingError, type Translate } from "../../i18n";
+import { readSyncEpoch } from "./syncReconciliation";
 import { historyKey, localDb } from "../../storage/database";
 import type { HistoryListItem, OpenDocument } from "../../types";
 import { attachmentIdsIn } from "../attachments";
@@ -167,6 +168,8 @@ export function useVaultHistoryActions(options: Options) {
   const deleteHistorySnapshot = async (item: HistoryListItem) => {
     if (!canDeleteHistory(item)) return showMessage(t("notice.historyProtectedDeleteBlocked"));
     if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
+    const epoch = await readSyncEpoch(userId);
+    if (!epoch) return showMessage(t("notice.purgeWaitSync"));
     const action = t("history.deleteOne");
     if (!await confirm({ title: action, message: t("history.deleteConfirm", { date: formatNoteTime(item.capturedAt) }), action, destructive: true })) return;
     if (!sessionVerified() || activeIdRef.current !== item.noteId) return;
@@ -175,7 +178,7 @@ export function useVaultHistoryActions(options: Options) {
       ?? (latest.historyPreview?.item.historyId === item.historyId ? latest.historyPreview.item : null);
     if (!current || !canDeleteHistory(current)) return;
     try {
-      await api(`/api/notes/${item.noteId}/history/${item.historyId}`, { method: "DELETE" });
+      await api(`/api/notes/${item.noteId}/history/${item.historyId}`, { method: "DELETE", headers: { "X-WebMD-Sync-Epoch": epoch } });
       const key = historyKey(userId, item.noteId, item.historyId);
       await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
         await localDb.historySnapshots.delete(key);
@@ -195,6 +198,8 @@ export function useVaultHistoryActions(options: Options) {
   const clearCurrentHistory = async () => {
     if (!activeDocument) return;
     if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
+    const epoch = await readSyncEpoch(userId);
+    if (!epoch) return showMessage(t("notice.purgeWaitSync"));
     const action = t("history.clearNote");
     if (!await confirm({ title: action, message: t("history.clearNoteConfirm", { title: activeDocument.title }), action, destructive: true })) return;
     if (!sessionVerified() || activeIdRef.current !== activeDocument.objectId || !documentIndexRef.current.has(activeDocument.objectId)) return;
@@ -203,7 +208,7 @@ export function useVaultHistoryActions(options: Options) {
         .where("[userId+noteId]").equals([userId, activeDocument.objectId]).toArray())
         .some((entry) => entry.protected !== undefined);
       if (protectionPending) return showMessage(t("notice.historyProtectionSyncRequired"));
-      const cleared = await api<{ deleted: number; preserved: number; clearedBefore: string }>(`/api/notes/${activeDocument.objectId}/history`, { method: "DELETE" });
+      const cleared = await api<{ deleted: number; preserved: number; clearedBefore: string }>(`/api/notes/${activeDocument.objectId}/history`, { method: "DELETE", headers: { "X-WebMD-Sync-Epoch": epoch } });
       await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
         const [snapshots, indexes] = await Promise.all([
           localDb.historySnapshots.where("[userId+noteId]").equals([userId, activeDocument.objectId]).toArray(),
@@ -231,13 +236,15 @@ export function useVaultHistoryActions(options: Options) {
 
   const clearAllHistory = async () => {
     if (!serverSessionVerified) return showMessage(t("notice.historyDeleteOnlineOnly"));
+    const epoch = await readSyncEpoch(userId);
+    if (!epoch) return showMessage(t("notice.purgeWaitSync"));
     const action = t("settings.historyClearAll");
     if (!await confirm({ title: action, message: t("history.clearAllConfirm"), action, destructive: true }) || !sessionVerified()) return;
     try {
       const protectionPending = (await localDb.historyMetadataOutbox.where("userId").equals(userId).toArray())
         .some((entry) => entry.protected !== undefined);
       if (protectionPending) return showMessage(t("notice.historyProtectionSyncRequired"));
-      const cleared = await api<{ deleted: number; preserved: number; clearedBefore: string }>("/api/account/note-history", { method: "DELETE" });
+      const cleared = await api<{ deleted: number; preserved: number; clearedBefore: string }>("/api/account/note-history", { method: "DELETE", headers: { "X-WebMD-Sync-Epoch": epoch } });
       await localDb.transaction("rw", localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, async () => {
         const [snapshots, indexes] = await Promise.all([
           localDb.historySnapshots.where("userId").equals(userId).toArray(),

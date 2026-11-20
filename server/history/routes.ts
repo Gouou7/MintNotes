@@ -1,6 +1,7 @@
 import { userQuotas, capacityBytes, admitHistoryGrowth, StorageQuotaError } from "../storageQuota.js";
 import { metadataUsage } from "../storageUsage.js";
 import { historyChanged, operationKeySchema, requireLiveOperation } from "../sync/lifecycle.js";
+import { validSyncMutation } from "../sync/protocol.js";
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -430,17 +431,20 @@ export function registerHistoryRoutes(
     const params = z.object({ noteId: z.string().uuid(), historyId: z.string().uuid() }).safeParse(request.params);
     if (!params.success) return reply.code(404).send({ error: "History snapshot not found" });
     const { userId } = getScope(request);
-    const row = db.prepare(`
-      SELECT is_protected FROM note_history WHERE user_id = ? AND note_id = ? AND history_id = ?
-    `).get(userId, params.data.noteId, params.data.historyId) as { is_protected: number } | undefined;
-    if (!row) return reply.code(404).send({ error: "History snapshot not found" });
-    if (row.is_protected) {
-      return reply.code(409).send({ error: "Protected history cannot be deleted", code: "PROTECTED_HISTORY" });
-    }
-    db.prepare("DELETE FROM note_history WHERE user_id = ? AND note_id = ? AND history_id = ?")
-      .run(userId, params.data.noteId, params.data.historyId);
-    historyChanged(db, userId, params.data.noteId);
-    return { ok: true };
+    return db.transaction(() => {
+      if (!validSyncMutation(db, userId, request.headers)) return reply.code(409).send({ error: "Synchronization epoch changed", code: "SYNC_RECONCILE_REQUIRED" });
+      const row = db.prepare(`
+        SELECT is_protected FROM note_history WHERE user_id = ? AND note_id = ? AND history_id = ?
+      `).get(userId, params.data.noteId, params.data.historyId) as { is_protected: number } | undefined;
+      if (!row) return reply.code(404).send({ error: "History snapshot not found" });
+      if (row.is_protected) {
+        return reply.code(409).send({ error: "Protected history cannot be deleted", code: "PROTECTED_HISTORY" });
+      }
+      db.prepare("DELETE FROM note_history WHERE user_id = ? AND note_id = ? AND history_id = ?")
+        .run(userId, params.data.noteId, params.data.historyId);
+      historyChanged(db, userId, params.data.noteId);
+      return { ok: true };
+    }).immediate();
   });
 
   if (!applicationOnly) app.delete(`${apiPrefix}/notes/:noteId/history`, { preHandler: authenticate }, async (request, reply) => {
@@ -453,6 +457,7 @@ export function registerHistoryRoutes(
     if (!note) return reply.code(404).send({ error: "Note not found" });
     const clearedBefore = new Date().toISOString();
     const result = db.transaction(() => {
+      if (!validSyncMutation(db, userId, request.headers)) return null;
       db.prepare(`
         INSERT INTO note_history_clear_markers (user_id, note_id, cleared_before)
         VALUES (?, ?, ?)
@@ -466,14 +471,16 @@ export function registerHistoryRoutes(
       `).get(userId, noteId.data) as { count: number }).count);
       historyChanged(db, userId, noteId.data);
       return { deleted, preserved };
-    })();
+    }).immediate();
+    if (!result) return reply.code(409).send({ error: "Synchronization epoch changed", code: "SYNC_RECONCILE_REQUIRED" });
     return { ok: true, ...result, clearedBefore };
   });
 
-  if (!applicationOnly) app.delete(`${apiPrefix}/account/note-history`, { preHandler: authenticate }, async (request) => {
+  if (!applicationOnly) app.delete(`${apiPrefix}/account/note-history`, { preHandler: authenticate }, async (request, reply) => {
     const { userId } = getScope(request);
     const clearedBefore = new Date().toISOString();
     const result = db.transaction(() => {
+      if (!validSyncMutation(db, userId, request.headers)) return null;
       db.prepare("UPDATE users SET history_cleared_before = ? WHERE id = ?").run(clearedBefore, userId);
       db.prepare("DELETE FROM note_history_clear_markers WHERE user_id = ?").run(userId);
       const deleted = db.prepare("DELETE FROM note_history WHERE user_id = ? AND is_protected = 0").run(userId).changes;
@@ -482,7 +489,8 @@ export function registerHistoryRoutes(
       `).get(userId) as { count: number }).count);
       for (const row of db.prepare("SELECT object_id FROM objects WHERE user_id = ? AND object_type = 'note'").all(userId) as Array<{ object_id: string }>) historyChanged(db, userId, row.object_id);
       return { deleted, preserved };
-    })();
+    }).immediate();
+    if (!result) return reply.code(409).send({ error: "Synchronization epoch changed", code: "SYNC_RECONCILE_REQUIRED" });
     return { ok: true, ...result, clearedBefore };
   });
 }

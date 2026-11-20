@@ -8,7 +8,7 @@ describe("vault synchronization execution", () => {
       isActive: () => true,
       countPending: vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(0),
       push: vi.fn(async () => { order.push("push"); }),
-      pull: vi.fn(async () => { order.push("pull"); return new Set<string>(); })
+      pull: vi.fn(async () => { order.push("pull"); return { failedObjectIds: new Set<string>(), complete: true }; })
     };
     expect(await executeVaultSync(dependencies, { pull: true, push: false })).toMatchObject({ pending: 0 });
     expect(order).toEqual(["push", "pull"]);

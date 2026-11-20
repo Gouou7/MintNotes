@@ -19,8 +19,10 @@ async function register(page, username, displayName) {
 async function sidebarAction(page, name) {
   const action = page.locator(".side-footer").getByRole("button", { name, exact: true });
   const shell = page.locator(".app-shell");
+  await expect(shell).toBeVisible();
   if (page.viewportSize().width < 700 && !await shell.evaluate((element) => element.classList.contains("tree-open"))) {
     await page.getByRole("button", { name: "Open left sidebar", exact: true }).click();
+    await expect(shell).toHaveClass(/tree-open/);
   }
   await action.click();
 }
@@ -92,7 +94,7 @@ test("switches remembered accounts across windows and requires the target PIN of
   const popover = await openAccountPopover(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
   const trigger = page.locator(".side-footer").getByRole("button", { name: "Switch account", exact: true });
-  const current = popover.getByRole("button", { name: "Alpha Current", exact: true });
+  const current = popover.getByRole("button", { name: "Alpha Current account", exact: true });
   const login = popover.getByRole("button", { name: "Sign in to another account", exact: true });
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
   await expect(trigger.locator("svg.lucide-users-round-collaboration")).toHaveCount(1);
@@ -107,6 +109,11 @@ test("switches remembered accounts across windows and requires the target PIN of
   await expect(loginIcon).toBeVisible();
   await expect(loginIcon).toHaveCSS("width", await accountIcon.evaluate((icon) => getComputedStyle(icon).width));
   await expect(login).toHaveCSS("font", await current.evaluate((row) => getComputedStyle(row).font));
+  await expect.poll(async () => {
+    const anchor = await trigger.boundingBox();
+    const panel = await popover.boundingBox();
+    return anchor && panel ? anchor.y - panel.y - panel.height : -Infinity;
+  }).toBeGreaterThanOrEqual(0);
   const anchor = await trigger.boundingBox();
   const panel = await popover.boundingBox();
   expect(panel.y).toBeGreaterThanOrEqual(0);
@@ -138,7 +145,7 @@ test("switches remembered accounts across windows and requires the target PIN of
 
   await openAccountPopover(page);
   await expect(popover.locator(".account-picker-list .account-picker-name")).toHaveText(["Alpha", "Beta"]);
-  await expect(popover.getByRole("button", { name: "Beta Current", exact: true })).toHaveAttribute("aria-current", "true");
+  await expect(popover.getByRole("button", { name: "Beta Current account", exact: true })).toHaveAttribute("aria-current", "true");
   await page.keyboard.press("Escape");
 
   await setPin(page, pin);

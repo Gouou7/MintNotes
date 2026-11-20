@@ -21,11 +21,11 @@ export function useSiblingNameRepair(options: Options) {
     previous.current = documents;
     const namesChanged = !before || before.length !== documents.length || documents.some((document, index) => {
       const old = before[index];
-      return old.objectId !== document.objectId || old.title !== document.title || old.parentId !== document.parentId || old.deleted !== document.deleted;
+      return old.objectId !== document.objectId || old.title !== document.title || old.parentId !== document.parentId || old.deleted !== document.deleted || old.bodyPending !== document.bodyPending;
     });
     // Body edits and save acknowledgements must not sort/check every namespace again.
     if (!namesChanged) return;
-    const repairs = siblingNameRepairs(documents);
+    const repairs = siblingNameRepairs(documents).filter((repair) => !documents.find((entry) => entry.objectId === repair.objectId)?.bodyPending);
     for (const repair of repairs) {
       const document = documents.find((entry) => entry.objectId === repair.objectId)!;
       // The save queue publishes synchronously and retries failures without replacing newer body edits.

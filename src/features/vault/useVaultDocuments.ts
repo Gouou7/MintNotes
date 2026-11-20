@@ -29,6 +29,8 @@ export type CreateDocumentOptions = { focusName?: boolean; activate?: boolean };
 
 interface Options {
   model: ReturnType<typeof useVaultModel>;
+  ensureBody: (note: OpenDocument) => Promise<OpenDocument>;
+  hasCompleteCatalog: () => Promise<boolean>;
   selection: ReturnType<typeof useWorkspaceSelection>;
   scheduleHistoryEdit: (before: OpenDocument, after: OpenDocument) => void;
   queueDocument: (document: OpenDocument, delay?: number, maxWait?: number) => void;
@@ -92,11 +94,16 @@ export function useVaultDocuments(options: Options) {
   const { documentIndexRef, documentsRef, upsertDocument, attachmentIndexRef, upsertAttachment } = model;
   const { setSelectedIds, selectionAnchor, activeIdRef, activateDocument } = selection;
 
+  const ready = async (note: OpenDocument) => {
+    try { return note.bodyPending ? await options.ensureBody(note) : note; }
+    catch { showMessage(t("storage.bodyFailed"), "warning"); return null; }
+  };
+
   const pendingTitleSave = useRef<Promise<boolean>>(Promise.resolve(true));
 
   const patchDocument = (objectId: string, patch: Partial<OpenDocument>, delay = 500) => {
     const current = documentIndexRef.current.get(objectId);
-    if (!current || isLockedNote(current) || !documentPatchChanges(current, patch)) return;
+    if (!current || current.bodyPending || isLockedNote(current) || !documentPatchChanges(current, patch)) return;
     const next = { ...current, ...patch, dirty: true };
     if (next.markdown !== current.markdown || next.title !== current.title) next.updatedAt = new Date().toISOString();
     scheduleHistoryEdit(current, next);
@@ -207,9 +214,17 @@ export function useVaultDocuments(options: Options) {
   const moveDocuments = async (objectIds: string[], parentId: string | null, beforeId: string | null = null) => {
     const roots = selectionRoots(documentsRef.current, objectIds);
     if (!roots.length) return;
-    const moving = roots.map((id) => documentsRef.current.find((entry) => entry.objectId === id)).filter(Boolean) as OpenDocument[];
+    let moving = roots.map((id) => documentsRef.current.find((entry) => entry.objectId === id)).filter(Boolean) as OpenDocument[];
     const movingTreeIds = new Set(roots.flatMap((id) => [...descendantsOf(documentsRef.current, id)]));
     if (parentId && movingTreeIds.has(parentId)) return showMessage(t("notice.batchMoveIntoDescendant"));
+    const toMove = preferences.sortMode === "manual"
+      ? reorderedSiblingBatch(documentsRef.current, roots, parentId, resolveManualDropBeforeId(documentsRef.current, movingTreeIds, parentId, beforeId)).map((change) => change.objectId)
+      : roots;
+    for (const id of toMove) {
+      const entry = documentIndexRef.current.get(id);
+      if (entry?.bodyPending && !await ready(entry)) return;
+    }
+    moving = roots.flatMap((id) => { const entry = documentIndexRef.current.get(id); return entry ? [entry] : []; });
     const conflict = nameReservations.current.claim(documentsRef.current, moving.map((entry) => ({ ...entry, parentId })));
     if (conflict) return showMessage(t("notice.batchMoveNameConflict", { title: conflict.title }));
     try {
@@ -240,6 +255,7 @@ export function useVaultDocuments(options: Options) {
 
   const addAttachment = async (noteId: string, file: File) => {
     const editableNote = documentIndexRef.current.get(noteId);
+    if (editableNote?.bodyPending) throw new UserFacingError("storage.bodyFailed");
     if (editableNote && isLockedNote(editableNote)) throw new UserFacingError("notice.noteLockedEdit", { title: editableNote.title });
     showMessage(t("notice.encryptingAttachment", { name: file.name }), "info");
     const attachment = await createLocalAttachment(userId, noteId, file, () => !logoutStarted.current, services.cryptoClient);
@@ -252,7 +268,8 @@ export function useVaultDocuments(options: Options) {
   };
 
   const duplicateDocument = async (objectId: string, parentOverride?: string | null): Promise<string | null> => {
-    const source = documentsRef.current.find((entry) => entry.objectId === objectId);
+    const entry = documentsRef.current.find((note) => note.objectId === objectId);
+    const source = entry && await ready(entry);
     if (!source) return null;
     if (source.kind === "folder") {
       const folderId = await createDocument("folder", `${source.title} ${t("app.copySuffix")}`, parentOverride === undefined ? source.parentId : parentOverride);
@@ -275,6 +292,14 @@ export function useVaultDocuments(options: Options) {
 
   const duplicateDocuments = async (objectIds: string[]) => {
     const roots = selectionRoots(documentsRef.current, objectIds);
+    if (roots.some((id) => documentIndexRef.current.get(id)?.kind === "folder") && !await options.hasCompleteCatalog()) {
+      showMessage(t("storage.loadingCatalog"));
+      return;
+    }
+    const included = new Set(roots.flatMap((id) => [...descendantsOf(documentsRef.current, id)]));
+    for (const note of documentsRef.current) {
+      if (included.has(note.objectId) && !note.deleted && note.bodyPending && !await ready(note)) return;
+    }
     const created: string[] = [];
     for (const objectId of roots) {
       const id = await duplicateDocument(objectId);
@@ -289,7 +314,8 @@ export function useVaultDocuments(options: Options) {
 
   const pinDocuments = async (objectIds: string[], pinned: boolean) => {
     for (const objectId of objectIds) {
-      const target = documentsRef.current.find((entry) => entry.objectId === objectId && !entry.deleted);
+      const entry = documentsRef.current.find((note) => note.objectId === objectId && !note.deleted);
+      const target = entry && await ready(entry);
       if (target && target.favorite !== pinned) {
         queueDocument({ ...target, favorite: pinned, dirty: true }, 0);
         await flushDocument(objectId);
@@ -299,7 +325,8 @@ export function useVaultDocuments(options: Options) {
   };
 
   const updateDocumentTitle = async (objectId: string, value: string): Promise<boolean> => {
-    const target = documentsRef.current.find((entry) => entry.objectId === objectId);
+    const entry = documentsRef.current.find((note) => note.objectId === objectId);
+    const target = entry && await ready(entry);
     if (!target) return false;
     if (isLockedNote(target)) {
       showMessage(t("notice.noteLockedEdit", { title: target.title }));
@@ -335,7 +362,8 @@ export function useVaultDocuments(options: Options) {
   };
 
   const toggleNoteLock = async (noteId: string) => {
-    const initial = documentIndexRef.current.get(noteId);
+    const entry = documentIndexRef.current.get(noteId);
+    const initial = entry && await ready(entry);
     if (!initial || initial.kind !== "note") return;
     try {
       if (noteId === activeIdRef.current && !isLockedNote(initial)) {

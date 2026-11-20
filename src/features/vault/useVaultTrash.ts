@@ -6,6 +6,7 @@ import { translateError, UserFacingError, type Translate } from "../../i18n";
 import type { OpenDocument } from "../../types";
 import { NameReservations } from "../siblingNames";
 import { descendantsOf, lockedNoteInSelection, selectionRoots } from "../tree";
+import { readSyncEpoch } from "./syncReconciliation";
 import { hasPendingLocalObjectGraph } from "./localPurge";
 import type { useDocumentSaveQueue } from "./useDocumentSaveQueue";
 import type { useObjectPersistence } from "./useObjectPersistence";
@@ -16,6 +17,8 @@ import type { useWorkspaceSelection } from "./useWorkspaceSelection";
 interface Options {
   confirm: RequestConfirmation;
   model: ReturnType<typeof useVaultModel>;
+  ensureBody?: (note: OpenDocument) => Promise<OpenDocument>;
+  hasCompleteCatalog?: () => Promise<boolean>;
   selection: ReturnType<typeof useWorkspaceSelection>;
   showMessage: ReturnType<typeof useToastNotifications>["showMessage"];
   t: Translate;
@@ -72,6 +75,12 @@ export function useVaultTrash(options: Options) {
     }
     const ids = new Set(roots.flatMap((objectId) => [...descendantsOf(documentsRef.current, objectId)]));
     if (!ids.size) return;
+    try {
+      for (const document of documentsRef.current) if (ids.has(document.objectId) && document.bodyPending) {
+        if (!options.ensureBody) throw new UserFacingError("storage.bodyFailed");
+        await options.ensureBody(document);
+      }
+    } catch { showMessage(t("storage.bodyFailed"), "warning"); return; }
     const restoredItem = !deleted && roots.length === 1
       ? documentsRef.current.find((entry) => entry.objectId === roots[0] && entry.deleted)
       : undefined;
@@ -127,25 +136,32 @@ export function useVaultTrash(options: Options) {
     const label = targets.length === 1
       ? t("notice.purgeSingleLabel", { title: targets[0].title })
       : t("notice.purgeMultipleLabel", { count: targets.length });
+    const epoch = await readSyncEpoch(userId);
+    if (!epoch) return showMessage(t("notice.purgeWaitSync"));
     const version = targetVersion(roots);
     const action = t("settings.permanentDelete");
-    if (await confirm({ title: action, message: t("notice.purgeConfirm", { label }), action, destructive: true })) await purgeTrash(roots, version);
+    if (await confirm({ title: action, message: t("notice.purgeConfirm", { label }), action, destructive: true })) await purgeTrash(roots, version, epoch);
   };
 
   const requestClearTrash = async () => {
+    if (options.hasCompleteCatalog && !await options.hasCompleteCatalog()) return showMessage(t("storage.loadingCatalog"));
     if (!documentsRef.current.some((entry) => entry.deleted) && !attachmentsRef.current.some((entry) => entry.deleted)) return;
+    const epoch = await readSyncEpoch(userId);
+    if (!epoch) return showMessage(t("notice.purgeWaitSync"));
     const version = targetVersion(null);
     const action = t("settings.clearTrash");
-    if (await confirm({ title: action, message: t("notice.clearTrashConfirm"), action, destructive: true })) await purgeTrash(null, version);
+    if (await confirm({ title: action, message: t("notice.clearTrashConfirm"), action, destructive: true })) await purgeTrash(null, version, epoch);
   };
 
-  const purgeTrash = async (objectIds: string[] | null, confirmedVersion?: string) => {
+  const purgeTrash = async (objectIds: string[] | null, confirmedVersion?: string, confirmedEpoch?: string) => {
     if (purgingRef.current) return;
     if (!sessionVerified.current) return showMessage(t("notice.purgeOnlineOnly"));
     if (confirmedVersion !== undefined && targetVersion(objectIds) !== confirmedVersion) return showMessage(t("notice.purgeTargetsChanged"));
     purgingRef.current = true;
     setPurging(true);
     try {
+      const epoch = await readSyncEpoch(userId);
+      if (!epoch || (confirmedEpoch && confirmedEpoch !== epoch) || (confirmedVersion !== undefined && targetVersion(objectIds) !== confirmedVersion)) throw new UserFacingError("notice.purgeTargetsChanged");
       const { noteIds, targets } = purgeTargets(objectIds);
       if (!targets.length) return;
       const targetIds = new Set(targets.map((entry) => entry.objectId));
@@ -162,7 +178,7 @@ export function useVaultTrash(options: Options) {
         for (let offset = 0; offset < requests.length; offset += 1000) {
           await api("/api/objects/purge", {
             method: "POST",
-            headers: { "X-WebMD-Sync-Client": syncClientId.current },
+            headers: { "X-WebMD-Sync-Client": syncClientId.current, "X-WebMD-Sync-Epoch": epoch },
             body: JSON.stringify({ objects: requests.slice(offset, offset + 1000).map((entry) => ({ objectId: entry.objectId, baseRevision: entry.serverRevision })) })
           });
         }

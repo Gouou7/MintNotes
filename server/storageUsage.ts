@@ -28,6 +28,11 @@ export function storageUsage(db: AppDatabase, userId: string) {
       THEN LENGTH(CAST(b.ciphertext AS BLOB)) + LENGTH(CAST(b.nonce AS BLOB)) ELSE 0 END), 0) AS trash
     FROM note_body_blocks b WHERE b.user_id = ?`).get(userId) as { bytes: number; trash: number };
   row.contentBytes += body.bytes; row.noteBytes += body.bytes;
+  const catalog = db.prepare(`SELECT COALESCE(SUM(LENGTH(c.ciphertext)+LENGTH(c.nonce)+LENGTH(c.source_digest)), 0) AS bytes,
+    COALESCE(SUM(CASE WHEN o.deleted = 1 THEN LENGTH(c.ciphertext)+LENGTH(c.nonce)+LENGTH(c.source_digest) ELSE 0 END), 0) AS trash
+    FROM note_catalog c JOIN objects o ON o.user_id = c.user_id AND o.object_id = c.note_id WHERE c.user_id = ?`).get(userId) as { bytes: number; trash: number };
+  row.contentBytes += catalog.bytes; row.noteBytes += catalog.bytes;
+  row.trashContentBytes += catalog.trash; row.trashNoteBytes += catalog.trash;
   row.trashContentBytes += body.trash; row.trashNoteBytes += body.trash;
   const { trashContentBytes, trashNoteBytes, trashHistoryBytes, ...usage } = row;
   const attachmentBytes = usage.contentBytes - usage.noteBytes;

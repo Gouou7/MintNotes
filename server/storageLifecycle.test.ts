@@ -18,6 +18,9 @@ import { issueSyncLease, validSyncLease } from "./sync/protocol";
 import { createApp } from "./app";
 import { loadServerConfig } from "./config";
 import { registerNoteBodyRoutes } from "./sync/noteBodies";
+import { registerSyncRoutes } from "./sync/routes";
+import { SyncEventHub } from "./syncEvents";
+import { LogReferenceFactory } from "./logging";
 
 const resources: Array<{ directory: string; db: AppDatabase }> = [];
 afterEach(() => { for (const r of resources.splice(0)) { if (r.db.open) r.db.close(); rmSync(r.directory, { recursive: true, force: true }); } });
@@ -39,6 +42,22 @@ function snapshot(db: AppDatabase, note: string, id: string, kind = "interval", 
 }
 
 describe("storage lifecycle v3", () => {
+  it("rejects an old epoch purge even when the restored tombstone revision matches", async () => {
+    const { db } = fixture();
+    const objectId = crypto.randomUUID();
+    writeObject(db, scope, objectId, body(0, { deleted: true }), 1000);
+    const oldEpoch = syncState(db, "user").epoch;
+    const oldLease = issueSyncLease(db, "user");
+    db.prepare("UPDATE sync_state SET epoch = 'restored'").run();
+    const app = Fastify();
+    registerSyncRoutes(app, { db, config: loadServerConfig({}), syncEvents: new SyncEventHub(), logRefs: new LogReferenceFactory(), authenticate: async () => {}, scope: () => scope });
+    try {
+      const response = await app.inject({ method: "POST", url: "/api/objects/purge", headers: { "x-webmd-sync-epoch": oldEpoch, "x-webmd-sync-lease": oldLease },
+        payload: { objects: [{ objectId, baseRevision: 1 }] } });
+      expect(response.json().code).toBe("SYNC_RECONCILE_REQUIRED");
+      expect(db.prepare("SELECT 1 FROM objects WHERE object_id = ?").get(objectId)).toBeDefined();
+    } finally { await app.close(); }
+  });
   it("keeps one current ciphertext, coalesces notifications, and receipts contain no body", () => {
     const { db } = fixture();
     for (let n = 0; n < 400; n++) expect(writeObject(db, scope, "note", body(n), 56).status).toBe("accepted");
@@ -114,17 +133,18 @@ describe("storage lifecycle v3", () => {
     writeObject(db, scope, noteId, body(), 1000);
     writeObject(db, scope, attachmentId, body(0, { objectType: "attachment", ownerNoteId: noteId }), 1000);
     const app = Fastify(); registerAttachmentLifecycle(app, { db, authenticate: async () => {}, scope: () => scope });
+    const headers = { "x-webmd-sync-epoch": syncState(db, "user").epoch, "x-webmd-sync-lease": issueSyncLease(db, "user") };
     const input = { noteId, noteRevision: 1, historyVersion: 0, ownershipVersion: 1, attachmentIds: [attachmentId], confirm: true };
     try {
-      expect((await app.inject({ method: "POST", url: "/api/attachments/reclaim", payload: input })).json().purged).toEqual([]);
+      expect((await app.inject({ method: "POST", url: "/api/attachments/reclaim", headers, payload: input })).json().purged).toEqual([]);
       expect(db.prepare("SELECT 1 FROM objects WHERE object_id = ?").get(attachmentId)).toBeDefined();
       db.prepare("UPDATE attachment_gc SET proposed_at = ?").run(new Date(Date.now() - 91 * 86_400_000).toISOString());
       historyChanged(db, "user", noteId);
-      expect((await app.inject({ method: "POST", url: "/api/attachments/reclaim", payload: input })).statusCode).toBe(409);
+      expect((await app.inject({ method: "POST", url: "/api/attachments/reclaim", headers, payload: input })).statusCode).toBe(409);
       input.historyVersion = 1;
-      expect((await app.inject({ method: "POST", url: "/api/attachments/reclaim", payload: input })).json().purged).toEqual([]);
+      expect((await app.inject({ method: "POST", url: "/api/attachments/reclaim", headers, payload: input })).json().purged).toEqual([]);
       db.prepare("UPDATE attachment_gc SET proposed_at = ?").run(new Date(Date.now() - 91 * 86_400_000).toISOString());
-      expect((await app.inject({ method: "POST", url: "/api/attachments/reclaim", payload: input })).json().purged).toEqual([attachmentId]);
+      expect((await app.inject({ method: "POST", url: "/api/attachments/reclaim", headers, payload: input })).json().purged).toEqual([attachmentId]);
       expect(db.prepare("SELECT 1 FROM objects WHERE object_id = ?").get(attachmentId)).toBeUndefined();
     } finally { await app.close(); }
   });
@@ -139,13 +159,13 @@ describe("storage lifecycle v3", () => {
     const receipts = db.prepare("SELECT * FROM sync_receipts").all();
     db.exec(`PRAGMA user_version = ${version}`); db.close();
     const migrated = openDatabase(directory); resources.find((r) => r.directory === directory)!.db = migrated;
-    expect(migrated.pragma("user_version", { simple: true })).toBe(6);
+    expect(migrated.pragma("user_version", { simple: true })).toBe(7);
     expect(migrated.prepare("SELECT * FROM objects").all()).toEqual(before.map((row) => ({ ...row, body_block_ids: "[]" })));
     expect(migrated.prepare("SELECT * FROM users").all()).toEqual(users);
     expect(migrated.prepare("SELECT * FROM sync_receipts").all()).toEqual(receipts);
     expect(migrated.prepare("SELECT COUNT(*) AS count FROM object_revisions").get()).toEqual({ count: 1 });
     expect(migrated.prepare("SELECT is_protected FROM note_history").get()).toEqual({ is_protected: 1 });
-    expect(readdirSync(join(directory, "backups"))).toContain("pre-schema6.sqlite");
+    expect(readdirSync(join(directory, "backups"))).toContain("pre-schema7.sqlite");
     migrated.close();
   });
   it("does not publish a manifest with missing or cross-note body blocks and retains unreferenced blocks", () => {

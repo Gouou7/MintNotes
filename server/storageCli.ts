@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { backupRetention } from "./backupRetention.js";
 import { verifyBackup, migrationBackup } from "./backupStorage.js";
 import { acquireStorageLock } from "./storageLock.js";
+import { supportedStorageSchema } from "./database.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -32,7 +33,7 @@ if (command === "backup-retention") {
         try { await original.backup(staging); } finally { original.close(); }
         database = new Database(staging);
         const version = Number(database.pragma("user_version", { simple: true }));
-        if (version !== 2 && version !== 3 && version !== 4 && version !== 5) throw new Error("RESTORE_SCHEMA_UNSUPPORTED");
+        if (!supportedStorageSchema(version)) throw new Error("RESTORE_SCHEMA_UNSUPPORTED");
         if (version >= 3) {
           database.prepare("UPDATE sync_state SET epoch = lower(hex(randomblob(16))), lease_secret = lower(hex(randomblob(32)))").run();
         } // v2 restores are migrated on next startup, which initializes a new epoch.

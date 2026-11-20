@@ -20,6 +20,11 @@ export async function exportRecoveryCopies(userId: string, active: () => boolean
       chunks.set(source.objectId, record.chunks.filter((chunk) => chunk.attachmentId === source.objectId));
     } else if (plain.kind === "note") {
       documents.push({ ...plain, objectId: crypto.randomUUID(), title: plain.title, parentId: null, deleted: false, serverRevision: 0, dirty: false });
+      for (const snapshot of record.history ?? []) {
+        const restored = await cryptoClient.decryptHistory(userId, source.objectId, snapshot.historyId, snapshot.capturedAt, snapshot.captureKind, snapshot.ciphertext, snapshot.nonce);
+        if (!active()) throw new DOMException("Cancelled", "AbortError");
+        documents.push(makeDocument(documents, "note", `${restored.title} (${snapshot.capturedAt})`, null, restored.markdown));
+      }
     } else continue;
     for (const object of record.attachments) {
       const metadata = await cryptoClient.decryptObject(userId, object.objectId, object.objectType, object.revision, object.ciphertext, object.nonce, object);

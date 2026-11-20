@@ -5,6 +5,7 @@ import type { ObjectScope } from "../types.js";
 import { createHash } from "node:crypto";
 import { metadataUsage } from "../storageUsage.js";
 import { operationKeySchema, recordChange, requireLiveOperation } from "./lifecycle.js";
+import { catalogMatches, catalogSchema, insertCatalog } from "./catalog.js";
 
 const envelopeField = z.string().min(16).max(2_000_000);
 
@@ -14,6 +15,7 @@ const objectFields = z.object({
   nonce: z.string().min(16).max(200),
   encryptionVersion: z.union([z.literal(1), z.literal(2)]),
   bodyBlockIds: z.array(z.string().uuid()).max(1000).optional(),
+  catalog: catalogSchema.optional(),
   baseRevision: z.number().int().nonnegative(),
   idempotencyKey: operationKeySchema,
   ownerNoteId: z.string().uuid().optional(),
@@ -59,7 +61,8 @@ export function writeObject(
   objectId: string,
   body: ObjectWrite,
   quotaBytes: number,
-  bodyChunkingEnabled = true
+  bodyChunkingEnabled = true,
+  catalogEnabled = true
 ): ObjectWriteResult {
   return db.transaction((): ObjectWriteResult => {
     const userId = scope.userId;
@@ -67,6 +70,7 @@ export function writeObject(
     const digestFields: unknown[] = [objectId, body.objectType, body.ciphertext,
       body.nonce, body.encryptionVersion, body.baseRevision, body.deleted, body.ownerNoteId ?? null];
     if (body.encryptionVersion === 2) digestFields.push([...body.bodyBlockIds!].sort());
+    if (body.catalog) digestFields.push(body.catalog);
     const digest = createHash("sha256").update(JSON.stringify(digestFields)).digest("hex");
     const prior = db.prepare("SELECT object_id, digest, revision FROM sync_receipts WHERE user_id = ? AND operation_id = ?")
       .get(userId, body.idempotencyKey) as { object_id: string; digest: string; revision: number } | undefined;
@@ -92,7 +96,8 @@ export function writeObject(
     if (current?.owner_note_id && current.owner_note_id !== body.ownerNoteId) throw new ObjectOwnershipError("ATTACHMENT_OWNER_IMMUTABLE");
     if (body.ownerNoteId && !(current && body.deleted) && db.prepare("SELECT 1 FROM changes WHERE user_id = ? AND object_id = ? AND change_type = 'purge'").get(userId, body.ownerNoteId)) return { objectId, status: "conflict", currentRevision: revision, reason: "revision" };
     if (body.ownerNoteId && db.prepare("SELECT 1 FROM objects WHERE user_id = ? AND object_id = ? AND object_type != 'note'").get(userId, body.ownerNoteId)) throw new ObjectOwnershipError("ATTACHMENT_OWNER_INVALID");
-    const growth = Buffer.byteLength(body.ciphertext) + Buffer.byteLength(body.nonce) - (current?.bytes ?? 0);
+    const priorCatalog = db.prepare("SELECT LENGTH(ciphertext)+LENGTH(nonce)+LENGTH(source_digest) AS bytes FROM note_catalog WHERE user_id = ? AND note_id = ?").get(userId, objectId) as { bytes: number } | undefined;
+    const growth = Buffer.byteLength(body.ciphertext) + Buffer.byteLength(body.nonce) - (current?.bytes ?? 0) - (priorCatalog?.bytes ?? 0);
     // Tombstones and non-growing replacements must remain possible above quota.
     if (!(current && !current.deleted && body.deleted && growth <= 1024)) assertStorageGrowth(db, userId, growth, quotaBytes);
     // Every live object reserves two metadata slots for its eventual purge and receipt.
@@ -114,6 +119,10 @@ export function writeObject(
         trashed_at = CASE WHEN excluded.deleted = 0 THEN NULL ELSE COALESCE(objects.trashed_at, excluded.trashed_at) END,
         trash_grace_until = CASE WHEN excluded.deleted = 0 THEN NULL ELSE objects.trash_grace_until END`)
       .run(userId, objectId, body.objectType, body.ciphertext, body.nonce, body.encryptionVersion, revision + 1, Number(body.deleted), now, body.deleted ? now : null, body.ownerNoteId ?? null, JSON.stringify(body.bodyBlockIds ?? []));
+    db.prepare("DELETE FROM note_catalog WHERE user_id = ? AND note_id = ?").run(userId, objectId);
+    if (catalogEnabled && body.objectType === "note" && body.encryptionVersion === 1 && body.catalog && catalogMatches(body.catalog, body.ciphertext, body.nonce)) {
+      insertCatalog(db, userId, objectId, revision + 1, body.catalog, quotaBytes);
+    }
     db.prepare("DELETE FROM note_body_refs WHERE user_id = ? AND note_id = ?").run(userId, objectId);
     for (const id of body.bodyBlockIds ?? []) db.prepare("INSERT INTO note_body_refs VALUES (?, ?, ?)").run(userId, objectId, id);
     if (body.objectType === "note" && body.deleted && !current?.deleted) {

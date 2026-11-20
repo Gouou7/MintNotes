@@ -2,7 +2,7 @@ import { ApplicationError } from "../protocol.js";
 import { DatabaseSync } from "node:sqlite";
 import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { ApplicationConnectionBootstrap } from "../protocol.js";
 import type { EncryptedAttachmentChunk, EncryptedObject, EncryptedNoteBodyBlock } from "../types.js";
 
@@ -41,6 +41,7 @@ export interface PendingWrite {
   recoveryConfirmed?: boolean;
   forceConflict?: boolean;
   noteCommitted?: boolean;
+  archived?: boolean;
 }
 export interface MutationResult {
   operationId: string;
@@ -58,6 +59,13 @@ export interface Operation {
   result: MutationResult;
 }
 
+interface EpochRecovery {
+  recoveryId: string;
+  object: EncryptedObject;
+  attachments: EncryptedObject[];
+  operationId?: string;
+}
+
 export class ApplicationStore {
   readonly db: DatabaseSync;
   constructor(stateDir: string, baseUrl: string, connectionId: string) {
@@ -67,7 +75,7 @@ export class ApplicationStore {
     const path = join(directory, `${originHash}-${connectionId}.sqlite`);
     this.db = new DatabaseSync(path);
     const version = Number(this.db.prepare("PRAGMA user_version").get()?.user_version);
-    if (version > 3) { this.db.close(); throw new ApplicationError("CACHE_VERSION_UNSUPPORTED", "Unsupported cache version"); }
+    if (version > 4) { this.db.close(); throw new ApplicationError("CACHE_VERSION_UNSUPPORTED", "Unsupported cache version"); }
     chmodSync(path, 0o600);
     this.db.exec(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;
       CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -80,7 +88,9 @@ export class ApplicationStore {
         body TEXT, result TEXT NOT NULL, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS body_blocks (note_id TEXT NOT NULL, block_id TEXT NOT NULL,
         data TEXT NOT NULL, uploaded INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(note_id, block_id));
-      PRAGMA user_version = 3;`);
+      CREATE TABLE IF NOT EXISTS epoch_recoveries (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL UNIQUE,
+        data TEXT NOT NULL, attachments TEXT NOT NULL, operation_id TEXT);
+      PRAGMA user_version = 4;`);
   }
 
   transaction<T>(operation: () => T): T {
@@ -133,11 +143,43 @@ export class ApplicationStore {
   }
   completeReconciliation(cursor: number, epoch: string, epochChanged = false): void {
     this.transaction(() => {
+      if (epochChanged) {
+        const priorEpoch = this.get<string>("epoch");
+        const objects = [...this.objects()];
+        const attachments = objects.filter((object) => object.objectType === "attachment");
+        const save = this.db.prepare("INSERT OR IGNORE INTO epoch_recoveries (id, fingerprint, data, attachments) VALUES (?, ?, ?, ?)");
+        for (const row of this.db.prepare(`SELECT o.data FROM objects o LEFT JOIN reconciliation_objects r ON o.id = r.id
+          WHERE json_extract(o.data,'$.objectType') = 'note' AND
+            (r.id IS NULL OR json_extract(r.data,'$.revision') != json_extract(o.data,'$.revision')
+              OR json_extract(r.data,'$.nonce') != json_extract(o.data,'$.nonce')
+              OR json_extract(r.data,'$.ciphertext') != json_extract(o.data,'$.ciphertext'))`).all()) {
+          const source = JSON.parse(String(row.data)) as EncryptedObject;
+          const fingerprint = createHash("sha256").update(JSON.stringify([priorEpoch, source.objectId, source.revision, source.nonce, source.ciphertext])).digest("base64url");
+          save.run(randomUUID(), fingerprint, String(row.data), JSON.stringify(attachments.filter((item) => !item.ownerNoteId || item.ownerNoteId === source.objectId)));
+        }
+        this.db.exec("UPDATE body_blocks SET uploaded = 0");
+      }
       this.db.exec("DELETE FROM objects; INSERT INTO objects SELECT * FROM reconciliation_objects; DELETE FROM reconciliation_objects");
       if (epochChanged) for (const operation of this.pending()) {
         operation.body!.forceConflict = true; this.saveOperation(operation);
       }
       this.set("cursor", cursor); this.set("epoch", epoch);
+    });
+  }
+  recovery(id: string): EpochRecovery | undefined {
+    const row = this.db.prepare("SELECT * FROM epoch_recoveries WHERE id = ?").get(id);
+    return row ? { recoveryId: id, object: JSON.parse(String(row.data)), attachments: JSON.parse(String(row.attachments)),
+      operationId: row.operation_id ? String(row.operation_id) : undefined } : undefined;
+  }
+  recoveries() {
+    return this.db.prepare(`SELECT r.id AS recoveryId, json_extract(r.data,'$.objectId') AS objectId, json_extract(r.data,'$.revision') AS revision
+      FROM epoch_recoveries r LEFT JOIN operations o ON o.id = r.operation_id WHERE o.id IS NULL OR o.body IS NOT NULL`).all();
+  }
+  stageRecovery(id: string, operation: Operation): void {
+    this.transaction(() => {
+      this.db.prepare("INSERT INTO operations VALUES (?, ?, ?, ?, ?)")
+        .run(operation.operationId, operation.requestHash, JSON.stringify(operation.body), JSON.stringify(operation.result), Date.now());
+      this.db.prepare("UPDATE epoch_recoveries SET operation_id = ? WHERE id = ?").run(operation.operationId, id);
     });
   }
   *objects(): Generator<EncryptedObject> {
@@ -147,6 +189,7 @@ export class ApplicationStore {
     const objects = new Map([...this.objects()].map((object) => [object.objectId, object]));
     for (const operation of this.pending()) {
       if (!operation.body) continue;
+      if (operation.body.archived && !operation.body.conflict) continue;
       for (const source of operation.body.sourceAttachments) if (!objects.has(source.objectId)) objects.set(source.objectId, source);
       const note = operation.body.conflict?.note ?? operation.body.note;
       if (!operation.body.noteCommitted || operation.body.conflict) objects.set(note.objectId, note);
@@ -165,7 +208,7 @@ export class ApplicationStore {
       .map((row) => this.operation(String(row.id))!);
   }
   pendingForObject(id: string): Operation | undefined {
-    const entries = this.pending().filter((operation) => operation.body?.note.objectId === id || operation.body?.conflict?.note.objectId === id);
+    const entries = this.pending().filter((operation) => (!operation.body?.archived && operation.body?.note.objectId === id) || operation.body?.conflict?.note.objectId === id);
     return entries.find((operation) => !operation.body?.noteCommitted) ?? entries[0];
   }
   stage(operation: Operation): void {
@@ -207,6 +250,9 @@ export class ApplicationStore {
   }
   evictAttachments(limit = 128 * 1024 * 1024): void {
     const protectedIds = new Set(this.pending().flatMap((operation) => operation.body?.sourceAttachments.map((object) => object.objectId) ?? []));
+    for (const row of this.db.prepare("SELECT attachments FROM epoch_recoveries").iterate()) {
+      for (const object of JSON.parse(String(row.attachments)) as EncryptedObject[]) protectedIds.add(object.objectId);
+    }
     const groups = [...this.db.prepare("SELECT attachment_id, SUM(LENGTH(data)) AS size FROM chunks GROUP BY attachment_id ORDER BY MAX(touched_at)").iterate()];
     let size = groups.reduce((total, row) => total + Number(row.size), 0);
     for (const row of groups) {

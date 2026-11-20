@@ -1,4 +1,4 @@
-import type { ApplicationCredential, EncryptedObject, EncryptedObjectEncoding } from "@mint-notes/application-client";
+import type { ApplicationCredential, EncryptedNoteCatalog, EncryptedObject, EncryptedObjectEncoding, VaultDocument } from "@mint-notes/application-client";
 import { localDb, localKey } from "../storage/database";
 import { bodyBlocksFor } from "../storage/noteBodies";
 import type {
@@ -68,6 +68,8 @@ export interface CryptoClient {
   derivePinVerifier(pin: string, salt: string): Promise<{ verifier: string }>;
   encryptObject(userId: string, objectId: string, objectType: ObjectType, revision: number, object: VaultObject): Promise<EncryptedObjectEncoding>;
   decryptObject(userId: string, objectId: string, objectType: ObjectType, revision: number, ciphertext: string, nonce: string, envelope?: EncryptedObject): Promise<VaultObject>;
+  encodeNoteCatalog(userId: string, object: EncryptedObject, document: VaultDocument): Promise<EncryptedNoteCatalog>;
+  decodeNoteCatalog(userId: string, object: EncryptedObject): Promise<Omit<VaultDocument, "markdown">>;
   encryptHistory(userId: string, noteId: string, historyId: string, capturedAt: string, captureKind: HistoryCaptureKind, payload: NoteHistoryPayload): Promise<{ ciphertext: string; nonce: string; encryptionVersion: 1 }>;
   decryptHistory(userId: string, noteId: string, historyId: string, capturedAt: string, captureKind: HistoryCaptureKind, ciphertext: string, nonce: string): Promise<NoteHistoryPayload>;
   encryptHistoryMetadata(userId: string, noteId: string, historyId: string, capturedAt: string, payload: NoteHistoryMetadataPayload): Promise<{ ciphertext: string; nonce: string; encryptionVersion: 1 }>;
@@ -144,7 +146,8 @@ export function createCryptoClient(): CryptoClient {
       const previous = objectType === "note" ? await localDb.objects.get(localKey(userId, objectId)) : undefined;
       const blocks = previous?.encryptionVersion === 2 ? await bodyBlocksFor(userId, objectId, previous.bodyBlockIds) : [];
       const enabled = (await localDb.meta.get(`body-chunking:${userId}`))?.value !== "false";
-      return call("encryptObject", { userId, objectId, objectType, revision, document: object, previous, blocks, enabled });
+      const catalogEnabled = (await localDb.meta.get(`note-catalog:${userId}`))?.value === "true";
+      return call("encryptObject", { userId, objectId, objectType, revision, document: object, previous, blocks, enabled, catalogEnabled });
     },
     decryptObject: async (userId, objectId, objectType, revision, ciphertext, nonce, envelope) => {
       const stored = envelope ?? await localDb.objects.get(localKey(userId, objectId));
@@ -152,6 +155,8 @@ export function createCryptoClient(): CryptoClient {
       const blocks = exact?.encryptionVersion === 2 ? [...await bodyBlocksFor(userId, objectId, exact.bodyBlockIds), ...(exact.bodyBlocks ?? [])] : [];
       return call("decryptObject", { userId, objectId, objectType, revision, ciphertext, nonce, envelope: exact, blocks });
     },
+    encodeNoteCatalog: (userId, object, document) => call("encodeNoteCatalog", { userId, object, document }),
+    decodeNoteCatalog: (userId, object) => call("decodeNoteCatalog", { userId, object }),
     encryptHistory: (userId, noteId, historyId, capturedAt, captureKind, payload) => call("encryptHistory", { userId, noteId, historyId, capturedAt, captureKind, document: payload }),
     decryptHistory: (userId, noteId, historyId, capturedAt, captureKind, ciphertext, nonce) => call("decryptHistory", { userId, noteId, historyId, capturedAt, captureKind, ciphertext, nonce }),
     encryptHistoryMetadata: (userId, noteId, historyId, capturedAt, metadata) => call("encryptHistoryMetadata", { userId, noteId, historyId, capturedAt, metadata }),

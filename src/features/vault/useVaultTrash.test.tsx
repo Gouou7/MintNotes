@@ -20,6 +20,7 @@ async function pending(objectId: string, ownerNoteId?: string) {
     operation: "upsert", baseRevision: 0, generation: 1, idempotencyKey: operationId() });
 }
 async function harness(run: (controller: ReturnType<typeof useVaultTrash>, options: any) => Promise<void>) {
+  await localDb.meta.put({ key: "sync-state:u", value: JSON.stringify({ epoch: "current" }) });
   const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
   const options: any = { confirm: vi.fn().mockResolvedValue(true), model: { documentsRef: { current: [target] }, attachmentsRef: { current: [] } },
     selection: { activeIdRef: { current: null }, selectionAnchor: { current: null }, setSelectedIds: vi.fn() },
@@ -36,8 +37,11 @@ describe("scoped permanent clearing", () => {
   it("does not purge a different set of tombstones after an asynchronous confirmation", async () => {
     await harness(async (controller, options) => {
       let accept!: (confirmed: boolean) => void;
-      options.confirm.mockImplementationOnce(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+      let opened!: () => void;
+      const confirming = new Promise<void>((resolve) => { opened = resolve; });
+      options.confirm.mockImplementationOnce(() => new Promise<boolean>((resolve) => { accept = resolve; opened(); }));
       const pendingConfirmation = controller.requestClearTrash();
+      await confirming;
       options.model.documentsRef.current = [target, { ...target, objectId: "newly-trashed" }];
       accept(true);
       await pendingConfirmation;

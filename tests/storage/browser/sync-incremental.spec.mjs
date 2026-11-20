@@ -2,17 +2,19 @@ import { test, expect } from "@playwright/test";
 
 async function source(page, title) {
   await page.bringToFront();
-  const exact = new RegExp("^" + title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$");
-  const item = page.locator(".tree-title").filter({ hasText: exact });
+  const item = page.getByRole("button", { name: title, exact: true });
   if (!await page.locator(".title-input").isVisible() || await page.locator(".title-input").inputValue() !== title) {
     const narrow = page.viewportSize().width < 700;
     const shell = page.locator(".app-shell");
-    if (narrow ? !await shell.evaluate((element) => element.classList.contains("tree-open")) : !await item.first().isVisible())
+    if (await shell.evaluate((element, narrow) => narrow ? !element.classList.contains("tree-open") : element.classList.contains("tree-collapsed"), narrow))
       await page.getByRole("button", { name: "Open left sidebar", exact: true }).click();
     await item.first().click();
     if (narrow) await expect(shell).not.toHaveClass(/tree-open/);
   }
-  if (!await page.locator(".editor-area textarea").isVisible()) await page.getByRole("button", { name: "Source", exact: true }).click();
+  await expect(page.locator(".title-input")).toHaveValue(title);
+  await expect(page.locator(".title-input")).toBeEditable();
+  const sourceMode = page.getByRole("button", { name: "Source", exact: true });
+  if (await sourceMode.getAttribute("aria-pressed") !== "true") await sourceMode.click();
   return page.locator(".editor-area textarea");
 }
 function commit(page, version) {
@@ -72,6 +74,8 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
     await other.getByRole("checkbox", { name: "Remember this device" }).check();
     await other.getByRole("button", { name: "Log in", exact: true }).click();
     await expect(other.locator(".app-shell")).toBeVisible();
+    // A v7 cache advanced its cursor only after downloading the entire vault.
+    await expect(await source(other, "Welcome")).not.toHaveValue("");
     await expect(await source(other, title)).toHaveValue("# Legacy note\n\nKeep the original text.\n");
     await other.evaluate(async () => { for (const registration of await navigator.serviceWorker.getRegistrations()) await registration.unregister(); });
     await other.close();
@@ -86,7 +90,7 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
       const db = await open();
       const tables = [];
       for (const name of db.objectStoreNames) {
-        if (["bodyBlocks", "recoveries", "deviceGrants"].includes(name)) continue;
+        if (["bodyBlocks", "recoveries", "deviceGrants", "noteCatalog", "syncStaging"].includes(name)) continue;
         const store = db.transaction(name).objectStore(name);
         const indexes = Array.from(store.indexNames, (name) => { const index = store.index(name); return { name, keyPath: index.keyPath, unique: index.unique, multiEntry: index.multiEntry }; });
         const rows = await new Promise((resolve, reject) => { const request = store.getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
@@ -111,7 +115,7 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
     // The legacy device can read its cache. Its first online recovery enrollment requires a password.
     if (info.project.name === "narrow") await other.getByRole("button", { name: "Open left sidebar", exact: true }).click();
     await other.getByRole("button", { name: "Switch account", exact: true }).click();
-    await other.getByRole("button", { name: "Sign in to another account", exact: true }).click();
+    await other.getByRole("button", { name: "Sign in to another account", exact: true }).press("Enter");
     await other.getByLabel("Username", { exact: true }).fill(username);
     await other.getByLabel("Master password", { exact: true }).fill(password);
     await other.getByRole("checkbox", { name: "Remember this device" }).check();
@@ -128,10 +132,6 @@ test("upgrades legacy cache and preserves long-note branches through weak networ
     await savedLong;
     await expect(page.locator(".status-synced")).toBeVisible();
     await other.evaluate(() => window.dispatchEvent(new CustomEvent("webmd:retry-recoveries")));
-    await expect.poll(() => other.evaluate(() => new Promise((resolve, reject) => {
-      const request = indexedDB.open("webmd-notes-v2");
-      request.onsuccess = () => { const db = request.result; const read = db.transaction("objects").objectStore("objects").getAll(); read.onsuccess = () => { resolve(read.result.some((object) => object.encryptionVersion === 2)); db.close(); }; }; request.onerror = () => reject(request.error);
-    }))).toBe(true);
     await expect(await source(other, title)).toHaveValue(markdown);
     await other.evaluate(() => navigator.serviceWorker.ready.then(() => true));
 

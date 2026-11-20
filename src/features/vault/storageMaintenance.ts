@@ -4,6 +4,7 @@ import { evictDownloadableCaches } from "../../storage/cache";
 import type { EncryptedHistorySnapshot, OpenAttachment, OpenDocument } from "../../types";
 import { attachmentIdsIn } from "../attachments";
 import type { HistoryIndexEnvelope } from "./historyController";
+import { readSyncEpoch } from "./syncReconciliation";
 
 /** No deletion is based on a partial or unauthenticated historical directory. */
 export async function validatedHistoryInventory(userId: string, noteId: string, isActive: () => boolean, services: import("../session/workspaceServices").WorkspaceServices) {
@@ -57,6 +58,8 @@ export async function maintainVaultStorage(options: { services: import("../sessi
   const api = options.services.transport.api;
   const { userId, isActive, documents, attachments } = options;
   if (!isActive()) return;
+  const epoch = await readSyncEpoch(userId);
+  if (!epoch) return;
   let ownership = await api<{ complete: number; version: number; notes: Array<{ noteId: string; version: number }> }>("/api/attachments/ownership");
   if (!ownership.complete) {
     const state = JSON.parse((await localDb.meta.get(`sync-state:${userId}`))?.value ?? "null") as { epoch: string } | null;
@@ -86,7 +89,7 @@ export async function maintainVaultStorage(options: { services: import("../sessi
   const collect = Date.now() - lastGc >= 86_400_000;
   for (const note of documents) {
     if (!isActive()) return;
-    if (note.kind !== "note" || note.dirty || note.deleted || pendingNotes.has(note.objectId)) continue;
+    if (note.kind !== "note" || note.bodyPending || note.dirty || note.deleted || pendingNotes.has(note.objectId)) continue;
     const [invalid, verified] = await Promise.all([
       localDb.meta.get(`history-invalid:${userId}:${note.objectId}`), localDb.meta.get(`history-verified:${userId}:${note.objectId}`)
     ]);
@@ -100,7 +103,7 @@ export async function maintainVaultStorage(options: { services: import("../sessi
     const candidates = attachments.filter((r) => r.ownerNoteId === note.objectId && !r.dirty && !retained.has(r.objectId)).map((r) => r.objectId);
     for (let i = 0; i < candidates.length; i += 500) {
       if (!isActive()) return;
-      await api("/api/attachments/reclaim", { method: "POST", body: JSON.stringify({ noteId: note.objectId, noteRevision: note.serverRevision,
+      await api("/api/attachments/reclaim", { method: "POST", headers: { "X-WebMD-Sync-Epoch": epoch }, body: JSON.stringify({ noteId: note.objectId, noteRevision: note.serverRevision,
         historyVersion: inventory.version, ownershipVersion: ownership.notes.find((r) => r.noteId === note.objectId)?.version ?? 0, attachmentIds: candidates.slice(i, i + 500), confirm: true }) });
     }
   }

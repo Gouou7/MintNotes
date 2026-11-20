@@ -34,7 +34,7 @@ import { createVaultEnvelopeBinding, type EncryptedProfileAvatar } from "../cryp
 import { getDeviceUnlock, hasDevicePin, removeDevicePin, setAutoLockMinutes, setDevicePin } from "../crypto/deviceUnlock";
 import { LANGUAGE_OPTIONS, translateError, useI18n, UserFacingError } from "../i18n";
 import type { DeviceUnlockCredential } from "../storage/database";
-import type { AuthEndpoint, AuthParameters, HistorySettings, OpenDocument, TrustedEndpointsResponse, UiPreferences, User, VaultEnvelopeBinding } from "../types";
+import type { AuthEndpoint, AuthParameters, HistorySettings, OpenDocument, NoteDownloadMode, TrustedEndpointsResponse, UiPreferences, User, VaultEnvelopeBinding } from "../types";
 import { submitFormOnEnter } from "./formKeyboard";
 import { AdminPanel } from "./AdminPanel";
 import { prepareProfileAvatar } from "./profileAvatar";
@@ -59,6 +59,7 @@ interface PendingUsernameRecoveryReset {
 interface Props {
   confirmationDialog?: ReactNode;
   storageStatus: StorageStatus;
+  noteBodies?: { ready: number; total: number; catalogLoading: boolean };
   user: User;
   endpoint: AuthEndpoint;
   credential: DeviceUnlockCredential | null;
@@ -86,7 +87,7 @@ interface Props {
   onNotify: (text: string, tone: ToastTone) => void;
 }
 
-export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoint, credential, serverSessionVerified, onCredentialChange, preferences, onPreferences, onClose, onLogout, onImport, onExport, onDisplayName, onUsername, avatarUrl, onAvatarChange, trashItems, purging, onRestoreTrash, onPurgeTrash, onClearHistory, onClearTrash, historySettings, onHistorySettings, onRefreshHistorySettings, onNotify }: Props) {
+export function SettingsPanel({ confirmationDialog, storageStatus, noteBodies, user, endpoint, credential, serverSessionVerified, onCredentialChange, preferences, onPreferences, onClose, onLogout, onImport, onExport, onDisplayName, onUsername, avatarUrl, onAvatarChange, trashItems, purging, onRestoreTrash, onPurgeTrash, onClearHistory, onClearTrash, historySettings, onHistorySettings, onRefreshHistorySettings, onNotify }: Props) {
   const { transport: { api }, cryptoClient, generation } = useWorkspaceServices();
   const { formatDateTime, setLanguagePreference, t } = useI18n();
   const confirmation = useConfirmation();
@@ -586,6 +587,24 @@ export function SettingsPanel({ confirmationDialog, storageStatus, user, endpoin
 
             <TabsContent value="storage" className="settings-page note-storage-settings">
               <StorageUsage status={storageStatus} />
+              <SettingsSection title={t("storage.bodyDownload")}>
+                <SettingsItem title={t("storage.bodyDownload")} description={t("storage.bodyDownloadHelp")}>{(control) =>
+                  <Select<NoteDownloadMode> {...control} value={preferences.noteDownloadMode ?? "all"} items={[
+                    { value: "on-demand", label: t("storage.bodyDemand") },
+                    { value: "recent", label: t("storage.bodyRecent") },
+                    { value: "all", label: t("storage.bodyAll") }
+                  ]} onValueChange={(noteDownloadMode) => onPreferences({ ...preferences, noteDownloadMode })} />}
+                </SettingsItem>
+                {preferences.noteDownloadMode === "recent" && <SettingsItem title={t("storage.bodyRecentLimit")} description={t("storage.bodyRecentLimitHelp")}>{(control) =>
+                  <Input key={preferences.recentNoteDownloadLimit ?? 20} {...control} type="number" min={1} max={200} step={1} defaultValue={preferences.recentNoteDownloadLimit ?? 20}
+                    onBlur={(event) => {
+                      const count = event.currentTarget.valueAsNumber;
+                      if (Number.isInteger(count) && count >= 1 && count <= 200) onPreferences({ ...preferences, recentNoteDownloadLimit: count });
+                      else event.currentTarget.value = String(preferences.recentNoteDownloadLimit ?? 20);
+                    }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />}
+                </SettingsItem>}
+                {noteBodies && <p className="settings-help">{noteBodies.catalogLoading ? t("storage.loadingCatalog") : t("storage.bodyCoverage", { count: noteBodies.ready, total: noteBodies.total })}</p>}
+              </SettingsSection>
               <RecoveryStorageSection userId={user.id} onNotify={onNotify} />
               <HistoryStorageSection historySettings={historySettings} busy={busy} serverSessionVerified={serverSessionVerified} updateHistorySettings={updateHistorySettings} onClearHistory={onClearHistory} />
               <TrashStorageSection trashItems={trashItems} busy={busy} purging={purging} serverSessionVerified={serverSessionVerified} trashRetentionDays={trashRetentionDays} updateTrashRetention={updateTrashRetention} onRestoreTrash={onRestoreTrash} onPurgeTrash={onPurgeTrash} onClearTrash={onClearTrash} onNotify={onNotify} />

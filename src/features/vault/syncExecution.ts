@@ -5,17 +5,17 @@ interface SyncExecutionDependencies {
   countPending: () => Promise<number>;
   prepare?: () => Promise<boolean>;
   push: () => Promise<void>;
-  pull: () => Promise<Set<string>>;
+  pull: () => Promise<{ failedObjectIds: Set<string>; complete: boolean }>;
 }
 
 /** Every wake-up drains durable writes, including failed uploads after editing stops. */
 export async function executeVaultSync(dependencies: SyncExecutionDependencies, intent: SyncIntent) {
-  const failedObjectIds = new Set<string>();
-  if (!dependencies.isActive()) return { failedObjectIds, pending: 0 };
+  let pull = { failedObjectIds: new Set<string>(), complete: false };
+  if (!dependencies.isActive()) return { ...pull, pending: 0 };
   if (dependencies.prepare && !await dependencies.prepare()) throw new Error("SYNC_RECONCILIATION_INCOMPLETE");
   if ((intent.push || intent.pull) && await dependencies.countPending()) await dependencies.push();
   if (dependencies.isActive() && intent.pull) {
-    for (const id of await dependencies.pull()) failedObjectIds.add(id);
+    pull = await dependencies.pull();
   }
-  return { failedObjectIds, pending: dependencies.isActive() ? await dependencies.countPending() : 0 };
+  return { ...pull, pending: dependencies.isActive() ? await dependencies.countPending() : 0 };
 }

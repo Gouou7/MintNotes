@@ -15,6 +15,8 @@ export function isAcknowledgedLocalEcho(
       && local.nonce === change.nonce
       && local.encryptionVersion === change.encryptionVersion
       && local.deleted === change.deleted
+      && (local.bodyBlockIds ?? []).length === (change.bodyBlockIds ?? []).length
+      && (local.bodyBlockIds ?? []).every((id, index) => id === change.bodyBlockIds?.[index])
   );
 }
 

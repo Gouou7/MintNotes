@@ -2,7 +2,7 @@ import type { ApplicationConnectionBootstrap, ApplicationCredential, VaultEnvelo
 import type { EncryptedObject, VaultObject, VaultAttachment, EncryptedAttachmentChunk } from "./types.js";
 import { ApplicationError } from "./protocol.js";
 import { encodeVaultObject, decodeVaultObject, type BodyBlockReader } from "./noteBodies.js";
-export { encodeVaultObject, decodeVaultObject, splitNoteBody } from "./noteBodies.js";
+export { encodeVaultObject, decodeVaultObject, splitNoteBody, encodeNoteCatalog, decodeNoteCatalog, catalogSourceDigest } from "./noteBodies.js";
 const ENCRYPTION_VERSION = 1;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

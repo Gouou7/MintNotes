@@ -183,12 +183,14 @@ export class ApplicationClient {
 
   private async pull(): Promise<void> {
     let cursor = this.store.get<number>("cursor") ?? 0;
+    const epoch = this.store.get<string>("epoch");
+    if (!epoch) throw new ApplicationError("SYNC_RECONCILE_REQUIRED", "A full reconciliation is required", 409);
     for (;;) {
-      const page = await this.transport.json<{ changes: SyncChange[]; cursor: number; hasMore: boolean; reset?: boolean }>(`/sync?since=${cursor}&limit=200&compact=1`, {}, this.activeSignal);
+      const page: { changes: SyncChange[]; cursor: number; hasMore: boolean; reset?: boolean; epoch: string } = await this.transport.json(`/sync?since=${cursor}&limit=200&compact=1&epoch=${encodeURIComponent(epoch)}`, {}, this.activeSignal);
       if (!page || !Array.isArray(page.changes) || !Number.isSafeInteger(page.cursor) || typeof page.hasMore !== "boolean") {
         throw new ApplicationError("INVALID_RESPONSE", "Invalid synchronization page");
       }
-      if (page.reset === true) throw new ApplicationError("SYNC_RECONCILE_REQUIRED", "A full reconciliation is required", 409);
+      if (page.reset === true || page.epoch !== epoch) throw new ApplicationError("SYNC_RECONCILE_REQUIRED", "A full reconciliation is required", 409);
       let sequence = cursor;
       for (const change of page.changes) {
         argumentId(change.objectId);
@@ -260,12 +262,23 @@ export class ApplicationClient {
   private async dispatch(tool: string, args: Arguments): Promise<unknown> {
     if (tool === "mint_notes_status") {
       const state = await this.prepare(false);
-      return { ...state, connection: this.bootstrap!.connection, historyPaused: this.store.get<boolean>("historyPaused") ?? false, pendingOperations: this.store.pending().map((operation) => operation.result) };
+      return { ...state, connection: this.bootstrap!.connection, historyPaused: this.store.get<boolean>("historyPaused") ?? false, pendingOperations: this.store.pending().map((operation) => operation.result), recoverableVersions: this.store.recoveries() };
     }
     if (tool === "mint_notes_recover") {
       await this.prepare(true, false);
       if (this.bootstrap!.connection.access !== "read-write") throw new ApplicationError("APPLICATION_READ_ONLY", "Application is read-only", 403);
-      const operation = this.store.operation(String(args.operationId));
+      const id = String(args.recoveryId ?? args.operationId);
+      const archived = this.store.recovery(id);
+      let operation = this.store.operation(archived?.operationId ?? id);
+      if (archived && !operation) {
+        const operationId = newOperationId();
+        operation = { operationId, requestHash: id,
+          body: { note: { ...archived.object, baseRevision: archived.object.revision - 1, idempotencyKey: operationId },
+            sourceAttachments: archived.attachments, archived: true, forceConflict: true },
+          result: { operationId, objectId: archived.object.objectId, status: "pending" } };
+        this.store.stageRecovery(id, operation);
+      }
+      if (archived && operation && !operation.body) return operation.result;
       if (!operation?.body) throw new ApplicationError("OPERATION_NOT_PENDING", "No pending proposal exists", 404);
       if (operation.body.recoveryConfirmed && operation.body.conflict && !operationExpired(operation.body.conflict.note.idempotencyKey)) return this.flush(operation);
       // This explicit tool recovers a separate note, never replays an expired append.
@@ -277,7 +290,14 @@ export class ApplicationClient {
     if (["mint_notes_create", "mint_notes_update", "mint_notes_append", "mint_notes_trash"].includes(tool)) return this.mutate(tool, args);
     if (!["mint_notes_get", "mint_notes_read_attachment", "mint_notes_list", "mint_notes_search"].includes(tool)) throw new ApplicationError("UNKNOWN_TOOL", "Unknown notes tool");
     const state = await this.prepare();
-    if (tool === "mint_notes_get") return this.view(await this.note(argumentId(args.noteId)), state);
+    if (tool === "mint_notes_get") {
+      if (args.recoveryId === undefined) return this.view(await this.note(argumentId(args.noteId)), state);
+      const archived = this.store.recovery(argumentId(args.recoveryId));
+      if (!archived) throw new ApplicationError("NOTE_NOT_FOUND", "Recovery version is unavailable", 404);
+      const note = await this.decryptObject(archived.object);
+      if (note.kind !== "note" || note.deleted) throw new ApplicationError("NOTE_NOT_FOUND", "Recovery version is unavailable", 404);
+      return { ...note, ...state, objectId: archived.object.objectId, revision: archived.object.revision, canRead: true, canWrite: false, pending: false };
+    }
     if (tool === "mint_notes_read_attachment") {
       const note = await this.note(argumentId(args.noteId));
       const id = argumentId(args.attachmentId);
@@ -455,7 +475,7 @@ export class ApplicationClient {
       const body = operation.body;
       let historyDeferred = false;
       if (body.forceConflict && !body.conflict) {
-        body.conflict = await this.conflictDraft(body); this.store.saveOperation(operation);
+        body.conflict = await this.conflictDraft(body, body.archived); this.store.saveOperation(operation);
       }
       if (body.history && !body.conflict) {
         const { historyId, ...history } = body.history;

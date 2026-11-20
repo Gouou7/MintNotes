@@ -1,5 +1,6 @@
 import { ensureBodyBlocks, persistBodyBlocks } from "../../storage/noteBodies";
-import type { EncryptedNoteBodyBlock } from "@mint-notes/application-client";
+import type { EncryptedNoteBodyBlock, EncryptedObject, VaultDocument } from "@mint-notes/application-client";
+import { catalogSourceDigest } from "@mint-notes/application-client/crypto";
 import { operationExpired, operationId } from "@mint-notes/application-client";
 import { cursorKey, localDb, localKey, type LocalEncryptedObject, type ObjectUploadAttempt, type OutboxEntry } from "../../storage/database";
 import type { OpenAttachment, OpenDocument, SyncChange, VaultObject } from "../../types";
@@ -35,6 +36,9 @@ export interface PullControllerDependencies {
   commitCursor?: boolean;
   reconcileSnapshot?: boolean;
   recoverLocalTimeline?: boolean;
+  epoch?: string;
+  catalog?: boolean;
+  validateSequence?: boolean;
 }
 
 export interface PullControllerResult {
@@ -74,6 +78,8 @@ interface Candidate {
   conflict?: OpenDocument;
   committed?: boolean;
   recoverySource?: OutboxEntry;
+  ownerProposal?: OutboxEntry;
+  catalogDocument?: Omit<VaultDocument, "markdown">;
 }
 
 /** Crypto and attachment copies run outside write lanes; only the guarded page commit holds them. */
@@ -87,21 +93,28 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
   let cursor = dependencies.initialCursor ?? Number((await localDb.meta.get(cursorKey(userId)))?.value ?? 0);
   let hasMore = true;
   while (hasMore && isActive()) {
-    const page = await (dependencies.fetchPage?.(cursor) ?? api<{ changes: SyncChange[]; cursor: number; hasMore: boolean; reset?: boolean }>(
-      `/api/sync?since=${cursor}&limit=500&compact=1`
+    const page = await (dependencies.fetchPage?.(cursor) ?? api<{ changes: SyncChange[]; cursor: number; hasMore: boolean; reset?: boolean; epoch?: string }>(
+      `/api/sync?since=${cursor}&limit=500&compact=1${dependencies.epoch ? `&epoch=${encodeURIComponent(dependencies.epoch)}` : ""}${dependencies.catalog ? "&view=catalog" : ""}`
     ));
     if (!isActive()) return { ...total, complete: false };
-    if (page.reset) throw new SyncCursorResetRequired();
+    if (page.reset || (!dependencies.fetchPage && dependencies.epoch && (!("epoch" in page) || page.epoch !== dependencies.epoch))) throw new SyncCursorResetRequired();
+    if (!Number.isSafeInteger(page.cursor) || page.cursor < cursor || (page.hasMore && !dependencies.reconcileSnapshot && page.cursor <= cursor)) throw new SyncCursorResetRequired();
+    if ((dependencies.validateSequence || (!dependencies.fetchPage && dependencies.epoch)) && page.changes.some((change, index) =>
+      !Number.isSafeInteger(change.sequence) || change.sequence <= (index ? page.changes[index - 1].sequence : cursor) || change.sequence > page.cursor)) throw new SyncCursorResetRequired();
     const result = emptyResult();
     const candidates: Candidate[] = [];
     const blocked = new Set<string>();
-    for (const change of page.changes) {
+    for (let change of page.changes) {
       if (!isActive()) return total;
       if (change.historyVersion !== undefined) {
         await localDb.meta.put({ key: `history-invalid:${userId}:${change.objectId}`, value: String(change.historyVersion) });
         continue;
       }
-      if (change.purged) await dependencies.recoverAuxiliary?.(change.objectId);
+      if (change.purged && await dependencies.recoverAuxiliary?.(change.objectId) === false) {
+        blocked.add(change.objectId);
+        result.purgeDeferred = true;
+        continue;
+      }
       const key = localKey(userId, change.objectId);
       if (change.purged && dependencies.hasPendingSave(change.objectId)) await dependencies.flushDocument(change.objectId);
       if (dependencies.hasPendingSave(change.objectId)) {
@@ -126,14 +139,26 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
       }
       if (!change.purged && isAcknowledgedLocalEcho(stored, change) && !pending) continue;
       let decrypted: VaultObject | undefined;
+      let catalogDocument: Omit<VaultDocument, "markdown"> | undefined;
       let bodyBlocks: EncryptedNoteBodyBlock[] = [];
       if (!change.purged && shouldSynchronizeWorkspaceObject(change.objectId)) {
         try {
-          bodyBlocks = await ensureBodyBlocks(userId, change, isActive, api);
-          decrypted = normalizeVaultObject(await cryptoClient.decryptObject(
-            userId, change.objectId, change.objectType, change.revision, change.ciphertext, change.nonce, { ...change, bodyBlocks }
-          ));
-          if (decrypted.kind !== change.objectType || decrypted.deleted !== change.deleted) throw new Error("Invalid object envelope");
+          if (change.bodyDeferred && dependencies.epoch && dependencies.catalog) {
+            try { catalogDocument = await cryptoClient.decodeNoteCatalog(userId, change); }
+            catch (error) {
+              if (!change.catalog) throw error;
+              const remote = await api<EncryptedObject>(`/api/objects/${change.objectId}?epoch=${encodeURIComponent(dependencies.epoch)}&revision=${change.revision}`);
+              if (remote.objectId !== change.objectId || remote.revision !== change.revision || remote.objectType !== "note" || remote.deleted !== change.deleted) throw error;
+              change = { ...change, ...remote, bodyDeferred: false, catalog: undefined };
+            }
+          }
+          if (!catalogDocument) {
+            bodyBlocks = await ensureBodyBlocks(userId, change, isActive, api, dependencies.epoch ? { epoch: dependencies.epoch } : undefined);
+            decrypted = normalizeVaultObject(await cryptoClient.decryptObject(
+              userId, change.objectId, change.objectType, change.revision, change.ciphertext, change.nonce, { ...change, bodyBlocks }
+            ));
+            if (decrypted.kind !== change.objectType || decrypted.deleted !== change.deleted) throw new Error("Invalid object envelope");
+          }
         } catch {
           result.failedObjectIds.add(change.objectId);
           blocked.add(change.objectId);
@@ -148,25 +173,53 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
         blocked.add(change.objectId);
         continue;
       }
-      const candidate: Candidate = { change, stored, pending, decrypted, bodyBlocks };
+      if (catalogDocument && change.catalog) {
+        const digest = change.catalog.sourceDigest;
+        const echo = pending && [pending.upload, pending].find((entry) => entry?.revision === change.revision && entry.catalog?.sourceDigest === digest);
+        if (echo) {
+          await coordinate(change.objectId, async () => {
+            if (isActive()) await dependencies.acknowledge?.(echo, change.revision);
+          });
+          continue;
+        }
+        if (!pending && stored?.revision === change.revision && digest === await catalogSourceDigest(stored)) continue;
+      }
+      const candidate: Candidate = { change, stored, pending, decrypted, bodyBlocks, catalogDocument };
       if (!shouldSynchronizeWorkspaceObject(change.objectId)) {
         candidates.push(candidate);
         continue;
       }
       if (change.purged) {
-        const graphPending = await hasPendingLocalObjectGraph(userId, new Set([change.objectId]));
+        // A cascade can span pages. Journal the owning draft while the attachment still exists.
+        if (stored?.ownerNoteId) {
+          const owner = stored.ownerNoteId;
+          if (dependencies.hasPendingSave(owner)) await dependencies.flushDocument(owner);
+          const ownerDraft = await localDb.outbox.get(localKey(userId, owner));
+          if (dependencies.hasPendingSave(owner)
+            || (ownerDraft && !await dependencies.preserveConflict(ownerDraft))
+            || (await hasPendingLocalAuxiliaryData(userId, owner) && !await dependencies.recoverAuxiliary?.(owner))) {
+            blocked.add(change.objectId);
+            result.purgeDeferred = true;
+            continue;
+          }
+          candidate.ownerProposal = ownerDraft;
+        }
+        const graphPending = await hasPendingLocalObjectGraph(userId, new Set([change.objectId]), false);
         if (await hasPendingLocalAuxiliaryData(userId, change.objectId)
-          || (graphPending && (!pending || pending.objectType === "attachment"))) {
+          || (graphPending && !stored?.ownerNoteId && (!pending || pending.objectType === "attachment"))) {
           blocked.add(change.objectId);
           result.purgeDeferred = true;
           continue;
+        }
+        if (stored && !pending && dependencies.recoverLocalTimeline) {
+          candidate.recoverySource = { ...stored, operation: "upsert", baseRevision: Math.max(0, stored.revision - 1), idempotencyKey: operationId(), generation: Date.now() * 1000, recoveryEpoch: dependencies.epoch };
         }
       } else {
         if (pending && change.revision <= pending.baseRevision && !(dependencies.reconcileSnapshot && change.revision < pending.baseRevision) && !dependencies.forceConflictIds?.has(change.objectId)
           && !operationExpired(pending.idempotencyKey) && !(pending.upload && operationExpired(pending.upload.idempotencyKey))) continue;
         if (!pending && stored && (stored.revision > change.revision || dependencies.recoverLocalTimeline)) {
           if (!dependencies.reconcileSnapshot) continue;
-          candidate.recoverySource = { ...stored, operation: "upsert", baseRevision: Math.max(0, stored.revision - 1), idempotencyKey: operationId(), generation: Date.now() * 1000 };
+          candidate.recoverySource = { ...stored, operation: "upsert", baseRevision: Math.max(0, stored.revision - 1), idempotencyKey: operationId(), generation: Date.now() * 1000, recoveryEpoch: dependencies.epoch };
         }
       }
       if (pending?.operation === "upsert" || candidate.recoverySource) {
@@ -181,11 +234,11 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
       candidates.push(candidate);
     }
 
-    const keys = [...new Set(candidates.map((entry) => entry.change.objectId))].sort();
+    const keys = [...new Set(candidates.flatMap((entry) => [entry.change.objectId, ...(entry.change.purged && entry.stored?.ownerNoteId ? [entry.stored.ownerNoteId] : [])]))].sort();
     const commit = async (): Promise<void> => {
       await localDb.transaction("rw", [
         localDb.objects, localDb.outbox, localDb.attachmentChunks, localDb.attachmentOutbox,
-        localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.meta, localDb.bodyBlocks
+        localDb.historySnapshots, localDb.historyIndex, localDb.historyOutbox, localDb.historyMetadataOutbox, localDb.meta, localDb.bodyBlocks, localDb.noteCatalog
       ], async () => {
         for (const candidate of candidates) {
           const { change } = candidate;
@@ -197,12 +250,21 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
             continue;
           }
           if (change.purged || !shouldSynchronizeWorkspaceObject(change.objectId)) {
+            const owner = stored?.ownerNoteId;
+            if (owner && (dependencies.hasPendingSave(owner)
+              || !sameOutboxEntry(await localDb.outbox.get(localKey(userId, owner)), candidate.ownerProposal)
+              || await hasPendingLocalAuxiliaryData(userId, owner))) {
+              blocked.add(change.objectId);
+              result.purgeDeferred = true;
+              continue;
+            }
             if (shouldSynchronizeWorkspaceObject(change.objectId) && await hasPendingLocalAuxiliaryData(userId, change.objectId)) {
               blocked.add(change.objectId);
               result.purgeDeferred = true;
               continue;
             }
             await localDb.meta.bulkDelete([`history-invalid:${userId}:${change.objectId}`, `history-verified:${userId}:${change.objectId}`]);
+            await localDb.noteCatalog.delete(key);
             await localDb.objects.delete(key);
             await localDb.outbox.delete(key);
             await localDb.attachmentChunks.where("[userId+attachmentId]").equals([userId, change.objectId]).delete();
@@ -211,6 +273,10 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
             await localDb.historyIndex.where("[userId+noteId]").equals([userId, change.objectId]).delete();
             await localDb.historyOutbox.where("[userId+noteId]").equals([userId, change.objectId]).delete();
             await localDb.historyMetadataOutbox.where("[userId+noteId]").equals([userId, change.objectId]).delete();
+          } else if (candidate.catalogDocument && dependencies.epoch) {
+            const { bodyDeferred: _deferred, ...envelope } = change;
+            await localDb.noteCatalog.put({ ...envelope, key, userId, epoch: dependencies.epoch, updatedAt: change.serverUpdatedAt });
+            if (pending) await localDb.outbox.delete(key);
           } else {
             await persistBodyBlocks(userId, change.objectId, { ...change, bodyBlocks: candidate.bodyBlocks });
             for (const block of candidate.bodyBlocks ?? []) await localDb.bodyBlocks.update(localKey(userId, `${change.objectId}:${block.blockId}`), { uploaded: true });
@@ -221,6 +287,7 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
               ...(change.bodyBlockIds ? { bodyBlockIds: change.bodyBlockIds } : {}),
               ...(candidate.decrypted?.kind === "attachment" ? { ownerNoteId: candidate.decrypted.ownerNoteId } : {})
             });
+            await localDb.noteCatalog.delete(key);
             if (pending) await localDb.outbox.delete(key);
           }
           candidate.committed = true;
@@ -231,7 +298,7 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
       });
       if (!isActive()) return;
       for (const candidate of candidates.filter((entry) => entry.committed)) {
-        const { change, conflict, decrypted } = candidate;
+        const { change, conflict, decrypted, catalogDocument } = candidate;
         if (conflict) {
           result.documentUpserts.set(conflict.objectId, conflict);
           result.conflicts.set(change.objectId, conflict.objectId);
@@ -243,6 +310,14 @@ export async function pullVaultChanges(dependencies: PullControllerDependencies)
           if (dependencies.activeObjectId() === change.objectId && !conflict) {
             result.deferredActive = { objectId: change.objectId, document: null, deleted: true };
           }
+        } else if (catalogDocument) {
+          const open = {
+            ...catalogDocument, markdown: "", bodyPending: true as const, objectId: change.objectId,
+            serverRevision: change.revision, serverTrashedAt: change.serverTrashedAt, dirty: false
+          };
+          if (dependencies.activeObjectId() === change.objectId && candidate.stored && !conflict) {
+            result.deferredActive = { objectId: change.objectId, document: open, deleted: open.deleted };
+          } else result.documentUpserts.set(change.objectId, open);
         } else if (decrypted) {
           const open = { ...decrypted, objectId: change.objectId, serverRevision: change.revision, serverTrashedAt: change.serverTrashedAt, dirty: false };
           if (open.kind === "attachment") result.attachmentUpserts.set(change.objectId, open);
