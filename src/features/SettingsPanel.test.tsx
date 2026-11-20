@@ -541,7 +541,9 @@ describe("SettingsPanel", () => {
     expect(button(container, "删除").querySelector(".lucide-trash-2")).toBeTruthy();
     await act(async () => button(container, "笔记和存储").click());
     expect(container.querySelector(".storage-migration")?.previousElementSibling?.textContent).toBe("笔记迁移");
-    expect([...container.querySelectorAll(".note-storage-settings h3")].map((node) => node.textContent).filter((text) => ["存储用量", "笔记历史", "回收站", "笔记迁移"].includes(text ?? ""))).toEqual(["存储用量", "笔记历史", "回收站", "笔记迁移"]);
+    const headings = [...container.querySelectorAll(".note-storage-settings h3")].map((node) => node.textContent);
+    expect(headings.filter((text) => ["笔记历史", "回收站", "笔记迁移", "存储用量"].includes(text ?? ""))).toEqual(["笔记历史", "回收站", "笔记迁移", "存储用量"]);
+    expect(headings.at(-1)).toBe("存储用量");
     expect(container.textContent).not.toContain("可移植数据");
     expect(container.textContent).not.toContain("密文快照");
     const userContainer = await renderSettings({ ...admin, role: "user" });

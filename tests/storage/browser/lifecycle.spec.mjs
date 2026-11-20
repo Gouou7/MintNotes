@@ -57,7 +57,8 @@ test("protected history follows a note through trash, restore and permanent clea
   };
   await trashNote(); await openTrash();
   const headings = await page.locator(".note-storage-settings h3").allTextContents();
-  expect(headings.filter((value) => ["Storage usage", "Note history", "Trash", "Note migration"].includes(value))).toEqual(["Storage usage", "Note history", "Trash", "Note migration"]);
+  expect(headings.filter((value) => ["Note history", "Trash", "Note migration", "Storage usage"].includes(value))).toEqual(["Note history", "Trash", "Note migration", "Storage usage"]);
+  expect(headings.at(-1)).toBe("Storage usage");
   await expect(page.getByText("Local status", { exact: true })).toBeVisible();
   const budgetSaved = page.waitForResponse((response) => response.url().endsWith("/api/account/note-history-settings") && response.request().method() === "PATCH");
   const budget = page.locator(".history-budget").getByRole("combobox");

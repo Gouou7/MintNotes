@@ -587,7 +587,6 @@ export function SettingsPanel({ confirmationDialog, storageStatus, noteBodies, u
             </TabsContent>
 
             <TabsContent value="storage" className="settings-page note-storage-settings">
-              <StorageUsage status={storageStatus} />
               <SettingsSection title={t("storage.bodyDownload")}>
                 <SettingsItem title={t("storage.bodyDownload")} description={t("storage.bodyDownloadHelp")}>{(control) =>
                   <Select<NoteDownloadMode> {...control} value={normalizeNoteDownloadMode(preferences.noteDownloadMode)} items={[
@@ -610,6 +609,7 @@ export function SettingsPanel({ confirmationDialog, storageStatus, noteBodies, u
               <HistoryStorageSection historySettings={historySettings} busy={busy} serverSessionVerified={serverSessionVerified} updateHistorySettings={updateHistorySettings} onClearHistory={onClearHistory} />
               <TrashStorageSection trashItems={trashItems} busy={busy} purging={purging} serverSessionVerified={serverSessionVerified} trashRetentionDays={trashRetentionDays} updateTrashRetention={updateTrashRetention} onRestoreTrash={onRestoreTrash} onPurgeTrash={onPurgeTrash} onClearTrash={onClearTrash} onNotify={onNotify} />
               <MigrationStorageSection onImport={onImport} onExport={onExport} onNotify={onNotify} />
+              <StorageUsage status={storageStatus} />
             </TabsContent>
 
             <TabsContent value="about" className="settings-page about-settings">
