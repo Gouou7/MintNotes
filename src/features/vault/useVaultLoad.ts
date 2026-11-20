@@ -15,6 +15,7 @@ import {
 } from "../../storage/database";
 import type { LanguagePreference, UiPreferences } from "../../types";
 import { normalizeFontSize, normalizeWrapCodeBlocks } from "../appearance";
+import { normalizeNoteDownloadMode } from "../noteSyncPreferences";
 import { decryptAvailableLocalObjects, decryptFailureFingerprint, shouldCreateWelcomeNote } from "../vaultLoad";
 import { parseLegacyWorkspaceState, resolveDeviceActiveNoteId, resolveDeviceWorkspacePreferences, WORKSPACE_OBJECT_ID } from "../workspace";
 import { SyncCursorResetRequired } from "./pullController";
@@ -117,7 +118,7 @@ export function useVaultLoad(options: Options) {
           ...DEFAULT_PREFERENCES,
           ...storedUiPreferences,
           ...deviceWorkspace,
-          noteDownloadMode: storedUiPreferences.noteDownloadMode === "on-demand" || storedUiPreferences.noteDownloadMode === "recent" ? storedUiPreferences.noteDownloadMode : "all",
+          noteDownloadMode: normalizeNoteDownloadMode(storedUiPreferences.noteDownloadMode),
           recentNoteDownloadLimit: normalizeRecentBodyLimit(storedUiPreferences.recentNoteDownloadLimit),
           fontSize: normalizeFontSize(storedUiPreferences.fontSize),
           wrapCodeBlocks: normalizeWrapCodeBlocks(storedUiPreferences.wrapCodeBlocks),

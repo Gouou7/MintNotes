@@ -548,6 +548,17 @@ describe("SettingsPanel", () => {
     expect(userContainer.textContent).not.toContain("管理员设置");
   });
 
+  it("defaults to on-demand note sync when no mode has been saved", async () => {
+    const onPreferences = vi.fn();
+    const container = await renderSettings(admin, vi.fn(), onPreferences);
+    await act(async () => button(container, "笔记和存储").click());
+    expect([...container.querySelectorAll(".note-storage-settings h3")].map((heading) => heading.textContent)).toContain("笔记同步");
+    const mode = [...container.querySelectorAll<HTMLElement>('[role="combobox"]')].find((control) => control.textContent === "仅需要时同步");
+    expect(mode).toBeDefined();
+    await chooseSelect(mode!, "同步全部");
+    expect(onPreferences).toHaveBeenCalledWith({ ...preferences, noteDownloadMode: "all" });
+  });
+
   it("shows project attribution and the build version in About", async () => {
     const container = await renderSettings();
     await act(async () => button(container, "关于").click());

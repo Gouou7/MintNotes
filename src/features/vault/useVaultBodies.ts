@@ -4,6 +4,7 @@ import { ApiError } from "../../api";
 import { localDb, localKey, type LocalCatalogNote } from "../../storage/database";
 import { ensureBodyBlocks, persistBodyBlocks } from "../../storage/noteBodies";
 import type { EncryptedObject, OpenDocument, UiPreferences } from "../../types";
+import { normalizeNoteDownloadMode } from "../noteSyncPreferences";
 import { useWorkspaceServices } from "../session/workspaceServices";
 import { readSyncEpoch } from "./syncReconciliation";
 import type { useVaultModel } from "./useVaultModel";
@@ -13,7 +14,7 @@ export const normalizeRecentBodyLimit = (value: unknown) =>
   typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 200 ? value : DEFAULT_RECENT_BODY_LIMIT;
 
 export function backgroundBodyTargets(documents: OpenDocument[], preferences: UiPreferences) {
-  const mode = preferences.noteDownloadMode ?? "all";
+  const mode = normalizeNoteDownloadMode(preferences.noteDownloadMode);
   if (mode === "on-demand") return [];
   const notes = documents.filter((note) => note.kind === "note" && (mode === "all" || !note.deleted));
   notes.sort((left, right) => Number(left.deleted) - Number(right.deleted)

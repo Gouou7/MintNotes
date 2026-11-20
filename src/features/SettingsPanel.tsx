@@ -42,6 +42,7 @@ import { formatHistoryBytes } from "./history";
 import { downloadRecoveryKey } from "./recoveryKey";
 import { APP_VERSION } from "../version";
 import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE, normalizeFontSize } from "./appearance";
+import { normalizeNoteDownloadMode } from "./noteSyncPreferences";
 import { ApplicationConnectionsSection } from "./applications/ApplicationConnectionsSection";
 
 type Tab = "general" | "storage" | "security" | "about" | "users";
@@ -589,7 +590,7 @@ export function SettingsPanel({ confirmationDialog, storageStatus, noteBodies, u
               <StorageUsage status={storageStatus} />
               <SettingsSection title={t("storage.bodyDownload")}>
                 <SettingsItem title={t("storage.bodyDownload")} description={t("storage.bodyDownloadHelp")}>{(control) =>
-                  <Select<NoteDownloadMode> {...control} value={preferences.noteDownloadMode ?? "all"} items={[
+                  <Select<NoteDownloadMode> {...control} value={normalizeNoteDownloadMode(preferences.noteDownloadMode)} items={[
                     { value: "on-demand", label: t("storage.bodyDemand") },
                     { value: "recent", label: t("storage.bodyRecent") },
                     { value: "all", label: t("storage.bodyAll") }

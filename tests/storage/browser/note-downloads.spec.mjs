@@ -73,11 +73,13 @@ async function openSidebar(page) {
   await expect(page.getByRole("button", { name: "New note", exact: true })).toBeVisible();
 }
 
-async function chooseMode(page, label, limit) {
+async function chooseMode(page, label, limit, previousMode) {
   await openSidebar(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("tab", { name: "Notes and storage", exact: true }).click();
-  await page.getByRole("combobox", { name: "Note downloads", exact: true }).click();
+  const mode = page.getByRole("combobox", { name: "Note sync", exact: true });
+  if (previousMode) await expect(mode).toHaveText(previousMode);
+  await mode.click();
   await page.getByRole("option", { name: label, exact: true }).click();
   if (limit) {
     const input = page.getByRole("spinbutton", { name: "Number of recently updated notes" });
@@ -118,7 +120,11 @@ test("lists a mixed-format vault before body downloads and prioritizes the opene
     const listMs = Date.now() - started;
     await openSidebar(page);
     await expect(page.locator(".document-tree .tree-title")).toHaveCount(1_000);
+    await page.waitForTimeout(700);
+    expect(bodyRequests).toHaveLength(0);
+    await chooseMode(page, "Sync all", undefined, "Sync on demand");
     await expect.poll(() => bodyRequests.slice()).toEqual([`/api/objects/${ids[0]}`]);
+    await openSidebar(page);
     const opened = Date.now();
     await page.getByText("Catalog note 0001", { exact: true }).click();
     await expect(page.locator(".title-input")).toBeEditable();
@@ -126,26 +132,26 @@ test("lists a mixed-format vault before body downloads and prioritizes the opene
     if (await mode.getAttribute("aria-pressed") !== "true") await mode.click();
     await expect(page.locator(".editor-area textarea")).toHaveValue(largeBody);
     const openMs = Date.now() - opened;
-    await chooseMode(page, "Download on demand");
+    await chooseMode(page, "Sync on demand");
     release();
     const requestsBeforeIdle = bodyRequests.length;
     await page.waitForTimeout(700);
     expect(bodyRequests).toHaveLength(requestsBeforeIdle);
-    await chooseMode(page, "Download recent notes", 3);
+    await chooseMode(page, "Sync recent notes", 3);
     await expect.poll(() => bodyRequests.includes(`/api/objects/${ids[2]}`)).toBe(true);
     expect(bodyRequests).not.toContain(`/api/objects/${ids[3]}`);
-    await chooseMode(page, "Download on demand");
+    await chooseMode(page, "Sync on demand");
     await context.setOffline(true);
     await openSidebar(page);
     await page.getByText("Catalog note 0004", { exact: true }).click();
-    await expect(page.getByText("This note has no current offline copy.", { exact: true })).toBeVisible();
+    await expect(page.getByText("The current version has not synced to this device. Open it when online.", { exact: true })).toBeVisible();
     if (info.project.name === "narrow") await expect(page.locator(".app-shell")).not.toHaveClass(/tree-open/);
     await openSidebar(page);
     await page.getByText("Catalog note 0001", { exact: true }).click();
     await expect(page.locator(".editor-area textarea")).toHaveValue(largeBody);
     await context.setOffline(false);
     await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(true);
-    await chooseMode(page, "Download all");
+    await chooseMode(page, "Sync all");
     await expect.poll(() => bodyRequests.includes(`/api/objects/${ids[3]}`)).toBe(true);
     const catalogBytes = (await Promise.all(pages)).reduce((total, bytes) => total + bytes, 0);
     expect(catalogBytes).toBeLessThan(fullBytes);

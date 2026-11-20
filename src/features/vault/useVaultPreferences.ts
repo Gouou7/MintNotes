@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { localDb, preferencesKey } from "../../storage/database";
 import type { LanguagePreference, UiPreferences } from "../../types";
 import { DEFAULT_FONT_SIZE, DEFAULT_WRAP_CODE_BLOCKS } from "../appearance";
+import { DEFAULT_NOTE_DOWNLOAD_MODE } from "../noteSyncPreferences";
 import { useTheme } from "../useTheme";
 import { DEFAULT_DEVICE_WORKSPACE_PREFERENCES } from "../workspace";
 import type { useWorkspaceSelection } from "./useWorkspaceSelection";
 
 export const DEFAULT_PREFERENCES: UiPreferences = {
   ...DEFAULT_DEVICE_WORKSPACE_PREFERENCES,
-  noteDownloadMode: "all",
+  noteDownloadMode: DEFAULT_NOTE_DOWNLOAD_MODE,
   recentNoteDownloadLimit: 20,
   theme: "system",
   fontSize: DEFAULT_FONT_SIZE,
